@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=64.0", "setuptools-scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["fleche"]
+
+[tool.setuptools_scm]
+version_file = "src/fleche/_version.py"
+
+[project]
+name = "fleche"
+dynamic = ["version"]
+authors = [
+    { name="Marvin Poul", email="pmrv@posteo.de" },
+]
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+#license = "BSD"
+#license-file = ["LICENSE"]
+dependencies = [
+    'cloudpickle',
+    'sqlalchemy',
+    'bagofholding',
+]
+
+# [project.urls]
+# Repository = "https://github.com/eisenforschung/landau"
