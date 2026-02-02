@@ -24,7 +24,7 @@ def fleche(
                 return func(*args, **kwargs)
             metadata = {m.name: m.pre(*args, **kwargs) for m in meta}
             result = func(*args, **kwargs)
-            metadata = {m.name: m.post(metadata[m.name], *args, **kwargs)
+            metadata = {m.name: m.post(metadata[m.name], result, *args, **kwargs)
                         for m in meta}
             METADATA_DB.save(key, metadata)
             return result

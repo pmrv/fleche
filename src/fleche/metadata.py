@@ -51,10 +51,10 @@ class PandasDB(MetaDB):
 
 class MetaData(ABC):
     def pre(self, *args, **kwargs) -> dict:
-        ...
+        return {}
 
-    def post(self, pre, *args, **kwargs) -> dict:
-        ...
+    def post(self, pre, result, *args, **kwargs) -> dict:
+        return pre
 
     @property
     @abstractmethod
