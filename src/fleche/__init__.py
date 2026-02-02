@@ -4,7 +4,10 @@ from functools import wraps, partial
 
 from .digest import Unhashable, digest
 from .invocation import Invocation
-from .metadata import MetaData, Runtime
+from .metadata import MetaData, Runtime, PandasDB
+
+
+METADATA_DB = PandasDB({})
 
 
 def fleche(
@@ -23,7 +26,7 @@ def fleche(
             result = func(*args, **kwargs)
             metadata = {m.name: m.post(metadata[m.name], *args, **kwargs)
                         for m in meta}
-            print(key, metadata)
+            METADATA_DB.save(key, metadata)
             return result
         return wrapper
 
