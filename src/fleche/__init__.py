@@ -1,37 +1,33 @@
 """lru_cache on 'roids."""
 
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from functools import wraps
-from types import Callable
+from functools import wraps, partial
+
+from .digest import Unhashable, digest
+from .invocation import Invocation
+from .metadata import MetaData, Runtime
 
 
-class MetaData(ABC):
-    def pre(self, *args, **kwargs) -> dict:
-        ...
+def fleche(
+    _func=None, *, meta: tuple[MetaData] = (Runtime(),)
+):
 
-    def post(self, pre, *args, **kwargs) -> dict:
-        ...
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                key = digest(Invocation(func.__name__, args, kwargs))
+            except Unhashable as e:
+                print("WARNING:", e.args[0])
+                return func(*args, **kwargs)
+            metadata = {m.name: m.pre(*args, **kwargs) for m in meta}
+            result = func(*args, **kwargs)
+            metadata = {m.name: m.post(metadata[m.name], *args, **kwargs)
+                        for m in meta}
+            print(key, metadata)
+            return result
+        return wrapper
 
-    @property
-    @abstractmethod
-    def keys(self):
-        ...
-
-
-@dataclass
-class Task:
-    func: Callable
-    meta: tuple[MetaData]
-
-    @property
-    def __doc__(self):
-        return self.func.__doc__
-
-    def __call__(self, *args, **kwargs):
-        result = self.func(*args, **kwargs)
-        return result
-
-
-def fleche(func):
-    return Task(func)
+    if callable(_func):
+        return decorator(_func)
+    else:
+        return decorator
