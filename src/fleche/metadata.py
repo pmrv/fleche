@@ -5,6 +5,8 @@ from typing import Any
 
 import pandas as pd
 
+from .digest import digest
+
 
 class MetaDB(ABC):
     """Interface for databases that keep metadata."""
@@ -82,3 +84,11 @@ class Runtime(MetaData):
             'timestop': float,
             'walltime': float,
     }
+
+
+class ResultDigest(MetaData):
+    def post(self, pre, result, *_, **__):
+        return {**pre, "result": digest(result)}
+
+    keys = {"result": str}
+    name = "resultdigest"

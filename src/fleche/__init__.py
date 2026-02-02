@@ -1,11 +1,11 @@
 """lru_cache on 'roids."""
 
-from functools import wraps, partial
+from functools import wraps
 from pathlib import Path
 
 from .digest import Unhashable, digest
 from .invocation import Invocation
-from .metadata import MetaData, Runtime, PandasDB
+from .metadata import MetaData, Runtime, ResultDigest, PandasDB
 from .cache import Cache
 from .storage import CloudpickleFileStorage
 
@@ -13,7 +13,7 @@ CACHE = Cache(PandasDB({}), CloudpickleFileStorage(Path(".fleche")))
 
 
 def fleche(
-    _func=None, *, meta: tuple[MetaData] = (Runtime(),)
+    _func=None, *, meta: tuple[MetaData] = (Runtime(), ResultDigest())
 ):
 
     def decorator(func):
