@@ -25,6 +25,12 @@ def fleche(
             except Unhashable as e:
                 print("WARNING:", e.args[0])
                 return func(*args, **kwargs)
+
+            try:
+                return CACHE.storage.load(key)
+            except KeyError:
+                pass
+
             metadata = {m.name: m.pre(*args, **kwargs) for m in meta}
             result = func(*args, **kwargs)
             metadata = {m.name: m.post(metadata[m.name], result, *args, **kwargs)

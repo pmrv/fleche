@@ -48,8 +48,11 @@ class CloudpickleFileStorage(Storage):
             f.write(dumps(value))
 
     def load(self, digest):
-        with open(self.root / digest, "rb") as f:
-            return loads(f.read())
+        try:
+            with open(self.root / digest, "rb") as f:
+                return loads(f.read())
+        except FileNotFoundError:
+            raise KeyError(digest) from None
 
     def list(self) -> Iterable[str]:
         return (p.name for p in self.root.iterdir())
