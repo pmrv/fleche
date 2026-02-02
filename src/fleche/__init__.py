@@ -1,13 +1,15 @@
 """lru_cache on 'roids."""
 
 from functools import wraps, partial
+from pathlib import Path
 
 from .digest import Unhashable, digest
 from .invocation import Invocation
 from .metadata import MetaData, Runtime, PandasDB
+from .cache import Cache
+from .storage import CloudpickleFileStorage
 
-
-METADATA_DB = PandasDB({})
+CACHE = Cache(PandasDB({}), CloudpickleFileStorage(Path(".fleche")))
 
 
 def fleche(
@@ -19,6 +21,7 @@ def fleche(
         def wrapper(*args, **kwargs):
             try:
                 key = digest(Invocation(func.__name__, args, kwargs))
+                print(key, Invocation(func.__name__, args, kwargs))
             except Unhashable as e:
                 print("WARNING:", e.args[0])
                 return func(*args, **kwargs)
@@ -26,7 +29,8 @@ def fleche(
             result = func(*args, **kwargs)
             metadata = {m.name: m.post(metadata[m.name], result, *args, **kwargs)
                         for m in meta}
-            METADATA_DB.save(key, metadata)
+            CACHE.metadata.save(key, metadata)
+            CACHE.storage.save(key, result)
             return result
         return wrapper
 
