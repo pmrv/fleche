@@ -2,7 +2,7 @@ import hashlib
 import dataclasses
 import struct
 from collections.abc import Iterable
-from typing import Any
+from typing import Any, TypeVar, Callable
 
 import numpy as np
 
@@ -10,6 +10,26 @@ import numpy as np
 class Unhashable(Exception):
     """Exception raised when an object cannot be digested."""
     pass
+
+
+T = TypeVar("T")
+
+
+@dataclasses.dataclass
+class Hook:
+    type: T
+    digest: Callable[[T], str]
+
+
+_HOOKS = []
+
+
+def get_hooks():
+    return _HOOKS
+
+
+def add_hook(hook: Hook):
+    _HOOKS.append(hook)
 
 
 def digest(value: Any) -> str:
@@ -30,6 +50,10 @@ def digest(value: Any) -> str:
         Unhashable: If the provided value cannot be digested.
     """
     m = hashlib.sha256()
+
+    for h in get_hooks():
+        if isinstance(value, h.type):
+            return h.digest(value)
 
     match value:
         case str():
