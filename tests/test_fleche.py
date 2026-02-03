@@ -1,6 +1,12 @@
 
 from unittest.mock import Mock
-from fleche import fleche
+from fleche import fleche, Cache, _CACHE
+
+
+def setup_function():
+    cache = Cache(Mock(), Mock())
+    cache.storage.load.side_effect = KeyError
+    _CACHE.set(cache)
 
 def test_fleche_no_args():
     @fleche
@@ -14,7 +20,7 @@ def test_fleche_with_args():
     def my_func(x):
         return x * 2
 
-    assert my_func(2) == 4
+    assert my_func(3) == 6
 
 def test_fleche_with_meta():
     mock_meta = Mock()
@@ -24,6 +30,6 @@ def test_fleche_with_meta():
     def my_func(x):
         return x * 2
 
-    assert my_func(2) == 4
-    mock_meta.pre.assert_called_once_with(2)
+    assert my_func(4) == 8
+    mock_meta.pre.assert_called_once_with(4)
     mock_meta.post.assert_called_once()
