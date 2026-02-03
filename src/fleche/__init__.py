@@ -67,6 +67,7 @@ def metadata(*new_metadata: MetaData, stack=False):
 def fleche(
     _func=None,
     *,
+    version: int | None = None,
     meta: tuple[MetaData] = (),
     hash_version: bool = True,
     hash_module: bool = True
@@ -76,6 +77,9 @@ def fleche(
         """
         The actual decorator that wraps the function.
         """
+        if version is not None:
+            func.__version__ = version
+
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> _T:
             cache: Cache = _CACHE.get()

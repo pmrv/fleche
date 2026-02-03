@@ -63,3 +63,79 @@ def test_fleche_retrieves_from_cache():
     mock_function.assert_called_once_with(2) # Not called again
     cache.storage.load.assert_called()
     assert cache.storage.load.call_count == 2
+
+
+def test_fleche_with_version_argument():
+    mock_function = Mock(return_value=42)
+    mock_function.__name__ = 'mock_function'
+
+    @fleche(version=1)
+    def my_func(x):
+        return mock_function(x)
+
+    cache = _CACHE.get()
+    cache.storage.load.side_effect = KeyError
+
+    # First call, should execute the function and save to cache
+    assert my_func(2) == 42
+    mock_function.assert_called_once_with(2)
+    cache.storage.save.assert_called_once()
+
+    # Second call, with different version, should execute again
+    @fleche(version=2)
+    def my_func(x):
+        return mock_function(x)
+
+    assert my_func(2) == 42
+    assert mock_function.call_count == 2
+    assert cache.storage.save.call_count == 2
+
+
+def test_fleche_with_version():
+    mock_function = Mock(return_value=42)
+    mock_function.__name__ = 'mock_function'
+
+    @fleche
+    def my_func(x):
+        return mock_function(x)
+
+    my_func.__version__ = 1
+
+    cache = _CACHE.get()
+    cache.storage.load.side_effect = KeyError
+
+    # First call, should execute the function and save to cache
+    assert my_func(2) == 42
+    mock_function.assert_called_once_with(2)
+    cache.storage.save.assert_called_once()
+
+    # Second call, with different version, should execute again
+    my_func.__version__ = 2
+    assert my_func(2) == 42
+    assert mock_function.call_count == 2
+    assert cache.storage.save.call_count == 2
+
+
+def test_fleche_with_module():
+    mock_function = Mock(return_value=42)
+    mock_function.__name__ = 'mock_function'
+
+    @fleche
+    def my_func(x):
+        return mock_function(x)
+
+    my_func.__module__ = "module1"
+
+    cache = _CACHE.get()
+    cache.storage.load.side_effect = KeyError
+
+    # First call, should execute the function and save to cache
+    assert my_func(2) == 42
+    mock_function.assert_called_once_with(2)
+    cache.storage.save.assert_called_once()
+
+    # Second call, with different module, should execute again
+    my_func.__module__ = "module2"
+    assert my_func(2) == 42
+    assert mock_function.call_count == 2
+    assert cache.storage.save.call_count == 2
