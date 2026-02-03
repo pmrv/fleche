@@ -6,7 +6,7 @@ import pytest
 
 from fleche import fleche, cache, metadata
 from fleche.cache import Cache
-from fleche.metadata import MetaData, PandasDB
+from fleche.metadata import MetaData, PandasDB, Invocation
 from fleche.storage import CloudpickleFileStorage
 
 
@@ -39,7 +39,7 @@ def test_fleche_decorator_custom_metadata(cache_it: Cache):
         name = "my_meta"
         keys = {"my_key": str}
 
-        def pre(self, *args, **kwargs):
+        def pre(self, invocation: Invocation):
             return {"my_key": "my_value"}
 
     @fleche(meta=(MyMetadata(),))
@@ -59,7 +59,7 @@ def test_metadata_context_manager(cache_it: Cache):
         name = "my_meta"
         keys = {"my_key": str}
 
-        def pre(self, *args, **kwargs):
+        def pre(self, invocation: Invocation):
             return {"my_key": "my_value"}
 
     @fleche
@@ -80,14 +80,14 @@ def test_metadata_context_manager_stacking(cache_it: Cache):
         name = "my_meta1"
         keys = {"my_key1": str}
 
-        def pre(self, *args, **kwargs):
+        def pre(self, invocation: Invocation):
             return {"my_key1": "my_value1"}
 
     class MyMetadata2(MetaData):
         name = "my_meta2"
         keys = {"my_key2": str}
 
-        def pre(self, *args, **kwargs):
+        def pre(self, invocation: Invocation):
             return {"my_key2": "my_value2"}
 
     @fleche
@@ -111,8 +111,8 @@ def test_metadb_table_filtering(cache_it: Cache):
         name = "my_meta"
         keys = {"my_key": str, "my_other_key": int}
 
-        def pre(self, *args, **kwargs):
-            if kwargs.get("b") == 2:
+        def pre(self, invocation: Invocation):
+            if invocation.kwargs.get("b") == 2:
                 return {"my_key": "my_value", "my_other_key": 1}
             return {"my_key": "another_value", "my_other_key": 2}
 
@@ -148,14 +148,14 @@ def test_fleche_decorator_and_context_manager(cache_it: Cache):
         name = "my_meta1"
         keys = {"my_key1": str}
 
-        def pre(self, *args, **kwargs):
+        def pre(self, invocation: Invocation):
             return {"my_key1": "my_value1"}
 
     class MyMetadata2(MetaData):
         name = "my_meta2"
         keys = {"my_key2": str}
 
-        def pre(self, *args, **kwargs):
+        def pre(self, invocation: Invocation):
             return {"my_key2": "my_value2"}
 
     @fleche(meta=(MyMetadata1(),))

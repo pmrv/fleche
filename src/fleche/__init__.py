@@ -7,7 +7,7 @@ from typing import Any, Callable, Dict, Optional, TypeVar, Union
 
 from .digest import Unhashable, digest
 from .invocation import Invocation
-from .metadata import MetaData, Runtime, ResultDigest, PandasDB
+from .metadata import MetaData, PandasDB, Runtime, ResultDigest, InvocationInfo
 from .cache import Cache
 from .storage import CloudpickleFileStorage
 
@@ -47,7 +47,7 @@ def cache(new_cache: Optional[Cache] = None) -> Union[Cache, AbstractContextMana
 
 _METADATA: ContextVar[tuple[MetaData]] = ContextVar(
         "fleche.METADATA",
-        default=(Runtime(), ResultDigest())
+        default=(Runtime(), ResultDigest(), InvocationInfo())
 )
 
 
@@ -65,7 +65,11 @@ def metadata(*new_metadata: MetaData, stack=False):
 
 
 def fleche(
-    _func=None, *, meta: tuple[MetaData] = (Runtime(), ResultDigest())
+    _func=None,
+    *,
+    meta: tuple[MetaData] = (),
+    hash_version: bool = True,
+    hash_module: bool = True
 ):
 
     def decorator(func: Callable[..., _T]) -> Callable[..., _T]:
@@ -76,8 +80,12 @@ def fleche(
         def wrapper(*args: Any, **kwargs: Any) -> _T:
             cache: Cache = _CACHE.get()
             try:
-                key: str = digest(Invocation(func.__name__, args, kwargs))
-                print(key, Invocation(func.__name__, args, kwargs))
+                inv = Invocation(func.__name__, args, kwargs)
+                if hash_version and hasattr(func, "__version__"):
+                    inv.version = func.__version__
+                if hash_module and hasattr(func, "__module__"):
+                    inv.module = func.__module__
+                key: str = digest(inv)
             except Unhashable as e:
                 print("WARNING:", e.args[0])
                 return func(*args, **kwargs)
@@ -88,9 +96,9 @@ def fleche(
                 pass
 
             active_meta = _METADATA.get() + tuple(meta)
-            metadata: Dict[str, Any] = {m.name: m.pre(*args, **kwargs) for m in active_meta}
+            metadata: Dict[str, Any] = {m.name: m.pre(inv) for m in active_meta}
             result: _T = func(*args, **kwargs)
-            metadata = {m.name: m.post(metadata[m.name], result, *args, **kwargs)
+            metadata = {m.name: m.post(metadata[m.name], result, inv)
                         for m in active_meta}
             cache.metadata.save(key, metadata)
             cache.storage.save(key, result)

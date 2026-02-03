@@ -1,11 +1,12 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 import time
 from typing import Any
 
 import pandas as pd
 
 from .digest import digest
+from .invocation import Invocation
 
 
 class MetaDB(ABC):
@@ -93,28 +94,26 @@ class PandasDB(MetaDB):
 
 class MetaData(ABC):
     """Abstract base class for defining metadata types."""
-    def pre(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+    def pre(self, invocation: Invocation) -> dict[str, Any]:
         """
         Hook for collecting metadata before the function execution.
 
         Args:
-            *args (Any): Positional arguments of the decorated function.
-            **kwargs (Any): Keyword arguments of the decorated function.
+            invocation (Invocation): The invocation object of the decorated function.
 
         Returns:
             dict[str, Any]: A dictionary of metadata collected before execution.
         """
         return {}
 
-    def post(self, pre: dict[str, Any], result: Any, *args: Any, **kwargs: Any) -> dict[str, Any]:
+    def post(self, pre: dict[str, Any], result: Any, invocation: Invocation) -> dict[str, Any]:
         """
         Hook for collecting metadata after the function execution.
 
         Args:
             pre (dict[str, Any]): Metadata collected during the pre-execution phase.
             result (Any): The result of the decorated function.
-            *args (Any): Positional arguments of the decorated function.
-            **kwargs (Any): Keyword arguments of the decorated function.
+            invocation (Invocation): The invocation object of the decorated function.
 
         Returns:
             dict[str, Any]: A dictionary of metadata collected after execution.
@@ -148,13 +147,13 @@ class Runtime(MetaData):
     """
     Metadata type for capturing runtime information, such as start time, stop time, and wall time.
     """
-    def pre(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+    def pre(self, invocation: Invocation) -> dict[str, Any]:
         """
         Records the start time before function execution.
         """
         return {'timestart': time.time()}
 
-    def post(self, pre: dict[str, Any], result: Any, *args: Any, **kwargs: Any) -> dict[str, Any]:
+    def post(self, pre: dict[str, Any], result: Any, invocation: Invocation) -> dict[str, Any]:
         """
         Records the stop time and calculates the wall time after function execution.
         """
@@ -174,12 +173,26 @@ class ResultDigest(MetaData):
     """
     Metadata type for storing the digest of the function's result.
     """
-    def post(self, pre: dict[str, Any], result: Any, *args: Any, **kwargs: Any) -> dict[str, Any]:
+    def post(self, pre: dict[str, Any], result: Any, invocation: Invocation) -> dict[str, Any]:
         """
         Calculates and stores the digest of the function's result.
         """
-        print(pre)
         return {**pre, "result": digest(result)}
 
-    keys: dict[str, type] = {"result": str}
     name: str = "resultdigest"
+    keys: dict[str, type] = {"result": str}
+
+
+class InvocationInfo(MetaData):
+    def pre(self, invocation: Invocation) -> dict[str, Any]:
+        pre = asdict(invocation)
+        pre.pop("args")
+        pre.pop("kwargs")
+        return pre
+
+    name: str = "invocation"
+    keys = {
+            "name":  str,
+            "module":  str,
+            "version":  int,
+    }
