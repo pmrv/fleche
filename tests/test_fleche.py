@@ -1,5 +1,6 @@
 
-from unittest.mock import Mock
+from unittest.mock import Mock, MagicMock
+
 from fleche import fleche, Cache, _CACHE
 
 from fleche.invocation import Invocation
@@ -28,7 +29,7 @@ def test_fleche_with_args():
 
 
 def test_fleche_with_meta():
-    mock_meta = Mock()
+    mock_meta = MagicMock()
     mock_meta.name = "my_meta"
 
     @fleche(meta=(mock_meta,))

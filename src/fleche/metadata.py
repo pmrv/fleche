@@ -118,7 +118,7 @@ class MetaData(ABC):
         Returns:
             dict[str, Any]: A dictionary of metadata collected after execution.
         """
-        return pre
+        return {}
 
     @property
     @abstractmethod
@@ -157,9 +157,10 @@ class Runtime(MetaData):
         """
         Records the stop time and calculates the wall time after function execution.
         """
-        pre['timestop'] = time.time()
-        pre['walltime'] = pre['timestop'] - pre['timestart']
-        return pre
+        return {
+            'timestop': (t := time.time()),
+            'walltime': t - pre['timestart'],
+        }
 
     name: str = 'runtime'
     keys: dict[str, type] = {
@@ -177,7 +178,7 @@ class ResultDigest(MetaData):
         """
         Calculates and stores the digest of the function's result.
         """
-        return {**pre, "result": digest(result)}
+        return {"result": digest(result)}
 
     name: str = "resultdigest"
     keys: dict[str, type] = {"result": str}
@@ -196,3 +197,17 @@ class InvocationInfo(MetaData):
             "module":  str,
             "version":  int,
     }
+
+
+@dataclass
+class Tags(MetaData):
+    tags: dict[str, Any]
+
+    def pre(self, invocation: Invocation) -> dict[str, Any]:
+        return self.tags.copy()
+
+    name: str = "tags"
+
+    @property
+    def keys(self):
+        return {k: type(v) for k, v in self.tags.items()}

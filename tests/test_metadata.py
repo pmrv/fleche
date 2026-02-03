@@ -1,19 +1,18 @@
 
 import time
-from pathlib import Path
 
 import pytest
 
-from fleche import fleche, cache, metadata
+from fleche import fleche, cache, tags, project, metadata
 from fleche.cache import Cache
 from fleche.metadata import MetaData, PandasDB, Invocation
-from fleche.storage import CloudpickleFileStorage
+from fleche.storage import MemoryStorage
 
 
 @pytest.fixture
-def cache_it(tmp_path: Path) -> Cache:
+def cache_it() -> Cache:
     db = PandasDB({})
-    storage = CloudpickleFileStorage(tmp_path)
+    storage = MemoryStorage({})
     return Cache(db, storage)
 
 
@@ -171,3 +170,29 @@ def test_fleche_decorator_and_context_manager(cache_it: Cache):
     assert "my_key2" in df.columns
     assert df["my_key1"].iloc[0] == "my_value1"
     assert df["my_key2"].iloc[0] == "my_value2"
+
+
+def test_tags():
+    storage = MemoryStorage({})
+    mdb = PandasDB({})
+
+    with cache(Cache(mdb, storage)):
+
+        @fleche
+        def my_func(a, b):
+            return a + b
+
+        with tags(user="test", project="fleche"):
+            my_func(1, 2)
+
+        df = mdb.table()
+        assert "user" in df.columns
+        assert "project" in df.columns
+        assert df.iloc[0]["user"] == "test"
+        assert df.iloc[0]["project"] == "fleche"
+
+        with project("example"):
+            my_func(2, 1)
+
+        df = mdb.table()
+        assert df.iloc[1]["project"] == "example"

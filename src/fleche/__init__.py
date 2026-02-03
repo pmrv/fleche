@@ -1,13 +1,14 @@
 """lru_cache on 'roids."""
 from contextlib import contextmanager, AbstractContextManager
 from contextvars import ContextVar
+from collections import defaultdict
 from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, TypeVar, Union
 
 from .digest import Unhashable, digest
 from .invocation import Invocation
-from .metadata import MetaData, PandasDB, Runtime, ResultDigest, InvocationInfo
+from .metadata import MetaData, PandasDB, Runtime, ResultDigest, InvocationInfo, Tags
 from .cache import Cache
 from .storage import CloudpickleFileStorage
 
@@ -64,6 +65,14 @@ def metadata(*new_metadata: MetaData, stack=False):
         _METADATA.reset(token)
 
 
+def tags(**kwargs):
+    return metadata(Tags(kwargs), stack=True)
+
+
+def project(name):
+    return tags(project=name)
+
+
 def fleche(
     _func=None,
     *,
@@ -100,11 +109,13 @@ def fleche(
                 pass
 
             active_meta = _METADATA.get() + tuple(meta)
-            metadata: Dict[str, Any] = {m.name: m.pre(inv) for m in active_meta}
+            metadata: Dict[str, Any] = defaultdict(dict)
+            for m in active_meta:
+                metadata[m.name] |= m.pre(inv)
             result: _T = func(*args, **kwargs)
-            metadata = {m.name: m.post(metadata[m.name], result, inv)
-                        for m in active_meta}
-            cache.save(key, result, metadata)
+            for m in active_meta:
+                metadata[m.name] |= m.post(metadata[m.name], result, inv)
+            cache.save(key, result, dict(metadata))
             return result
         return wrapper
 
