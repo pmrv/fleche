@@ -170,17 +170,24 @@ class Runtime(MetaData):
     }
 
 
-class ResultDigest(MetaData):
+class Digest(MetaData):
     """
     Metadata type for storing the digest of the function's result.
     """
+    def pre(self, invocation: Invocation) -> dict[str, Any]:
+        return {
+            "arguments":
+                {i: digest(a) for i, a in enumerate(invocation.args)}
+                | {k: digest(v) for k, v in invocation.kwargs.items()}
+        }
+
     def post(self, pre: dict[str, Any], result: Any, invocation: Invocation) -> dict[str, Any]:
         """
         Calculates and stores the digest of the function's result.
         """
         return {"result": digest(result)}
 
-    name: str = "resultdigest"
+    name: str = "digest"
     keys: dict[str, type] = {"result": str}
 
 

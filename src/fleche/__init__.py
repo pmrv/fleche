@@ -8,7 +8,7 @@ from typing import Any, Callable, Dict, Optional, TypeVar, Union
 
 from .digest import Unhashable, digest
 from .invocation import Invocation
-from .metadata import MetaData, PandasDB, Runtime, ResultDigest, InvocationInfo, Tags
+from .metadata import MetaData, PandasDB, Runtime, Digest, InvocationInfo, Tags
 from .cache import Cache
 from .storage import CloudpickleFileStorage
 
@@ -47,8 +47,8 @@ def cache(new_cache: Optional[Cache] = None) -> Union[Cache, AbstractContextMana
 
 
 _METADATA: ContextVar[tuple[MetaData]] = ContextVar(
-        "fleche.METADATA",
-        default=(Runtime(), ResultDigest(), InvocationInfo())
+    "fleche.METADATA",
+    default=(Runtime(), Digest(), InvocationInfo())
 )
 
 
