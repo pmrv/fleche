@@ -11,17 +11,17 @@ from .digest import digest
 class MetaDB(ABC):
     """Interface for databases that keep metadata."""
     @abstractmethod
-    def save(self, digest, metadata: dict[str, dict[str, Any]]):
+    def save(self, digest: str, metadata: dict[str, dict[str, Any]]) -> None:
         """Save a given metadata entry."""
         ...
 
     @abstractmethod
-    def load(self, digest) -> dict[str, dict[str, Any]]:
+    def load(self, digest: str) -> dict[str, dict[str, Any]]:
         """Load a given metadata entry."""
         ...
 
     @abstractmethod
-    def table(self, **kwargs) -> pd.DataFrame:
+    def table(self, **kwargs: Any) -> pd.DataFrame:
         """Return a display-friendly table of all metadata entries.
 
         Entries can be filtered using the kwargs."""
@@ -30,9 +30,24 @@ class MetaDB(ABC):
 
 @dataclass
 class PandasDB(MetaDB):
+    """
+    A concrete implementation of MetaDB using Pandas DataFrames to store metadata.
+    Each metadata type (e.g., 'runtime', 'resultdigest') is stored in its own DataFrame.
+    """
     tables: dict[str, pd.DataFrame]
 
-    def save(self, digest, metadata):
+    def save(self, digest: str, metadata: dict[str, dict[str, Any]]) -> None:
+        """
+        Saves metadata for a given digest. Each metadata entry is added to its
+        corresponding DataFrame. If a DataFrame for a metadata type does not exist,
+        it will be created.
+
+        Args:
+            digest (str): The digest key associated with the metadata.
+            metadata (dict[str, dict[str, Any]]): A dictionary where keys are metadata
+                                                  names (e.g., 'runtime') and values
+                                                  are dictionaries of metadata attributes.
+        """
         for name, data in metadata.items():
             df = pd.DataFrame([data], index=[digest])
             if name in self.tables:
@@ -40,46 +55,111 @@ class PandasDB(MetaDB):
             else:
                 self.tables[name] = df
 
-    def load(self, digest) -> dict[str, dict[str, Any]]:
-        return {m: t.loc[digest] for m, t in self.tables.items() if digest in t.index}
+    def load(self, digest: str) -> dict[str, dict[str, Any]]:
+        """
+        Loads metadata for a given digest.
 
-    def table(self, **kwargs) -> pd.DataFrame:
+        Args:
+            digest (str): The digest key of the metadata to load.
+
+        Returns:
+            dict[str, dict[str, Any]]: A dictionary containing the loaded metadata,
+                                       structured by metadata name.
+        """
+        return {m: t.loc[digest].to_dict() for m, t in self.tables.items() if digest in t.index}
+
+    def table(self, **kwargs: Any) -> pd.DataFrame:
+        """
+        Returns a display-friendly table of all metadata entries, optionally filtered
+        by keyword arguments.
+
+        Args:
+            **kwargs (Any): Keyword arguments for filtering the metadata table.
+                            e.g., column_name=value.
+
+        Returns:
+            pd.DataFrame: A DataFrame containing the metadata, potentially filtered.
+        """
         # join all tables on index
         df = pd.concat(self.tables.values(), axis=1)
         if kwargs:
-            return df.query(" and ".join(f"{k} == {v}" for k, v in kwargs.items()))
+            return df.query(" and ".join(f"{k} == '{v}'" if isinstance(v, str) else f"{k} == {v}" for k, v in kwargs.items()))
         return df
 
 
 class MetaData(ABC):
-    def pre(self, *args, **kwargs) -> dict:
+    """Abstract base class for defining metadata types."""
+    def pre(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        """
+        Hook for collecting metadata before the function execution.
+
+        Args:
+            *args (Any): Positional arguments of the decorated function.
+            **kwargs (Any): Keyword arguments of the decorated function.
+
+        Returns:
+            dict[str, Any]: A dictionary of metadata collected before execution.
+        """
         return {}
 
-    def post(self, pre, result, *args, **kwargs) -> dict:
+    def post(self, pre: dict[str, Any], result: Any, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        """
+        Hook for collecting metadata after the function execution.
+
+        Args:
+            pre (dict[str, Any]): Metadata collected during the pre-execution phase.
+            result (Any): The result of the decorated function.
+            *args (Any): Positional arguments of the decorated function.
+            **kwargs (Any): Keyword arguments of the decorated function.
+
+        Returns:
+            dict[str, Any]: A dictionary of metadata collected after execution.
+        """
         return pre
 
     @property
     @abstractmethod
     def keys(self) -> dict[str, type]:
+        """
+        Defines the schema of the metadata, mapping metadata keys to their expected types.
+
+        Returns:
+            dict[str, type]: A dictionary representing the metadata schema.
+        """
         ...
 
     @property
     @abstractmethod
     def name(self) -> str:
+        """
+        The unique name of this metadata type.
+
+        Returns:
+            str: The name of the metadata type.
+        """
         ...
 
 
 class Runtime(MetaData):
-    def pre(self, *_, **__):
+    """
+    Metadata type for capturing runtime information, such as start time, stop time, and wall time.
+    """
+    def pre(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        """
+        Records the start time before function execution.
+        """
         return {'timestart': time.time()}
 
-    def post(self, pre, *_, **__):
+    def post(self, pre: dict[str, Any], result: Any, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        """
+        Records the stop time and calculates the wall time after function execution.
+        """
         pre['timestop'] = time.time()
         pre['walltime'] = pre['timestop'] - pre['timestart']
         return pre
 
     name: str = 'runtime'
-    keys = {
+    keys: dict[str, type] = {
             'timestart': float,
             'timestop': float,
             'walltime': float,
@@ -87,8 +167,15 @@ class Runtime(MetaData):
 
 
 class ResultDigest(MetaData):
-    def post(self, pre, result, *_, **__):
+    """
+    Metadata type for storing the digest of the function's result.
+    """
+    def post(self, pre: dict[str, Any], result: Any, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        """
+        Calculates and stores the digest of the function's result.
+        """
+        print(pre)
         return {**pre, "result": digest(result)}
 
-    keys = {"result": str}
-    name = "resultdigest"
+    keys: dict[str, type] = {"result": str}
+    name: str = "resultdigest"

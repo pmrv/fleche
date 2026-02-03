@@ -2,6 +2,7 @@ import hashlib
 import dataclasses
 import struct
 from collections.abc import Iterable
+from typing import Any
 
 import numpy as np
 
@@ -9,10 +10,27 @@ from .invocation import Invocation
 
 
 class Unhashable(Exception):
+    """Exception raised when an object cannot be digested."""
     pass
 
 
-def digest(value) -> str:
+def digest(value: Any) -> str:
+    """
+    Generates a SHA256 digest for a given Python object.
+
+    This function handles various types including strings, bytes, integers, floats, booleans,
+    None, dictionaries, numpy arrays, dataclasses, and iterables.
+    If an unhashable type is encountered, an Unhashable exception is raised.
+
+    Args:
+        value (Any): The object to be digested.
+
+    Returns:
+        str: The SHA256 hexdigest of the object.
+
+    Raises:
+        Unhashable: If the provided value cannot be digested.
+    """
     m = hashlib.sha256()
 
     match value:
@@ -29,7 +47,8 @@ def digest(value) -> str:
         case None:
             m.update(b"__None__")
         case dict():
-            for k, v in value.items():
+            # Sort items to ensure consistent digest for dictionaries
+            for k, v in sorted(value.items()):
                 m.update(digest(k).encode())
                 m.update(digest(v).encode())
         case np.ndarray():
