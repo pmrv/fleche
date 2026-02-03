@@ -1,4 +1,3 @@
-import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 import numpy as np
@@ -6,7 +5,7 @@ from dataclasses import dataclass
 import math
 import hashlib
 
-from fleche.digest import digest, Unhashable
+from fleche.digest import digest
 
 
 def test_supported_types():
@@ -45,18 +44,17 @@ def test_different_integers_have_different_hashes(x, y):
 @given(st.floats(allow_nan=True), st.floats(allow_nan=True))
 def test_different_floats_have_different_hashes(x, y):
     """Test that two different floats have different hashes."""
-    if x == y or (math.isnan(x) and math.isnan(y)):
+    if x == y or (math.isnan(x) and math.isnan(y) and math.sign(x) == math.sign(y)):
         assert digest(x) == digest(y)
     else:
         assert digest(x) != digest(y)
 
 
-@given(st.lists(st.integers()), st.tuples(st.integers()))
-def test_different_iterables_same_values_hash_differently(l, t):
+@given(st.lists(st.integers()))
+def test_different_iterables_same_values_hash_differently(lst):
     """Test that two different iterables with the same values have different hashes."""
-    l_from_t = list(t)
-    if l == l_from_t:
-        assert digest(l) != digest(t)
+    tup = tuple(lst)
+    assert digest(tup) != digest(lst)
 
 
 def test_specific_iterables_dont_use_generic_iterable_path(monkeypatch):
