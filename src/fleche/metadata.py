@@ -81,9 +81,13 @@ class PandasDB(MetaDB):
             pd.DataFrame: A DataFrame containing the metadata, potentially filtered.
         """
         # join all tables on index
+        if not self.tables:
+            return pd.DataFrame()
+
         df = pd.concat(self.tables.values(), axis=1)
         if kwargs:
-            return df.query(" and ".join(f"{k} == '{v}'" if isinstance(v, str) else f"{k} == {v}" for k, v in kwargs.items()))
+            for k, v in kwargs.items():
+                df = df[df[k] == v]
         return df
 
 

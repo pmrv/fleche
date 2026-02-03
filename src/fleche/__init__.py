@@ -45,6 +45,25 @@ def cache(new_cache: Optional[Cache] = None) -> Union[Cache, AbstractContextMana
     return cache_manager()
 
 
+_METADATA: ContextVar[tuple[MetaData]] = ContextVar(
+        "fleche.METADATA",
+        default=(Runtime(), ResultDigest())
+)
+
+
+@contextmanager
+def metadata(*new_metadata: MetaData, stack=False):
+    new_metadata = tuple(new_metadata)
+    if stack:
+        new_metadata = _METADATA.get() + new_metadata
+
+    token = _METADATA.set(new_metadata)
+    try:
+        yield
+    finally:
+        _METADATA.reset(token)
+
+
 def fleche(
     _func=None, *, meta: tuple[MetaData] = (Runtime(), ResultDigest())
 ):
@@ -68,10 +87,11 @@ def fleche(
             except KeyError:
                 pass
 
-            metadata = {m.name: m.pre(*args, **kwargs) for m in meta}
-            result = func(*args, **kwargs)
+            active_meta = _METADATA.get() + tuple(meta)
+            metadata: Dict[str, Any] = {m.name: m.pre(*args, **kwargs) for m in active_meta}
+            result: _T = func(*args, **kwargs)
             metadata = {m.name: m.post(metadata[m.name], result, *args, **kwargs)
-                        for m in meta}
+                        for m in active_meta}
             cache.metadata.save(key, metadata)
             cache.storage.save(key, result)
             return result

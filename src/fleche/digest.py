@@ -6,8 +6,6 @@ from typing import Any
 
 import numpy as np
 
-from .invocation import Invocation
-
 
 class Unhashable(Exception):
     """Exception raised when an object cannot be digested."""
