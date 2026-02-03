@@ -10,3 +10,7 @@ class Cache:
     """
     metadata: MetaDB
     storage: Storage
+
+    def save(self, key, result, metadata):
+        self.storage.save(key, result)
+        self.metadata.save(key, metadata)

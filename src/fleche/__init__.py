@@ -104,8 +104,7 @@ def fleche(
             result: _T = func(*args, **kwargs)
             metadata = {m.name: m.post(metadata[m.name], result, inv)
                         for m in active_meta}
-            cache.metadata.save(key, metadata)
-            cache.storage.save(key, result)
+            cache.save(key, result, metadata)
             return result
         return wrapper
 
