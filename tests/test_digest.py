@@ -44,7 +44,7 @@ def test_different_integers_have_different_hashes(x, y):
 @given(st.floats(allow_nan=True), st.floats(allow_nan=True))
 def test_different_floats_have_different_hashes(x, y):
     """Test that two different floats have different hashes."""
-    if x == y or (math.isnan(x) and math.isnan(y) and math.sign(x) == math.sign(y)):
+    if x == y or (math.isnan(x) and math.isnan(y) and math.copysign(1, x) == math.copysign(1, y)):
         assert digest(x) == digest(y)
     else:
         assert digest(x) != digest(y)

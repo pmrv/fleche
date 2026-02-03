@@ -33,3 +33,25 @@ def test_fleche_with_meta():
     assert my_func(4) == 8
     mock_meta.pre.assert_called_once_with(4)
     mock_meta.post.assert_called_once()
+
+def test_fleche_retrieves_from_cache():
+    mock_function = Mock(return_value=42)
+    mock_function.__name__ = 'mock_function'
+
+    @fleche
+    def my_func(x):
+        return mock_function(x)
+
+    cache = _CACHE.get()
+    cache.storage.load.side_effect = [KeyError, 42]
+
+    # First call, should execute the function and save to cache
+    assert my_func(2) == 42
+    mock_function.assert_called_once_with(2)
+    cache.storage.save.assert_called_once()
+
+    # Second call, should load from cache
+    assert my_func(2) == 42
+    mock_function.assert_called_once_with(2) # Not called again
+    cache.storage.load.assert_called()
+    assert cache.storage.load.call_count == 2
