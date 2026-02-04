@@ -32,6 +32,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+docs = [
+    "mkdocs>=1.5",
+    "mkdocs-material",
+    "mkdocs-autoapi",
+    "mkdocstrings[python]",
+    "griffe_fieldz",
+]
 test = [
     "pytest",
     "hypothesis",
