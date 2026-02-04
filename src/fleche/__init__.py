@@ -66,10 +66,20 @@ def metadata(*new_metadata: MetaData, stack=False):
 
 
 def tags(**kwargs):
+    """A context manager to add arbitrary tags to results.
+
+    Args:
+        **kwargs: The tags to add to the results.
+    """
     return metadata(Tags(kwargs), stack=True)
 
 
 def project(name):
+    """A context manager to tag results with a project name.
+
+    Args:
+        name (str): The name of the project.
+    """
     return tags(project=name)
 
 

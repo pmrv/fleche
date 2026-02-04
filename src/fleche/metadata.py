@@ -144,8 +144,12 @@ class MetaData(ABC):
 
 
 class Runtime(MetaData):
-    """
-    Metadata type for capturing runtime information, such as start time, stop time, and wall time.
+    """Metadata type for capturing runtime information.
+
+    Keys:
+        timestart (float): The timestamp when the execution started.
+        timestop (float): The timestamp when the execution stopped.
+        walltime (float): The total execution time in seconds.
     """
     def pre(self, invocation: Invocation) -> dict[str, Any]:
         """
@@ -171,8 +175,11 @@ class Runtime(MetaData):
 
 
 class Digest(MetaData):
-    """
-    Metadata type for storing the digest of the function's result.
+    """Metadata type for storing the digest of the function's result.
+
+    Keys:
+        arguments (dict): A dictionary of the digests of the arguments.
+        result (str): The digest of the function's result.
     """
     def pre(self, invocation: Invocation) -> dict[str, Any]:
         return {
@@ -192,6 +199,13 @@ class Digest(MetaData):
 
 
 class InvocationInfo(MetaData):
+    """Metadata type for storing information about the function invocation.
+
+    Keys:
+        name (str): The name of the invoked function.
+        module (str): The module where the invoked function is defined.
+        version (int): The version of the invoked function.
+    """
     def pre(self, invocation: Invocation) -> dict[str, Any]:
         pre = asdict(invocation)
         pre.pop("args")
@@ -208,6 +222,13 @@ class InvocationInfo(MetaData):
 
 @dataclass
 class Tags(MetaData):
+    """Metadata type for storing arbitrary tags.
+
+    For each key in the ``tags`` dictionary, a new metadata column is created.
+
+    Keys:
+        tags (dict): A dictionary of user-defined tags.
+    """
     tags: dict[str, Any]
 
     def pre(self, invocation: Invocation) -> dict[str, Any]:
