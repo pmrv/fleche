@@ -6,13 +6,13 @@ import pytest
 from fleche import fleche, cache, tags, project, metadata
 from fleche.cache import Cache
 from fleche.metadata import MetaData, PandasDB, Invocation
-from fleche.storage import MemoryStorage
+from fleche.storage import Memory
 
 
 @pytest.fixture
 def cache_it() -> Cache:
     db = PandasDB({})
-    storage = MemoryStorage({})
+    storage = Memory({})
     return Cache(db, storage)
 
 
@@ -173,7 +173,7 @@ def test_fleche_decorator_and_context_manager(cache_it: Cache):
 
 
 def test_tags():
-    storage = MemoryStorage({})
+    storage = Memory({})
     mdb = PandasDB({})
 
     with cache(Cache(mdb, storage)):

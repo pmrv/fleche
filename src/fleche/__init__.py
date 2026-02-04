@@ -10,13 +10,13 @@ from .digest import Unhashable, digest
 from .invocation import Invocation
 from .metadata import MetaData, PandasDB, Runtime, Digest, InvocationInfo, Tags
 from .cache import Cache
-from .storage import CloudpickleFileStorage
+from . import storage
 
 _T = TypeVar("_T")
 
 _CACHE: ContextVar[Cache] = ContextVar(
     'fleche.CACHE',
-    default=Cache(PandasDB({}), CloudpickleFileStorage(Path(".fleche")))
+    default=Cache(PandasDB({}), storage.CloudpickleFile(Path(".fleche")))
 )
 
 

@@ -4,12 +4,12 @@ import numpy as np
 import tempfile
 from pathlib import Path
 
-from fleche.storage import CloudpickleFileStorage, MemoryStorage, BagOfHoldingH5File
+from fleche.storage import CloudpickleFile, Memory, BagOfHoldingH5File
 
 
 temp = tempfile.TemporaryDirectory()
 temp_bag = tempfile.TemporaryDirectory()
-storages = [MemoryStorage({}), CloudpickleFileStorage(temp.name), BagOfHoldingH5File(temp_bag.name)]
+storages = [Memory({}), CloudpickleFile(temp.name), BagOfHoldingH5File(temp_bag.name)]
 
 
 @pytest.mark.parametrize("storage", storages)

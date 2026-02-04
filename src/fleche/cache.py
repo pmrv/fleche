@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from .metadata import MetaDB
-from .storage import Storage
+from . import storage
 
 
 @dataclass
@@ -9,7 +9,7 @@ class Cache:
     Represents a cache composed of a metadata database and a storage mechanism.
     """
     metadata: MetaDB
-    storage: Storage
+    storage: storage.Storage
 
     def save(self, key, result, metadata):
         self.storage.save(key, result)

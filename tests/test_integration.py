@@ -4,10 +4,10 @@ import tempfile
 from unittest.mock import Mock
 
 from fleche import fleche, cache, Cache
-from fleche.storage import CloudpickleFileStorage, MemoryStorage
+from fleche.storage import CloudpickleFile, Memory
 
 temp = tempfile.TemporaryDirectory()
-storages = [MemoryStorage({}), CloudpickleFileStorage(temp.name)]
+storages = [Memory({}), CloudpickleFile(temp.name)]
 
 
 @fleche

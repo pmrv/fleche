@@ -49,7 +49,7 @@ class Storage(ABC):
 
 
 @dataclass
-class MemoryStorage(Storage):
+class Memory(Storage):
     """
     A concrete implementation of Storage that stores values in an in-memory dictionary.
     """
@@ -115,7 +115,7 @@ class FileStorage(Storage):
 
 
 @dataclass
-class CloudpickleFileStorage(FileStorage):
+class CloudpickleFile(FileStorage):
     """
     A concrete implementation of Storage that stores values as files on the filesystem,
     using cloudpickle for serialization.
