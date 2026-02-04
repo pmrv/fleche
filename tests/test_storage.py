@@ -3,13 +3,13 @@ from hypothesis import given, strategies as st
 import numpy as np
 import tempfile
 from pathlib import Path
-import shutil
 
-from fleche.storage import CloudpickleFileStorage, MemoryStorage
+from fleche.storage import CloudpickleFileStorage, MemoryStorage, BagOfHoldingH5File
 
 
 temp = tempfile.TemporaryDirectory()
-storages = [MemoryStorage({}), CloudpickleFileStorage(temp.name)]
+temp_bag = tempfile.TemporaryDirectory()
+storages = [MemoryStorage({}), CloudpickleFileStorage(temp.name), BagOfHoldingH5File(temp_bag.name)]
 
 
 @pytest.mark.parametrize("storage", storages)

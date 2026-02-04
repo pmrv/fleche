@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Iterable, Any
 
 from cloudpickle import loads, dumps
+from bagofholding import H5Bag
 
 
 class Storage(ABC):
@@ -90,11 +91,7 @@ class MemoryStorage(Storage):
 
 
 @dataclass
-class CloudpickleFileStorage(Storage):
-    """
-    A concrete implementation of Storage that stores values as files on the filesystem,
-    using cloudpickle for serialization.
-    """
+class FileStorage(Storage):
     root: Path
 
     def __post_init__(self) -> None:
@@ -104,6 +101,26 @@ class CloudpickleFileStorage(Storage):
         self.root = Path(self.root)
         self.root.mkdir(exist_ok=True)
 
+    def _path(self, digest: str) -> Path:
+        return self.root / digest
+
+    def list(self) -> Iterable[str]:
+        """
+        Lists all digests (filenames) currently present in the root directory.
+
+        Returns:
+            Iterable[str]: An iterable of all digests stored.
+        """
+        return (p.name for p in self.root.iterdir())
+
+
+@dataclass
+class CloudpickleFileStorage(FileStorage):
+    """
+    A concrete implementation of Storage that stores values as files on the filesystem,
+    using cloudpickle for serialization.
+    """
+
     def save(self, digest: str, value: Any) -> None:
         """
         Saves a value to a file in the root directory, serialized using cloudpickle.
@@ -112,7 +129,7 @@ class CloudpickleFileStorage(Storage):
             digest (str): The digest (hash) to use as the filename.
             value (Any): The value to be stored.
         """
-        with open(self.root / digest, "wb") as f:
+        with open(self._path(digest), "wb") as f:
             f.write(dumps(value))
 
     def load(self, digest: str) -> Any:
@@ -129,16 +146,18 @@ class CloudpickleFileStorage(Storage):
             KeyError: If no file is found for the given digest.
         """
         try:
-            with open(self.root / digest, "rb") as f:
+            with open(self._path(digest), "rb") as f:
                 return loads(f.read())
         except FileNotFoundError:
             raise KeyError(digest) from None
 
-    def list(self) -> Iterable[str]:
-        """
-        Lists all digests (filenames) currently present in the root directory.
 
-        Returns:
-            Iterable[str]: An iterable of all digests stored.
-        """
-        return (p.name for p in self.root.iterdir())
+@dataclass
+class BagOfHoldingH5File(FileStorage):
+    root: Path
+
+    def save(self, digest: str, value: Any) -> None:
+        H5Bag.save(value, self._path(digest))
+
+    def load(self, digest: str) -> Any:
+        return H5Bag(self._path(digest)).load()
