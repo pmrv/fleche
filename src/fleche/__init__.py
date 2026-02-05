@@ -9,7 +9,7 @@ from typing import Any, Callable, Dict, Optional, TypeVar, Union
 from .digest import Unhashable, digest
 from .invocation import Invocation
 from .metadata import MetaData, PandasDB, Runtime, Digest, InvocationInfo, Tags
-from .cache import Cache
+from .cache import Cache, SaveError, ReadOnlyCache, CacheStack
 from . import storage
 
 _T = TypeVar("_T")
@@ -20,7 +20,7 @@ _CACHE: ContextVar[Cache] = ContextVar(
 )
 
 
-def cache(new_cache: Optional[Cache] = None) -> Union[Cache, AbstractContextManager[None]]:
+def cache(new_cache: Optional[Cache] = None, stack=False) -> Union[Cache, AbstractContextManager[None]]:
     """
     Manages the active cache for Fleche. If `new_cache` is provided, it returns a context manager
     that sets the cache for the duration of the context. If `new_cache` is None, it returns
@@ -28,6 +28,7 @@ def cache(new_cache: Optional[Cache] = None) -> Union[Cache, AbstractContextMana
 
     Args:
         new_cache (Optional[Cache]): An optional Cache object to set as the active cache.
+        stack (bool, default False): if True, construct a CacheStack, with new_cache at the bottom
 
     Returns:
         Union[Cache, Callable[..., Any]]: The current Cache object if `new_cache` is None,
@@ -38,7 +39,11 @@ def cache(new_cache: Optional[Cache] = None) -> Union[Cache, AbstractContextMana
 
     @contextmanager
     def cache_manager():
-        token = _CACHE.set(new_cache)
+        if stack:
+            cache = _CACHE.get().push(new_cache)
+        else:
+            cache = new_cache
+        token = _CACHE.set(cache)
         try:
             yield
         finally:
@@ -110,11 +115,11 @@ def fleche(
                     inv.module = func.__module__
                 key: str = digest(inv)
             except Unhashable as e:
-                print("WARNING:", e.args[0])
+                print("WARNING NO HASH:", e.args[0])
                 return func(*args, **kwargs)
 
             try:
-                return cache.storage.load(key)
+                return cache.load(key)[0]
             except KeyError:
                 pass
 
@@ -125,7 +130,10 @@ def fleche(
             result: _T = func(*args, **kwargs)
             for m in active_meta:
                 metadata[m.name] |= m.post(metadata[m.name], result, inv)
-            cache.save(key, result, dict(metadata))
+            try:
+                cache.save(key, result, dict(metadata))
+            except SaveError as e:
+                print("WARNING NO SAVE:", *e.args)
             return result
         return wrapper
 

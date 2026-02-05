@@ -1,10 +1,41 @@
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Self
+
 from .metadata import MetaDB
 from . import storage
 
 
+class SaveError(Exception):
+    pass
+
+
+class BaseCache(ABC):
+
+    @abstractmethod
+    def save(self, key, result, metadata):
+        ...
+
+    @abstractmethod
+    def load(self, key):
+        ...
+
+    def transfer(self, other: 'Cache'):
+        # TODO: when migrating results up, we will need to think about what happens to conflicting metadata
+        # probably transfering items should just pop them off the lower cache, therefore the only reason this could
+        # happen is if a user runs the same function in two separate caches and then combines them.  In this case self
+        # should win, because its intuitive even if a bit dangerous
+        # TODO: make a design choice: is storage or metadata sovereign?
+        # for now: storage is king because that's the most important part
+        for key in self.storage.list():
+            other.save(key, *self.load(key))
+
+    def push(self, cache: 'BaseCache') -> 'CacheStack':
+        return CacheStack((cache, self))
+
+
 @dataclass
-class Cache:
+class Cache(BaseCache):
     """
     Represents a cache composed of a metadata database and a storage mechanism.
     """
@@ -14,3 +45,43 @@ class Cache:
     def save(self, key, result, metadata):
         self.storage.save(key, result)
         self.metadata.save(key, metadata)
+
+    def load(self, key):
+        return self.storage.load(key), self.metadata.load(key)
+
+
+@dataclass(frozen=True)
+class ReadOnlyCache(BaseCache):
+    """A cache that can only be read from."""
+    cache: BaseCache
+
+    def save(self, key, result, metadata):
+        raise SaveError(self, result)
+
+    def load(self, key):
+        return self.cache.load(key)
+
+
+@dataclass(frozen=True)
+class CacheStack(BaseCache):
+    """
+    Represents a combination of caches.
+
+    Saving will always hit the lowest level, while loading will traverse up.
+    """
+    stack: tuple[Cache]
+
+    def save(self, key, result, metadata):
+        self.stack[0].save(key, result, metadata)
+
+    def load(self, key):
+        for cache in self.stack:
+            try:
+                return cache.load(key)
+            except KeyError:
+                continue
+        else:
+            raise KeyError(key)
+
+    def push(self, cache: BaseCache) -> Self:
+        return CacheStack((cache, *self.stack))
