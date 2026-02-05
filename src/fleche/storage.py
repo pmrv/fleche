@@ -11,39 +11,39 @@ class Storage(ABC):
     """Abstract base class for defining storage mechanisms."""
 
     @abstractmethod
-    def save(self, digest: str, value: Any) -> None:
+    def save(self, key: str, value: Any) -> None:
         """
-        Saves a value to storage using a given digest as a key.
+        Saves a value to storage using a given key as a key.
 
         Args:
-            digest (str): The digest (hash) to use as the key for storing the value.
+            key (str): The key (digest) to use as the key for storing the value.
             value (Any): The value to be stored.
         """
         ...
 
     @abstractmethod
-    def load(self, digest: str) -> Any:
+    def load(self, key: str) -> Any:
         """
-        Loads a value from storage using a given digest as a key.
+        Loads a value from storage using a given key as a key.
 
         Args:
-            digest (str): The digest (hash) corresponding to the stored value.
+            key (str): The key (digest) corresponding to the stored value.
 
         Returns:
             Any: The loaded value.
 
         Raises:
-            KeyError: If no value is found for the given digest.
+            KeyError: If no value is found for the given key.
         """
         ...
 
     @abstractmethod
     def list(self) -> Iterable[str]:
         """
-        Lists all digests (keys) currently present in the storage.
+        Lists all keys (keys) currently present in the storage.
 
         Returns:
-            Iterable[str]: An iterable of all digests stored.
+            Iterable[str]: An iterable of all keys stored.
         """
         ...
 
@@ -55,37 +55,37 @@ class Memory(Storage):
     """
     storage: dict[str, Any]
 
-    def save(self, digest: str, value: Any) -> None:
+    def save(self, key: str, value: Any) -> None:
         """
         Saves a value to the in-memory storage.
 
         Args:
-            digest (str): The digest (hash) to use as the key for storing the value.
+            key (str): The key (digest) to use as the key for storing the value.
             value (Any): The value to be stored.
         """
-        self.storage[digest] = value
+        self.storage[key] = value
 
-    def load(self, digest: str) -> Any:
+    def load(self, key: str) -> Any:
         """
         Loads a value from the in-memory storage.
 
         Args:
-            digest (str): The digest (hash) corresponding to the stored value.
+            key (str): The key (digest) corresponding to the stored value.
 
         Returns:
             Any: The loaded value.
 
         Raises:
-            KeyError: If no value is found for the given digest.
+            KeyError: If no value is found for the given key.
         """
-        return self.storage[digest]
+        return self.storage[key]
 
     def list(self) -> Iterable[str]:
         """
-        Lists all digests (keys) currently present in the in-memory storage.
+        Lists all keys (keys) currently present in the in-memory storage.
 
         Returns:
-            Iterable[str]: An iterable of all digests stored.
+            Iterable[str]: An iterable of all keys stored.
         """
         return self.storage.keys()
 
@@ -101,17 +101,21 @@ class FileStorage(Storage):
         self.root = Path(self.root)
         self.root.mkdir(exist_ok=True)
 
-    def _path(self, digest: str) -> Path:
-        return self.root / digest
+    def _path(self, key: str) -> Path:
+        return self.root / key
 
     def list(self) -> Iterable[str]:
         """
-        Lists all digests (filenames) currently present in the root directory.
+        Lists all keys (filenames) currently present in the root directory.
 
         Returns:
-            Iterable[str]: An iterable of all digests stored.
+            Iterable[str]: An iterable of all keys stored.
         """
         return (p.name for p in self.root.iterdir())
+
+    def save(self, key: str, value: Any) -> None:
+        if isinstance(value, File):
+            value.move(self._path("files"))
 
 
 @dataclass
@@ -121,46 +125,46 @@ class CloudpickleFile(FileStorage):
     using cloudpickle for serialization.
     """
 
-    def save(self, digest: str, value: Any) -> None:
+    def save(self, key: str, value: Any) -> None:
         """
         Saves a value to a file in the root directory, serialized using cloudpickle.
 
         Args:
-            digest (str): The digest (hash) to use as the filename.
+            key (str): The key (digest) to use as the filename.
             value (Any): The value to be stored.
         """
-        with open(self._path(digest), "wb") as f:
+        with open(self._path(key), "wb") as f:
             f.write(dumps(value))
 
-    def load(self, digest: str) -> Any:
+    def load(self, key: str) -> Any:
         """
         Loads a value from a file in the root directory, deserialized using cloudpickle.
 
         Args:
-            digest (str): The digest (hash) corresponding to the filename.
+            key (str): The key (digest) corresponding to the filename.
 
         Returns:
             Any: The loaded value.
 
         Raises:
-            KeyError: If no file is found for the given digest.
+            KeyError: If no file is found for the given key.
         """
         try:
-            with open(self._path(digest), "rb") as f:
+            with open(self._path(key), "rb") as f:
                 return loads(f.read())
         except FileNotFoundError:
-            raise KeyError(digest) from None
+            raise KeyError(key) from None
 
 
 @dataclass
 class BagOfHoldingH5File(FileStorage):
     root: Path
 
-    def save(self, digest: str, value: Any) -> None:
-        H5Bag.save(value, self._path(digest))
+    def save(self, key: str, value: Any) -> None:
+        H5Bag.save(value, self._path(key))
 
-    def load(self, digest: str) -> Any:
+    def load(self, key: str) -> Any:
         try:
-            return H5Bag(self._path(digest)).load()
+            return H5Bag(self._path(key)).load()
         except FileNotFoundError:
-            raise KeyError(digest) from None
+            raise KeyError(key) from None
