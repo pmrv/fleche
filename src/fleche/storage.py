@@ -160,4 +160,7 @@ class BagOfHoldingH5File(FileStorage):
         H5Bag.save(value, self._path(digest))
 
     def load(self, digest: str) -> Any:
-        return H5Bag(self._path(digest)).load()
+        try:
+            return H5Bag(self._path(digest)).load()
+        except FileNotFoundError:
+            raise KeyError(digest) from None
