@@ -28,7 +28,9 @@ def get_hooks():
     return _HOOKS
 
 
-def add_hook(hook: Hook):
+def add_hook(hook: Hook | tuple[str, Callable[[T], str]]):
+    if isinstance(hook, tuple):
+        hook = Hook(*hook)
     _HOOKS.append(hook)
 
 
