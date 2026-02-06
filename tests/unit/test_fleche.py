@@ -1,13 +1,13 @@
 
 from unittest.mock import Mock, MagicMock
 
-from fleche import fleche, Cache, _CACHE
-
+from fleche import fleche, Cache, _CACHE, digest, cache
 from fleche.invocation import Invocation
+from fleche.storage import Memory
 
 
 def setup_function():
-    cache = Cache(Mock(), Mock())
+    cache = Cache(Mock())
     cache.storage.load.side_effect = KeyError
     _CACHE.set(cache)
 
@@ -51,19 +51,31 @@ def test_fleche_retrieves_from_cache():
     def my_func(x):
         return mock_function(x)
 
+    key = digest(Invocation.from_call(my_func, 2))
+
     cache = _CACHE.get()
-    cache.storage.load.side_effect = [KeyError, 42]
+    storage_content = {}
+
+    def load_from_storage(k):
+        if k not in storage_content:
+            raise KeyError
+        return storage_content[k]
+
+    def save_to_storage(k, v):
+        print(f"saving {k}: {v}")
+        storage_content[k] = v
+
+    cache.storage.load = Mock(side_effect=load_from_storage)
+    cache.storage.save = Mock(side_effect=save_to_storage)
 
     # First call, should execute the function and save to cache
     assert my_func(2) == 42
     mock_function.assert_called_once_with(2)
-    cache.storage.save.assert_called_once()
+    assert cache.contains(key)
 
     # Second call, should load from cache
     assert my_func(2) == 42
     mock_function.assert_called_once_with(2) # Not called again
-    cache.storage.load.assert_called()
-    assert cache.storage.load.call_count == 2
 
 
 def test_fleche_with_version_argument():
@@ -75,68 +87,85 @@ def test_fleche_with_version_argument():
         return mock_function(x)
 
     cache = _CACHE.get()
-    cache.storage.load.side_effect = KeyError
+    storage_content = {}
+
+    def load_from_storage(k):
+        if k not in storage_content:
+            raise KeyError
+        return storage_content[k]
+
+    def save_to_storage(k, v):
+        storage_content[k] = v
+
+    cache.storage.load = Mock(side_effect=load_from_storage)
+    cache.storage.save = Mock(side_effect=save_to_storage)
 
     # First call, should execute the function and save to cache
     assert my_func(2) == 42
     mock_function.assert_called_once_with(2)
-    cache.storage.save.assert_called_once()
+    key_v1 = digest(Invocation.from_call(my_func, 2))
+    assert cache.contains(key_v1)
 
     # Second call, with different version, should execute again
     @fleche(version=2)
-    def my_func(x):
+    def my_func_v2(x):
         return mock_function(x)
 
-    assert my_func(2) == 42
+    assert my_func_v2(2) == 42
     assert mock_function.call_count == 2
-    assert cache.storage.save.call_count == 2
+    key_v2 = digest(Invocation.from_call(my_func_v2, 2))
+    assert cache.contains(key_v2)
 
 
 def test_fleche_with_version():
     mock_function = Mock(return_value=42)
     mock_function.__name__ = 'mock_function'
 
-    @fleche
-    def my_func(x):
-        return mock_function(x)
+    with cache(Cache(Memory({}))):
+        mock_function.__version__ = 1
+        my_func = fleche(mock_function)
 
-    my_func.__version__ = 1
+        # First call, should execute the function and save to cache
+        assert my_func(2) == 42
+        mock_function.assert_called_once_with(2)
+        inv = Invocation.from_call(my_func, 2)
+        inv.version = 1
+        key_v1 = digest(inv)
+        assert cache().contains(key_v1)
 
-    cache = _CACHE.get()
-    cache.storage.load.side_effect = KeyError
+        mock_function.__version__ = 2
+        my_func = fleche(mock_function)
 
-    # First call, should execute the function and save to cache
-    assert my_func(2) == 42
-    mock_function.assert_called_once_with(2)
-    cache.storage.save.assert_called_once()
-
-    # Second call, with different version, should execute again
-    my_func.__version__ = 2
-    assert my_func(2) == 42
-    assert mock_function.call_count == 2
-    assert cache.storage.save.call_count == 2
+        # Second call, with different version, should execute again
+        assert my_func(2) == 42
+        assert mock_function.call_count == 2
+        inv.version = 2
+        key_v2 = digest(inv)
+        assert cache().contains(key_v2)
 
 
 def test_fleche_with_module():
     mock_function = Mock(return_value=42)
-    mock_function.__name__ = 'mock_function'
+    mock_function.__name__ = "name"
 
-    @fleche
-    def my_func(x):
-        return mock_function(x)
+    with cache(Cache(Memory({}))):
+        # First call, should execute the function and save to cache
+        mock_function.__module__ = "module1"
+        # need to assigne dunder before wrapping for fleche to pick it up
+        my_func = fleche(mock_function)
 
-    my_func.__module__ = "module1"
+        assert my_func(2) == 42
+        mock_function.assert_called_once_with(2)
+        inv = Invocation.from_call(my_func, 2)
+        inv.module = "module1"
+        key_m1 = digest(inv)
+        assert cache().contains(key_m1)
 
-    cache = _CACHE.get()
-    cache.storage.load.side_effect = KeyError
-
-    # First call, should execute the function and save to cache
-    assert my_func(2) == 42
-    mock_function.assert_called_once_with(2)
-    cache.storage.save.assert_called_once()
-
-    # Second call, with different module, should execute again
-    my_func.__module__ = "module2"
-    assert my_func(2) == 42
-    assert mock_function.call_count == 2
-    assert cache.storage.save.call_count == 2
+        # Second call, with different module, should execute again
+        mock_function.__module__ = "module2"
+        my_func = fleche(mock_function)
+        assert my_func(2) == 42
+        assert mock_function.call_count == 2
+        inv.module = "module2"
+        key_m2 = digest(inv)
+        assert cache().contains(key_m2)

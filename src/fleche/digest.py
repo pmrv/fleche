@@ -6,6 +6,8 @@ from typing import Any, TypeVar, Callable
 
 import numpy as np
 
+from .invocation import Invocation
+
 
 class Unhashable(Exception):
     """Exception raised when an object cannot be digested."""
@@ -87,4 +89,7 @@ def digest(value: Any) -> str:
         case _:
             raise Unhashable(value)
 
-    return m.hexdigest()
+    if isinstance(value, Invocation):
+        return "i:" + m.hexdigest()
+    else:
+        return "v:" + m.hexdigest()

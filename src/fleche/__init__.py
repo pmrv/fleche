@@ -9,14 +9,14 @@ from typing import Any, Callable, Dict, Optional, TypeVar, Union
 from .digest import Unhashable, digest
 from .invocation import Invocation
 from .metadata import MetaData, PandasDB, Runtime, Digest, InvocationInfo, Tags
-from .cache import Cache, SaveError, ReadOnlyCache, CacheStack
+from .cache import Cache, SaveError
 from . import storage
 
 _T = TypeVar("_T")
 
 _CACHE: ContextVar[Cache] = ContextVar(
     'fleche.CACHE',
-    default=Cache(PandasDB({}), storage.CloudpickleFile(Path(".fleche")))
+    default=Cache(storage.CloudpickleFile(Path(".fleche"))).metadb(PandasDB({}))
 )
 
 
@@ -108,18 +108,18 @@ def fleche(
         def wrapper(*args: Any, **kwargs: Any) -> _T:
             cache: Cache = _CACHE.get()
             try:
-                inv = Invocation(func.__name__, args, kwargs)
-                if hash_version and hasattr(func, "__version__"):
-                    inv.version = func.__version__
-                if hash_module and hasattr(func, "__module__"):
-                    inv.module = func.__module__
+                inv = Invocation.from_call(func, *args, **kwargs)
+                if not hash_version:
+                    inv.version = None
+                if not hash_module:
+                    inv.module = None
                 key: str = digest(inv)
             except Unhashable as e:
                 print("WARNING NO HASH:", e.args[0])
                 return func(*args, **kwargs)
 
             try:
-                return cache.load(key)[0]
+                return cache.load(cache.load(key)[0])
             except KeyError:
                 pass
 
@@ -131,7 +131,7 @@ def fleche(
             for m in active_meta:
                 metadata[m.name] |= m.post(metadata[m.name], result, inv)
             try:
-                cache.save(key, result, dict(metadata))
+                cache.save(inv, result, dict(metadata))
             except SaveError as e:
                 print("WARNING NO SAVE:", *e.args)
             return result

@@ -13,7 +13,7 @@ from fleche.storage import Memory
 def cache_it() -> Cache:
     db = PandasDB({})
     storage = Memory({})
-    return Cache(db, storage)
+    return Cache(storage).metadb(db)
 
 
 def test_fleche_decorator_default_metadata(cache_it: Cache):
@@ -26,7 +26,7 @@ def test_fleche_decorator_default_metadata(cache_it: Cache):
         time.sleep(0.1)
         my_function(1, 2)
 
-    df = cache_it.metadata.table()
+    df = cache_it.metadb.table()
     assert "walltime" in df.columns
     assert "result" in df.columns
     assert len(df) == 1
@@ -48,7 +48,7 @@ def test_fleche_decorator_custom_metadata(cache_it: Cache):
     with cache(cache_it):
         my_function(1, 2)
 
-    df = cache_it.metadata.table()
+    df = cache_it.metadb.table()
     assert "my_key" in df.columns
     assert df["my_key"].iloc[0] == "my_value"
 
@@ -69,7 +69,7 @@ def test_metadata_context_manager(cache_it: Cache):
         with metadata(MyMetadata()):
             my_function(1, 2)
 
-    df = cache_it.metadata.table()
+    df = cache_it.metadb.table()
     assert "my_key" in df.columns
     assert df["my_key"].iloc[0] == "my_value"
 
@@ -98,7 +98,7 @@ def test_metadata_context_manager_stacking(cache_it: Cache):
             with metadata(MyMetadata2(), stack=True):
                 my_function(1, 2)
 
-    df = cache_it.metadata.table()
+    df = cache_it.metadb.table()
     assert "my_key1" in df.columns
     assert "my_key2" in df.columns
     assert df["my_key1"].iloc[0] == "my_value1"
@@ -123,22 +123,22 @@ def test_metadb_table_filtering(cache_it: Cache):
         my_function(a=1, b=2)
         my_function(a=2, b=3)
 
-    df = cache_it.metadata.table()
+    df = cache_it.metadb.table()
     assert len(df) == 2
 
-    df_filtered = cache_it.metadata.table(my_key="my_value")
+    df_filtered = cache_it.metadb.table(my_key="my_value")
     assert len(df_filtered) == 1
 
-    df_filtered = cache_it.metadata.table(my_other_key=2)
+    df_filtered = cache_it.metadb.table(my_other_key=2)
     assert len(df_filtered) == 1
 
-    df_filtered = cache_it.metadata.table(my_other_key=3)
+    df_filtered = cache_it.metadb.table(my_other_key=3)
     assert len(df_filtered) == 0
 
-    df_filtered = cache_it.metadata.table(my_key="my_value", my_other_key=1)
+    df_filtered = cache_it.metadb.table(my_key="my_value", my_other_key=1)
     assert len(df_filtered) == 1
 
-    df_filtered = cache_it.metadata.table(my_key="my_value", my_other_key=2)
+    df_filtered = cache_it.metadb.table(my_key="my_value", my_other_key=2)
     assert len(df_filtered) == 0
 
 
@@ -165,7 +165,7 @@ def test_fleche_decorator_and_context_manager(cache_it: Cache):
         with metadata(MyMetadata2()):
             my_function(1, 2)
 
-    df = cache_it.metadata.table()
+    df = cache_it.metadb.table()
     assert "my_key1" in df.columns
     assert "my_key2" in df.columns
     assert df["my_key1"].iloc[0] == "my_value1"
@@ -176,7 +176,7 @@ def test_tags():
     storage = Memory({})
     mdb = PandasDB({})
 
-    with cache(Cache(mdb, storage)):
+    with cache(Cache(storage).metadb(mdb)):
 
         @fleche
         def my_func(a, b):

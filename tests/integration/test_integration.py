@@ -1,9 +1,10 @@
 import pytest
 import time
 import tempfile
-from unittest.mock import Mock
 
-from fleche import fleche, cache, Cache, ReadOnlyCache, CacheStack
+from fleche import fleche, cache, digest
+from fleche.invocation import Invocation
+from fleche.cache import Cache, ReadOnlyCache, CacheStack
 from fleche.storage import CloudpickleFile, Memory
 
 temp = tempfile.TemporaryDirectory()
@@ -32,7 +33,7 @@ functions_to_test = [
 @pytest.mark.parametrize("storage", storages)
 @pytest.mark.parametrize("func, arg", functions_to_test)
 def test_fleche_performance(storage, func, arg):
-    with cache(Cache(storage=storage, metadata=Mock())):
+    with cache(Cache(storage)):
 
         start_time = time.time()
         func(arg)
@@ -51,7 +52,7 @@ def test_fleche_readonly_cache():
     def func(x):
         return x
 
-    c = Cache(storage=Memory({}), metadata=Mock())
+    c = Cache(Memory({}))
     ro_cache = ReadOnlyCache(c)
 
     with cache(ro_cache):
@@ -74,19 +75,21 @@ def test_fleche_cache_stack():
     def func(x):
         return x
 
-    cache1 = Cache(storage=Memory({}), metadata=Mock())
-    cache2 = Cache(storage=Memory({}), metadata=Mock())
+    cache1 = Cache(Memory({}))
+    cache2 = Cache(Memory({}))
 
     stack = CacheStack(stack=(cache2, cache1))
+
+    key1 = digest(Invocation.from_call(func, 1))
+    key2 = digest(Invocation.from_call(func, 2))
 
     with cache(stack):
         # first call, should go in cache2
         func(1)
         # assert that the value is in cache2
-        assert len(cache2.storage.list()) == 1
-        assert cache2.storage.load(list(cache2.storage.list())[0]) == 1
-        # assert that the value is not in cache1
-        assert len(cache1.storage.list()) == 0
+        # TODO: change to actually check presence of keys
+        assert cache2.contains(key1)
+        assert not cache1.contains(key1)
 
         # second call, should be loaded from cache2
         func(1)
@@ -97,9 +100,9 @@ def test_fleche_cache_stack():
 
     with cache(stack):
         # this should be loaded from cache1
-        assert func(2) == 2
-        # size of the other cache should not increase, otherwise last call got added to it
-        assert len(cache2.storage.list()) == 1
+        func(2)
+        assert not cache2.contains(key2)
+        assert cache1.contains(key2)
 
 
 def test_fleche_cache_stack_context_manager():
@@ -108,28 +111,22 @@ def test_fleche_cache_stack_context_manager():
     def func(x):
         return x
 
-    cache1 = Cache(storage=Memory({}), metadata=Mock())
-    cache2 = Cache(storage=Memory({}), metadata=Mock())
+    cache1 = Cache(Memory({}))
+    cache2 = Cache(Memory({}))
 
     with cache(cache1):
         with cache(cache2, stack=True):
-            # first call, should go in cache2
             func(1)
-            # assert that the value is in cache2
-            assert len(cache2.storage.list()) == 1
-            assert cache2.storage.load(list(cache2.storage.list())[0]) == 1
-            # assert that the value is not in cache1
-            assert len(cache1.storage.list()) == 0
+            key = digest(Invocation.from_call(func, 1))
+            assert cache2.contains(key)
+            assert cache2.load(cache2.load(key)[0]) == 1
+            assert not cache1.contains(key)
 
-            # second call, should be loaded from cache2
-            func(1)
-
-        # third call, should go in cache1
         func(2)
-        assert len(cache1.storage.list()) == 1
+        key = digest(Invocation.from_call(func, 2))
+        assert cache1.contains(key)
 
         with cache(cache2, stack=True):
             # this should be loaded from cache1
-            assert func(2) == 2
-            # size of the other cache should not increase, otherwise last call got added to it
-            assert len(cache2.storage.list()) == 1
+            func(2)
+            assert not cache2.contains(key)

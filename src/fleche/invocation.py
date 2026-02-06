@@ -16,3 +16,12 @@ class Invocation:
     kwargs: dict[str, Any]
     module: str | None = None
     version: int | None = None
+
+    @classmethod
+    def from_call(cls, func, *args, **kwargs):
+        inv = cls(func.__name__, args, kwargs)
+        if hasattr(func, "__version__"):
+            inv.version = func.__version__
+        if hasattr(func, "__module__"):
+            inv.module = func.__module__
+        return inv
