@@ -14,8 +14,11 @@ class Unhashable(Exception):
     pass
 
 
-T = TypeVar("T")
+class Digest(str):
+    pass
 
+
+T = TypeVar("T")
 
 @dataclasses.dataclass
 class Hook:
@@ -60,6 +63,8 @@ def digest(value: Any) -> str:
             return h.digest(value)
 
     match value:
+        case Digest():
+            return value
         case str():
             m.update(value.encode())
         case bytes():
@@ -79,6 +84,12 @@ def digest(value: Any) -> str:
                 m.update(digest(v).encode())
         case np.ndarray():
             m.update(value.data)
+        case Invocation():
+            m.update(type(value).__name__.encode())
+            content = dataclasses.asdict(value)
+            content.pop("result", None)
+            content.pop("metadata", None)
+            m.update(digest(content).encode())
         case _ if dataclasses.is_dataclass(value):
             m.update(type(value).__name__.encode())
             m.update(digest(dataclasses.asdict(value)).encode())
@@ -89,7 +100,4 @@ def digest(value: Any) -> str:
         case _:
             raise Unhashable(value)
 
-    if isinstance(value, Invocation):
-        return "i:" + m.hexdigest()
-    else:
-        return "v:" + m.hexdigest()
+    return Digest(m.hexdigest())

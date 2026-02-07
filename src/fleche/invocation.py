@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -14,8 +14,10 @@ class Invocation:
     name: str
     args: tuple[Any, ...]
     kwargs: dict[str, Any]
+    metadata: dict[str, dict[str, Any]] = field(default_factory=dict)
     module: str | None = None
     version: int | None = None
+    result: Any = None
 
     @classmethod
     def from_call(cls, func, *args, **kwargs):

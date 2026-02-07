@@ -1,23 +1,28 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from copy import deepcopy
 from pathlib import Path
 from typing import Iterable, Any
 
 from cloudpickle import loads, dumps
 from bagofholding import H5Bag
 
+from .digest import digest
+
 
 class Storage(ABC):
     """Abstract base class for defining storage mechanisms."""
 
     @abstractmethod
-    def save(self, key: str, value: Any) -> None:
+    def save(self, value: Any) -> str:
         """
-        Saves a value to storage using a given key as a key.
+        Saves a value to storage using its digest as a key
 
         Args:
-            key (str): The key (digest) to use as the key for storing the value.
             value (Any): The value to be stored.
+
+        Returns:
+            str: The key (digest) to use as the key for retrieving the value.
         """
         ...
 
@@ -55,15 +60,21 @@ class Memory(Storage):
     """
     storage: dict[str, Any]
 
-    def save(self, key: str, value: Any) -> None:
+    def save(self, value: Any) -> str:
         """
         Saves a value to the in-memory storage.
 
         Args:
-            key (str): The key (digest) to use as the key for storing the value.
             value (Any): The value to be stored.
+
+        Returns:
+            key (str): The key (digest) to use as the key for storing the value.
         """
-        self.storage[key] = value
+        key = digest(value)
+        if key in self.storage:
+            return key
+        self.storage[key] = deepcopy(value)
+        return key
 
     def load(self, key: str) -> Any:
         """
@@ -78,7 +89,7 @@ class Memory(Storage):
         Raises:
             KeyError: If no value is found for the given key.
         """
-        return self.storage[key]
+        return deepcopy(self.storage[key])
 
     def list(self) -> Iterable[str]:
         """
@@ -113,10 +124,6 @@ class FileStorage(Storage):
         """
         return (p.name for p in self.root.iterdir())
 
-    def save(self, key: str, value: Any) -> None:
-        if isinstance(value, File):
-            value.move(self._path("files"))
-
 
 @dataclass
 class CloudpickleFile(FileStorage):
@@ -125,16 +132,19 @@ class CloudpickleFile(FileStorage):
     using cloudpickle for serialization.
     """
 
-    def save(self, key: str, value: Any) -> None:
+    def save(self, value: Any) -> str:
         """
         Saves a value to a file in the root directory, serialized using cloudpickle.
 
         Args:
-            key (str): The key (digest) to use as the filename.
             value (Any): The value to be stored.
+
+        Returns:
+            str: The key (digest) to use as the filename.
         """
-        with open(self._path(key), "wb") as f:
-            f.write(dumps(value))
+        key = digest(value)
+        (self._path(key)).write_bytes(dumps(value))
+        return key
 
     def load(self, key: str) -> Any:
         """
@@ -150,8 +160,7 @@ class CloudpickleFile(FileStorage):
             KeyError: If no file is found for the given key.
         """
         try:
-            with open(self._path(key), "rb") as f:
-                return loads(f.read())
+            loads((self._path(key)).read_bytes())
         except FileNotFoundError:
             raise KeyError(key) from None
 
@@ -160,8 +169,10 @@ class CloudpickleFile(FileStorage):
 class BagOfHoldingH5File(FileStorage):
     root: Path
 
-    def save(self, key: str, value: Any) -> None:
+    def save(self, value: Any) -> str:
+        key = digest(value)
         H5Bag.save(value, self._path(key))
+        return key
 
     def load(self, key: str) -> Any:
         try:

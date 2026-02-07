@@ -1,10 +1,12 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Self
+from copy import copy, deepcopy
+from typing import Self, Any
 
 from .digest import digest
 from .metadata import MetaDB
 from . import storage
+from .invocation import Invocation
 
 
 class SaveError(Exception):
@@ -14,11 +16,11 @@ class SaveError(Exception):
 class BaseCache(ABC):
 
     @abstractmethod
-    def save(self, invocation, result, metadata):
+    def save(self, value) -> str:
         ...
 
     @abstractmethod
-    def load(self, key):
+    def load(self, key: str) -> Invocation:
         ...
 
     def contains(self, key: str) -> bool:
@@ -28,15 +30,15 @@ class BaseCache(ABC):
         except KeyError:
             return False
 
-    def transfer(self, other: 'Cache'):
-        # TODO: when migrating results up, we will need to think about what happens to conflicting metadata
-        # probably transfering items should just pop them off the lower cache, therefore the only reason this could
-        # happen is if a user runs the same function in two separate caches and then combines them.  In this case self
-        # should win, because its intuitive even if a bit dangerous
-        # TODO: make a design choice: is storage or metadata sovereign?
-        # for now: storage is king because that's the most important part
-        for key in self.storage.list():
-            other.save(key, *self.load(key))
+    # def transfer(self, other: 'Cache'):
+    #     # TODO: when migrating results up, we will need to think about what happens to conflicting metadata
+    #     # probably transfering items should just pop them off the lower cache, therefore the only reason this could
+    #     # happen is if a user runs the same function in two separate caches and then combines them.  In this case self
+    #     # should win, because its intuitive even if a bit dangerous
+    #     # TODO: make a design choice: is storage or metadata sovereign?
+    #     # for now: storage is king because that's the most important part
+    #     for key in self.storage.list():
+    #         other.save(key, *self.load(key))
 
     def push(self, cache: 'BaseCache') -> 'CacheStack':
         return CacheStack((cache, self))
@@ -47,14 +49,21 @@ class BaseCache(ABC):
 
 @dataclass
 class Cache(BaseCache):
-    storage: storage.Storage
+    values: storage.Storage
+    invocs: storage.Storage
 
-    def save(self, invocation, result, metadata):
-        self.storage.save(digest(result), result)
-        self.storage.save(digest(invocation), (digest(result), metadata))
+    def save(self, inv: Invocation) -> str:
+        inv = copy(inv)
+        inv.result = self.values.save(inv.result)
+        inv.args = tuple(self.values.save(a) for a in inv.args)
+        inv.kwargs = {k: self.values.save(v) for k, v in inv.kwargs.items()}
 
-    def load(self, key):
-        return self.storage.load(key)
+        return self.invocs.save(inv)
+
+    def load(self, key: str) -> Invocation:
+        inv = deepcopy(self.invocs.load(key))
+        inv.result = self.values.load(inv.result)
+        return inv
 
 
 @dataclass
@@ -62,9 +71,9 @@ class MetaCache(BaseCache):
     cache: BaseCache
     metadb: MetaDB
 
-    def save(self, invocation, result, metadata):
-        self.cache.save(invocation, result, metadata)
-        self.metadb.save(digest(invocation), metadata)
+    def save(self, inv: Invocation) -> str:
+        self.cache.save(inv)
+        self.metadb.save(digest(inv), inv.metadata)
 
     def load(self, key):
         return self.cache.load(key)

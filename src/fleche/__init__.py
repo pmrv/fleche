@@ -16,7 +16,8 @@ _T = TypeVar("_T")
 
 _CACHE: ContextVar[Cache] = ContextVar(
     'fleche.CACHE',
-    default=Cache(storage.CloudpickleFile(Path(".fleche"))).metadb(PandasDB({}))
+    # default=Cache(storage.CloudpickleFile(Path(".fleche"))).metadb(PandasDB({}))
+    default=Cache(storage.Memory({}), storage.Memory({})).metadb(PandasDB({}))
 )
 
 
@@ -53,7 +54,8 @@ def cache(new_cache: Optional[Cache] = None, stack=False) -> Union[Cache, Abstra
 
 _METADATA: ContextVar[tuple[MetaData]] = ContextVar(
     "fleche.METADATA",
-    default=(Runtime(), Digest(), InvocationInfo())
+    # default=(Runtime(), Digest(), InvocationInfo())
+    default=(Runtime(), InvocationInfo())
 )
 
 
@@ -119,7 +121,7 @@ def fleche(
                 return func(*args, **kwargs)
 
             try:
-                return cache.load(cache.load(key)[0])
+                return cache.load(key).result
             except KeyError:
                 pass
 
@@ -128,10 +130,15 @@ def fleche(
             for m in active_meta:
                 metadata[m.name] |= m.pre(inv)
             result: _T = func(*args, **kwargs)
+            if result is None:
+                print("WARNING NO VALUE")
+                return
             for m in active_meta:
                 metadata[m.name] |= m.post(metadata[m.name], result, inv)
             try:
-                cache.save(inv, result, dict(metadata))
+                inv.metadata = metadata
+                inv.result = result
+                cache.save(inv)
             except SaveError as e:
                 print("WARNING NO SAVE:", *e.args)
             return result
