@@ -110,9 +110,9 @@ class FileStorage(Storage):
         Ensures the root directory for storage exists.
         """
         self.root = Path(self.root)
-        self.root.mkdir(exist_ok=True)
 
     def _path(self, key: str) -> Path:
+        self.root.mkdir(exist_ok=True)
         return self.root / key
 
     def list(self) -> Iterable[str]:
