@@ -96,7 +96,8 @@ def fleche(
     version: int | None = None,
     meta: tuple[MetaData] = (),
     hash_version: bool = True,
-    hash_module: bool = True
+    hash_module: bool = True,
+    require: None | str | list[str] | tuple[str] = None,
 ):
 
     def decorator(func: Callable[..., _T]) -> Callable[..., _T]:
@@ -108,6 +109,15 @@ def fleche(
 
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> _T:
+            if require is None:
+                required_args = ()
+            elif isinstance(require, str):
+                required_args = (require,)
+            else:
+                required_args = require
+            if any(r not in kwargs for r in required_args):
+                print(f"WARNING MISSING REQUIRED ARG: {required_args}")
+                return func(*args, **kwargs)
             cache: Cache = _CACHE.get()
             try:
                 inv = Invocation.from_call(func, *args, **kwargs)
