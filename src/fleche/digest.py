@@ -78,8 +78,9 @@ def digest(value: Any) -> str:
         case None:
             m.update(b"__None__")
         case dict():
-            # Sort items to ensure consistent digest for dictionaries
-            for k, v in sorted(value.items()):
+            # Sort by digest of keys to ensure merkle tree property and order stability
+            sorted_items = sorted(value.items(), key=lambda item: digest(item[0]))
+            for k, v in sorted_items:
                 m.update(digest(k).encode())
                 m.update(digest(v).encode())
         case np.ndarray():
