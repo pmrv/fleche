@@ -1,3 +1,4 @@
+import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 import numpy as np
@@ -222,3 +223,31 @@ def test_merkle_tree_property(value, data):
     modified_value = randomly_digest_subvalues(value, data)
     assert digest(modified_value) == original_digest, \
         f"Merkle property failed: digest changed after replacing sub-values with their digests"
+
+
+# some explicit cases test_merkle_tree_property is apparently not efficient enough to catch
+
+@dataclass
+class Input:
+    a: int
+
+
+@dataclass
+class Other:
+    i: Input
+
+
+def foo(inp):
+    return inp.a / inp.b
+
+
+@pytest.mark.parametrize("value, partially_digested_value", (
+    ([Input(2)], [digest(Input(2))]),
+    ((Input(2),), (digest(Input(2)),)),
+    (Other(Input(2)), Other(Input(digest(2)))),
+    (Other(Input(2)), Other(digest(Input(2)))),
+    (Invocation.from_call(foo, Input(1), a=Input(2)), Invocation.from_call(foo, digest(Input(1)), a=Input(2))),
+    (Invocation.from_call(foo, Input(1), a=Input(2)), Invocation.from_call(foo, Input(1), a=digest(Input(2)))),
+))
+def test_merkle_tree_property_fixed(value, partially_digested_value):
+    assert digest(value) == digest(partially_digested_value), (value, partially_digested_value)
