@@ -207,11 +207,8 @@ class InvocationInfo(MetaData):
         module (str): The module where the invoked function is defined.
         version (int): The version of the invoked function.
     """
-    def pre(self, invocation: Invocation) -> dict[str, Any]:
-        pre = asdict(invocation)
-        pre.pop("args")
-        pre.pop("kwargs")
-        return pre
+    def pre(self, inv: Invocation) -> dict[str, Any]:
+        return {k: getattr(inv, k) for k in ("module", "name", "version")}
 
     name: str = "invocation"
     keys = {
