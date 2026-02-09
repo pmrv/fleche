@@ -52,7 +52,8 @@ class PandasDB(MetaDB):
         for name, data in metadata.items():
             df = pd.DataFrame([data], index=[digest])
             if name in self.tables:
-                self.tables[name] = pd.concat([self.tables[name], df])
+                if digest not in self.tables[name].index:
+                    self.tables[name] = pd.concat([self.tables[name], df])
             else:
                 self.tables[name] = df
 
