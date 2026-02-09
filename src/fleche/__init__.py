@@ -6,7 +6,7 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, TypeVar, Union
 
-from .digest import Unhashable, digest
+from . import digest
 from .invocation import Invocation
 from .metadata import MetaData, PandasDB, Runtime, Digest, InvocationInfo, Tags
 from .cache import Cache, SaveError
@@ -125,8 +125,8 @@ def fleche(
                     inv.version = None
                 if not hash_module:
                     inv.module = None
-                key: str = digest(inv)
-            except Unhashable as e:
+                key: str = digest.digest(inv.to_lookup())
+            except digest.Unhashable as e:
                 print("WARNING NO HASH:", e.args[0])
                 return func(*args, **kwargs)
 

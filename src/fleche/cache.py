@@ -58,7 +58,7 @@ class Cache(BaseCache):
         inv.args = tuple(self.values.save(a) for a in inv.args)
         inv.kwargs = {k: self.values.save(v) for k, v in inv.kwargs.items()}
 
-        return self.invocs.save(inv)
+        return self.invocs.save(inv, key=digest(inv.to_lookup()))
 
     def load(self, key: str) -> Invocation:
         inv = deepcopy(self.invocs.load(key))

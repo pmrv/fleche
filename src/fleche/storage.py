@@ -7,14 +7,15 @@ from typing import Iterable, Any
 from cloudpickle import loads, dumps
 from bagofholding import H5Bag
 
-from .digest import digest
+from .digest import digest, Digest
+from .files import File
 
 
 class Storage(ABC):
     """Abstract base class for defining storage mechanisms."""
 
     @abstractmethod
-    def save(self, value: Any) -> str:
+    def save(self, value: Any, key: Digest | None = None) -> str:
         """
         Saves a value to storage using its digest as a key
 
@@ -60,7 +61,7 @@ class Memory(Storage):
     """
     storage: dict[str, Any]
 
-    def save(self, value: Any) -> str:
+    def save(self, value: Any, key: Digest | None = None) -> str:
         """
         Saves a value to the in-memory storage.
 
@@ -70,7 +71,8 @@ class Memory(Storage):
         Returns:
             key (str): The key (digest) to use as the key for storing the value.
         """
-        key = digest(value)
+        if key is None:
+            key = digest(value)
         if key in self.storage:
             return key
         self.storage[key] = deepcopy(value)
@@ -132,7 +134,7 @@ class CloudpickleFile(FileStorage):
     using cloudpickle for serialization.
     """
 
-    def save(self, value: Any) -> str:
+    def save(self, value: Any, key: Digest | None = None) -> str:
         """
         Saves a value to a file in the root directory, serialized using cloudpickle.
 
@@ -142,7 +144,8 @@ class CloudpickleFile(FileStorage):
         Returns:
             str: The key (digest) to use as the filename.
         """
-        key = digest(value)
+        if key is None:
+            key = digest(value)
         (self._path(key)).write_bytes(dumps(value))
         return key
 

@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Any
 
+import fleche.digest
+
 
 @dataclass
 class Invocation:
@@ -27,3 +29,22 @@ class Invocation:
         if hasattr(func, "__module__"):
             inv.module = func.__module__
         return inv
+
+    def to_lookup(self):
+        return InvocationLookup(
+                name=self.name,
+                args=tuple(fleche.digest.digest(a) for a in self.args),
+                kwargs={k: fleche.digest.digest(v) for k, v in self.kwargs.items()},
+                module=self.module,
+                version=self.version,
+        )
+
+
+@dataclass(frozen=True)
+class InvocationLookup:
+    """Subset of :class:`.Invocation` to be used as a lookup key """
+    name: str
+    args: tuple[str, ...]
+    kwargs: dict[str, str]
+    module: str | None = None
+    version: int | None = None
