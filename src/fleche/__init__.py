@@ -2,6 +2,7 @@
 import os
 import shutil
 import tempfile
+import contextlib
 from contextlib import contextmanager, AbstractContextManager
 from contextvars import ContextVar
 from collections import defaultdict
@@ -98,7 +99,9 @@ def _get_working_directory_root() -> Path:
     Determines the root directory for fleche working directories, following the XDG spec.
     """
     xdg_cache_home = os.environ.get('XDG_CACHE_HOME') or (Path.home() / '.cache')
-    return Path(xdg_cache_home) / 'fleche' / 'workingdirectories'
+    root = Path(xdg_cache_home) / 'fleche' / 'workingdirectories'
+    root.mkdir(parents=True, exist_ok=True)
+    return root
 
 
 def fleche(
@@ -109,6 +112,7 @@ def fleche(
     hash_version: bool = True,
     hash_module: bool = True,
     require: None | str | list[str] | tuple[str] = None,
+    isolate: bool = False,
 ):
 
     def decorator(func: Callable[..., _T]) -> Callable[..., _T]:
@@ -146,14 +150,7 @@ def fleche(
             except KeyError:
                 pass
 
-            root = _get_working_directory_root()
-            root.mkdir(parents=True, exist_ok=True)
-            # Create a unique working directory to avoid race conditions during concurrent execution.
-            # NOTE: os.chdir is process-wide and not thread-safe.
-            workdir = Path(tempfile.mkdtemp(dir=root, prefix=f"{key}_"))
-            old_cwd = os.getcwd()
-            os.chdir(workdir)
-            try:
+            def _run_and_cache():
                 active_meta = _METADATA.get() + tuple(meta)
                 metadata: Dict[str, Any] = defaultdict(dict)
                 for m in active_meta:
@@ -161,20 +158,26 @@ def fleche(
                 result: _T = func(*args, **kwargs)
                 if result is None:
                     print("WARNING NO VALUE")
-                    shutil.rmtree(workdir)
-                    return
+                    return None
                 for m in active_meta:
                     metadata[m.name] |= m.post(metadata[m.name], result, inv)
                 try:
                     inv.metadata = metadata
                     inv.result = result
                     cache.save(inv)
-                    shutil.rmtree(workdir)
                 except SaveError as e:
                     print("WARNING NO SAVE:", *e.args)
                 return result
-            finally:
-                os.chdir(old_cwd)
+
+            if isolate:
+                root = _get_working_directory_root()
+                # Create a unique working directory to avoid race conditions during concurrent execution.
+                # NOTE: os.chdir is process-wide and not thread-safe.
+                with tempfile.TemporaryDirectory(dir=root, prefix=f"{key}_") as workdir:
+                    with contextlib.chdir(workdir):
+                        return _run_and_cache()
+            else:
+                return _run_and_cache()
         return wrapper
 
     if callable(_func):
