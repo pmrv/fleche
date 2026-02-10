@@ -8,7 +8,6 @@ from cloudpickle import loads, dumps
 from bagofholding import H5Bag
 
 from .digest import digest, Digest
-from .files import File
 
 
 class Storage(ABC):
