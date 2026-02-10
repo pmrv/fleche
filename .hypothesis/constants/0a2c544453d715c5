@@ -1,4 +1,0 @@
-# file: /app/src/fleche/metadata.py
-# hypothesis_version: 6.151.5
-
-['arguments', 'digest', 'invocation', 'module', 'name', 'result', 'runtime', 'tags', 'timestart', 'timestop', 'version', 'walltime']
