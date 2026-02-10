@@ -13,30 +13,34 @@ from fleche.invocation import Invocation
 
 
 def test_custom_digest():
-    """Test that custom __digest__ attribute or method is used."""
-    class CustomAttr:
-        def __init__(self, d):
-            self.__digest__ = d
-
+    """Test that custom __digest__ method is used."""
     class CustomMethod:
         def __init__(self, d):
             self.d = d
         def __digest__(self):
             return self.d
 
-    class CustomProperty:
-        def __init__(self, d):
-            self.d = d
-        @property
-        def __digest__(self):
-            return self.d
-
-    assert digest(CustomAttr("attr")) == "attr"
-    assert isinstance(digest(CustomAttr("attr")), Digest)
     assert digest(CustomMethod("method")) == "method"
     assert isinstance(digest(CustomMethod("method")), Digest)
-    assert digest(CustomProperty("property")) == "property"
-    assert isinstance(digest(CustomProperty("property")), Digest)
+
+
+def test_custom_digest_priority():
+    """Test that __digest__ has priority over default implementations."""
+    class CustomStr(str):
+        def __digest__(self):
+            return "custom_str_digest"
+
+    class CustomInt(int):
+        def __digest__(self):
+            return "custom_int_digest"
+
+    class CustomDict(dict):
+        def __digest__(self):
+            return "custom_dict_digest"
+
+    assert digest(CustomStr("hello")) == "custom_str_digest"
+    assert digest(CustomInt(42)) == "custom_int_digest"
+    assert digest(CustomDict(a=1)) == "custom_dict_digest"
 
 
 def test_supported_types():

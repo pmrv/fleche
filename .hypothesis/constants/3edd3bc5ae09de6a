@@ -1,0 +1,4 @@
+# file: /app/src/fleche/cache.py
+# hypothesis_version: 6.151.5
+
+['BaseCache', 'CacheStack', 'MetaCache']
