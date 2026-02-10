@@ -33,7 +33,7 @@ functions_to_test = [
 @pytest.mark.parametrize("storage", storages)
 @pytest.mark.parametrize("func, arg", functions_to_test)
 def test_fleche_performance(storage, func, arg):
-    with cache(Cache(storage)):
+    with cache(Cache(storage, storage)):
 
         start_time = time.time()
         func(arg)
@@ -52,7 +52,7 @@ def test_fleche_readonly_cache():
     def func(x):
         return x
 
-    c = Cache(Memory({}))
+    c = Cache(Memory({}), Memory({}))
     ro_cache = ReadOnlyCache(c)
 
     with cache(ro_cache):
@@ -62,7 +62,7 @@ def test_fleche_readonly_cache():
             ro_cache.load('2d2984056834041089b5849259a8ba42')
 
     # now, let's add the value to the cache and see if we can get it from there
-    c.storage.save('2d2984056834041089b5849259a8ba42', 1)
+    c.values.save('2d2984056834041089b5849259a8ba42', 1)
 
     with cache(ro_cache):
         # this should be loaded from ro_cache
@@ -75,8 +75,8 @@ def test_fleche_cache_stack():
     def func(x):
         return x
 
-    cache1 = Cache(Memory({}))
-    cache2 = Cache(Memory({}))
+    cache1 = Cache(Memory({}), Memory({}))
+    cache2 = Cache(Memory({}), Memory({}))
 
     stack = CacheStack(stack=(cache2, cache1))
 
@@ -111,8 +111,8 @@ def test_fleche_cache_stack_context_manager():
     def func(x):
         return x
 
-    cache1 = Cache(Memory({}))
-    cache2 = Cache(Memory({}))
+    cache1 = Cache(Memory({}), Memory({}))
+    cache2 = Cache(Memory({}), Memory({}))
 
     with cache(cache1):
         with cache(cache2, stack=True):

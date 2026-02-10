@@ -84,8 +84,8 @@ class ReadOnlyCache(BaseCache):
     """A cache that can only be read from."""
     cache: BaseCache
 
-    def save(self, invocation, result, metadata):
-        raise SaveError(self, result)
+    def save(self, inv: Invocation):
+        raise SaveError(self, inv)
 
     def load(self, key):
         return self.cache.load(key)
@@ -100,8 +100,8 @@ class CacheStack(BaseCache):
     """
     stack: tuple[Cache]
 
-    def save(self, invocation, result, metadata):
-        self.stack[0].save(invocation, result, metadata)
+    def save(self, inv: Invocation):
+        self.stack[0].save(inv)
 
     def load(self, key):
         for cache in self.stack:

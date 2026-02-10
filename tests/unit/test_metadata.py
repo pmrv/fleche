@@ -12,8 +12,9 @@ from fleche.storage import Memory
 @pytest.fixture
 def cache_it() -> Cache:
     db = PandasDB({})
-    storage = Memory({})
-    return Cache(storage).metadb(db)
+    values_storage = Memory({})
+    invocs_storage = Memory({})
+    return Cache(values_storage, invocs_storage).metadb(db)
 
 
 def test_fleche_decorator_default_metadata(cache_it: Cache):
@@ -173,10 +174,11 @@ def test_fleche_decorator_and_context_manager(cache_it: Cache):
 
 
 def test_tags():
-    storage = Memory({})
+    values_storage = Memory({})
+    invocs_storage = Memory({})
     mdb = PandasDB({})
 
-    with cache(Cache(storage).metadb(mdb)):
+    with cache(Cache(values_storage, invocs_storage).metadb(mdb)):
 
         @fleche
         def my_func(a, b):

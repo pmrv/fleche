@@ -7,9 +7,12 @@ from fleche.storage import Memory
 
 
 def setup_function():
-    cache = Cache(Mock())
-    cache.storage.load.side_effect = KeyError
-    _CACHE.set(cache)
+    values_storage = Mock()
+    values_storage.save.return_value = "digest_value"
+    invocs_storage = Mock()
+    invocs_storage.load.side_effect = KeyError
+    c = Cache(values_storage, invocs_storage)
+    _CACHE.set(c)
 
 
 def test_fleche_no_args():
@@ -61,12 +64,15 @@ def test_fleche_retrieves_from_cache():
             raise KeyError
         return storage_content[k]
 
-    def save_to_storage(k, v):
+    def save_to_storage(v, key=None):
+        k = key if key else "default"
         print(f"saving {k}: {v}")
         storage_content[k] = v
+        return k
 
-    cache.storage.load = Mock(side_effect=load_from_storage)
-    cache.storage.save = Mock(side_effect=save_to_storage)
+    cache.invocs.load = Mock(side_effect=load_from_storage)
+    cache.invocs.save = Mock(side_effect=save_to_storage)
+    cache.values.save = Mock(return_value="digest_value")
 
     # First call, should execute the function and save to cache
     assert my_func(2) == 42
@@ -94,11 +100,14 @@ def test_fleche_with_version_argument():
             raise KeyError
         return storage_content[k]
 
-    def save_to_storage(k, v):
+    def save_to_storage(v, key=None):
+        k = key if key else "default"
         storage_content[k] = v
+        return k
 
-    cache.storage.load = Mock(side_effect=load_from_storage)
-    cache.storage.save = Mock(side_effect=save_to_storage)
+    cache.invocs.load = Mock(side_effect=load_from_storage)
+    cache.invocs.save = Mock(side_effect=save_to_storage)
+    cache.values.save = Mock(return_value="digest_value")
 
     # First call, should execute the function and save to cache
     assert my_func(2) == 42
@@ -121,7 +130,7 @@ def test_fleche_with_version():
     mock_function = Mock(return_value=42)
     mock_function.__name__ = 'mock_function'
 
-    with cache(Cache(Memory({}))):
+    with cache(Cache(Memory({}), Memory({}))):
         mock_function.__version__ = 1
         my_func = fleche(mock_function)
 
@@ -148,7 +157,7 @@ def test_fleche_with_module():
     mock_function = Mock(return_value=42)
     mock_function.__name__ = "name"
 
-    with cache(Cache(Memory({}))):
+    with cache(Cache(Memory({}), Memory({}))):
         # First call, should execute the function and save to cache
         mock_function.__module__ = "module1"
         # need to assigne dunder before wrapping for fleche to pick it up
