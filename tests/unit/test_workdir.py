@@ -8,13 +8,13 @@ from fleche import fleche, cache, Cache, SaveError, PandasDB, storage
 def test_get_working_directory_root_default():
     from fleche import _get_working_directory_root
     with patch.dict(os.environ, {}, clear=True):
-        expected = Path.home() / '.cache' / 'fleche' / 'cwds'
+        expected = Path.home() / '.cache' / 'fleche' / 'cwd'
         assert _get_working_directory_root() == expected
 
 def test_get_working_directory_root_xdg():
     from fleche import _get_working_directory_root
     with patch.dict(os.environ, {'XDG_CACHE_HOME': '/tmp/mycache'}):
-        expected = Path('/tmp/mycache') / 'fleche' / 'cwds'
+        expected = Path('/tmp/mycache') / 'fleche' / 'cwd'
         assert _get_working_directory_root() == expected
 
 def test_fleche_changes_and_restores_cwd():
@@ -27,7 +27,7 @@ def test_fleche_changes_and_restores_cwd():
     with cache(Cache(storage.Memory({}), storage.Memory({})).metadb(PandasDB({}))):
         cwd = get_cwd()
         assert cwd != original_cwd
-        assert "cwds" in cwd
+        assert "cwd" in cwd
         assert os.getcwd() == original_cwd
 
 def test_fleche_no_isolate_no_cwd_change():
