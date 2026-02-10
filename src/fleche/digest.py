@@ -65,6 +65,9 @@ def digest(value: Any) -> str:
     match value:
         case Digest():
             return value
+        case _ if hasattr(value, "__digest__"):
+            res = value.__digest__
+            return Digest(res() if callable(res) else res)
         case str():
             m.update(value.encode())
         case bytes():

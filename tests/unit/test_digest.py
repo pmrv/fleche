@@ -12,6 +12,33 @@ from fleche.digest import digest, Digest
 from fleche.invocation import Invocation
 
 
+def test_custom_digest():
+    """Test that custom __digest__ attribute or method is used."""
+    class CustomAttr:
+        def __init__(self, d):
+            self.__digest__ = d
+
+    class CustomMethod:
+        def __init__(self, d):
+            self.d = d
+        def __digest__(self):
+            return self.d
+
+    class CustomProperty:
+        def __init__(self, d):
+            self.d = d
+        @property
+        def __digest__(self):
+            return self.d
+
+    assert digest(CustomAttr("attr")) == "attr"
+    assert isinstance(digest(CustomAttr("attr")), Digest)
+    assert digest(CustomMethod("method")) == "method"
+    assert isinstance(digest(CustomMethod("method")), Digest)
+    assert digest(CustomProperty("property")) == "property"
+    assert isinstance(digest(CustomProperty("property")), Digest)
+
+
 def test_supported_types():
     """Test that all supported types can be digested without raising an exception."""
     @dataclass
