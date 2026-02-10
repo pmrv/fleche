@@ -1,4 +1,7 @@
 """lru_cache on 'roids."""
+import os
+import shutil
+import tempfile
 from contextlib import contextmanager, AbstractContextManager
 from contextvars import ContextVar
 from collections import defaultdict
@@ -90,6 +93,14 @@ def project(name):
     return tags(project=name)
 
 
+def _get_working_directory_root() -> Path:
+    """
+    Determines the root directory for fleche working directories, following the XDG spec.
+    """
+    xdg_cache_home = os.environ.get('XDG_CACHE_HOME') or (Path.home() / '.cache')
+    return Path(xdg_cache_home) / 'fleche' / 'workingdirectories'
+
+
 def fleche(
     _func=None,
     *,
@@ -135,23 +146,35 @@ def fleche(
             except KeyError:
                 pass
 
-            active_meta = _METADATA.get() + tuple(meta)
-            metadata: Dict[str, Any] = defaultdict(dict)
-            for m in active_meta:
-                metadata[m.name] |= m.pre(inv)
-            result: _T = func(*args, **kwargs)
-            if result is None:
-                print("WARNING NO VALUE")
-                return
-            for m in active_meta:
-                metadata[m.name] |= m.post(metadata[m.name], result, inv)
+            root = _get_working_directory_root()
+            root.mkdir(parents=True, exist_ok=True)
+            # Create a unique working directory to avoid race conditions during concurrent execution.
+            # NOTE: os.chdir is process-wide and not thread-safe.
+            workdir = Path(tempfile.mkdtemp(dir=root, prefix=f"{key}_"))
+            old_cwd = os.getcwd()
+            os.chdir(workdir)
             try:
-                inv.metadata = metadata
-                inv.result = result
-                cache.save(inv)
-            except SaveError as e:
-                print("WARNING NO SAVE:", *e.args)
-            return result
+                active_meta = _METADATA.get() + tuple(meta)
+                metadata: Dict[str, Any] = defaultdict(dict)
+                for m in active_meta:
+                    metadata[m.name] |= m.pre(inv)
+                result: _T = func(*args, **kwargs)
+                if result is None:
+                    print("WARNING NO VALUE")
+                    shutil.rmtree(workdir)
+                    return
+                for m in active_meta:
+                    metadata[m.name] |= m.post(metadata[m.name], result, inv)
+                try:
+                    inv.metadata = metadata
+                    inv.result = result
+                    cache.save(inv)
+                    shutil.rmtree(workdir)
+                except SaveError as e:
+                    print("WARNING NO SAVE:", *e.args)
+                return result
+            finally:
+                os.chdir(old_cwd)
         return wrapper
 
     if callable(_func):
