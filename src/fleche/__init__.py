@@ -99,7 +99,7 @@ def _get_working_directory_root() -> Path:
     Determines the root directory for fleche working directories, following the XDG spec.
     """
     xdg_cache_home = os.environ.get('XDG_CACHE_HOME') or (Path.home() / '.cache')
-    root = Path(xdg_cache_home) / 'fleche' / 'workingdirectories'
+    root = Path(xdg_cache_home) / 'fleche' / 'cwds'
     root.mkdir(parents=True, exist_ok=True)
     return root
 
