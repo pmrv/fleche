@@ -85,15 +85,12 @@ def digest(value: Any) -> str:
                 m.update(digest(v).encode())
         case np.ndarray():
             m.update(value.data)
-        case Invocation():
-            m.update(type(value).__name__.encode())
-            content = dataclasses.asdict(value)
-            content.pop("result", None)
-            content.pop("metadata", None)
-            m.update(digest(content).encode())
         case _ if dataclasses.is_dataclass(value):
             m.update(type(value).__name__.encode())
-            m.update(digest(dataclasses.asdict(value)).encode())
+            # cannot use asdict because it recursively converts values which destroys digests
+            # instead (flat-) convert to dictionaries, salt with type name, then fallback to dictionary case.
+            fields = map(lambda f: (f.name, getattr(value, f.name)), dataclasses.fields(value))
+            m.update(digest(dict(fields)).encode())
         case Iterable():
             m.update(type(value).__name__.encode())
             for v in value:

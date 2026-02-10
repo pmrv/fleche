@@ -1,3 +1,4 @@
+import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 import numpy as np
@@ -211,14 +212,42 @@ def randomly_digest_subvalues(value, data):
 def test_merkle_tree_property(value, data):
     """
     Test the merkle tree property: replacing any sub-value with its digest preserves the overall digest.
-    
+
     This property is essential for building merkle trees where we can replace
     any subtree with its digest and get the same overall hash.
-    
+
     This unified test generates random nested values and randomly replaces sub-values
     with their digests, verifying that the overall digest remains unchanged.
     """
     original_digest = digest(value)
     modified_value = randomly_digest_subvalues(value, data)
     assert digest(modified_value) == original_digest, \
-        f"Merkle property failed: digest changed after replacing sub-values with their digests"
+        (f"Merkle property failed: digest changed after replacing sub-values with their digests", value, modified_value)
+
+
+# some explicit cases test_merkle_tree_property is apparently not efficient enough to catch
+
+@dataclass
+class Input:
+    a: int
+
+
+@dataclass
+class Other:
+    i: Input
+
+
+def foo(inp):
+    return inp.a / inp.b
+
+
+@pytest.mark.parametrize("value, partially_digested_value", (
+    ([Input(2)], [digest(Input(2))]),
+    ((Input(2),), (digest(Input(2)),)),
+    (Other(Input(2)), Other(Input(digest(2)))),
+    (Other(Input(2)), Other(digest(Input(2)))),
+    (Invocation.from_call(foo, Input(1), a=Input(2)), Invocation.from_call(foo, digest(Input(1)), a=Input(2))),
+    (Invocation.from_call(foo, Input(1), a=Input(2)), Invocation.from_call(foo, Input(1), a=digest(Input(2)))),
+))
+def test_merkle_tree_property_fixed(value, partially_digested_value):
+    assert digest(value) == digest(partially_digested_value), (value, partially_digested_value)
