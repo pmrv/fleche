@@ -9,7 +9,8 @@ from . import storage
 from .invocation import Invocation
 
 
-class SaveError(Exception):
+class Rejected(Exception):
+    """Cache refused to cache the invocation for some reason or other."""
     pass
 
 
@@ -54,9 +55,12 @@ class Cache(BaseCache):
 
     def save(self, inv: Invocation) -> str:
         inv = copy(inv)
-        inv.result = self.values.save(inv.result)
-        inv.args = tuple(self.values.save(a) for a in inv.args)
-        inv.kwargs = {k: self.values.save(v) for k, v in inv.kwargs.items()}
+        try:
+            inv.result = self.values.save(inv.result)
+            inv.args = tuple(self.values.save(a) for a in inv.args)
+            inv.kwargs = {k: self.values.save(v) for k, v in inv.kwargs.items()}
+        except storage.SaveError as e:
+            raise Rejected(e)
 
         return self.invocs.save(inv, key=digest(inv.to_lookup()))
 
@@ -85,7 +89,7 @@ class ReadOnlyCache(BaseCache):
     cache: BaseCache
 
     def save(self, inv: Invocation):
-        raise SaveError(self, inv)
+        raise Rejected(self, inv)
 
     def load(self, key):
         return self.cache.load(key)

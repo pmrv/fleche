@@ -3,7 +3,8 @@ import os
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from fleche import fleche, cache, Cache, SaveError, PandasDB, storage
+from fleche import fleche, cache, Cache, PandasDB, storage
+from fleche.storage import SaveError
 
 def test_get_working_directory_root_default():
     from fleche import _get_working_directory_root

@@ -10,6 +10,10 @@ from bagofholding import H5Bag
 from .digest import digest, Digest
 
 
+class SaveError(Exception):
+    pass
+
+
 class Storage(ABC):
     """Abstract base class for defining storage mechanisms."""
 
@@ -171,9 +175,13 @@ class CloudpickleFile(FileStorage):
 class BagOfHoldingH5File(FileStorage):
     root: Path
 
-    def save(self, value: Any) -> str:
-        key = digest(value)
-        H5Bag.save(value, self._path(key))
+    def save(self, value: Any, key: Digest | None = None) -> Digest:
+        if key is None:
+            key = digest(value)
+        try:
+            H5Bag.save(value, self._path(key))
+        except (ValueError, TypeError):  # h5py choked on something, pass it along
+            raise SaveError(value) from None
         return key
 
     def load(self, key: str) -> Any:

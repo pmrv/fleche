@@ -25,7 +25,7 @@ license = "BSD-3-Clause"
 dependencies = [
     'cloudpickle',
     'sqlalchemy',
-    'bagofholding',
+    'bagofholding == 0.1.7',
     'numpy',
     'pandas >= 3, <4',
 ]

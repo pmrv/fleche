@@ -12,8 +12,8 @@ from typing import Any, Callable, Dict, Optional, TypeVar, Union
 
 from . import digest
 from .invocation import Invocation
-from .metadata import MetaData, PandasDB, Runtime, Digest, InvocationInfo, Tags
-from .cache import Cache, SaveError
+from .metadata import MetaData, PandasDB, Runtime, InvocationInfo, Tags
+from .cache import Cache, Rejected
 from . import storage
 
 _T = TypeVar("_T")
@@ -165,7 +165,7 @@ def fleche(
                     inv.metadata = metadata
                     inv.result = result
                     cache.save(inv)
-                except SaveError as e:
+                except Rejected as e:
                     print("WARNING NO SAVE:", *e.args)
                 return result
 

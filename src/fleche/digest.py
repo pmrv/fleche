@@ -62,6 +62,7 @@ def digest(value: Any) -> str:
         if isinstance(value, h.type):
             return h.digest(value)
 
+    m.update(type(value).__name__.encode())
     match value:
         case Digest():
             return value
@@ -88,13 +89,11 @@ def digest(value: Any) -> str:
         case np.ndarray():
             m.update(value.data)
         case _ if dataclasses.is_dataclass(value):
-            m.update(type(value).__name__.encode())
             # cannot use asdict because it recursively converts values which destroys digests
             # instead (flat-) convert to dictionaries, salt with type name, then fallback to dictionary case.
             fields = map(lambda f: (f.name, getattr(value, f.name)), dataclasses.fields(value))
             m.update(digest(dict(fields)).encode())
         case Iterable():
-            m.update(type(value).__name__.encode())
             for v in value:
                 m.update(digest(v).encode())
         case _:

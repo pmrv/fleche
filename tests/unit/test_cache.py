@@ -2,7 +2,7 @@ from unittest.mock import Mock
 import pytest
 from fleche import fleche, cache, Cache
 from fleche.digest import digest
-from fleche.cache import ReadOnlyCache, CacheStack, SaveError
+from fleche.cache import ReadOnlyCache, CacheStack, Rejected
 
 
 def test_cache_save():
@@ -102,7 +102,7 @@ def test_readonly_cache_save():
     from fleche.invocation import Invocation
     c = ReadOnlyCache(Mock())
     inv = Invocation(name="test", args=(1,), kwargs={}, result="result")
-    with pytest.raises(SaveError):
+    with pytest.raises(Rejected):
         c.save(inv)
 
 
