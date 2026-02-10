@@ -29,7 +29,8 @@ def test_fleche_decorator_default_metadata(cache_it: Cache):
 
     df = cache_it.metadb.table()
     assert "walltime" in df.columns
-    assert "result" in df.columns
+    assert "name" in df.columns  # From InvocationInfo
+    assert "module" in df.columns  # From InvocationInfo
     assert len(df) == 1
     assert df['walltime'].iloc[0] < 0.1
 
