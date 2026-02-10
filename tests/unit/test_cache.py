@@ -1,6 +1,7 @@
 from unittest.mock import Mock
 import pytest
-from fleche import fleche, cache, Cache, digest
+from fleche import fleche, cache, Cache
+from fleche.digest import digest
 from fleche.cache import ReadOnlyCache, CacheStack, SaveError
 
 

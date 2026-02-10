@@ -2,7 +2,8 @@ import pytest
 import time
 import tempfile
 
-from fleche import fleche, cache, digest
+from fleche import fleche, cache
+from fleche.digest import digest
 from fleche.invocation import Invocation
 from fleche.cache import Cache, ReadOnlyCache, CacheStack
 from fleche.storage import CloudpickleFile, Memory
