@@ -212,17 +212,17 @@ def randomly_digest_subvalues(value, data):
 def test_merkle_tree_property(value, data):
     """
     Test the merkle tree property: replacing any sub-value with its digest preserves the overall digest.
-    
+
     This property is essential for building merkle trees where we can replace
     any subtree with its digest and get the same overall hash.
-    
+
     This unified test generates random nested values and randomly replaces sub-values
     with their digests, verifying that the overall digest remains unchanged.
     """
     original_digest = digest(value)
     modified_value = randomly_digest_subvalues(value, data)
     assert digest(modified_value) == original_digest, \
-        f"Merkle property failed: digest changed after replacing sub-values with their digests"
+        (f"Merkle property failed: digest changed after replacing sub-values with their digests", value, modified_value)
 
 
 # some explicit cases test_merkle_tree_property is apparently not efficient enough to catch
