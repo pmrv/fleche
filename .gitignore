@@ -1,9 +1,0 @@
-__pycache__/
-*.py[cod]
-*$py.class
-.hypothesis/
-build/
-dist/
-*.egg-info/
-.fleche/
-.pytest_cache/
