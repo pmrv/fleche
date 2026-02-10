@@ -162,7 +162,7 @@ class CloudpickleFile(FileStorage):
             KeyError: If no file is found for the given key.
         """
         try:
-            loads((self._path(key)).read_bytes())
+            return loads((self._path(key)).read_bytes())
         except FileNotFoundError:
             raise KeyError(key) from None
 

@@ -27,8 +27,8 @@ storages = [Memory({}), CloudpickleFile(temp.name), BagOfHoldingH5File(temp_bag.
 def test_storage(storage, value):
     if isinstance(storage, BagOfHoldingH5File):
         pytest.skip("Borked for upstream reasons")
-    storage.save("key", value)
-    loaded_value = storage.load("key")
+    key = storage.save(value, key="key")
+    loaded_value = storage.load(key)
     if isinstance(value, np.ndarray):
         np.testing.assert_array_equal(loaded_value, value)
     else:
