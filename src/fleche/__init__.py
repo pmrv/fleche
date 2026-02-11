@@ -1,5 +1,6 @@
 """lru_cache on 'roids."""
 import os
+from dataclasses import replace
 import shutil
 import tempfile
 import contextlib
@@ -154,20 +155,19 @@ def fleche(
                 active_meta = _METADATA.get() + tuple(meta)
                 metadata: Dict[str, Any] = defaultdict(dict)
                 for m in active_meta:
-                    metadata[m.name] |= m.pre(inv)
-                result: _T = func(*args, **kwargs)
-                if result is None:
+                    metadata[m.name] |= m.pre(replace(inv, metadata={}))
+                inv.result: _T = func(*args, **kwargs)
+                if inv.result is None:
                     print("WARNING NO VALUE")
                     return None
                 for m in active_meta:
-                    metadata[m.name] |= m.post(metadata[m.name], result, inv)
+                    metadata[m.name] |= m.post(metadata[m.name], replace(inv, metadata={}))
                 try:
                     inv.metadata = metadata
-                    inv.result = result
                     cache.save(inv)
                 except Rejected as e:
                     print("WARNING NO SAVE:", *e.args)
-                return result
+                return inv.result
 
             if isolate:
                 root = _get_working_directory_root()
