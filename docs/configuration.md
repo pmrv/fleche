@@ -1,0 +1,69 @@
+# Configuration
+
+`fleche` can be configured using a TOML file located at `$XDG_CONFIG_HOME/fleche/cache.toml` (or `~/.config/fleche/cache.toml` if `$XDG_CONFIG_HOME` is not set).
+
+## The `[default]` section
+
+The `[default]` section is used to configure the default behavior of `fleche`.
+
+### `cache`
+
+The `cache` key specifies the name of the default cache to use.
+
+Example:
+```toml
+[default]
+cache = "mycache"
+```
+
+### `metadata`
+
+The `metadata` key specifies the default metadata chain to use. This is a list of strings, where each string is the name of a metadata class from the `fleche.metadata` module.
+
+Example:
+```toml
+[default]
+metadata = ["Runtime", "InvocationInfo"]
+```
+
+**Note:** The `Tags` metadata cannot be configured from the config file, as it requires arguments.
+
+## Cache sections
+
+You can define multiple cache configurations in the same file, each in its own section.
+
+Each cache section must define two storage backends: `values` and `invocs`. `values` is used to store the results of function calls, and `invocs` is used to store the function invocation details.
+
+### Storage backends
+
+Each storage backend is configured using a `type` key, which specifies the name of the storage class from the `fleche.storage` module. Other keys are passed as arguments to the storage class constructor.
+
+Example:
+```toml
+[mycache]
+values.type = "Memory"
+invocs.type = "Memory"
+```
+
+### Available storage types
+
+*   `Memory`: Stores data in an in-memory dictionary. It takes no arguments.
+*   `CloudpickleFile`: Stores data as files on the filesystem, using `cloudpickle` for serialization. It takes a `root` argument, which is the path to the directory where the files will be stored.
+*   `BagOfHoldingH5File`: Stores data in an HDF5 file using the `bagofholding` library. It takes a `root` argument, which is the path to the directory where the files will be stored.
+
+### Nested storage
+
+You can also nest storage configurations. This is useful for creating complex storage backends, like a compressed storage that wraps another storage.
+
+To configure a nested storage, you can use a `inner` key, which contains the configuration for the inner storage.
+
+Example:
+```toml
+[nested]
+values.type = "CompressedStorage"
+values.compression = "gzip"
+values.inner.type = "BagOfHoldingH5File"
+values.inner.root  = "..."
+invocs.type = "CloudpickleFile"
+invocs.root = "~/.fleche/invocs"
+```
