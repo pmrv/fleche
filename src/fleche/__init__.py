@@ -124,6 +124,14 @@ def fleche(
         if version is not None:
             func.__version__ = version
 
+        def get_invocation(*args, **kwargs):
+            inv = Invocation.from_call(func, *args, **kwargs)
+            if not hash_version:
+                inv.version = None
+            if not hash_module:
+                inv.module = None
+            return inv
+
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> _T:
             if require is None:
@@ -137,12 +145,8 @@ def fleche(
                 return func(*args, **kwargs)
             cache: Cache = _CACHE.get()
             try:
-                inv = Invocation.from_call(func, *args, **kwargs)
-                if not hash_version:
-                    inv.version = None
-                if not hash_module:
-                    inv.module = None
-                key: str = digest.digest(inv.to_lookup())
+                inv = get_invocation(*args, **kwargs)
+                key = wrapper.key(*args, **kwargs)
             except digest.Unhashable as e:
                 print("WARNING NO HASH:", e.args[0])
                 return func(*args, **kwargs)
@@ -179,6 +183,12 @@ def fleche(
                         return _run_and_cache()
             else:
                 return _run_and_cache()
+
+        wrapper.invocation = get_invocation
+        wrapper.key = lambda *args, **kwargs: digest.digest(get_invocation(*args, **kwargs).to_lookup())
+        wrapper.load = lambda *args, **kwargs: _CACHE.get().load(wrapper.key(*args, **kwargs)).result
+        wrapper.contains = lambda *args, **kwargs: _CACHE.get().contains(wrapper.key(*args, **kwargs))
+
         return wrapper
 
     if callable(_func):
