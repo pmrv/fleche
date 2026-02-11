@@ -55,7 +55,7 @@ def test_fleche_retrieves_from_cache():
     def my_func(x):
         return mock_function(x)
 
-    key = digest(Invocation.from_call(my_func, 2))
+    key = digest(Invocation.from_call(my_func, 2).to_lookup())
 
     cache = _CACHE.get()
     storage_content = {}
@@ -113,7 +113,7 @@ def test_fleche_with_version_argument():
     # First call, should execute the function and save to cache
     assert my_func(2) == 42
     mock_function.assert_called_once_with(2)
-    key_v1 = digest(Invocation.from_call(my_func, 2))
+    key_v1 = digest(Invocation.from_call(my_func, 2).to_lookup())
     assert cache.contains(key_v1)
 
     # Second call, with different version, should execute again
@@ -123,7 +123,7 @@ def test_fleche_with_version_argument():
 
     assert my_func_v2(2) == 42
     assert mock_function.call_count == 2
-    key_v2 = digest(Invocation.from_call(my_func_v2, 2))
+    key_v2 = digest(Invocation.from_call(my_func_v2, 2).to_lookup())
     assert cache.contains(key_v2)
 
 
@@ -140,7 +140,7 @@ def test_fleche_with_version():
         mock_function.assert_called_once_with(2)
         inv = Invocation.from_call(my_func, 2)
         inv.version = 1
-        key_v1 = digest(inv)
+        key_v1 = digest(inv.to_lookup())
         assert cache().contains(key_v1)
 
         mock_function.__version__ = 2
@@ -150,7 +150,7 @@ def test_fleche_with_version():
         assert my_func(2) == 42
         assert mock_function.call_count == 2
         inv.version = 2
-        key_v2 = digest(inv)
+        key_v2 = digest(inv.to_lookup())
         assert cache().contains(key_v2)
 
 
@@ -168,7 +168,7 @@ def test_fleche_with_module():
         mock_function.assert_called_once_with(2)
         inv = Invocation.from_call(my_func, 2)
         inv.module = "module1"
-        key_m1 = digest(inv)
+        key_m1 = digest(inv.to_lookup())
         assert cache().contains(key_m1)
 
         # Second call, with different module, should execute again
@@ -177,5 +177,5 @@ def test_fleche_with_module():
         assert my_func(2) == 42
         assert mock_function.call_count == 2
         inv.module = "module2"
-        key_m2 = digest(inv)
+        key_m2 = digest(inv.to_lookup())
         assert cache().contains(key_m2)
