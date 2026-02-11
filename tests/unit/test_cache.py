@@ -8,14 +8,15 @@ from fleche.cache import ReadOnlyCache, CacheStack, Rejected
 def test_cache_save():
     from fleche.invocation import Invocation
     values_storage = Mock()
+    values_storage.save.return_value = 1
     invocs_storage = Mock()
     metadata = Mock()
     c = Cache(values_storage, invocs_storage).metadb(metadata)
-    
+
     inv = Invocation(name="test", args=(1,), kwargs={}, result="result")
     inv.metadata = {"test": {"key": "value"}}
     c.save(inv)
-    
+
     # Check that the underlying cache saves values and invocations
     assert values_storage.save.called
     assert invocs_storage.save.called
