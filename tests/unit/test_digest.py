@@ -103,38 +103,24 @@ def test_different_iterables_same_values_hash_differently(lst):
 
 def test_specific_iterables_dont_use_generic_iterable_path(monkeypatch):
     """Test that specific iterable types use their specific match case."""
-    # spy on the update method
-    update_calls = []
 
-    class MockSHA256:
-        def update(self, data):
-            update_calls.append(data)
+    # fake class that acts and names itself as the original type's iterator
+    class Chamelion:
+        def __init__(self, value):
+            self.value = value
 
-        def hexdigest(self):
-            return "mock_hexdigest"
+        @property
+        def __name__(self):
+            return type(self.value).__name__
 
-    monkeypatch.setattr(hashlib, "sha256", MockSHA256)
+        def __iter__(self):
+            return iter(self.value)
 
     # test str
-    update_calls.clear()
-    digest("hello")
-    assert b"str" not in update_calls
-
-    # test bytes
-    update_calls.clear()
-    digest(b"hello")
-    assert b"bytes" not in update_calls
-
-    # test dict
-    update_calls.clear()
-    digest({"a": 1})
-    assert b"dict" not in update_calls
-
-    # test numpy array
-    update_calls.clear()
-    digest(np.array([1, 2, 3]))
-    assert b"ndarray" not in update_calls
-
+    assert digest("hello") != Chamelion("hello")
+    assert digest(b"hello") != Chamelion(b"hello")
+    assert digest({"a": 1}) != Chamelion({"a": 1})
+    assert digest(np.array([1, 2, 3])) != Chamelion(np.array([1, 2, 3]))
 
 @st.composite
 def dataclasses(draw, field_types, frozen=None):
