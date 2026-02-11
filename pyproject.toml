@@ -38,7 +38,7 @@ docs = [
     "mkdocstrings[python]",
     "griffe_fieldz",
 ]
-test = [
+tests = [
     "pytest",
     "hypothesis",
 ]
