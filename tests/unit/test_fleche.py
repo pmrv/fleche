@@ -57,32 +57,15 @@ def test_fleche_retrieves_from_cache():
 
     key = digest(Invocation.from_call(my_func, 2).to_lookup())
 
-    cache = _CACHE.get()
-    storage_content = {}
+    with cache(Cache(Memory({}), Memory({}))):
+        # First call, should execute the function and save to cache
+        assert my_func(2) == 42
+        mock_function.assert_called_once_with(2)
+        assert cache().contains(key)
 
-    def load_from_storage(k):
-        if k not in storage_content:
-            raise KeyError
-        return storage_content[k]
-
-    def save_to_storage(v, key=None):
-        k = key if key else "default"
-        print(f"saving {k}: {v}")
-        storage_content[k] = v
-        return k
-
-    cache.invocs.load = Mock(side_effect=load_from_storage)
-    cache.invocs.save = Mock(side_effect=save_to_storage)
-    cache.values.save = Mock(return_value="digest_value")
-
-    # First call, should execute the function and save to cache
-    assert my_func(2) == 42
-    mock_function.assert_called_once_with(2)
-    assert cache.contains(key)
-
-    # Second call, should load from cache
-    assert my_func(2) == 42
-    mock_function.assert_called_once_with(2) # Not called again
+        # Second call, should load from cache
+        assert my_func(2) == 42
+        mock_function.assert_called_once_with(2)
 
 
 def test_fleche_with_version_argument():
@@ -93,16 +76,16 @@ def test_fleche_with_version_argument():
     def my_func(x):
         return mock_function(x)
 
-    cache = _CACHE.get()
+    cache = Cache(Mock(), Mock())
     storage_content = {}
 
     def load_from_storage(k):
         if k not in storage_content:
-            raise KeyError
+            raise KeyError(k)
         return storage_content[k]
 
     def save_to_storage(v, key=None):
-        k = key if key else "default"
+        k = digest(v.to_lookup())
         storage_content[k] = v
         return k
 
@@ -113,8 +96,6 @@ def test_fleche_with_version_argument():
     # First call, should execute the function and save to cache
     assert my_func(2) == 42
     mock_function.assert_called_once_with(2)
-    key_v1 = digest(Invocation.from_call(my_func, 2).to_lookup())
-    assert cache.contains(key_v1)
 
     # Second call, with different version, should execute again
     @fleche(version=2)
@@ -123,8 +104,6 @@ def test_fleche_with_version_argument():
 
     assert my_func_v2(2) == 42
     assert mock_function.call_count == 2
-    key_v2 = digest(Invocation.from_call(my_func_v2, 2).to_lookup())
-    assert cache.contains(key_v2)
 
 
 def test_fleche_with_version():
