@@ -18,8 +18,8 @@ def test_fleche_extra_attributes():
         assert inv.kwargs == {"b": 2}
         assert inv.version == 1
 
-        # Test key
-        key = add.key(1, b=2)
+        # Test digest
+        key = add.digest(1, b=2)
         assert isinstance(key, str)
 
         # Test contains

@@ -121,7 +121,7 @@ def fleche(
 
     The decorated function is enhanced with helper methods:
     - .call(*args, **kwargs): Get the Call object.
-    - .key(*args, **kwargs): Get the cache key.
+    - .digest(*args, **kwargs): Get the cache key.
     - .load(*args, **kwargs): Load result from cache.
     - .contains(*args, **kwargs): Check if result is in cache.
     The original function is available via .__wrapped__.
@@ -156,7 +156,7 @@ def fleche(
             cache: Cache = _CACHE.get()
             try:
                 inv = get_call(*args, **kwargs)
-                key = wrapper.key(*args, **kwargs)
+                key = wrapper.digest(*args, **kwargs)
             except digest.Unhashable as e:
                 print("WARNING NO HASH:", e.args[0])
                 return func(*args, **kwargs)
@@ -195,9 +195,9 @@ def fleche(
                 return _run_and_cache()
 
         wrapper.call = get_call
-        wrapper.key = lambda *args, **kwargs: digest.digest(get_call(*args, **kwargs).to_lookup())
-        wrapper.load = lambda *args, **kwargs: _CACHE.get().load(wrapper.key(*args, **kwargs)).result
-        wrapper.contains = lambda *args, **kwargs: _CACHE.get().contains(wrapper.key(*args, **kwargs))
+        wrapper.digest = lambda *args, **kwargs: digest.digest(get_call(*args, **kwargs).to_lookup())
+        wrapper.load = lambda *args, **kwargs: _CACHE.get().load(wrapper.digest(*args, **kwargs)).result
+        wrapper.contains = lambda *args, **kwargs: _CACHE.get().contains(wrapper.digest(*args, **kwargs))
         return wrapper
 
     if callable(_func):

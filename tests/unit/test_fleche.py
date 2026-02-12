@@ -55,7 +55,7 @@ def test_fleche_retrieves_from_cache():
     def my_func(x):
         return mock_function(x)
 
-    key = digest(Call.from_call(my_func, 2).to_lookup())
+    key = my_func.digest(2)
 
     with cache(Cache(Memory({}), Memory({}))):
         # First call, should execute the function and save to cache
@@ -117,9 +117,7 @@ def test_fleche_with_version():
         # First call, should execute the function and save to cache
         assert my_func(2) == 42
         mock_function.assert_called_once_with(2)
-        inv = Call.from_call(my_func, 2)
-        inv.version = 1
-        key_v1 = digest(inv.to_lookup())
+        key_v1 = my_func.digest(2)
         assert cache().contains(key_v1)
 
         mock_function.__version__ = 2
@@ -128,8 +126,7 @@ def test_fleche_with_version():
         # Second call, with different version, should execute again
         assert my_func(2) == 42
         assert mock_function.call_count == 2
-        inv.version = 2
-        key_v2 = digest(inv.to_lookup())
+        key_v2 = my_func.digest(2)
         assert cache().contains(key_v2)
 
 
@@ -145,9 +142,7 @@ def test_fleche_with_module():
 
         assert my_func(2) == 42
         mock_function.assert_called_once_with(2)
-        inv = Call.from_call(my_func, 2)
-        inv.module = "module1"
-        key_m1 = digest(inv.to_lookup())
+        key_m1 = my_func.digest(2)
         assert cache().contains(key_m1)
 
         # Second call, with different module, should execute again
@@ -155,6 +150,5 @@ def test_fleche_with_module():
         my_func = fleche(mock_function)
         assert my_func(2) == 42
         assert mock_function.call_count == 2
-        inv.module = "module2"
-        key_m2 = digest(inv.to_lookup())
+        key_m2 = my_func.digest(2)
         assert cache().contains(key_m2)
