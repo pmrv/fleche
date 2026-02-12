@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from fleche import fleche, cache, Cache, PandasDB, storage
+from fleche import fleche, cache, Cache, storage
 from fleche.storage import SaveError
 
 def test_get_working_directory_root_default():
@@ -25,7 +25,7 @@ def test_fleche_changes_and_restores_cwd():
     def get_cwd():
         return os.getcwd()
 
-    with cache(Cache(storage.Memory({}), storage.Memory({})).metadb(PandasDB({}))):
+    with cache(Cache(storage.Memory({}), storage.Memory({}))):
         cwd = get_cwd()
         assert cwd != original_cwd
         assert "cwd" in cwd
@@ -38,7 +38,7 @@ def test_fleche_no_isolate_no_cwd_change():
     def get_cwd():
         return os.getcwd()
 
-    with cache(Cache(storage.Memory({}), storage.Memory({})).metadb(PandasDB({}))):
+    with cache(Cache(storage.Memory({}), storage.Memory({}))):
         cwd = get_cwd()
         assert cwd == original_cwd
 
@@ -51,7 +51,7 @@ def test_fleche_cleans_up_workdir_on_success():
         workdir_capture.append(cwd)
         return "success"
 
-    with cache(Cache(storage.Memory({}), storage.Memory({})).metadb(PandasDB({}))):
+    with cache(Cache(storage.Memory({}), storage.Memory({}))):
         my_func()
         workdir = workdir_capture[0]
         assert not os.path.exists(workdir)
@@ -65,7 +65,7 @@ def test_fleche_cleans_up_workdir_on_none_result():
         workdir_capture.append(cwd)
         return None
 
-    with cache(Cache(storage.Memory({}), storage.Memory({})).metadb(PandasDB({}))):
+    with cache(Cache(storage.Memory({}), storage.Memory({}))):
         my_func()
         workdir = workdir_capture[0]
         assert not os.path.exists(workdir)
@@ -81,7 +81,7 @@ def test_fleche_cleans_up_on_save_error():
     mock_storage = MagicMock()
     mock_storage.save.side_effect = SaveError("mock save error")
 
-    with cache(Cache(mock_storage, storage.Memory({})).metadb(PandasDB({}))):
+    with cache(Cache(mock_storage, storage.Memory({}))):
         my_func()
         workdir = workdir_capture[0]
         # With TemporaryDirectory, it's cleaned up even on SaveError inside the block
@@ -96,7 +96,7 @@ def test_distinct_workdirs_for_different_invocations():
         workdirs.append(os.getcwd())
         return x
 
-    with cache(Cache(storage.Memory({}), storage.Memory({})).metadb(PandasDB({}))):
+    with cache(Cache(storage.Memory({}), storage.Memory({}))):
         func(1)
         func(2)
         assert workdirs[0] != workdirs[1]
@@ -110,11 +110,11 @@ def test_distinct_workdirs_for_same_invocation():
         return x
 
     # First call
-    with cache(Cache(storage.Memory({}), storage.Memory({})).metadb(PandasDB({}))):
+    with cache(Cache(storage.Memory({}), storage.Memory({}))):
         func(1)
 
     # Second call (with new cache to force miss)
-    with cache(Cache(storage.Memory({}), storage.Memory({})).metadb(PandasDB({}))):
+    with cache(Cache(storage.Memory({}), storage.Memory({}))):
         func(1)
 
     assert workdirs[0] != workdirs[1]

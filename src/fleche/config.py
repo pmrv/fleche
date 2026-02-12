@@ -90,7 +90,7 @@ def _create_cache(cache_config: dict[str, Any]) -> Cache:
     return Cache(values=values, invocs=invocs)
 
 
-def from_config(name: str | None = None) -> Cache:
+def load_cache_config(name: str | None = None) -> Cache:
     """
     Load a cache from the configuration file.
 

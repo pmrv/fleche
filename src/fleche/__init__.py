@@ -1,7 +1,6 @@
 """lru_cache on 'roids."""
 import os
 from dataclasses import replace
-import shutil
 import tempfile
 import contextlib
 from contextlib import contextmanager, AbstractContextManager
@@ -13,17 +12,15 @@ from typing import Any, Callable, Dict, Optional, TypeVar, Union
 
 from . import digest
 from .invocation import Invocation
-from .metadata import MetaData, PandasDB, Runtime, InvocationInfo, Tags
+from .metadata import MetaData, Tags
 from .cache import Cache, Rejected
-from .config import from_config, load_default_metadata
-from . import storage
+from .config import load_cache_config, load_default_metadata
 
 _T = TypeVar("_T")
 
 _CACHE: ContextVar[Cache] = ContextVar(
     'fleche.CACHE',
-    # default=Cache(storage.CloudpickleFile(Path(".fleche"))).metadb(PandasDB({}))
-    default=from_config()
+    default=load_cache_config()
 )
 
 
@@ -45,7 +42,7 @@ def cache(new_cache: Optional[Union[Cache, str]] = None, stack=False) -> Union[C
         return _CACHE.get()
 
     if isinstance(new_cache, str):
-        new_cache = from_config(new_cache)
+        new_cache = load_cache_config(new_cache)
 
     @contextmanager
     def cache_manager():

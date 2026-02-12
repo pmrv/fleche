@@ -1,13 +1,12 @@
-import os
 import tempfile
 from pathlib import Path
 import textwrap
 import pytest
 from dataclasses import dataclass
 
-from fleche import from_config, storage, cache
+from fleche import load_cache_config, storage, cache
 from fleche.cache import Cache, BaseCache
-from fleche import metadata as metadata_module
+from fleche.metadata import Runtime, InvocationInfo
 
 
 @dataclass
@@ -41,7 +40,7 @@ def config_file():
         values.root = ".fleche/values"
         invocs.type = "CloudpickleFile"
         invocs.root = ".fleche/invocs"
-        
+
         [global]
         values.type = "BagOfHoldingH5File"
         values.root = "~/.fleche/values"
@@ -109,30 +108,30 @@ def config_file_no_default():
         yield tmpdir
 
 
-def test_from_config_default(monkeypatch, config_file):
+def test_load_cache_config_default(monkeypatch, config_file):
     monkeypatch.setenv("XDG_CONFIG_HOME", config_file)
 
-    cache_obj = from_config()
+    cache_obj = load_cache_config()
 
     assert isinstance(cache_obj, Cache)
     assert isinstance(cache_obj.values, storage.Memory)
     assert isinstance(cache_obj.invocs, storage.Memory)
 
 
-def test_from_config_explicit_default(monkeypatch, config_file_explicit_default):
+def test_load_cache_config_explicit_default(monkeypatch, config_file_explicit_default):
     monkeypatch.setenv("XDG_CONFIG_HOME", config_file_explicit_default)
 
-    cache_obj = from_config()
+    cache_obj = load_cache_config()
 
     assert isinstance(cache_obj, Cache)
     assert isinstance(cache_obj.values, storage.Memory)
     assert isinstance(cache_obj.invocs, storage.Memory)
 
 
-def test_from_config_specific(monkeypatch, config_file):
+def test_load_cache_config_specific(monkeypatch, config_file):
     monkeypatch.setenv("XDG_CONFIG_HOME", config_file)
 
-    cache_obj = from_config("transient")
+    cache_obj = load_cache_config("transient")
 
     assert isinstance(cache_obj, Cache)
     assert isinstance(cache_obj.values, storage.CloudpickleFile)
@@ -141,17 +140,17 @@ def test_from_config_specific(monkeypatch, config_file):
     assert cache_obj.invocs.root == Path(".fleche/invocs")
 
 
-def test_from_config_no_file(monkeypatch):
+def test_load_cache_config_no_file(monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", "/tmp/nonexistent")
-    cache_obj = from_config()
+    cache_obj = load_cache_config()
     assert isinstance(cache_obj, Cache)
     assert isinstance(cache_obj.values, storage.Memory)
     assert isinstance(cache_obj.invocs, storage.Memory)
 
 
-def test_from_config_no_default(monkeypatch, config_file_no_default):
+def test_load_cache_config_no_default(monkeypatch, config_file_no_default):
     monkeypatch.setenv("XDG_CONFIG_HOME", config_file_no_default)
-    cache_obj = from_config()
+    cache_obj = load_cache_config()
     assert isinstance(cache_obj, Cache)
     assert isinstance(cache_obj.values, storage.Memory)
     assert isinstance(cache_obj.invocs, storage.Memory)
@@ -183,7 +182,7 @@ def test_nested_storage(monkeypatch, config_file):
     monkeypatch.setenv("XDG_CONFIG_HOME", config_file)
     storage.NestedStorage = NestedStorage
 
-    cache_obj = from_config("nested")
+    cache_obj = load_cache_config("nested")
 
     assert isinstance(cache_obj, Cache)
     assert isinstance(cache_obj.values, NestedStorage)
@@ -201,8 +200,8 @@ def test_load_default_metadata(monkeypatch, config_file):
 
     meta = fleche._METADATA.get()
     assert len(meta) == 2
-    assert isinstance(meta[0], fleche.Runtime)
-    assert isinstance(meta[1], fleche.InvocationInfo)
+    assert isinstance(meta[0], Runtime)
+    assert isinstance(meta[1], InvocationInfo)
 
 
 def test_load_default_cache(monkeypatch, config_file):
