@@ -120,7 +120,7 @@ def test_fleche_cache_stack_context_manager():
             func(1)
             key = digest(Invocation.from_call(func, 1).to_lookup())
             assert cache2.contains(key)
-            assert cache2.load(cache2.load(key)[0]) == 1
+            assert cache2.load(key).result == 1
             assert not cache1.contains(key)
 
         func(2)
