@@ -5,6 +5,7 @@ site_url: https://example.com/fleche
 nav:
   - Home: index.md
   - Installation: installation.md
+  - Decorator Helpers: helpers.md
 
 
 theme:
