@@ -60,14 +60,18 @@ def test_fleche_readonly_cache():
         # this should not be saved
         func(1)
         with pytest.raises(KeyError):
-            ro_cache.load('2d2984056834041089b5849259a8ba42')
+            func.load(1)
 
-    # now, let's add the value to the cache and see if we can get it from there
-    c.values.save('2d2984056834041089b5849259a8ba42', 1)
+    # add the call to underlying cache
+    with cache(c):
+        func(1)
 
     with cache(ro_cache):
         # this should be loaded from ro_cache
-        assert func(1) == 1
+        try:
+            func.load(1)
+        except KeyError:
+            assert False, "Failed to load value from underlying cache!"
 
 
 def test_fleche_cache_stack():

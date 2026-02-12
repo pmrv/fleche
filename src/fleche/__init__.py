@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, Optional, TypeVar, Union
 from . import digest
 from .call import Call
 from .metadata import MetaData, Tags
-from .caches import Cache, Rejected
+from .caches import BaseCache, Cache, Rejected
 from .config import load_cache_config, load_default_metadata
 
 _T = TypeVar("_T")
@@ -43,6 +43,8 @@ def cache(new_cache: Optional[Union[Cache, str]] = None, stack=False) -> Union[C
 
     if isinstance(new_cache, str):
         new_cache = load_cache_config(new_cache)
+    if not isinstance(new_cache, BaseCache):
+        raise ValueError(new_cache)
 
     @contextmanager
     def cache_manager():
