@@ -98,6 +98,9 @@ def load_cache_config(name: str | None = None) -> Cache:
 
     Note: The `Tags` metadata cannot be configured from the config file.
     """
+    if name == 'memory':
+        return Cache(storage.Memory({}), storage.Memory({}))
+
     path = _get_config_path()
     if path is None or not path.exists():
         print("Warning: No config file found. Using default memory cache.")
