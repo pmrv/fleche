@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional, TypeVar, Union
 
 from . import digest
-from .invocation import Invocation
+from .call import Call
 from .metadata import MetaData, Tags
 from .cache import Cache, Rejected
 from .config import load_cache_config, load_default_metadata
@@ -60,7 +60,7 @@ def cache(new_cache: Optional[Union[Cache, str]] = None, stack=False) -> Union[C
 
 _METADATA: ContextVar[tuple[MetaData]] = ContextVar(
     "fleche.METADATA",
-    # default=(Runtime(), Digest(), InvocationInfo())
+    # default=(Runtime(), Digest(), CallInfo())
     default=load_default_metadata()
 )
 
@@ -120,7 +120,7 @@ def fleche(
     Cache decorator for functions.
 
     The decorated function is enhanced with helper methods:
-    - .invocation(*args, **kwargs): Get the Invocation object.
+    - .call(*args, **kwargs): Get the Call object.
     - .key(*args, **kwargs): Get the cache key.
     - .load(*args, **kwargs): Load result from cache.
     - .contains(*args, **kwargs): Check if result is in cache.
@@ -134,8 +134,8 @@ def fleche(
         if version is not None:
             func.__version__ = version
 
-        def get_invocation(*args, **kwargs):
-            inv = Invocation.from_call(func, *args, **kwargs)
+        def get_call(*args, **kwargs):
+            inv = Call.from_call(func, *args, **kwargs)
             if not hash_version:
                 inv.version = None
             if not hash_module:
@@ -155,7 +155,7 @@ def fleche(
                 return func(*args, **kwargs)
             cache: Cache = _CACHE.get()
             try:
-                inv = get_invocation(*args, **kwargs)
+                inv = get_call(*args, **kwargs)
                 key = wrapper.key(*args, **kwargs)
             except digest.Unhashable as e:
                 print("WARNING NO HASH:", e.args[0])
@@ -194,8 +194,8 @@ def fleche(
             else:
                 return _run_and_cache()
 
-        wrapper.invocation = get_invocation
-        wrapper.key = lambda *args, **kwargs: digest.digest(get_invocation(*args, **kwargs).to_lookup())
+        wrapper.call = get_call
+        wrapper.key = lambda *args, **kwargs: digest.digest(get_call(*args, **kwargs).to_lookup())
         wrapper.load = lambda *args, **kwargs: _CACHE.get().load(wrapper.key(*args, **kwargs)).result
         wrapper.contains = lambda *args, **kwargs: _CACHE.get().contains(wrapper.key(*args, **kwargs))
         return wrapper

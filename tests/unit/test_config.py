@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from fleche import load_cache_config, storage, cache
 from fleche.cache import Cache, BaseCache
-from fleche.metadata import Runtime, InvocationInfo
+from fleche.metadata import Runtime, CallInfo
 
 
 @dataclass
@@ -29,29 +29,29 @@ def config_file():
     config = textwrap.dedent("""
         [default]
         cache = "mycache"
-        metadata = ["Runtime", "InvocationInfo"]
+        metadata = ["Runtime", "CallInfo"]
 
         [mycache]
         values.type = "Memory"
-        invocs.type = "Memory"
+        calls.type = "Memory"
 
         [transient]
         values.type = "CloudpickleFile"
         values.root = ".fleche/values"
-        invocs.type = "CloudpickleFile"
-        invocs.root = ".fleche/invocs"
+        calls.type = "CloudpickleFile"
+        calls.root = ".fleche/calls"
 
         [global]
         values.type = "BagOfHoldingH5File"
         values.root = "~/.fleche/values"
-        invocs.type = "CloudpickleFile"
-        invocs.root = "~/.fleche/invocs"
+        calls.type = "CloudpickleFile"
+        calls.root = "~/.fleche/calls"
 
         [nested]
         values.type = "NestedStorage"
         values.arg = "test"
         values.inner.type = "Memory"
-        invocs.type = "Memory"
+        calls.type = "Memory"
     """)
     with tempfile.TemporaryDirectory() as tmpdir:
         config_dir = Path(tmpdir) / "fleche"
@@ -65,10 +65,10 @@ def config_file():
 def config_file_explicit_default():
     config = textwrap.dedent("""
         [default]
-        metadata = ["Runtime", "InvocationInfo"]
+        metadata = ["Runtime", "CallInfo"]
         [default.cache]
         values.type = "Memory"
-        invocs.type = "Memory"
+        calls.type = "Memory"
     """)
     with tempfile.TemporaryDirectory() as tmpdir:
         config_dir = Path(tmpdir) / "fleche"
@@ -83,7 +83,7 @@ def config_file_with_tags():
     config = textwrap.dedent("""
         [default]
         cache = "mycache"
-        metadata = ["Runtime", "InvocationInfo", "Tags"]
+        metadata = ["Runtime", "CallInfo", "Tags"]
     """)
     with tempfile.TemporaryDirectory() as tmpdir:
         config_dir = Path(tmpdir) / "fleche"
@@ -98,7 +98,7 @@ def config_file_no_default():
     config = textwrap.dedent("""
         [mycache]
         values.type = "Memory"
-        invocs.type = "Memory"
+        calls.type = "Memory"
     """)
     with tempfile.TemporaryDirectory() as tmpdir:
         config_dir = Path(tmpdir) / "fleche"
@@ -115,7 +115,7 @@ def test_load_cache_config_default(monkeypatch, config_file):
 
     assert isinstance(cache_obj, Cache)
     assert isinstance(cache_obj.values, storage.Memory)
-    assert isinstance(cache_obj.invocs, storage.Memory)
+    assert isinstance(cache_obj.calls, storage.Memory)
 
 
 def test_load_cache_config_explicit_default(monkeypatch, config_file_explicit_default):
@@ -125,7 +125,7 @@ def test_load_cache_config_explicit_default(monkeypatch, config_file_explicit_de
 
     assert isinstance(cache_obj, Cache)
     assert isinstance(cache_obj.values, storage.Memory)
-    assert isinstance(cache_obj.invocs, storage.Memory)
+    assert isinstance(cache_obj.calls, storage.Memory)
 
 
 def test_load_cache_config_specific(monkeypatch, config_file):
@@ -136,8 +136,8 @@ def test_load_cache_config_specific(monkeypatch, config_file):
     assert isinstance(cache_obj, Cache)
     assert isinstance(cache_obj.values, storage.CloudpickleFile)
     assert cache_obj.values.root == Path(".fleche/values")
-    assert isinstance(cache_obj.invocs, storage.CloudpickleFile)
-    assert cache_obj.invocs.root == Path(".fleche/invocs")
+    assert isinstance(cache_obj.calls, storage.CloudpickleFile)
+    assert cache_obj.calls.root == Path(".fleche/calls")
 
 
 def test_load_cache_config_no_file(monkeypatch):
@@ -145,7 +145,7 @@ def test_load_cache_config_no_file(monkeypatch):
     cache_obj = load_cache_config()
     assert isinstance(cache_obj, Cache)
     assert isinstance(cache_obj.values, storage.Memory)
-    assert isinstance(cache_obj.invocs, storage.Memory)
+    assert isinstance(cache_obj.calls, storage.Memory)
 
 
 def test_load_cache_config_no_default(monkeypatch, config_file_no_default):
@@ -153,7 +153,7 @@ def test_load_cache_config_no_default(monkeypatch, config_file_no_default):
     cache_obj = load_cache_config()
     assert isinstance(cache_obj, Cache)
     assert isinstance(cache_obj.values, storage.Memory)
-    assert isinstance(cache_obj.invocs, storage.Memory)
+    assert isinstance(cache_obj.calls, storage.Memory)
 
 
 def test_cache_function_loads_by_name(monkeypatch, config_file):
@@ -201,7 +201,7 @@ def test_load_default_metadata(monkeypatch, config_file):
     meta = fleche._METADATA.get()
     assert len(meta) == 2
     assert isinstance(meta[0], Runtime)
-    assert isinstance(meta[1], InvocationInfo)
+    assert isinstance(meta[1], CallInfo)
 
 
 def test_load_default_cache(monkeypatch, config_file):
@@ -216,10 +216,10 @@ def test_load_default_cache(monkeypatch, config_file):
     assert isinstance(cache_obj, BaseCache)
     if hasattr(cache_obj, "values"):
         assert isinstance(cache_obj.values, storage.Memory)
-        assert isinstance(cache_obj.invocs, storage.Memory)
+        assert isinstance(cache_obj.calls, storage.Memory)
     else:
         assert isinstance(cache_obj.cache.values, storage.Memory)
-        assert isinstance(cache_obj.cache.invocs, storage.Memory)
+        assert isinstance(cache_obj.cache.calls, storage.Memory)
 
 
 def test_tags_disallowed(monkeypatch, config_file_with_tags):

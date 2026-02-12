@@ -9,7 +9,7 @@ import string
 
 
 from fleche.digest import digest, Digest
-from fleche.invocation import Invocation
+from fleche.call import Call
 
 
 def test_custom_digest():
@@ -132,10 +132,10 @@ def dataclasses(draw, field_types, frozen=None):
     return cls(*fields)\
 
 
-def invocations(value_types):
-    """Generate random Invocation objects using st.builds."""
+def calls(value_types):
+    """Generate random Call objects using st.builds."""
     return st.builds(
-        Invocation,
+        Call,
         name=st.text(string.ascii_letters, min_size=1, max_size=10),
         args=st.lists(value_types, max_size=3).map(tuple),
         kwargs=st.dictionaries(
@@ -159,9 +159,9 @@ key_strategies = [
 key_strategies.append(dataclasses(st.one_of(*key_strategies), frozen=True))
 
 
-# Base values include all key strategies plus unhashable types like Invocation
+# Base values include all key strategies plus unhashable types like Call
 value_strategies = key_strategies.copy()
-value_strategies.append(invocations(st.one_of(*key_strategies)))
+value_strategies.append(calls(st.one_of(*key_strategies)))
 
 
 st_base_values = st.one_of(*value_strategies)
@@ -211,9 +211,9 @@ def randomly_digest_subvalues(value, data):
         field_dict = {f.name: randomly_digest_subvalues(getattr(value, f.name), data) 
                       for f in fields(value)}
         return type(value)(**field_dict)
-    elif isinstance(value, Invocation):
-        # For Invocation, replace args and kwargs values
-        return Invocation(
+    elif isinstance(value, Call):
+        # For Call, replace args and kwargs values
+        return Call(
             name=value.name,
             args=tuple(randomly_digest_subvalues(arg, data) for arg in value.args),
             kwargs={k: randomly_digest_subvalues(v, data) for k, v in value.kwargs.items()},
@@ -263,8 +263,8 @@ def foo(inp):
     ((Input(2),), (digest(Input(2)),)),
     (Other(Input(2)), Other(Input(digest(2)))),
     (Other(Input(2)), Other(digest(Input(2)))),
-    (Invocation.from_call(foo, Input(1), a=Input(2)), Invocation.from_call(foo, digest(Input(1)), a=Input(2))),
-    (Invocation.from_call(foo, Input(1), a=Input(2)), Invocation.from_call(foo, Input(1), a=digest(Input(2)))),
+    (Call.from_call(foo, Input(1), a=Input(2)), Call.from_call(foo, digest(Input(1)), a=Input(2))),
+    (Call.from_call(foo, Input(1), a=Input(2)), Call.from_call(foo, Input(1), a=digest(Input(2)))),
 ))
 def test_merkle_tree_property_fixed(value, partially_digested_value):
     assert digest(value) == digest(partially_digested_value), (value, partially_digested_value)

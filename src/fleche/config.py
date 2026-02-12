@@ -5,23 +5,23 @@ Example cache.toml:
 
 [default]
 cache = "mycache"
-metadata = ["Runtime", "InvocationInfo"]
+metadata = ["Runtime", "CallInfo"]
 
 [mycache]
 values.type = "Memory"
-invocs.type = "Memory"
+calls.type = "Memory"
 
 [transient]
 values.type = "CloudpickleFile"
 values.root = ".fleche/values"
-invocs.type = "CloudpickleFile"
-invocs.root = ".fleche/invocs"
+calls.type = "CloudpickleFile"
+calls.root = ".fleche/calls"
 
 [global]
 values.type = "BagOfHoldingH5File"
 values.root = "~/.fleche/values"
-invocs.type = "CloudpickleFile"
-invocs.root = "~/.fleche/invocs"
+calls.type = "CloudpickleFile"
+calls.root = "~/.fleche/calls"
 
 """
 
@@ -64,13 +64,13 @@ def load_default_metadata():
     """
     path = _get_config_path()
     if path is None or not path.exists():
-        return (metadata.Runtime(), metadata.InvocationInfo())
+        return (metadata.Runtime(), metadata.CallInfo())
 
     with open(path, "rb") as f:
         config = tomllib.load(f)
 
     if "default" not in config or "metadata" not in config["default"]:
-        return (metadata.Runtime(), metadata.InvocationInfo())
+        return (metadata.Runtime(), metadata.CallInfo())
 
     meta_names = config["default"]["metadata"]
 
@@ -86,8 +86,8 @@ def load_default_metadata():
 
 def _create_cache(cache_config: dict[str, Any]) -> Cache:
     values = _get_storage(cache_config["values"])
-    invocs = _get_storage(cache_config["invocs"])
-    return Cache(values=values, invocs=invocs)
+    calls = _get_storage(cache_config["calls"])
+    return Cache(values=values, calls=calls)
 
 
 def load_cache_config(name: str | None = None) -> Cache:

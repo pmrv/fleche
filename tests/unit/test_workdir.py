@@ -88,7 +88,7 @@ def test_fleche_cleans_up_on_save_error():
         # (or when the context manager exits)
         assert not os.path.exists(workdir)
 
-def test_distinct_workdirs_for_different_invocations():
+def test_distinct_workdirs_for_different_calls():
     workdirs = []
 
     @fleche(isolate=True)
@@ -101,7 +101,7 @@ def test_distinct_workdirs_for_different_invocations():
         func(2)
         assert workdirs[0] != workdirs[1]
 
-def test_distinct_workdirs_for_same_invocation():
+def test_distinct_workdirs_for_same_call():
     workdirs = []
 
     @fleche(isolate=True)

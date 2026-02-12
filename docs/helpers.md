@@ -6,8 +6,8 @@ Functions decorated with `@fleche` are enhanced with several helper methods that
 
 The following methods are added to the decorated function:
 
-### `.invocation(*args, **kwargs)`
-Returns an `Invocation` object corresponding to the provided arguments. This object contains metadata about the call, such as the function name, arguments, and version, but does not execute the function.
+### `.call(*args, **kwargs)`
+Returns a `Call` object corresponding to the provided arguments. This object contains metadata about the call, such as the function name, arguments, and version, but does not execute the function.
 
 ### `.key(*args, **kwargs)`
 Returns the unique cache key (a digest string) that would be used for the given call.

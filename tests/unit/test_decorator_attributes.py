@@ -1,7 +1,7 @@
 
 from fleche import fleche, Cache, cache
 from fleche.storage import Memory
-from fleche.invocation import Invocation
+from fleche.call import Call
 import pytest
 
 def test_fleche_extra_attributes():
@@ -11,8 +11,8 @@ def test_fleche_extra_attributes():
         def add(a, b=1):
             return a + b
 
-        # Test invocation
-        inv = add.invocation(1, b=2)
+        # Test call
+        inv = add.call(1, b=2)
         assert inv.name == "add"
         assert inv.args == (1,)
         assert inv.kwargs == {"b": 2}
@@ -41,12 +41,12 @@ def test_hash_settings():
         def func_no_version(x):
             return x
 
-        inv = func_no_version.invocation(1)
+        inv = func_no_version.call(1)
         assert inv.version is None
 
         @fleche(hash_module=False)
         def func_no_module(x):
             return x
 
-        inv = func_no_module.invocation(1)
+        inv = func_no_module.call(1)
         assert inv.module is None

@@ -6,11 +6,11 @@ from typing import Self, Any
 from .digest import digest
 from .metadata import MetaDB
 from . import storage
-from .invocation import Invocation
+from .call import Call
 
 
 class Rejected(Exception):
-    """Cache refused to cache the invocation for some reason or other."""
+    """Cache refused to cache the call for some reason or other."""
     pass
 
 
@@ -21,7 +21,7 @@ class BaseCache(ABC):
         ...
 
     @abstractmethod
-    def load(self, key: str) -> Invocation:
+    def load(self, key: str) -> Call:
         ...
 
     def contains(self, key: str) -> bool:
@@ -51,9 +51,9 @@ class BaseCache(ABC):
 @dataclass
 class Cache(BaseCache):
     values: storage.Storage
-    invocs: storage.Storage
+    calls: storage.Storage
 
-    def save(self, inv: Invocation) -> str:
+    def save(self, inv: Call) -> str:
         inv = copy(inv)
         try:
             inv.result = self.values.save(inv.result)
@@ -62,10 +62,10 @@ class Cache(BaseCache):
         except storage.SaveError as e:
             raise Rejected(e)
 
-        return self.invocs.save(inv, key=digest(inv.to_lookup()))
+        return self.calls.save(inv, key=digest(inv.to_lookup()))
 
-    def load(self, key: str) -> Invocation:
-        inv = deepcopy(self.invocs.load(key))
+    def load(self, key: str) -> Call:
+        inv = deepcopy(self.calls.load(key))
         inv.result = self.values.load(inv.result)
         return inv
 
@@ -75,7 +75,7 @@ class MetaCache(BaseCache):
     cache: BaseCache
     metadb: MetaDB
 
-    def save(self, inv: Invocation) -> str:
+    def save(self, inv: Call) -> str:
         self.cache.save(inv)
         self.metadb.save(digest(inv), inv.metadata)
 
@@ -88,7 +88,7 @@ class ReadOnlyCache(BaseCache):
     """A cache that can only be read from."""
     cache: BaseCache
 
-    def save(self, inv: Invocation):
+    def save(self, inv: Call):
         raise Rejected(self, inv)
 
     def load(self, key):
@@ -104,7 +104,7 @@ class CacheStack(BaseCache):
     """
     stack: tuple[Cache]
 
-    def save(self, inv: Invocation):
+    def save(self, inv: Call):
         self.stack[0].save(inv)
 
     def load(self, key):

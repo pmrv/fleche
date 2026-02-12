@@ -23,7 +23,7 @@ The `metadata` key specifies the default metadata chain to use. This is a list o
 Example:
 ```toml
 [default]
-metadata = ["Runtime", "InvocationInfo"]
+metadata = ["Runtime", "CallInfo"]
 ```
 
 **Note:** The `Tags` metadata cannot be configured from the config file, as it requires arguments.
@@ -32,7 +32,7 @@ metadata = ["Runtime", "InvocationInfo"]
 
 You can define multiple cache configurations in the same file, each in its own section.
 
-Each cache section must define two storage backends: `values` and `invocs`. `values` is used to store the results of function calls, and `invocs` is used to store the function invocation details.
+Each cache section must define two storage backends: `values` and `calls`. `values` is used to store the results of function calls, and `calls` is used to store the function call details.
 
 ### Storage backends
 
@@ -42,7 +42,7 @@ Example:
 ```toml
 [mycache]
 values.type = "Memory"
-invocs.type = "Memory"
+calls.type = "Memory"
 ```
 
 ### Available storage types
@@ -64,6 +64,6 @@ values.type = "CompressedStorage"
 values.compression = "gzip"
 values.inner.type = "BagOfHoldingH5File"
 values.inner.root  = "..."
-invocs.type = "CloudpickleFile"
-invocs.root = "~/.fleche/invocs"
+calls.type = "CloudpickleFile"
+calls.root = "~/.fleche/calls"
 ```

@@ -6,31 +6,31 @@ from fleche.cache import ReadOnlyCache, CacheStack, Rejected
 
 
 def test_cache_save():
-    from fleche.invocation import Invocation
+    from fleche.call import Call
     values_storage = Mock()
     values_storage.save.return_value = 1
-    invocs_storage = Mock()
+    calls_storage = Mock()
     metadata = Mock()
-    c = Cache(values_storage, invocs_storage).metadb(metadata)
+    c = Cache(values_storage, calls_storage).metadb(metadata)
 
-    inv = Invocation(name="test", args=(1,), kwargs={}, result="result")
+    inv = Call(name="test", args=(1,), kwargs={}, result="result")
     inv.metadata = {"test": {"key": "value"}}
     c.save(inv)
 
-    # Check that the underlying cache saves values and invocations
+    # Check that the underlying cache saves values and calls
     assert values_storage.save.called
-    assert invocs_storage.save.called
+    assert calls_storage.save.called
     # Check that metadata is saved
     assert metadata.save.called
 
 
 def test_cache_load():
     values_storage = Mock()
-    invocs_storage = Mock()
+    calls_storage = Mock()
     metadata = Mock()
-    c = Cache(values_storage, invocs_storage).metadb(metadata)
+    c = Cache(values_storage, calls_storage).metadb(metadata)
     c.load("key")
-    invocs_storage.load.assert_called_once_with("key")
+    calls_storage.load.assert_called_once_with("key")
     metadata.load.assert_not_called()
 
 
@@ -42,16 +42,16 @@ def test_cache_context_manager():
     # a mock cache to be the original one
     original_values = Mock()
     original_values.save.return_value = "digest_value"
-    original_invocs = Mock()
-    original_invocs.load.side_effect = KeyError
-    original_cache = Cache(original_values, original_invocs)
+    original_calls = Mock()
+    original_calls.load.side_effect = KeyError
+    original_cache = Cache(original_values, original_calls)
 
     # a mock cache to be the new one
     new_values = Mock()
     new_values.save.return_value = "digest_value"
-    new_invocs = Mock()
-    new_invocs.load.side_effect = KeyError
-    new_cache = Cache(new_values, new_invocs)
+    new_calls = Mock()
+    new_calls.load.side_effect = KeyError
+    new_cache = Cache(new_values, new_calls)
 
     # get the default cache and replace it with our mock original_cache
     default_cache = cache()
@@ -60,13 +60,13 @@ def test_cache_context_manager():
         with cache(new_cache):
             assert cache() is new_cache
             my_func(2)
-            new_cache.invocs.load.assert_called_once()
-            assert new_cache.invocs.save.call_count == 1
+            new_cache.calls.load.assert_called_once()
+            assert new_cache.calls.save.call_count == 1
 
         assert cache() is original_cache
         my_func(3)
-        original_cache.invocs.load.assert_called_once()
-        assert original_cache.invocs.save.call_count == 1
+        original_cache.calls.load.assert_called_once()
+        assert original_cache.calls.save.call_count == 1
 
     # ensure the default cache is restored
     assert cache() is default_cache
@@ -75,24 +75,24 @@ def test_cache_context_manager():
 @pytest.mark.xfail
 def test_base_cache_transfer():
     values_storage = Mock()
-    invocs_storage = Mock()
-    invocs_storage.list.return_value = ["key1", "key2"]
-    invocs_storage.load.side_effect = ["result1", "result2"]
+    calls_storage = Mock()
+    calls_storage.list.return_value = ["key1", "key2"]
+    calls_storage.load.side_effect = ["result1", "result2"]
     metadata = Mock()
     metadata.load.side_effect = ["metadata1", "metadata2"]
 
-    c1 = Cache(values_storage, invocs_storage).metadb(metadata)
+    c1 = Cache(values_storage, calls_storage).metadb(metadata)
 
     other_values_storage = Mock()
-    other_invocs_storage = Mock()
+    other_calls_storage = Mock()
     other_metadata = Mock()
-    c2 = Cache(other_values_storage, other_invocs_storage).metadb(other_metadata)
+    c2 = Cache(other_values_storage, other_calls_storage).metadb(other_metadata)
 
     c1.transfer(c2)
 
-    assert other_invocs_storage.save.call_count == 2
-    other_invocs_storage.save.assert_any_call("key1", "result1")
-    other_invocs_storage.save.assert_any_call("key2", "result2")
+    assert other_calls_storage.save.call_count == 2
+    other_calls_storage.save.assert_any_call("key1", "result1")
+    other_calls_storage.save.assert_any_call("key2", "result2")
 
     assert other_metadata.save.call_count == 2
     other_metadata.save.assert_any_call("key1", "metadata1")
@@ -100,9 +100,9 @@ def test_base_cache_transfer():
 
 
 def test_readonly_cache_save():
-    from fleche.invocation import Invocation
+    from fleche.call import Call
     c = ReadOnlyCache(Mock())
-    inv = Invocation(name="test", args=(1,), kwargs={}, result="result")
+    inv = Call(name="test", args=(1,), kwargs={}, result="result")
     with pytest.raises(Rejected):
         c.save(inv)
 
@@ -115,22 +115,22 @@ def test_readonly_cache_load():
 
 
 def test_cache_stack_save():
-    from fleche.invocation import Invocation
+    from fleche.call import Call
     c1 = Mock()
     c2 = Mock()
     stack = CacheStack((c1, c2))
-    inv = Invocation(name="test", args=(1,), kwargs={}, result="result")
+    inv = Call(name="test", args=(1,), kwargs={}, result="result")
     stack.save(inv)
     c1.save.assert_called_once()
     c2.save.assert_not_called()
 
 
 def test_cache_stack_load_hit():
-    from fleche.invocation import Invocation
+    from fleche.call import Call
     c1 = Mock()
     c1.load.side_effect = KeyError
     c2 = Mock()
-    inv = Invocation(name="test", args=(1,), kwargs={}, result="result")
+    inv = Call(name="test", args=(1,), kwargs={}, result="result")
     c2.load.return_value = inv
     stack = CacheStack((c1, c2))
     result = stack.load("key")

@@ -3,16 +3,16 @@ from unittest.mock import Mock, MagicMock
 
 from fleche import fleche, Cache, _CACHE, cache
 from fleche.digest import digest
-from fleche.invocation import Invocation
+from fleche.call import Call
 from fleche.storage import Memory
 
 
 def setup_function():
     values_storage = Mock()
     values_storage.save.return_value = "digest_value"
-    invocs_storage = Mock()
-    invocs_storage.load.side_effect = KeyError
-    c = Cache(values_storage, invocs_storage)
+    calls_storage = Mock()
+    calls_storage.load.side_effect = KeyError
+    c = Cache(values_storage, calls_storage)
     _CACHE.set(c)
 
 
@@ -42,7 +42,7 @@ def test_fleche_with_meta():
 
     assert my_func(4) == 8
     mock_meta.pre.assert_called_once_with(
-            Invocation(name='my_func', args=(4,), kwargs={}, module='test_fleche', version=None)
+            Call(name='my_func', args=(4,), kwargs={}, module='test_fleche', version=None)
     )
     mock_meta.post.assert_called_once()
 
@@ -55,7 +55,7 @@ def test_fleche_retrieves_from_cache():
     def my_func(x):
         return mock_function(x)
 
-    key = digest(Invocation.from_call(my_func, 2).to_lookup())
+    key = digest(Call.from_call(my_func, 2).to_lookup())
 
     with cache(Cache(Memory({}), Memory({}))):
         # First call, should execute the function and save to cache
@@ -89,8 +89,8 @@ def test_fleche_with_version_argument():
         storage_content[k] = v
         return k
 
-    cache.invocs.load = Mock(side_effect=load_from_storage)
-    cache.invocs.save = Mock(side_effect=save_to_storage)
+    cache.calls.load = Mock(side_effect=load_from_storage)
+    cache.calls.save = Mock(side_effect=save_to_storage)
     cache.values.save = Mock(return_value="digest_value")
 
     # First call, should execute the function and save to cache
@@ -117,7 +117,7 @@ def test_fleche_with_version():
         # First call, should execute the function and save to cache
         assert my_func(2) == 42
         mock_function.assert_called_once_with(2)
-        inv = Invocation.from_call(my_func, 2)
+        inv = Call.from_call(my_func, 2)
         inv.version = 1
         key_v1 = digest(inv.to_lookup())
         assert cache().contains(key_v1)
@@ -145,7 +145,7 @@ def test_fleche_with_module():
 
         assert my_func(2) == 42
         mock_function.assert_called_once_with(2)
-        inv = Invocation.from_call(my_func, 2)
+        inv = Call.from_call(my_func, 2)
         inv.module = "module1"
         key_m1 = digest(inv.to_lookup())
         assert cache().contains(key_m1)
