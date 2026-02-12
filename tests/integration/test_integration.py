@@ -4,7 +4,7 @@ import tempfile
 
 from fleche import fleche, cache
 from fleche.digest import digest
-from fleche.invocation import Invocation
+from fleche.call import Call
 from fleche.cache import Cache, ReadOnlyCache, CacheStack
 from fleche.storage import CloudpickleFile, Memory
 
@@ -81,8 +81,8 @@ def test_fleche_cache_stack():
 
     stack = CacheStack(stack=(cache2, cache1))
 
-    key1 = digest(Invocation.from_call(func, 1).to_lookup())
-    key2 = digest(Invocation.from_call(func, 2).to_lookup())
+    key1 = digest(Call.from_call(func, 1).to_lookup())
+    key2 = digest(Call.from_call(func, 2).to_lookup())
 
     with cache(stack):
         # first call, should go in cache2
@@ -118,13 +118,13 @@ def test_fleche_cache_stack_context_manager():
     with cache(cache1):
         with cache(cache2, stack=True):
             func(1)
-            key = digest(Invocation.from_call(func, 1).to_lookup())
+            key = digest(Call.from_call(func, 1).to_lookup())
             assert cache2.contains(key)
             assert cache2.load(key).result == 1
             assert not cache1.contains(key)
 
         func(2)
-        key = digest(Invocation.from_call(func, 2).to_lookup())
+        key = digest(Call.from_call(func, 2).to_lookup())
         assert cache1.contains(key)
 
         with cache(cache2, stack=True):

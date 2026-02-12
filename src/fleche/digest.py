@@ -6,7 +6,7 @@ from typing import Any, TypeVar, Callable
 
 import numpy as np
 
-from .invocation import Invocation
+from .call import Call
 
 
 class Unhashable(Exception):

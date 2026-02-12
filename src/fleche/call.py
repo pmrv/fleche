@@ -5,13 +5,13 @@ import fleche.digest
 
 
 @dataclass
-class Invocation:
+class Call:
     """
-    Represents a function invocation, capturing its name, arguments, and keyword arguments.
+    Represents a function call, capturing its name, arguments, and keyword arguments.
 
-    `module` and `version` can be optionally set to be included in the hash of the invocation.
+    `module` and `version` can be optionally set to be included in the hash of the call.
     `version` should be a plain integer and monotonically increase.  Each different version will completely change the
-    hash of the invocation, invalidating previously cached results.
+    hash of the call, invalidating previously cached results.
     """
     name: str
     args: tuple[Any, ...]
@@ -31,7 +31,7 @@ class Invocation:
         return inv
 
     def to_lookup(self):
-        return InvocationLookup(
+        return CallLookup(
                 name=self.name,
                 args=tuple(fleche.digest.digest(a) for a in self.args),
                 kwargs={k: fleche.digest.digest(v) for k, v in self.kwargs.items()},
@@ -41,8 +41,8 @@ class Invocation:
 
 
 @dataclass(frozen=True)
-class InvocationLookup:
-    """Subset of :class:`.Invocation` to be used as a lookup key """
+class CallLookup:
+    """Subset of :class:`.Call` to be used as a lookup key """
     name: str
     args: tuple[str, ...]
     kwargs: dict[str, str]

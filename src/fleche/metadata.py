@@ -5,7 +5,7 @@ from typing import Any
 
 import pandas as pd
 
-from .invocation import Invocation
+from .call import Call
 
 
 class MetaDB(ABC):
@@ -94,27 +94,27 @@ class PandasDB(MetaDB):
 
 class MetaData(ABC):
     """Abstract base class for defining metadata types."""
-    def pre(self, invocation: Invocation) -> dict[str, Any]:
+    def pre(self, call: Call) -> dict[str, Any]:
         """
         Hook for collecting metadata before the function execution.
 
         Args:
-            invocation (Invocation): The invocation object of the decorated function.
+            call (Call): The call object of the decorated function.
 
         Returns:
             dict[str, Any]: A dictionary of metadata collected before execution.
         """
         return {}
 
-    def post(self, pre: dict[str, Any], invocation: Invocation) -> dict[str, Any]:
+    def post(self, pre: dict[str, Any], call: Call) -> dict[str, Any]:
         """
         Hook for collecting metadata after the function execution.
 
-        The return value of the function is available on the `invocation.result` attribute.
+        The return value of the function is available on the `call.result` attribute.
 
         Args:
             pre (dict[str, Any]): Metadata collected during the pre-execution phase.
-            invocation (Invocation): The invocation object of the decorated function.
+            call (Call): The call object of the decorated function.
 
         Returns:
             dict[str, Any]: A dictionary of metadata collected after execution.
@@ -152,13 +152,13 @@ class Runtime(MetaData):
         timestop (float): The timestamp when the execution stopped.
         walltime (float): The total execution time in seconds.
     """
-    def pre(self, invocation: Invocation) -> dict[str, Any]:
+    def pre(self, call: Call) -> dict[str, Any]:
         """
         Records the start time before function execution.
         """
         return {'timestart': time.time()}
 
-    def post(self, pre: dict[str, Any], invocation: Invocation) -> dict[str, Any]:
+    def post(self, pre: dict[str, Any], call: Call) -> dict[str, Any]:
         """
         Records the stop time and calculates the wall time after function execution.
         """
@@ -175,18 +175,18 @@ class Runtime(MetaData):
     }
 
 
-class InvocationInfo(MetaData):
-    """Metadata type for storing information about the function invocation.
+class CallInfo(MetaData):
+    """Metadata type for storing information about the function call.
 
     Keys:
         name (str): The name of the invoked function.
         module (str): The module where the invoked function is defined.
         version (int): The version of the invoked function.
     """
-    def pre(self, inv: Invocation) -> dict[str, Any]:
+    def pre(self, inv: Call) -> dict[str, Any]:
         return {k: getattr(inv, k) for k in ("module", "name", "version")}
 
-    name: str = "invocation"
+    name: str = "call"
     keys = {
             "name":  str,
             "module":  str,
@@ -205,7 +205,7 @@ class Tags(MetaData):
     """
     tags: dict[str, Any]
 
-    def pre(self, invocation: Invocation) -> dict[str, Any]:
+    def pre(self, call: Call) -> dict[str, Any]:
         return self.tags.copy()
 
     name: str = "tags"
