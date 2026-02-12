@@ -1,8 +1,8 @@
 from unittest.mock import Mock
 import pytest
-from fleche import fleche, cache, Cache
+from fleche import fleche, cache
 from fleche.digest import digest
-from fleche.cache import ReadOnlyCache, CacheStack, Rejected
+from fleche.caches import ReadOnlyCache, CacheStack, Rejected, Cache
 
 
 def test_cache_save():
@@ -13,9 +13,9 @@ def test_cache_save():
     metadata = Mock()
     c = Cache(values_storage, calls_storage).metadb(metadata)
 
-    inv = Call(name="test", args=(1,), kwargs={}, result="result")
-    inv.metadata = {"test": {"key": "value"}}
-    c.save(inv)
+    call = Call(name="test", args=(1,), kwargs={}, result="result")
+    call.metadata = {"test": {"key": "value"}}
+    c.save(call)
 
     # Check that the underlying cache saves values and calls
     assert values_storage.save.called
@@ -102,9 +102,9 @@ def test_base_cache_transfer():
 def test_readonly_cache_save():
     from fleche.call import Call
     c = ReadOnlyCache(Mock())
-    inv = Call(name="test", args=(1,), kwargs={}, result="result")
+    call = Call(name="test", args=(1,), kwargs={}, result="result")
     with pytest.raises(Rejected):
-        c.save(inv)
+        c.save(call)
 
 
 def test_readonly_cache_load():
@@ -119,8 +119,8 @@ def test_cache_stack_save():
     c1 = Mock()
     c2 = Mock()
     stack = CacheStack((c1, c2))
-    inv = Call(name="test", args=(1,), kwargs={}, result="result")
-    stack.save(inv)
+    call = Call(name="test", args=(1,), kwargs={}, result="result")
+    stack.save(call)
     c1.save.assert_called_once()
     c2.save.assert_not_called()
 
@@ -130,13 +130,13 @@ def test_cache_stack_load_hit():
     c1 = Mock()
     c1.load.side_effect = KeyError
     c2 = Mock()
-    inv = Call(name="test", args=(1,), kwargs={}, result="result")
-    c2.load.return_value = inv
+    call = Call(name="test", args=(1,), kwargs={}, result="result")
+    c2.load.return_value = call
     stack = CacheStack((c1, c2))
     result = stack.load("key")
     c1.load.assert_called_once_with("key")
     c2.load.assert_called_once_with("key")
-    assert result == inv
+    assert result == call
 
 
 def test_cache_stack_load_miss():

@@ -5,7 +5,8 @@ import tempfile
 from pathlib import Path
 
 from fleche.storage import SaveError, CloudpickleFile, Memory, BagOfHoldingH5File
-from fleche.digest import digest
+from fleche.digest import digest, Digest
+from fleche.caches import DigestedIterable
 
 
 temp = tempfile.TemporaryDirectory()
@@ -54,3 +55,13 @@ def test_storage_given_key(storage, value):
         np.testing.assert_array_equal(loaded_value, value)
     else:
         assert loaded_value == value, "value not available under given key"
+
+
+@pytest.mark.parametrize("storage", storages)
+@pytest.mark.parametrize("value", [
+    DigestedIterable([Digest("asdf"), Digest("foobar")]),
+    DigestedIterable((Digest("asdf"), Digest("foobar"))),
+])
+def test_digested(storage, value):
+    loaded_value = storage.load(storage.save(value))
+    assert loaded_value == value, "digested value not available under given key"

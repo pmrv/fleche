@@ -31,7 +31,7 @@ import os
 from typing import Any
 
 from . import storage, metadata
-from .cache import Cache
+from .caches import Cache
 
 _live_caches: dict[str, Cache] = {}
 

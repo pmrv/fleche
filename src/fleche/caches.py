@@ -1,9 +1,9 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from copy import copy, deepcopy
-from typing import Self, Any
+from typing import Self, Iterable
 
-from .digest import digest
+from .digest import digest, Digest
 from .metadata import MetaDB
 from . import storage
 from .call import Call
@@ -48,17 +48,82 @@ class BaseCache(ABC):
         return MetaCache(self, metadb)
 
 
+class Digested(ABC):
+    @abstractmethod
+    def underlying(self):
+        ...
+
+    # mess with our hash to ensure that we are referentially transparent with respect to the underlying list.
+    # For the replacement of the 'real' list with the 'digested' list to be invisible to caches, they must hash to the
+    # same values.
+    def __digest__(self):
+        return digest(self.underlying())
+
+
+@dataclass
+class DigestedIterable(Digested):
+    items: Iterable
+
+    def underlying(self):
+        return self.items
+
+
+@dataclass
+class DigestedDict(Digested):
+    items: dict
+
+    def underlying(self):
+        return self.items
+
+
 @dataclass
 class Cache(BaseCache):
     values: storage.Storage
     calls: storage.Storage
 
+    def _recursive_value_save(self, value):
+        match value:
+            case list() | tuple():
+                return self.values.save(
+                        DigestedIterable(type(value)(self._recursive_value_save(v) for v in value))
+                )
+            case dict():
+                return self.values.save(
+                        DigestedDict(
+                            {self._recursive_value_save(k): self._recursive_value_save(v)
+                                for k, v in value.items()}
+                        )
+                )
+            case _:
+                return self.values.save(value)
+
+    def _recursive_value_load(self, key):
+        if not isinstance(key, Digest):
+            return key
+        value = self.values.load(key)
+        match value:
+            case DigestedIterable(items=items):
+                value = type(items)(self._recursive_value_load(v) for v in items)
+            case DigestedDict(items=items):
+                value = {
+                        self._recursive_value_load(k): self._recursive_value_load(v)
+                        for k, v in value.items.items()
+                }
+        return value
+
     def save(self, inv: Call) -> str:
+        # for arguments saving is not critical, substitute digest and move on
+        def save_or_digest(v):
+            try:
+                return self._recursive_value_save(v)
+            except storage.SaveError:
+                print("WARNING NO ARG SAVE:", v)
+                return digest(v)
         inv = copy(inv)
         try:
-            inv.result = self.values.save(inv.result)
-            inv.args = tuple(self.values.save(a) for a in inv.args)
-            inv.kwargs = {k: self.values.save(v) for k, v in inv.kwargs.items()}
+            inv.result = self._recursive_value_save(inv.result)
+            inv.args = tuple(save_or_digest(a) for a in inv.args)
+            inv.kwargs = {k: save_or_digest(v) for k, v in inv.kwargs.items()}
         except storage.SaveError as e:
             raise Rejected(e)
 
@@ -66,7 +131,7 @@ class Cache(BaseCache):
 
     def load(self, key: str) -> Call:
         inv = deepcopy(self.calls.load(key))
-        inv.result = self.values.load(inv.result)
+        inv.result = self._recursive_value_load(inv.result)
         return inv
 
 

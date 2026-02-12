@@ -5,7 +5,7 @@ import pytest
 from dataclasses import dataclass
 
 from fleche import load_cache_config, storage, cache
-from fleche.cache import Cache, BaseCache
+from fleche.caches import Cache, BaseCache
 from fleche.metadata import Runtime, CallInfo
 
 

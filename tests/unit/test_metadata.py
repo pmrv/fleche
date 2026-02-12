@@ -4,7 +4,7 @@ import time
 import pytest
 
 from fleche import fleche, cache, tags, project, metadata
-from fleche.cache import Cache
+from fleche.caches import Cache
 from fleche.metadata import MetaData, PandasDB, Call
 from fleche.storage import Memory
 

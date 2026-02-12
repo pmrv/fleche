@@ -1,6 +1,6 @@
 # Configuration
 
-`fleche` can be configured using a TOML file located at `$XDG_CONFIG_HOME/fleche/cache.toml` (or `~/.config/fleche/cache.toml` if `$XDG_CONFIG_HOME` is not set).
+`fleche` can be configured using a TOML file located at `$XDG_CONFIG_HOME/fleche/caches.toml` (or `~/.config/fleche/caches.toml` if `$XDG_CONFIG_HOME` is not set).
 
 ## Reserved Cache Names
 

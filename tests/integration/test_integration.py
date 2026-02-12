@@ -4,8 +4,8 @@ import tempfile
 
 from fleche import fleche, cache
 from fleche.digest import digest
+from fleche.caches import Cache, ReadOnlyCache, CacheStack
 from fleche.call import Call
-from fleche.cache import Cache, ReadOnlyCache, CacheStack
 from fleche.storage import CloudpickleFile, Memory
 
 temp = tempfile.TemporaryDirectory()

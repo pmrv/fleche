@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, Optional, TypeVar, Union
 from . import digest
 from .call import Call
 from .metadata import MetaData, Tags
-from .cache import Cache, Rejected
+from .caches import Cache, Rejected
 from .config import load_cache_config, load_default_metadata
 
 _T = TypeVar("_T")

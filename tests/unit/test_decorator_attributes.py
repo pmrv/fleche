@@ -12,11 +12,11 @@ def test_fleche_extra_attributes():
             return a + b
 
         # Test call
-        inv = add.call(1, b=2)
-        assert inv.name == "add"
-        assert inv.args == (1,)
-        assert inv.kwargs == {"b": 2}
-        assert inv.version == 1
+        call = add.call(1, b=2)
+        assert call.name == "add"
+        assert call.args == (1,)
+        assert call.kwargs == {"b": 2}
+        assert call.version == 1
 
         # Test digest
         key = add.digest(1, b=2)
@@ -41,12 +41,12 @@ def test_hash_settings():
         def func_no_version(x):
             return x
 
-        inv = func_no_version.call(1)
-        assert inv.version is None
+        call = func_no_version.call(1)
+        assert call.version is None
 
         @fleche(hash_module=False)
         def func_no_module(x):
             return x
 
-        inv = func_no_module.call(1)
-        assert inv.module is None
+        call = func_no_module.call(1)
+        assert call.module is None
