@@ -235,8 +235,12 @@ def test_load_cache_config_memory_special_case(monkeypatch, config_file):
     monkeypatch.setenv("XDG_CONFIG_HOME", config_file)
 
     # Even with a config file that doesn't have 'memory', it should work
-    cache_obj = load_cache_config("memory")
+    cache1 = load_cache_config("memory")
 
-    assert isinstance(cache_obj, Cache)
-    assert isinstance(cache_obj.values, storage.Memory)
-    assert isinstance(cache_obj.calls, storage.Memory)
+    assert isinstance(cache1, Cache)
+    assert isinstance(cache1.values, storage.Memory)
+    assert isinstance(cache1.calls, storage.Memory)
+
+    # Should be a singleton
+    cache2 = load_cache_config("memory")
+    assert cache1 is cache2

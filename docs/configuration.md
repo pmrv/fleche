@@ -2,6 +2,20 @@
 
 `fleche` can be configured using a TOML file located at `$XDG_CONFIG_HOME/fleche/cache.toml` (or `~/.config/fleche/cache.toml` if `$XDG_CONFIG_HOME` is not set).
 
+## Reserved Cache Names
+
+### `memory`
+
+The name `memory` is a reserved cache name. When requested, `fleche` will provide a fresh, transient in-memory cache. This cache is not shared with other processes and is lost when the current process exits.
+
+Example:
+```python
+from fleche import cache
+with cache("memory"):
+    # Results will be cached in memory for the duration of this context.
+    ...
+```
+
 ## The `[default]` section
 
 The `[default]` section is used to configure the default behavior of `fleche`.
