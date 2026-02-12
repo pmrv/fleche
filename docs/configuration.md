@@ -6,13 +6,13 @@
 
 ### `memory`
 
-The name `memory` is a reserved cache name. When requested, `fleche` will provide a fresh, transient in-memory cache. This cache is not shared with other processes and is lost when the current process exits.
+The name `memory` is a reserved cache name. When requested, `fleche` will provide a transient in-memory cache. This cache is persistent for the duration of the process, but is not shared with other processes and is lost when the current process exits.
 
 Example:
 ```python
 from fleche import cache
 with cache("memory"):
-    # Results will be cached in memory for the duration of this context.
+    # Results will be cached in memory. The cache persists for the lifetime of the process.
     ...
 ```
 
