@@ -6,8 +6,10 @@ from dataclasses import dataclass, make_dataclass, is_dataclass, fields
 import math
 import hashlib
 import string
+import keyword
 
 
+from fleche import fleche
 from fleche.digest import digest, Digest
 from fleche.call import Call
 
@@ -126,7 +128,7 @@ def test_specific_iterables_dont_use_generic_iterable_path(monkeypatch):
 def dataclasses(draw, field_types, frozen=None):
     if frozen is None:
         frozen = draw(st.booleans())
-    fields = draw(st.dictionaries(st.text(string.ascii_letters, min_size=3, max_size=3), field_types, min_size=1, max_size=5))
+    fields = draw(st.dictionaries(st.text(string.ascii_letters, min_size=3, max_size=3).filter(lambda s: not keyword.iskeyword(s)), field_types, min_size=1, max_size=5))
     clsname = draw(st.text(string.ascii_letters, min_size=3, max_size=3))
     cls = make_dataclass(clsname, [(k, type(v)) for k, v in fields.items()], frozen=frozen)
     return cls(*fields)\
@@ -254,7 +256,8 @@ class Other:
     i: Input
 
 
-def foo(inp):
+@fleche
+def foo(inp, **kwargs):
     return inp.a / inp.b
 
 
@@ -263,8 +266,8 @@ def foo(inp):
     ((Input(2),), (digest(Input(2)),)),
     (Other(Input(2)), Other(Input(digest(2)))),
     (Other(Input(2)), Other(digest(Input(2)))),
-    (Call.from_call(foo, Input(1), a=Input(2)), Call.from_call(foo, digest(Input(1)), a=Input(2))),
-    (Call.from_call(foo, Input(1), a=Input(2)), Call.from_call(foo, Input(1), a=digest(Input(2)))),
+    (foo.call(Input(1), a=Input(2)), foo.call(digest(Input(1)), a=Input(2))),
+    (foo.call(Input(1), a=Input(2)), foo.call(Input(1), a=digest(Input(2)))),
 ))
 def test_merkle_tree_property_fixed(value, partially_digested_value):
     assert digest(value) == digest(partially_digested_value), (value, partially_digested_value)
