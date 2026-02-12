@@ -5,9 +5,9 @@ import textwrap
 import pytest
 from dataclasses import dataclass
 
-from fleche import from_config, storage, cache, set_metadata
-from fleche.cache import Cache
-from fleche import metadata
+from fleche import from_config, storage, cache
+from fleche.cache import Cache, BaseCache
+from fleche import metadata as metadata_module
 
 
 @dataclass
@@ -201,8 +201,8 @@ def test_load_default_metadata(monkeypatch, config_file):
 
     meta = fleche._METADATA.get()
     assert len(meta) == 2
-    assert isinstance(meta[0], metadata.Runtime)
-    assert isinstance(meta[1], metadata.InvocationInfo)
+    assert isinstance(meta[0], fleche.Runtime)
+    assert isinstance(meta[1], fleche.InvocationInfo)
 
 
 def test_load_default_cache(monkeypatch, config_file):
@@ -214,9 +214,13 @@ def test_load_default_cache(monkeypatch, config_file):
     importlib.reload(fleche)
 
     cache_obj = fleche._CACHE.get()
-    assert isinstance(cache_obj, Cache)
-    assert isinstance(cache_obj.values, storage.Memory)
-    assert isinstance(cache_obj.invocs, storage.Memory)
+    assert isinstance(cache_obj, BaseCache)
+    if hasattr(cache_obj, "values"):
+        assert isinstance(cache_obj.values, storage.Memory)
+        assert isinstance(cache_obj.invocs, storage.Memory)
+    else:
+        assert isinstance(cache_obj.cache.values, storage.Memory)
+        assert isinstance(cache_obj.cache.invocs, storage.Memory)
 
 
 def test_tags_disallowed(monkeypatch, config_file_with_tags):

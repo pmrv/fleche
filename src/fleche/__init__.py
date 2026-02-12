@@ -15,6 +15,7 @@ from . import digest
 from .invocation import Invocation
 from .metadata import MetaData, PandasDB, Runtime, InvocationInfo, Tags
 from .cache import Cache, Rejected
+from .config import from_config, load_default_metadata
 from . import storage
 
 _T = TypeVar("_T")
@@ -22,11 +23,11 @@ _T = TypeVar("_T")
 _CACHE: ContextVar[Cache] = ContextVar(
     'fleche.CACHE',
     # default=Cache(storage.CloudpickleFile(Path(".fleche"))).metadb(PandasDB({}))
-    default=Cache(storage.Memory({}), storage.Memory({})).metadb(PandasDB({}))
+    default=from_config()
 )
 
 
-def cache(new_cache: Optional[Cache] = None, stack=False) -> Union[Cache, AbstractContextManager[None]]:
+def cache(new_cache: Optional[Union[Cache, str]] = None, stack=False) -> Union[Cache, AbstractContextManager[None]]:
     """
     Manages the active cache for Fleche. If `new_cache` is provided, it returns a context manager
     that sets the cache for the duration of the context. If `new_cache` is None, it returns
@@ -42,6 +43,9 @@ def cache(new_cache: Optional[Cache] = None, stack=False) -> Union[Cache, Abstra
     """
     if new_cache is None:
         return _CACHE.get()
+
+    if isinstance(new_cache, str):
+        new_cache = from_config(new_cache)
 
     @contextmanager
     def cache_manager():
@@ -60,7 +64,7 @@ def cache(new_cache: Optional[Cache] = None, stack=False) -> Union[Cache, Abstra
 _METADATA: ContextVar[tuple[MetaData]] = ContextVar(
     "fleche.METADATA",
     # default=(Runtime(), Digest(), InvocationInfo())
-    default=(Runtime(), InvocationInfo())
+    default=load_default_metadata()
 )
 
 
