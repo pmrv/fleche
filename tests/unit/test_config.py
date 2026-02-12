@@ -230,3 +230,17 @@ def test_tags_disallowed(monkeypatch, config_file_with_tags):
 
     with pytest.raises(ValueError):
         importlib.reload(fleche)
+
+def test_load_cache_config_memory_special_case(monkeypatch, config_file):
+    monkeypatch.setenv("XDG_CONFIG_HOME", config_file)
+
+    # Even with a config file that doesn't have 'memory', it should work
+    cache1 = load_cache_config("memory")
+
+    assert isinstance(cache1, Cache)
+    assert isinstance(cache1.values, storage.Memory)
+    assert isinstance(cache1.calls, storage.Memory)
+
+    # Should be a singleton
+    cache2 = load_cache_config("memory")
+    assert cache1 is cache2

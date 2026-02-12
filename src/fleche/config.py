@@ -95,6 +95,7 @@ def load_cache_config(name: str | None = None) -> Cache:
     Load a cache from the configuration file.
 
     If name is None, the default cache is loaded.
+    The name 'memory' is special-cased to return a transient in-memory cache.
 
     Note: The `Tags` metadata cannot be configured from the config file.
     """
@@ -123,6 +124,11 @@ def load_cache_config(name: str | None = None) -> Cache:
 
     if cache_name in _live_caches:
         return _live_caches[cache_name]
+
+    if cache_name == "memory":
+        cache = Cache(storage.Memory({}), storage.Memory({}))
+        _live_caches[cache_name] = cache
+        return cache
 
     if cache_config is None:
         cache_config = config[cache_name]
