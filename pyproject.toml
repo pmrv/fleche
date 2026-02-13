@@ -32,11 +32,9 @@ dependencies = [
 
 [project.optional-dependencies]
 docs = [
-    "mkdocs>=1.5",
-    "mkdocs-material",
-    "mkdocs-autoapi",
-    "mkdocstrings[python]",
-    "griffe_fieldz",
+    "sphinx",
+    "sphinx-rtd-theme",
+    "sphinx-autoapi",
 ]
 tests = [
     "pytest",
