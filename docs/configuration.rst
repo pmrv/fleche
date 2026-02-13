@@ -96,3 +96,37 @@ Example:
    values.inner.root  = "..."
    calls.type = "CloudpickleFile"
    calls.root = "~/.fleche/calls"
+
+Full Configuration Example
+--------------------------
+
+Below is an example of a complete configuration file demonstrating several features:
+
+.. code-block:: toml
+
+   [default]
+   cache = "persistent"
+   metadata = ["Runtime", "CallInfo"]
+
+   [persistent]
+   # Store values in HDF5 files
+   values.type = "BagOfHoldingH5File"
+   values.root = "~/.cache/fleche/values"
+
+   # Store call details as cloudpickle files
+   calls.type = "CloudpickleFile"
+   calls.root = "~/.cache/fleche/calls"
+
+   [fast]
+   # Simple in-memory cache
+   values.type = "Memory"
+   calls.type = "Memory"
+
+   [compressed]
+   # Example of nested storage with compression
+   values.type = "CompressedStorage"
+   values.compression = "gzip"
+   values.inner.type = "BagOfHoldingH5File"
+   values.inner.root  = "~/.cache/fleche/compressed_values"
+   calls.type = "CloudpickleFile"
+   calls.root = "~/.cache/fleche/compressed_calls"
