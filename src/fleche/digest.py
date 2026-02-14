@@ -87,7 +87,7 @@ def digest(value: Any) -> str:
                 m.update(digest(k).encode())
                 m.update(digest(v).encode())
         case np.ndarray():
-            m.update(value.data)
+            m.update(value.tobytes())
         case _ if dataclasses.is_dataclass(value):
             # cannot use asdict because it recursively converts values which destroys digests
             # instead (flat-) convert to dictionaries, salt with type name, then fallback to dictionary case.
