@@ -114,10 +114,10 @@ class FileStorage(Storage):
         """
         Ensures the root directory for storage exists.
         """
-        self.root = Path(self.root)
+        self.root = Path(self.root).expanduser().absolute().resolve()
 
     def _path(self, key: str) -> Path:
-        self.root.mkdir(exist_ok=True)
+        self.root.mkdir(parents=True, exist_ok=True)
         return self.root / key
 
     def list(self) -> Iterable[str]:
@@ -127,6 +127,7 @@ class FileStorage(Storage):
         Returns:
             Iterable[str]: An iterable of all keys stored.
         """
+        self.root.mkdir(parents=True, exist_ok=True)
         return (p.name for p in self.root.iterdir())
 
 
@@ -173,7 +174,6 @@ class CloudpickleFile(FileStorage):
 
 @dataclass
 class BagOfHoldingH5File(FileStorage):
-    root: Path
 
     def save(self, value: Any, key: Digest | None = None) -> Digest:
         if key is None:
