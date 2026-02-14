@@ -116,6 +116,7 @@ def fleche(
     hash_version: bool = True,
     hash_module: bool = True,
     require: None | str | list[str] | tuple[str] = None,
+    ignore: None | str | list[str] | tuple[str] = None,
     isolate: bool = False,
 ):
     """
@@ -158,6 +159,13 @@ def fleche(
             cache: Cache = _CACHE.get()
             try:
                 inv = get_call(*args, **kwargs)
+                if ignore is not None:
+                    if isinstance(ignore, str):
+                        ignored_args = (ignore,)
+                    else:
+                        ignored_args = ignore
+                    for ign in ignored_args:
+                        inv.kwargs.pop(ign, None)
                 key = wrapper.digest(*args, **kwargs)
             except digest.Unhashable as e:
                 print("WARNING NO HASH:", e.args[0])
