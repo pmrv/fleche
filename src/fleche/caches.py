@@ -1,7 +1,9 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from copy import copy, deepcopy
 from typing import Self, Iterable
+
+import pandas as pd
 
 from .digest import digest, Digest
 from .metadata import MetaDB
@@ -133,6 +135,9 @@ class Cache(BaseCache):
         inv = deepcopy(self.calls.load(key))
         inv.result = self._recursive_value_load(inv.result)
         return inv
+
+    def table(self) -> pd.DataFrame:
+        return pd.DataFrame([asdict(self.calls.load(k)) for k in self.calls.list()])
 
 
 @dataclass
