@@ -65,14 +65,14 @@ class Storage(ABC):
         Expands a short-hand digest to the full length one.
 
         Args:
-            key (str): The short-hand digest.
+            key (:class:`Digest` | :class:`str`): The short-hand digest.
 
         Returns:
-            Digest: The full length digest.
+            :class:`Digest`: The full length digest.
 
         Raises:
-            KeyError: If no match is found.
-            AmbiguousDigestError: If multiple matches are found.
+            :class:`KeyError`: If no match is found.
+            :class:`AmbiguousDigestError`: If multiple matches are found.
         """
         if len(key) >= DIGEST_LENGTH:
             return key
