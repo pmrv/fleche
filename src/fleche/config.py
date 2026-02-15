@@ -37,25 +37,21 @@ _live_caches: dict[str, Cache] = {}
 
 
 def _get_config_path() -> Path | None:
+    path = Path("fleche.toml")
+    if path.exists():
+        return path.absolute()
+    print(f"LOGGING INFO: local config {path} does not exist, trying global")
+
     if "XDG_CONFIG_HOME" in os.environ:
-        return Path(os.environ["XDG_CONFIG_HOME"]) / "fleche/cache.toml"
+        path = Path(os.environ["XDG_CONFIG_HOME"]) / "fleche" / "cache.toml"
     elif "HOME" in os.environ:
-        return Path(os.environ["HOME"]) / ".config/fleche/cache.toml"
+        path = Path(os.environ["HOME"]) / ".fleche.toml"
     else:
-        return None
+        path = Path("~").expanduser() / ".fleche.toml"
 
-
-def _get_storage(config: dict[str, Any]) -> storage.Storage:
-    storage_type = config.pop("type")
-
-    if storage_type == "Memory":
-        return storage.Memory({})
-
-    if "inner" in config:
-        config["inner"] = _get_storage(config["inner"])
-
-    cls = getattr(storage, storage_type)
-    return cls(**config)
+    if path.exists():
+        return path
+    print(f"LOGGING INFO: global config {path} does not exist")
 
 
 def load_default_metadata():
@@ -82,6 +78,20 @@ def load_default_metadata():
             meta_objects.append(getattr(metadata, name)())
 
     return tuple(meta_objects)
+
+
+def _get_storage(config: dict[str, Any]) -> storage.Storage:
+    storage_type = config.pop("type")
+    match storage_type:
+        case "Memory":
+            return storage.Memory({})
+        case "FileLinkingStorage":
+            config["store"] = _get_storage(config.pop("store"))
+            return storage.FileLinkingStorage(**config)
+        case "CloudpickleFile" | "BagOfHoldingH5File":
+            return getattr(storage, storage_type)(**config)
+        case _:
+            raise ValueError(f"Unknown storage type: {storage_type}")
 
 
 def _create_cache(cache_config: dict[str, Any]) -> Cache:

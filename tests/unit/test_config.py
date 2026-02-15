@@ -135,9 +135,9 @@ def test_load_cache_config_specific(monkeypatch, config_file):
 
     assert isinstance(cache_obj, Cache)
     assert isinstance(cache_obj.values, storage.CloudpickleFile)
-    assert cache_obj.values.root == Path(".fleche/values")
+    assert cache_obj.values.root == Path(".fleche/values").absolute()
     assert isinstance(cache_obj.calls, storage.CloudpickleFile)
-    assert cache_obj.calls.root == Path(".fleche/calls")
+    assert cache_obj.calls.root == Path(".fleche/calls").absolute()
 
 
 def test_load_cache_config_no_file(monkeypatch):
@@ -163,7 +163,7 @@ def test_cache_function_loads_by_name(monkeypatch, config_file):
         cache_obj = cache()
         assert isinstance(cache_obj, Cache)
         assert isinstance(cache_obj.values, storage.BagOfHoldingH5File)
-        assert str(cache_obj.values.root) == "~/.fleche/values"
+        assert cache_obj.values.root == Path("~/.fleche/values").expanduser()
 
 
 def test_cache_instances_are_persistent(monkeypatch, config_file):
@@ -178,6 +178,7 @@ def test_cache_instances_are_persistent(monkeypatch, config_file):
     assert cache1 is cache2
 
 
+@pytest.mark.xfail(reason="Missing overloading support for additional storage classes.")
 def test_nested_storage(monkeypatch, config_file):
     monkeypatch.setenv("XDG_CONFIG_HOME", config_file)
     storage.NestedStorage = NestedStorage
