@@ -94,6 +94,33 @@ class Storage(ABC):
             raise AmbiguousDigestError(f"Short digest {key} is ambiguous; need at least {i+1} characters.")
         return Digest(matches[0])
 
+    def shrink(self, key: Digest | str) -> Digest:
+        """
+        Find the shortest substring that is still an unambigious reference to the same value.
+
+        .. warning::
+
+            This is a property of how many values there are in your storage!
+            A key returned from this function may become ambigious in the future when more values are added.
+            Do not rely on this function in your programs, it is provided as a convenience for users only!
+
+        Args:
+            key (str or :class:`Digest`): the key to shorten
+
+        Returns:
+            :class:`Digest`: shortest key possible
+
+        Raises:
+            :class:`AmbiguousDigestError`: if no shorter key is possible
+        """
+        for ln in range(4, len(key)):
+            try:
+                self.expand(key[:ln])
+                return key[:ln]
+            except AmbiguousDigestError:
+                continue
+        raise AmbiguousDigestError(f"Digest {key} cannot be shrunk without becoming ambigious!")
+
 
 @dataclass
 class Memory(Storage):

@@ -49,6 +49,28 @@ class BaseCache(ABC):
     def metadb(self, metadb) -> 'MetaCache':
         return MetaCache(self, metadb)
 
+    @abstractmethod
+    def shrink(self, key: Digest | str) -> Digest:
+        """
+        Find the shortest substring that is still an unambigious reference to the same call.
+
+        .. warning::
+
+            This is a property of how many values there are in your storage!
+            A key returned from this function may become ambigious in the future when more values are added.
+            Do not rely on this function in your programs, it is provided as a convenience for users only!
+
+        Args:
+            key (str or :class:`Digest`): the key to shorten
+
+        Returns:
+            :class:`Digest`: shortest key possible
+
+        Raises:
+            :class:`AmbiguousDigestError`: if no shorter key is possible
+        """
+        ...
+
 
 class Digested(ABC):
     @abstractmethod
@@ -136,6 +158,9 @@ class Cache(BaseCache):
         inv.result = self._recursive_value_load(inv.result)
         return inv
 
+    def shrink(self, key: Digest | str) -> Digest:
+        return self.calls.shrink(key)
+
     def table(self) -> pd.DataFrame:
         return pd.DataFrame([asdict(self.calls.load(k)) for k in self.calls.list()])
 
@@ -152,6 +177,9 @@ class MetaCache(BaseCache):
     def load(self, key):
         return self.cache.load(key)
 
+    def shrink(self, key: Digest | str) -> Digest:
+        return self.cache.shrink(key)
+
 
 @dataclass(frozen=True)
 class ReadOnlyCache(BaseCache):
@@ -163,6 +191,9 @@ class ReadOnlyCache(BaseCache):
 
     def load(self, key):
         return self.cache.load(key)
+
+    def shrink(self, key: Digest | str) -> Digest:
+        return self.cache.shrink(key)
 
 
 @dataclass(frozen=True)
@@ -188,3 +219,6 @@ class CacheStack(BaseCache):
 
     def push(self, cache: BaseCache) -> Self:
         return CacheStack((cache, *self.stack))
+
+    def shrink(self, key: Digest | str) -> Digest:
+        return sorted([c.shrink(key) for c in self.stack], key=len)[-1]

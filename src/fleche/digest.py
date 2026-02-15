@@ -6,8 +6,6 @@ from typing import Any, TypeVar, Callable
 
 import numpy as np
 
-from .call import Call
-
 
 class Unhashable(Exception):
     """Exception raised when an object cannot be digested."""
@@ -22,6 +20,7 @@ DIGEST_LENGTH = 64
 
 
 T = TypeVar("T")
+
 
 @dataclasses.dataclass
 class Hook:
