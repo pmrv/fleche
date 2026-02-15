@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional, TypeVar, Union
 
 from . import digest
+from .digest import Digest, Digest as D
 from .call import Call
 from .metadata import MetaData, Tags
 from .caches import BaseCache, Cache, Rejected
@@ -181,7 +182,11 @@ def fleche(
                 metadata: Dict[str, Any] = defaultdict(dict)
                 for m in active_meta:
                     metadata[m.name] |= m.pre(replace(inv, metadata={}))
-                inv.result: _T = func(*args, **kwargs)
+
+                expanded_args = tuple(cache.load_value(arg) if isinstance(arg, Digest) else arg for arg in args)
+                expanded_kwargs = {k: (cache.load_value(v) if isinstance(v, Digest) else v) for k, v in kwargs.items()}
+
+                inv.result: _T = func(*expanded_args, **expanded_kwargs)
                 if inv.result is None:
                     print("WARNING NO VALUE")
                     return None

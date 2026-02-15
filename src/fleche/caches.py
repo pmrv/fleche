@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, asdict
 from copy import copy
-from typing import Self, Iterable
+from typing import Self, Iterable, Any
 
 import pandas as pd
 
@@ -24,6 +24,10 @@ class BaseCache(ABC):
 
     @abstractmethod
     def load(self, key: str) -> Call:
+        ...
+
+    @abstractmethod
+    def load_value(self, key: str) -> Any:
         ...
 
     def contains(self, key: str) -> bool:
@@ -121,16 +125,16 @@ class Cache(BaseCache):
             case _:
                 return self.values.save(value)
 
-    def _recursive_value_load(self, key):
+    def load_value(self, key):
         if not isinstance(key, Digest):
             return key
         value = self.values.load(key)
         match value:
             case DigestedIterable(items=items):
-                value = type(items)(self._recursive_value_load(v) for v in items)
+                value = type(items)(self.load_value(v) for v in items)
             case DigestedDict(items=items):
                 value = {
-                        self._recursive_value_load(k): self._recursive_value_load(v)
+                        self.load_value(k): self.load_value(v)
                         for k, v in value.items.items()
                 }
         return value
@@ -170,7 +174,7 @@ class Cache(BaseCache):
         call = self.calls.load(key)
         call.args = tuple(self._handle_args_load(a) for a in call.args)
         call.kwargs = {k: self._handle_args_load(v) for k, v in call.kwargs.items()}
-        call.result = self._recursive_value_load(call.result)
+        call.result = self.load_value(call.result)
         return call
 
     def shrink(self, key: Digest | str) -> Digest:
@@ -195,6 +199,10 @@ class MetaCache(BaseCache):
     def shrink(self, key: Digest | str) -> Digest:
         return self.cache.shrink(key)
 
+    def load_value(self, key):
+        return self.cache.load_value(key)
+
+
 
 @dataclass(frozen=True)
 class ReadOnlyCache(BaseCache):
@@ -209,6 +217,10 @@ class ReadOnlyCache(BaseCache):
 
     def shrink(self, key: Digest | str) -> Digest:
         return self.cache.shrink(key)
+
+    def load_value(self, key):
+        return self.cache.load_value(key)
+
 
 
 @dataclass(frozen=True)
@@ -227,6 +239,15 @@ class CacheStack(BaseCache):
         for cache in self.stack:
             try:
                 return cache.load(key)
+            except KeyError:
+                continue
+        else:
+            raise KeyError(key)
+
+    def load_value(self, key):
+        for cache in self.stack:
+            try:
+                return cache.load_value(key)
             except KeyError:
                 continue
         else:
