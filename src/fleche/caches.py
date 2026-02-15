@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, asdict
-from copy import copy, deepcopy
+from copy import copy
 from typing import Self, Iterable
 
 import pandas as pd
@@ -132,7 +132,7 @@ class Cache(BaseCache):
         return self.calls.save(inv, key=digest(inv.to_lookup()))
 
     def load(self, key: str) -> Call:
-        inv = deepcopy(self.calls.load(key))
+        inv = self.calls.load(key)
         inv.result = self._recursive_value_load(inv.result)
         return inv
 
