@@ -7,10 +7,14 @@ from typing import Iterable, Any
 from cloudpickle import loads, dumps
 from bagofholding import H5Bag
 
-from .digest import digest, Digest
+from .digest import digest, Digest, DIGEST_LENGTH
 
 
 class SaveError(Exception):
+    pass
+
+
+class AmbiguousDigestError(ValueError):
     pass
 
 
@@ -56,6 +60,40 @@ class Storage(ABC):
         """
         ...
 
+    def expand(self, key: Digest | str) -> Digest:
+        """
+        Expands a short-hand digest to the full length one.
+
+        Args:
+            key (:class:`Digest` | :class:`str`): The short-hand digest.
+
+        Returns:
+            :class:`Digest`: The full length digest.
+
+        Raises:
+            :class:`KeyError`: If no match is found.
+            :class:`AmbiguousDigestError`: If multiple matches are found.
+        """
+        if len(key) >= DIGEST_LENGTH:
+            return key
+        if len(key) < 4:
+            raise KeyError(key)
+
+        matches = sorted([k for k in self.list() if k.startswith(key)])
+        if not matches:
+            raise KeyError(key)
+        if len(matches) > 1:
+            # find longest common prefix of the first two matches to find where they diverge
+            m1, m2 = matches[0], matches[1]
+            for i, (c1, c2) in enumerate(zip(m1, m2)):
+                if c1 != c2:
+                    break
+            else:
+                i = min(len(m1), len(m2))
+
+            raise AmbiguousDigestError(f"Short digest {key} is ambiguous; need at least {i+1} characters.")
+        return Digest(matches[0])
+
 
 @dataclass
 class Memory(Storage):
@@ -94,6 +132,8 @@ class Memory(Storage):
         Raises:
             KeyError: If no value is found for the given key.
         """
+        if len(key) < DIGEST_LENGTH:
+            key = self.expand(key)
         return deepcopy(self.storage[key])
 
     def list(self) -> Iterable[str]:
@@ -166,6 +206,8 @@ class CloudpickleFile(FileStorage):
         Raises:
             KeyError: If no file is found for the given key.
         """
+        if len(key) < DIGEST_LENGTH:
+            key = self.expand(key)
         try:
             return loads((self._path(key)).read_bytes())
         except FileNotFoundError:
@@ -185,6 +227,8 @@ class BagOfHoldingH5File(FileStorage):
         return key
 
     def load(self, key: str) -> Any:
+        if len(key) < DIGEST_LENGTH:
+            key = self.expand(key)
         try:
             return H5Bag(self._path(key)).load()
         except FileNotFoundError:

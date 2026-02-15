@@ -18,6 +18,9 @@ class Digest(str):
     pass
 
 
+DIGEST_LENGTH = 64
+
+
 T = TypeVar("T")
 
 @dataclasses.dataclass
