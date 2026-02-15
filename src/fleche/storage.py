@@ -79,11 +79,19 @@ class Storage(ABC):
         if len(key) < 4:
             raise KeyError(key)
 
-        matches = [k for k in self.list() if k.startswith(key)]
+        matches = sorted([k for k in self.list() if k.startswith(key)])
         if not matches:
             raise KeyError(key)
         if len(matches) > 1:
-            raise AmbiguousDigestError(f"Short digest {key} is ambiguous")
+            # find longest common prefix of the first two matches to find where they diverge
+            m1, m2 = matches[0], matches[1]
+            for i, (c1, c2) in enumerate(zip(m1, m2)):
+                if c1 != c2:
+                    break
+            else:
+                i = min(len(m1), len(m2))
+
+            raise AmbiguousDigestError(f"Short digest {key} is ambiguous; need at least {i+1} characters.")
         return Digest(matches[0])
 
 

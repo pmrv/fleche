@@ -36,20 +36,13 @@ def test_ambiguous_digest(storage):
     k1 = "a" * 64
     k2 = "a" * 10 + "b" + "a" * 53
 
-    if isinstance(storage, Memory):
-        storage.storage[k1] = "val1"
-        storage.storage[k2] = "val2"
-    elif isinstance(storage, CloudpickleFile):
-        storage._path(k1).write_bytes(b"val1")
-        storage._path(k2).write_bytes(b"val2")
-    elif isinstance(storage, BagOfHoldingH5File):
-        # We just need the files to exist for expand() to find them via list()
-        storage._path(k1).touch()
-        storage._path(k2).touch()
+    storage.save("val1", k1)
+    storage.save("val2", k2)
 
     # Prefix "aaaa" should be ambiguous
-    with pytest.raises(AmbiguousDigestError):
+    with pytest.raises(AmbiguousDigestError) as excinfo:
         storage.expand("aaaa")
+    assert "need at least 11 characters" in str(excinfo.value)
 
     with pytest.raises(AmbiguousDigestError):
         storage.load("aaaa")
