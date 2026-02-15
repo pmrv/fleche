@@ -122,8 +122,15 @@ class Storage(ABC):
         raise AmbiguousDigestError(f"Digest {key} cannot be shrunk without becoming ambigious!")
 
 
+class CallStorage(Storage):
+    """Special storage for saving :class:`Call` instances.
+
+    Useful to distinguish the type required for :attr:`Cache.calls`."""
+    # if we take Storage[T] to be a dependant type in the type of save()/load(), T, this is not even completely wrong!
+
+
 @dataclass
-class Memory(Storage):
+class Memory(CallStorage, Storage):
     """
     A concrete implementation of Storage that stores values in an in-memory dictionary.
     """
@@ -174,7 +181,7 @@ class Memory(Storage):
 
 
 @dataclass
-class FileStorage(Storage):
+class FileStorage(CallStorage, Storage):
     root: Path
 
     def __post_init__(self) -> None:
@@ -199,7 +206,7 @@ class FileStorage(Storage):
 
 
 @dataclass
-class CloudpickleFile(FileStorage):
+class CloudpickleFile(FileStorage, CallStorage):
     """
     A concrete implementation of Storage that stores values as files on the filesystem,
     using cloudpickle for serialization.
@@ -242,7 +249,7 @@ class CloudpickleFile(FileStorage):
 
 
 @dataclass
-class BagOfHoldingH5File(FileStorage):
+class BagOfHoldingH5File(FileStorage, CallStorage):
 
     def save(self, value: Any, key: Digest | None = None) -> Digest:
         if key is None:

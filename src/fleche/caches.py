@@ -107,7 +107,7 @@ class DigestedDict(Digested):
 @dataclass
 class Cache(BaseCache):
     values: storage.Storage
-    calls: storage.Storage
+    calls: storage.CallStorage
 
     def _recursive_value_save(self, value):
         match value:
