@@ -7,6 +7,7 @@ from fleche.digest import digest
 from fleche.caches import Cache, ReadOnlyCache, CacheStack
 from fleche.call import Call
 from fleche.storage import CloudpickleFile, Memory
+from fleche.storage_sqlalchemy import Sql
 
 temp = tempfile.TemporaryDirectory()
 storages = [Memory({}), CloudpickleFile(temp.name)]
@@ -92,7 +93,6 @@ def test_fleche_cache_stack():
         # first call, should go in cache2
         func(1)
         # assert that the value is in cache2
-        # TODO: change to actually check presence of keys
         assert cache2.contains(key1)
         assert not cache1.contains(key1)
 
@@ -135,3 +135,37 @@ def test_fleche_cache_stack_context_manager():
             # this should be loaded from cache1
             func(2)
             assert not cache2.contains(key)
+
+
+@pytest.mark.parametrize(
+    "backend",
+    [
+        "memory_memory",   # values=Memory, calls=Memory
+        "memory_sql",      # values=Memory, calls=Sql (in-memory SQLite)
+    ],
+)
+def test_cache_hit_returns_materialized_value(backend):
+    if backend == "memory_memory":
+        values = Memory({})
+        calls = Memory({})
+    elif backend == "memory_sql":
+        values = Memory({})
+        calls = Sql()  # in-memory SQLite by default
+    else:
+        raise AssertionError("unknown backend")
+
+    c = Cache(values, calls)
+
+    @fleche
+    def twice(x):
+        return x * 2
+
+    with cache(c):
+        # miss -> compute and store
+        r1 = twice(5)
+        assert r1 == 10
+
+        # hit -> must return original python value, not digest string
+        r2 = twice(5)
+        assert r2 == 10
+        assert r2 != digest(10)

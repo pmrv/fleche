@@ -1,23 +1,42 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import time
-from typing import Any
+from typing import Any, TypeAlias
 
 import pandas as pd
 
 from .call import Call
 
+# Values produced by MetaData.pre/post must be JSON-serializable.
+# This alias documents the expected shape and helps static type checkers.
+JSONValue: TypeAlias = str | int | float | bool | None | list["JSONValue"] | dict[str, "JSONValue"]
+
 
 class MetaDB(ABC):
-    """Interface for databases that keep metadata."""
+    """Interface for databases that keep metadata.
+
+    Notes:
+        All metadata values must be JSON-serializable (json.dumps-able). In practice this means
+        primitives like str, int, float, bool, None, lists of those, or dicts with str keys and
+        JSON-serializable values.
+    """
     @abstractmethod
-    def save(self, key: str, metadata: dict[str, dict[str, Any]]) -> None:
-        """Save a given metadata entry."""
+    def save(self, key: str, metadata: dict[str, dict[str, JSONValue]]) -> None:
+        """Save a given metadata entry.
+
+        Args:
+            key: The call key.
+            metadata: Mapping from metadata type name to a flat dict of JSON-serializable values.
+        """
         ...
 
     @abstractmethod
-    def load(self, key: str) -> dict[str, dict[str, Any]]:
-        """Load a given metadata entry."""
+    def load(self, key: str) -> dict[str, dict[str, JSONValue]]:
+        """Load a given metadata entry.
+
+        Returns:
+            A mapping from metadata type name to a flat dict of JSON-serializable values.
+        """
         ...
 
     @abstractmethod
@@ -36,7 +55,7 @@ class PandasDB(MetaDB):
     """
     tables: dict[str, pd.DataFrame]
 
-    def save(self, key: str, metadata: dict[str, dict[str, Any]]) -> None:
+    def save(self, key: str, metadata: dict[str, dict[str, JSONValue]]) -> None:
         """
         Saves metadata for a given key. Each metadata entry is added to its
         corresponding DataFrame. If a DataFrame for a metadata type does not exist,
@@ -56,7 +75,7 @@ class PandasDB(MetaDB):
             else:
                 self.tables[name] = df
 
-    def load(self, key: str) -> dict[str, dict[str, Any]]:
+    def load(self, key: str) -> dict[str, dict[str, JSONValue]]:
         """
         Loads metadata for a given key.
 
@@ -93,8 +112,13 @@ class PandasDB(MetaDB):
 
 
 class MetaData(ABC):
-    """Abstract base class for defining metadata types."""
-    def pre(self, call: Call) -> dict[str, Any]:
+    """Abstract base class for defining metadata types.
+
+    Implementations must return only JSON-serializable values from pre() and post().
+    That means scalars (str, int, float, bool, None), lists of those, or dicts with str keys
+    and JSON-serializable values.
+    """
+    def pre(self, call: Call) -> dict[str, JSONValue]:
         """
         Hook for collecting metadata before the function execution.
 
@@ -102,22 +126,22 @@ class MetaData(ABC):
             call (Call): The call object of the decorated function.
 
         Returns:
-            dict[str, Any]: A dictionary of metadata collected before execution.
+            dict[str, JSONValue]: A flat dictionary of JSON-serializable metadata collected before execution.
         """
         return {}
 
-    def post(self, pre: dict[str, Any], call: Call) -> dict[str, Any]:
+    def post(self, pre: dict[str, JSONValue], call: Call) -> dict[str, JSONValue]:
         """
         Hook for collecting metadata after the function execution.
 
         The return value of the function is available on the `call.result` attribute.
 
         Args:
-            pre (dict[str, Any]): Metadata collected during the pre-execution phase.
+            pre (dict[str, JSONValue]): Metadata collected during the pre-execution phase.
             call (Call): The call object of the decorated function.
 
         Returns:
-            dict[str, Any]: A dictionary of metadata collected after execution.
+            dict[str, JSONValue]: A flat dictionary of JSON-serializable metadata collected after execution.
         """
         return {}
 
@@ -151,6 +175,9 @@ class Runtime(MetaData):
         timestart (float): The timestamp when the execution started.
         timestop (float): The timestamp when the execution stopped.
         walltime (float): The total execution time in seconds.
+
+    Notes:
+        Values are JSON-serializable.
     """
     def pre(self, call: Call) -> dict[str, Any]:
         """
@@ -182,6 +209,9 @@ class CallInfo(MetaData):
         name (str): The name of the invoked function.
         module (str): The module where the invoked function is defined.
         version (int): The version of the invoked function.
+
+    Notes:
+        Values are JSON-serializable.
     """
     def pre(self, inv: Call) -> dict[str, Any]:
         return {k: getattr(inv, k) for k in ("module", "name", "version")}
@@ -202,6 +232,9 @@ class Tags(MetaData):
 
     Keys:
         tags (dict): A dictionary of user-defined tags.
+
+    Notes:
+        Tag values must be JSON-serializable.
     """
     tags: dict[str, Any]
 
