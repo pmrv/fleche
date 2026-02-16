@@ -9,7 +9,7 @@ from fleche.storage.sql import Sql
 from fleche.call import Call
 from fleche.digest import digest, Digest
 from fleche.caches import DigestedIterable
-from fleche.metadata import Runtime, CallInfo
+from fleche.metadata import Runtime
 
 
 temp = tempfile.TemporaryDirectory()

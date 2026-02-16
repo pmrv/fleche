@@ -11,8 +11,7 @@ def test_cache_save():
     values_storage = Mock()
     values_storage.save.return_value = 1
     calls_storage = Mock()
-    metadata = Mock()
-    c = Cache(values_storage, calls_storage).metadb(metadata)
+    c = Cache(values_storage, calls_storage)
 
     call = Call(name="test", args=(1,), kwargs={}, result="result")
     call.metadata = {"test": {"key": "value"}}
@@ -21,14 +20,13 @@ def test_cache_save():
     # Check that the underlying cache saves values and calls
     assert values_storage.save.called
     assert calls_storage.save.called
-    # Check that metadata is saved
-    assert metadata.save.called
 
 
 def test_cache_load():
     values_storage = Mock()
     values_storage.load = Mock()
     calls_storage = Mock()
+
     calls_storage.load = Mock(return_value=Call(
         name='test',
         args=(Digest('arg1'), Digest('arg2')),
@@ -90,15 +88,11 @@ def test_base_cache_transfer():
     calls_storage = Mock()
     calls_storage.list.return_value = ["key1", "key2"]
     calls_storage.load.side_effect = ["result1", "result2"]
-    metadata = Mock()
-    metadata.load.side_effect = ["metadata1", "metadata2"]
-
-    c1 = Cache(values_storage, calls_storage).metadb(metadata)
+    c1 = Cache(values_storage, calls_storage)
 
     other_values_storage = Mock()
     other_calls_storage = Mock()
-    other_metadata = Mock()
-    c2 = Cache(other_values_storage, other_calls_storage).metadb(other_metadata)
+    c2 = Cache(other_values_storage, other_calls_storage)
 
     c1.transfer(c2)
 
@@ -106,9 +100,7 @@ def test_base_cache_transfer():
     other_calls_storage.save.assert_any_call("key1", "result1")
     other_calls_storage.save.assert_any_call("key2", "result2")
 
-    assert other_metadata.save.call_count == 2
-    other_metadata.save.assert_any_call("key1", "metadata1")
-    other_metadata.save.assert_any_call("key2", "metadata2")
+    # Metadata layer removed; only calls would be transferred (feature xfailed)
 
 
 def test_readonly_cache_save():

@@ -1,20 +1,18 @@
-
 import time
 
 import pytest
 
 from fleche import fleche, cache, tags, project, metadata
 from fleche.caches import Cache
-from fleche.metadata import MetaData, PandasDB, Call
+from fleche.metadata import MetaData, Call
 from fleche.storage import Memory
 
 
 @pytest.fixture
 def cache_it() -> Cache:
-    db = PandasDB({})
     values_storage = Memory({})
     calls_storage = Memory({})
-    return Cache(values_storage, calls_storage).metadb(db)
+    return Cache(values_storage, calls_storage)
 
 
 def test_fleche_decorator_default_metadata(cache_it: Cache):
@@ -25,14 +23,13 @@ def test_fleche_decorator_default_metadata(cache_it: Cache):
     with cache(cache_it):
         my_function(1, 2)
         time.sleep(0.1)
-        my_function(1, 2)
+        my_function(1, 2)  # cache hit, no new entry
 
-    df = cache_it.metadb.table()
-    assert "walltime" in df.columns
-    assert "name" in df.columns  # From CallInfo
-    assert "module" in df.columns  # From CallInfo
-    assert len(df) == 1
-    assert df['walltime'].iloc[0] < 0.1
+        key = my_function.digest(1, 2)
+        call = cache().calls.load(key)
+
+    assert "runtime" in call.metadata
+    assert call.metadata["runtime"]["walltime"] < 0.1
 
 
 def test_fleche_decorator_custom_metadata(cache_it: Cache):
@@ -49,10 +46,10 @@ def test_fleche_decorator_custom_metadata(cache_it: Cache):
 
     with cache(cache_it):
         my_function(1, 2)
+        key = my_function.digest(1, 2)
+        call = cache().calls.load(key)
 
-    df = cache_it.metadb.table()
-    assert "my_key" in df.columns
-    assert df["my_key"].iloc[0] == "my_value"
+    assert call.metadata.get("my_meta", {}).get("my_key") == "my_value"
 
 
 def test_metadata_context_manager(cache_it: Cache):
@@ -70,10 +67,10 @@ def test_metadata_context_manager(cache_it: Cache):
     with cache(cache_it):
         with metadata(MyMetadata()):
             my_function(1, 2)
+        key = my_function.digest(1, 2)
+        call = cache().calls.load(key)
 
-    df = cache_it.metadb.table()
-    assert "my_key" in df.columns
-    assert df["my_key"].iloc[0] == "my_value"
+    assert call.metadata.get("my_meta", {}).get("my_key") == "my_value"
 
 
 def test_metadata_context_manager_stacking(cache_it: Cache):
@@ -99,12 +96,11 @@ def test_metadata_context_manager_stacking(cache_it: Cache):
         with metadata(MyMetadata1()):
             with metadata(MyMetadata2(), stack=True):
                 my_function(1, 2)
+        key = my_function.digest(1, 2)
+        call = cache().calls.load(key)
 
-    df = cache_it.metadb.table()
-    assert "my_key1" in df.columns
-    assert "my_key2" in df.columns
-    assert df["my_key1"].iloc[0] == "my_value1"
-    assert df["my_key2"].iloc[0] == "my_value2"
+    assert call.metadata.get("my_meta1", {}).get("my_key1") == "my_value1"
+    assert call.metadata.get("my_meta2", {}).get("my_key2") == "my_value2"
 
 
 def test_metadb_table_filtering(cache_it: Cache):
@@ -125,23 +121,16 @@ def test_metadb_table_filtering(cache_it: Cache):
         my_function(a=1, b=2)
         my_function(a=2, b=3)
 
-    df = cache_it.metadb.table()
-    assert len(df) == 2
+        key1 = my_function.digest(a=1, b=2)
+        key2 = my_function.digest(a=2, b=3)
+        call1 = cache().calls.load(key1)
+        call2 = cache().calls.load(key2)
 
-    df_filtered = cache_it.metadb.table(my_key="my_value")
-    assert len(df_filtered) == 1
-
-    df_filtered = cache_it.metadb.table(my_other_key=2)
-    assert len(df_filtered) == 1
-
-    df_filtered = cache_it.metadb.table(my_other_key=3)
-    assert len(df_filtered) == 0
-
-    df_filtered = cache_it.metadb.table(my_key="my_value", my_other_key=1)
-    assert len(df_filtered) == 1
-
-    df_filtered = cache_it.metadb.table(my_key="my_value", my_other_key=2)
-    assert len(df_filtered) == 0
+    assert call1.metadata["my_meta"]["my_key"] in {"my_value", "another_value"}
+    assert call2.metadata["my_meta"]["my_key"] in {"my_value", "another_value"}
+    # Verify the conditional split
+    assert call1.metadata["my_meta"]["my_key"] == "my_value"
+    assert call2.metadata["my_meta"]["my_other_key"] == 2
 
 
 def test_fleche_decorator_and_context_manager(cache_it: Cache):
@@ -166,20 +155,18 @@ def test_fleche_decorator_and_context_manager(cache_it: Cache):
     with cache(cache_it):
         with metadata(MyMetadata2()):
             my_function(1, 2)
+        key = my_function.digest(1, 2)
+        call = cache().calls.load(key)
 
-    df = cache_it.metadb.table()
-    assert "my_key1" in df.columns
-    assert "my_key2" in df.columns
-    assert df["my_key1"].iloc[0] == "my_value1"
-    assert df["my_key2"].iloc[0] == "my_value2"
+    assert call.metadata.get("my_meta1", {}).get("my_key1") == "my_value1"
+    assert call.metadata.get("my_meta2", {}).get("my_key2") == "my_value2"
 
 
 def test_tags():
     values_storage = Memory({})
     calls_storage = Memory({})
-    mdb = PandasDB({})
 
-    with cache(Cache(values_storage, calls_storage).metadb(mdb)):
+    with cache(Cache(values_storage, calls_storage)):
 
         @fleche
         def my_func(a, b):
@@ -187,15 +174,13 @@ def test_tags():
 
         with tags(user="test", project="fleche"):
             my_func(1, 2)
-
-        df = mdb.table()
-        assert "user" in df.columns
-        assert "project" in df.columns
-        assert df.iloc[0]["user"] == "test"
-        assert df.iloc[0]["project"] == "fleche"
+            key1 = my_func.digest(1, 2)
+            call1 = cache().calls.load(key1)
+            assert call1.metadata.get("tags", {}).get("user") == "test"
+            assert call1.metadata.get("tags", {}).get("project") == "fleche"
 
         with project("example"):
             my_func(2, 1)
-
-        df = mdb.table()
-        assert df.iloc[1]["project"] == "example"
+            key2 = my_func.digest(2, 1)
+            call2 = cache().calls.load(key2)
+            assert call2.metadata.get("tags", {}).get("project") == "example"

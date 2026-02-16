@@ -60,13 +60,13 @@ def load_default_metadata():
     """
     path = _get_config_path()
     if path is None or not path.exists():
-        return (metadata.Runtime(), metadata.CallInfo())
+        return (metadata.Runtime(),)
 
     with open(path, "rb") as f:
         config = tomllib.load(f)
 
     if "default" not in config or "metadata" not in config["default"]:
-        return (metadata.Runtime(), metadata.CallInfo())
+        return (metadata.Runtime(),)
 
     meta_names = config["default"]["metadata"]
 
@@ -74,8 +74,10 @@ def load_default_metadata():
     for name in meta_names:
         if name == "Tags":
             raise ValueError("Tags metadata cannot be configured from the config file.")
+        elif name == "Runtime":
+            meta_objects.append(metadata.Runtime())
         else:
-            meta_objects.append(getattr(metadata, name)())
+            raise ValueError(f"Unknown metadata type in config: {name}")
 
     return tuple(meta_objects)
 

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from fleche import load_cache_config, storage, cache
 from fleche.caches import Cache, BaseCache
-from fleche.metadata import Runtime, CallInfo
+from fleche.metadata import Runtime
 
 
 @dataclass
@@ -29,7 +29,7 @@ def config_file():
     config = textwrap.dedent("""
         [default]
         cache = "mycache"
-        metadata = ["Runtime", "CallInfo"]
+        metadata = ["Runtime"]
 
         [mycache]
         values.type = "Memory"
@@ -65,7 +65,7 @@ def config_file():
 def config_file_explicit_default():
     config = textwrap.dedent("""
         [default]
-        metadata = ["Runtime", "CallInfo"]
+        metadata = ["Runtime"]
         [default.cache]
         values.type = "Memory"
         calls.type = "Memory"
@@ -83,7 +83,7 @@ def config_file_with_tags():
     config = textwrap.dedent("""
         [default]
         cache = "mycache"
-        metadata = ["Runtime", "CallInfo", "Tags"]
+        metadata = ["Runtime", "Tags"]
     """)
     with tempfile.TemporaryDirectory() as tmpdir:
         config_dir = Path(tmpdir) / "fleche"
@@ -200,9 +200,8 @@ def test_load_default_metadata(monkeypatch, config_file):
     importlib.reload(fleche)
 
     meta = fleche._METADATA.get()
-    assert len(meta) == 2
+    assert len(meta) == 1
     assert isinstance(meta[0], Runtime)
-    assert isinstance(meta[1], CallInfo)
 
 
 def test_load_default_cache(monkeypatch, config_file):

@@ -3,112 +3,11 @@ from dataclasses import dataclass
 import time
 from typing import Any, TypeAlias
 
-import pandas as pd
-
 from .call import Call
 
 # Values produced by MetaData.pre/post must be JSON-serializable.
 # This alias documents the expected shape and helps static type checkers.
 JSONValue: TypeAlias = str | int | float | bool | None | list["JSONValue"] | dict[str, "JSONValue"]
-
-
-class MetaDB(ABC):
-    """Interface for databases that keep metadata.
-
-    Notes:
-        All metadata values must be JSON-serializable (json.dumps-able). In practice this means
-        primitives like str, int, float, bool, None, lists of those, or dicts with str keys and
-        JSON-serializable values.
-    """
-    @abstractmethod
-    def save(self, key: str, metadata: dict[str, dict[str, JSONValue]]) -> None:
-        """Save a given metadata entry.
-
-        Args:
-            key: The call key.
-            metadata: Mapping from metadata type name to a flat dict of JSON-serializable values.
-        """
-        ...
-
-    @abstractmethod
-    def load(self, key: str) -> dict[str, dict[str, JSONValue]]:
-        """Load a given metadata entry.
-
-        Returns:
-            A mapping from metadata type name to a flat dict of JSON-serializable values.
-        """
-        ...
-
-    @abstractmethod
-    def table(self, **kwargs: Any) -> pd.DataFrame:
-        """Return a display-friendly table of all metadata entries.
-
-        Entries can be filtered using the kwargs."""
-        ...
-
-
-@dataclass
-class PandasDB(MetaDB):
-    """
-    A concrete implementation of MetaDB using Pandas DataFrames to store metadata.
-    Each metadata type (e.g., 'runtime', 'tags') is stored in its own DataFrame.
-    """
-    tables: dict[str, pd.DataFrame]
-
-    def save(self, key: str, metadata: dict[str, dict[str, JSONValue]]) -> None:
-        """
-        Saves metadata for a given key. Each metadata entry is added to its
-        corresponding DataFrame. If a DataFrame for a metadata type does not exist,
-        it will be created.
-
-        Args:
-            key (str): The key associated with the metadata.
-            metadata (dict[str, dict[str, Any]]): A dictionary where keys are metadata
-                                                  names (e.g., 'runtime') and values
-                                                  are dictionaries of metadata attributes.
-        """
-        for name, data in metadata.items():
-            df = pd.DataFrame([data], index=[key])
-            if name in self.tables:
-                if key not in self.tables[name].index:
-                    self.tables[name] = pd.concat([self.tables[name], df])
-            else:
-                self.tables[name] = df
-
-    def load(self, key: str) -> dict[str, dict[str, JSONValue]]:
-        """
-        Loads metadata for a given key.
-
-        Args:
-            key (str): The key of the metadata to load.
-
-        Returns:
-            dict[str, dict[str, Any]]: A dictionary containing the loaded metadata,
-                                       structured by metadata name.
-        """
-        return {m: t.loc[key].to_dict() for m, t in self.tables.items() if key in t.index}
-
-    def table(self, **kwargs: Any) -> pd.DataFrame:
-        """
-        Returns a display-friendly table of all metadata entries, optionally filtered
-        by keyword arguments.
-
-        Args:
-            **kwargs (Any): Keyword arguments for filtering the metadata table.
-                            e.g., column_name=value.
-
-        Returns:
-            pd.DataFrame: A DataFrame containing the metadata, potentially filtered.
-        """
-        # join all tables on index
-        if not self.tables:
-            return pd.DataFrame()
-
-        df = pd.concat(self.tables.values(), axis=1)
-        if kwargs:
-            for k, v in kwargs.items():
-                df = df[df[k] == v]
-        return df
 
 
 class MetaData(ABC):
@@ -199,28 +98,6 @@ class Runtime(MetaData):
             'timestart': float,
             'timestop': float,
             'walltime': float,
-    }
-
-
-class CallInfo(MetaData):
-    """Metadata type for storing information about the function call.
-
-    Keys:
-        name (str): The name of the invoked function.
-        module (str): The module where the invoked function is defined.
-        version (int): The version of the invoked function.
-
-    Notes:
-        Values are JSON-serializable.
-    """
-    def pre(self, inv: Call) -> dict[str, Any]:
-        return {k: getattr(inv, k) for k in ("module", "name", "version")}
-
-    name: str = "call"
-    keys = {
-            "name":  str,
-            "module":  str,
-            "version":  int,
     }
 
 

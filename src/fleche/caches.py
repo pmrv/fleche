@@ -6,7 +6,6 @@ from typing import Self, Iterable, Any
 import pandas as pd
 
 from .digest import digest, Digest
-from .metadata import MetaDB
 from . import storage
 from .call import Call
 
@@ -49,9 +48,6 @@ class BaseCache(ABC):
 
     def push(self, cache: 'BaseCache') -> 'CacheStack':
         return CacheStack((cache, self))
-
-    def metadb(self, metadb) -> 'MetaCache':
-        return MetaCache(self, metadb)
 
     @abstractmethod
     def shrink(self, key: Digest | str) -> Digest:
@@ -193,26 +189,6 @@ class Cache(BaseCache):
         return pd.DataFrame(calls)
 
 
-@dataclass
-class MetaCache(BaseCache):
-    cache: BaseCache
-    metadb: MetaDB
-
-    def save(self, inv: Call) -> str:
-        self.cache.save(inv)
-        self.metadb.save(digest(inv), inv.metadata)
-
-    def load(self, key):
-        return self.cache.load(key)
-
-    def shrink(self, key: Digest | str) -> Digest:
-        return self.cache.shrink(key)
-
-    def load_value(self, key):
-        return self.cache.load_value(key)
-
-
-
 @dataclass(frozen=True)
 class ReadOnlyCache(BaseCache):
     """A cache that can only be read from."""
@@ -229,7 +205,6 @@ class ReadOnlyCache(BaseCache):
 
     def load_value(self, key):
         return self.cache.load_value(key)
-
 
 
 @dataclass(frozen=True)
