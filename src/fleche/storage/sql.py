@@ -139,6 +139,7 @@ class Sql(CallStorage):
                 select(CallModel).where(CallModel.key == key)
             ).scalar_one_or_none()
             if existing is not None:
+                # Always return a Digest instance
                 return key
 
             call_model = CallModel(
@@ -166,7 +167,8 @@ class Sql(CallStorage):
                     ]
                 )
             session.commit()
-            return str(key)
+            # Always return a Digest instance, not a plain str
+            return key
         except Exception:
             session.rollback()
             raise
@@ -211,7 +213,8 @@ class Sql(CallStorage):
     def list(self) -> Iterable[str]:
         session: Session = self.Session()
         try:
-            return [row[0] for row in session.execute(select(CallModel.key))]
+            # Return Digest instances for keys
+            return [Digest(row[0]) for row in session.execute(select(CallModel.key))]
         finally:
             session.close()
 
@@ -290,7 +293,8 @@ class Sql(CallStorage):
                         select(MetaModel.call_key).where(and_(*conditions)).distinct()
                     )
                     try:
-                        result = [row[0] for row in session.execute(stmt).all()]
+                        result = [Digest(row[0]) for row in session.execute(stmt).all()]
+                        # Ensure uniqueness and stable order
                         return sorted(set(result))
                     except Exception:
                         pass
@@ -306,10 +310,10 @@ class Sql(CallStorage):
                         return False
                 return True
 
-            keys: set[str] = set()
+            keys: set[Digest] = set()
             for call_key, _mname, mdata in rows:
                 if matches(mdata or {}):
-                    keys.add(call_key)
+                    keys.add(Digest(call_key))
             return sorted(keys)
         finally:
             session.close()
