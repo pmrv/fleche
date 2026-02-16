@@ -1,4 +1,5 @@
 from typing import Iterable, Any, List
+from pathlib import Path
 
 from sqlalchemy import (
     create_engine,
@@ -104,6 +105,7 @@ def _coerce_sqlite_url(path_or_url: str | None) -> str:
     import os
 
     abs_path = os.path.abspath(str(path_or_url))
+    Path(abs_path).parent.mkdir(parents=True, exist_ok=True)
     return f"sqlite:///{abs_path}"
 
 
@@ -120,8 +122,8 @@ def _enable_sqlite_foreign_keys(engine: Engine) -> None:
 class Sql(CallStorage):
     """SQLAlchemy-backed CallStorage with JSON metadata and DB-backed expand()."""
 
-    def __init__(self, path_or_url: str | None = None, echo: bool = False):
-        url = _coerce_sqlite_url(path_or_url)
+    def __init__(self, url: str | None = None, echo: bool = False):
+        url = _coerce_sqlite_url(url)
         self.engine = create_engine(url, echo=echo, future=True)
         _enable_sqlite_foreign_keys(self.engine)
         Base.metadata.create_all(self.engine)
