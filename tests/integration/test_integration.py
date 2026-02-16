@@ -7,7 +7,7 @@ from fleche.digest import digest
 from fleche.caches import Cache, ReadOnlyCache, CacheStack
 from fleche.call import Call
 from fleche.storage import CloudpickleFile, Memory
-from fleche.storage_sqlalchemy import Sql
+from fleche.storage.sql import Sql
 
 temp = tempfile.TemporaryDirectory()
 storages = [Memory({}), CloudpickleFile(temp.name)]

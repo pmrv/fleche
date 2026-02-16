@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 
 from fleche.storage import SaveError, CloudpickleFile, Memory, BagOfHoldingH5File
-from fleche.storage_sqlalchemy import Sql
+from fleche.storage.sql import Sql
 from fleche.call import Call
 from fleche.digest import digest, Digest
 from fleche.caches import DigestedIterable
