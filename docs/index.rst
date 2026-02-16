@@ -14,6 +14,7 @@ Welcome to the **Fleche** library documentation.
    installation
    helpers
    digests_as_args
+   custom_digests
    configuration
 
 Indices and tables

@@ -2,6 +2,7 @@ import hashlib
 import dataclasses
 import struct
 import types
+import importlib.metadata
 from collections.abc import Iterable
 from typing import Any, TypeVar, Callable
 
@@ -30,10 +31,11 @@ class Hook:
 
 
 _HOOKS = []
+_EP_HOOKS = []
 
 
 def get_hooks():
-    return _HOOKS
+    return _HOOKS + _EP_HOOKS
 
 
 def add_hook(hook: Hook | tuple[str, Callable[[T], str]]):
@@ -42,7 +44,53 @@ def add_hook(hook: Hook | tuple[str, Callable[[T], str]]):
     _HOOKS.append(hook)
 
 
+def load_entry_points():
+    _EP_HOOKS.clear()
+    eps = importlib.metadata.entry_points(group="fleche", name="digest")
+
+    seen_types = {h.type: "add_hook" for h in _HOOKS}
+
+    for ep in eps:
+        try:
+            hooks = ep.load()
+            if not isinstance(hooks, list):
+                hooks = [hooks]
+
+            for hook in hooks:
+                if isinstance(hook, tuple):
+                    hook = Hook(*hook)
+
+                if hook.type in seen_types:
+                    source = seen_types[hook.type]
+                    if source == "add_hook":
+                        print(
+                            "INFO",
+                            f"add_hook for {hook.type} overrides entry point {ep.value}",
+                        )
+                    else:
+                        for h in _EP_HOOKS:
+                            if (h.type is not hook.type) and (h.digest is not hook.digest):
+                                print(
+                                    "INFO",
+                                    f"Digest from {source} overrides later entry point {ep.value}!"
+                                )
+                    continue
+
+                _EP_HOOKS.append(hook)
+                seen_types[hook.type] = ep.value
+        except Exception as e:
+            print("ERROR", f"Failed to load entry point {ep.name}: {e}")
+
+
 def digest(value: Any) -> str:
+    try:
+        return _digest(value)
+    except Unhashable:
+        load_entry_points()
+    return _digest(value)
+
+
+def _digest(value: Any) -> str:
     """
     Generates a SHA256 digest for a given Python object.
 
