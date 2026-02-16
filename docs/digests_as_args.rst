@@ -23,10 +23,12 @@ You can use the convenience wrapper `D` to mark a string as a digest:
         return y * 2
 
     # Get the digest of the result of func_a(5)
-    digest_a = func_a.digest(5)
+    print(func_a.digest(5))
+    # '6511a915535857f7e7ca73b8b62968975f357664ed331c38f9e188fa738223ad'
 
     # Pass it to func_b. func_b will receive the value 6, not the digest string.
-    result = func_b(D(digest_a))
+    # You can even use a short digest!
+    result = func_b(D('6511a915'))
     assert result == 12
 
 Behavior
