@@ -11,8 +11,18 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional, TypeVar, Union
 
 from . import digest
-from .digest import Digest, Digest as D
+from .digest import Digest
 from .call import Call
+
+
+def D(d: str) -> Digest:
+    """
+    Convenience wrapper to create a Digest from a string.
+
+    Digests passed as arguments to @fleche decorated functions are automatically expanded
+    to their cached values.
+    """
+    return Digest(d)
 from .metadata import MetaData, Tags
 from .caches import BaseCache, Cache, Rejected
 from .config import load_cache_config, load_default_metadata
