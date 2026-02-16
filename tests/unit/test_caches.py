@@ -1,7 +1,8 @@
 from unittest.mock import Mock
 import pytest
 from fleche import fleche, cache
-from fleche.digest import digest
+from fleche.call import Call
+from fleche.digest import digest, Digest
 from fleche.caches import ReadOnlyCache, CacheStack, Rejected, Cache
 
 
@@ -26,12 +27,23 @@ def test_cache_save():
 
 def test_cache_load():
     values_storage = Mock()
+    values_storage.load = Mock()
     calls_storage = Mock()
-    metadata = Mock()
-    c = Cache(values_storage, calls_storage).metadb(metadata)
+    calls_storage.load = Mock(return_value=Call(
+        name='test',
+        args=(Digest('arg1'), Digest('arg2')),
+        kwargs={
+            'key1': Digest('kwarg1'),
+            'key2': Digest('kwarg2')
+        },
+    ))
+    c = Cache(values_storage, calls_storage)
     c.load("key")
     calls_storage.load.assert_called_once_with("key")
-    metadata.load.assert_not_called()
+    values_storage.load.assert_any_call("arg1")
+    values_storage.load.assert_any_call("arg2")
+    values_storage.load.assert_any_call("kwarg1")
+    values_storage.load.assert_any_call("kwarg2")
 
 
 def test_cache_context_manager():

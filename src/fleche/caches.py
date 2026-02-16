@@ -135,28 +135,43 @@ class Cache(BaseCache):
                 }
         return value
 
-    def save(self, inv: Call) -> str:
+    def _handle_args_save(self, value):
+        # if value is 'simple' leave it in the call storage to be dealt with there
+        if isinstance(value, (str, float, int)):
+            return value
         # for arguments saving is not critical, substitute digest and move on
-        def save_or_digest(v):
-            try:
-                return self._recursive_value_save(v)
-            except storage.SaveError:
-                print("WARNING NO ARG SAVE:", v)
-                return digest(v)
+        try:
+            return self._recursive_value_save(value)
+        except storage.SaveError:
+            print("WARNING NO ARG SAVE:", value)
+            return digest(value)
+
+    def _handle_args_load(self, key):
+        if not isinstance(key, Digest):
+            return key  # found a simple value
+        try:
+            return self.values.load(key)
+        except KeyError:
+            # if value is not in storage, leave the digest in place
+            return key
+
+    def save(self, inv: Call) -> str:
         inv = copy(inv)
         try:
             inv.result = self._recursive_value_save(inv.result)
-            inv.args = tuple(save_or_digest(a) for a in inv.args)
-            inv.kwargs = {k: save_or_digest(v) for k, v in inv.kwargs.items()}
+            inv.args = tuple(self._handle_args_save(a) for a in inv.args)
+            inv.kwargs = {k: self._handle_args_save(v) for k, v in inv.kwargs.items()}
         except storage.SaveError as e:
             raise Rejected(e)
 
         return self.calls.save(inv, key=digest(inv.to_lookup()))
 
     def load(self, key: str) -> Call:
-        inv = self.calls.load(key)
-        inv.result = self._recursive_value_load(inv.result)
-        return inv
+        call = self.calls.load(key)
+        call.args = tuple(self._handle_args_load(a) for a in call.args)
+        call.kwargs = {k: self._handle_args_load(v) for k, v in call.kwargs.items()}
+        call.result = self._recursive_value_load(call.result)
+        return call
 
     def shrink(self, key: Digest | str) -> Digest:
         return self.calls.shrink(key)
