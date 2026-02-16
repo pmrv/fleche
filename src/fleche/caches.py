@@ -128,7 +128,11 @@ class Cache(BaseCache):
     def load_value(self, key):
         if not isinstance(key, Digest):
             return key
-        value = self.values.load(key)
+        try:
+            value = self.values.load(key)
+        except KeyError:
+            return self.load(key).result
+
         match value:
             case DigestedIterable(items=items):
                 value = type(items)(self.load_value(v) for v in items)
@@ -181,7 +185,12 @@ class Cache(BaseCache):
         return self.calls.shrink(key)
 
     def table(self) -> pd.DataFrame:
-        return pd.DataFrame([asdict(self.calls.load(k)) for k in self.calls.list()])
+        calls = [asdict(self.calls.load(k)) for k in self.calls.list()]
+        for call in calls:
+            metadata = call.pop('metadata')
+            for data in metadata.values():
+                call.update(data)
+        return pd.DataFrame(calls)
 
 
 @dataclass

@@ -114,3 +114,22 @@ def test_short_digest_expansion_via_D():
 def test_D_alias():
     assert D("abc") == Digest("abc")
     assert isinstance(D("abc"), Digest)
+
+def test_chaining_by_call_digest():
+    c = Cache(Memory({}), Memory({}))
+
+    @fleche
+    def func_a(x):
+        return x + 1
+
+    @fleche
+    def func_b(y):
+        return y * 2
+
+    with cache(c):
+        # 1. Call func_a(5) -> 6
+        assert func_a(5) == 6
+        digest_a = func_a.digest(5) # Call digest
+
+        # 2. Pass call digest to func_b. It should be expanded to 6.
+        assert func_b(D(digest_a)) == 12

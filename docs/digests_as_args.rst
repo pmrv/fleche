@@ -24,11 +24,11 @@ You can use the convenience wrapper `D` to mark a string as a digest:
 
     # Get the digest of the result of func_a(5)
     print(func_a.digest(5))
-    # '6511a915535857f7e7ca73b8b62968975f357664ed331c38f9e188fa738223ad'
+    # '0e69e4e8496e7caebdefd277a0dfbd65929419a52f6183ace4000d4029add987'
 
     # Pass it to func_b. func_b will receive the value 6, not the digest string.
     # You can even use a short digest!
-    result = func_b(D('6511a915'))
+    result = func_b(D('0e69e4e8'))
     assert result == 12
 
 Behavior
