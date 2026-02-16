@@ -1,6 +1,7 @@
 import hashlib
 import dataclasses
 import struct
+import types
 from collections.abc import Iterable
 from typing import Any, TypeVar, Callable
 
@@ -90,6 +91,23 @@ def digest(value: Any) -> str:
                 m.update(digest(v).encode())
         case np.ndarray():
             m.update(value.tobytes())
+        case types.CodeType():
+            # captured properties for behavior stability
+            props = [
+                value.co_code,
+                value.co_consts,
+                value.co_names,
+                value.co_varnames,
+                value.co_freevars,
+                value.co_cellvars,
+                value.co_argcount,
+                value.co_posonlyargcount,
+                value.co_kwonlyargcount,
+                value.co_flags,
+            ]
+            if hasattr(value, "co_exceptiontable"):
+                props.append(value.co_exceptiontable)
+            m.update(digest(tuple(props)).encode())
         case _ if dataclasses.is_dataclass(value):
             # cannot use asdict because it recursively converts values which destroys digests
             # instead (flat-) convert to dictionaries, salt with type name, then fallback to dictionary case.
