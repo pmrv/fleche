@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Iterable
 from inspect import signature
 
 import fleche.digest
@@ -15,8 +15,7 @@ class Call:
     hash of the call, invalidating previously cached results.
     """
     name: str
-    args: tuple[Any, ...]
-    kwargs: dict[str, Any]
+    arguments: dict[str, Any]
     metadata: dict[str, dict[str, Any]] = field(default_factory=dict)
     module: str | None = None
     version: int | None = None
@@ -25,26 +24,36 @@ class Call:
 
     @classmethod
     def from_call(cls, func, *args, **kwargs):
-        sig = signature(func).bind(*args, **kwargs)
-        sig.apply_defaults()
+        # Normalize arguments using function signature
+        bound = signature(func).bind(*args, **kwargs)
+        bound.apply_defaults()
 
-        inv = cls(func.__name__, sig.args, sig.kwargs)
+        # Preserve declared parameter order via bound.arguments (OrderedDict)
+        call = cls(func.__name__, dict(bound.arguments))
         if hasattr(func, "__version__"):
-            inv.version = func.__version__
+            call.version = func.__version__
         if hasattr(func, "__module__"):
-            inv.module = func.__module__
+            call.module = func.__module__
         if hasattr(func, "__code__"):
-            inv.code_digest = fleche.digest.digest(func.__code__)
-        return inv
+            call.code_digest = fleche.digest.digest(func.__code__)
+        return call
 
-    def to_lookup(self):
+    def to_lookup(self, ignore: Iterable[str] | None = None):
+        # Iterate explicitly in the preserved parameter order; do not sort
+        if ignore is None:
+            ignore = ()
+        ignore_set = set(ignore)
+        arg_pairs = tuple(
+            (k, fleche.digest.digest(v))
+            for k, v in self.arguments.items()
+            if (ignore_set is None or k not in ignore_set)
+        )
         return CallLookup(
-                name=self.name,
-                args=tuple(fleche.digest.digest(a) for a in self.args),
-                kwargs={k: fleche.digest.digest(v) for k, v in self.kwargs.items()},
-                module=self.module,
-                version=self.version,
-                code_digest=self.code_digest,
+            name=self.name,
+            arguments=arg_pairs,
+            module=self.module,
+            version=self.version,
+            code_digest=self.code_digest,
         )
 
 
@@ -52,8 +61,7 @@ class Call:
 class CallLookup:
     """Subset of :class:`.Call` to be used as a lookup key """
     name: str
-    args: tuple[str, ...]
-    kwargs: dict[str, str]
+    arguments: tuple[tuple[str, str], ...]
     module: str | None = None
     version: int | None = None
     code_digest: str | None = None

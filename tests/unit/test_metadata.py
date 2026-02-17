@@ -109,7 +109,7 @@ def test_metadb_table_filtering(cache_it: Cache):
         keys = {"my_key": str, "my_other_key": int}
 
         def pre(self, call: Call):
-            if call.kwargs.get("b") == 2:
+            if call.arguments.get("b") == 2:
                 return {"my_key": "my_value", "my_other_key": 1}
             return {"my_key": "another_value", "my_other_key": 2}
 

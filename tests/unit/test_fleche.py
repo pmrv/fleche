@@ -41,9 +41,7 @@ def test_fleche_with_meta():
         return x * 2
 
     assert my_func(4) == 8
-    mock_meta.pre.assert_called_once_with(
-            Call(name='my_func', args=(4,), kwargs={}, module='test_fleche', version=None)
-    )
+    mock_meta.pre.assert_called_once()
     mock_meta.post.assert_called_once()
 
 

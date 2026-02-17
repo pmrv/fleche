@@ -150,14 +150,21 @@ def fleche(
             func.__version__ = version
 
         def get_call(*args, **kwargs):
-            inv = Call.from_call(func, *args, **kwargs)
+            call = Call.from_call(func, *args, **kwargs)
             if not hash_version:
-                inv.version = None
+                call.version = None
             if not hash_module:
-                inv.module = None
+                call.module = None
             if not hash_code:
-                inv.code_digest = None
-            return inv
+                call.code_digest = None
+            return call
+
+        def _ignored_args_tuple() -> tuple[str, ...] | None:
+            if ignore is None:
+                return None
+            if isinstance(ignore, str):
+                return (ignore,)
+            return tuple(ignore)
 
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> _T:
@@ -172,15 +179,8 @@ def fleche(
                 return func(*args, **kwargs)
             cache: Cache = _CACHE.get()
             try:
-                inv = get_call(*args, **kwargs)
-                if ignore is not None:
-                    if isinstance(ignore, str):
-                        ignored_args = (ignore,)
-                    else:
-                        ignored_args = ignore
-                    for ign in ignored_args:
-                        inv.kwargs.pop(ign, None)
-                key = wrapper.digest(*args, **kwargs)
+                call = get_call(*args, **kwargs)
+                key = digest.digest(call.to_lookup(ignore=_ignored_args_tuple()))
             except digest.Unhashable as e:
                 print("WARNING NO HASH:", e.args[0])
                 return func(*args, **kwargs)
@@ -194,23 +194,23 @@ def fleche(
                 active_meta = _METADATA.get() + tuple(meta)
                 metadata: Dict[str, Any] = defaultdict(dict)
                 for m in active_meta:
-                    metadata[m.name] |= m.pre(replace(inv, metadata={}))
+                    metadata[m.name] |= m.pre(replace(call, metadata={}))
 
                 expanded_args = tuple(cache.load_value(arg) if isinstance(arg, Digest) else arg for arg in args)
                 expanded_kwargs = {k: (cache.load_value(v) if isinstance(v, Digest) else v) for k, v in kwargs.items()}
 
-                inv.result: _T = func(*expanded_args, **expanded_kwargs)
-                if inv.result is None:
+                call.result: _T = func(*expanded_args, **expanded_kwargs)
+                if call.result is None:
                     print("WARNING NO VALUE")
                     return None
                 for m in active_meta:
-                    metadata[m.name] |= m.post(metadata[m.name], replace(inv, metadata={}))
+                    metadata[m.name] |= m.post(metadata[m.name], replace(call, metadata={}))
                 try:
-                    inv.metadata = metadata
-                    cache.save(inv)
+                    call.metadata = metadata
+                    cache.save(call)
                 except Rejected as e:
                     print("WARNING NO SAVE:", *e.args)
-                return inv.result
+                return call.result
 
             if isolate:
                 root = _get_working_directory_root()
@@ -223,9 +223,14 @@ def fleche(
                 return _run_and_cache()
 
         wrapper.call = get_call
-        wrapper.digest = lambda *args, **kwargs: digest.digest(get_call(*args, **kwargs).to_lookup())
-        wrapper.load = lambda *args, **kwargs: _CACHE.get().load(wrapper.digest(*args, **kwargs)).result
-        wrapper.contains = lambda *args, **kwargs: _CACHE.get().contains(wrapper.digest(*args, **kwargs))
+
+        def _digest_func(*args, **kwargs):
+            call = get_call(*args, **kwargs)
+            return digest.digest(call.to_lookup(ignore=_ignored_args_tuple()))
+
+        wrapper.digest = _digest_func
+        wrapper.load = lambda *args, **kwargs: _CACHE.get().load(_digest_func(*args, **kwargs)).result
+        wrapper.contains = lambda *args, **kwargs: _CACHE.get().contains(_digest_func(*args, **kwargs))
         return wrapper
 
     if callable(_func):
