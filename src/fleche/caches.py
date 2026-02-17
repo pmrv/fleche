@@ -124,10 +124,8 @@ class Cache(BaseCache):
     def load_value(self, key):
         if not isinstance(key, Digest):
             return key
-        try:
-            value = self.values.load(key)
-        except KeyError:
-            return self.load(key).result
+
+        value = self.values.load(key)
 
         match value:
             case DigestedIterable(items=items):
