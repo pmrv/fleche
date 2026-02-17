@@ -90,7 +90,7 @@ def _get_storage(config: dict[str, Any]) -> storage.Storage:
         case "FileLinkingStorage":
             config["store"] = _get_storage(config.pop("store"))
             return storage.FileLinkingStorage(**config)
-        case "CloudpickleFile" | "BagOfHoldingH5File" | "Sql":
+        case "CloudpickleFile" | "PickleFile" | "BagOfHoldingH5File" | "Sql":
             return getattr(storage, storage_type)(**config)
         case _:
             raise ValueError(f"Unknown storage type: {storage_type}")

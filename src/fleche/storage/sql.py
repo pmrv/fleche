@@ -78,13 +78,19 @@ class MetaModel(Base):
 def _coerce_sqlite_url(path_or_url: str | None) -> str:
     if path_or_url is None:
         return "sqlite:///:memory:"
-    if isinstance(path_or_url, str) and path_or_url.startswith("sqlite:"):
-        return path_or_url
-    import os
 
-    abs_path = os.path.abspath(str(path_or_url))
-    Path(abs_path).parent.mkdir(parents=True, exist_ok=True)
-    return f"sqlite:///{abs_path}"
+    if isinstance(path_or_url, str) and path_or_url.startswith("sqlite:"):
+        url = path_or_url
+    else:
+        abs_path = Path(str(path_or_url)).absolute()
+        url = f"sqlite:///{abs_path}"
+
+    if url.startswith("sqlite:///"):
+        db_path = url[len("sqlite:///"):]
+        if db_path and db_path != ":memory:":
+            Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+
+    return url
 
 
 def _enable_sqlite_foreign_keys(engine: Engine) -> None:
