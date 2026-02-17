@@ -138,9 +138,6 @@ class Cache(BaseCache):
         return value
 
     def _handle_args_save(self, value):
-        # if value is 'simple' leave it in the call storage to be dealt with there
-        if isinstance(value, (str, float, int)):
-            return value
         # for arguments saving is not critical, substitute digest and move on
         try:
             return self._recursive_value_save(value)
