@@ -149,8 +149,22 @@ def fleche(
         if version is not None:
             func.__version__ = version
 
+        def _ignored_args_tuple() -> tuple[str, ...] | None:
+            if ignore is None:
+                return ()
+            if isinstance(ignore, str):
+                return (ignore,)
+            return tuple(ignore)
+
         def get_call(*args, **kwargs):
             call = Call.from_call(func, *args, **kwargs)
+            # drop ignored arguments for the saved call object to make our lives much simpler when hashing or saving it
+            # if we leave them in, then Cache.save needs to know about them indirectly to ensure correct digest key
+            # generation, but then we'd also have to save it somehow and that just seems bothersome in particular for
+            # Sql Callstorage.  We could add a new table there connecting unique functions and their ignored args, but
+            # meh.
+            for ign in _ignored_args_tuple():
+                del call.arguments[ign]
             if not hash_version:
                 call.version = None
             if not hash_module:
@@ -158,13 +172,6 @@ def fleche(
             if not hash_code:
                 call.code_digest = None
             return call
-
-        def _ignored_args_tuple() -> tuple[str, ...] | None:
-            if ignore is None:
-                return None
-            if isinstance(ignore, str):
-                return (ignore,)
-            return tuple(ignore)
 
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> _T:
@@ -180,7 +187,7 @@ def fleche(
             cache: Cache = _CACHE.get()
             try:
                 call = get_call(*args, **kwargs)
-                key = digest.digest(call.to_lookup(ignore=_ignored_args_tuple()))
+                key = digest.digest(call.to_lookup())
             except digest.Unhashable as e:
                 print("WARNING NO HASH:", e.args[0])
                 return func(*args, **kwargs)
@@ -226,7 +233,7 @@ def fleche(
 
         def _digest_func(*args, **kwargs):
             call = get_call(*args, **kwargs)
-            return digest.digest(call.to_lookup(ignore=_ignored_args_tuple()))
+            return digest.digest(call.to_lookup())
 
         wrapper.digest = _digest_func
         wrapper.load = lambda *args, **kwargs: _CACHE.get().load(_digest_func(*args, **kwargs)).result

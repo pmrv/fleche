@@ -38,15 +38,11 @@ class Call:
             call.code_digest = fleche.digest.digest(func.__code__)
         return call
 
-    def to_lookup(self, ignore: Iterable[str] | None = None):
+    def to_lookup(self):
         # Iterate explicitly in the preserved parameter order; do not sort
-        if ignore is None:
-            ignore = ()
-        ignore_set = set(ignore)
         arg_pairs = tuple(
             (k, fleche.digest.digest(v))
             for k, v in self.arguments.items()
-            if (ignore_set is None or k not in ignore_set)
         )
         return CallLookup(
             name=self.name,
