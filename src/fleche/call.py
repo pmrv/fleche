@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Any
+from inspect import signature
 
 import fleche.digest
 
@@ -24,7 +25,10 @@ class Call:
 
     @classmethod
     def from_call(cls, func, *args, **kwargs):
-        inv = cls(func.__name__, args, kwargs)
+        sig = signature(func).bind(*args, **kwargs)
+        sig.apply_defaults()
+
+        inv = cls(func.__name__, sig.args, sig.kwargs)
         if hasattr(func, "__version__"):
             inv.version = func.__version__
         if hasattr(func, "__module__"):
