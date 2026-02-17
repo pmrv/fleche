@@ -139,11 +139,10 @@ def calls(value_types):
     return st.builds(
         Call,
         name=st.text(string.ascii_letters, min_size=1, max_size=10),
-        args=st.lists(value_types, max_size=3).map(tuple),
-        kwargs=st.dictionaries(
+        arguments=st.dictionaries(
             st.text(string.ascii_letters, min_size=1, max_size=5),
             value_types,
-            max_size=3
+            max_size=6
         ),
         module=st.one_of(st.none(), st.text(string.ascii_letters, min_size=1, max_size=10)),
         version=st.one_of(st.none(), st.integers(min_value=0, max_value=100)),
@@ -214,11 +213,10 @@ def randomly_digest_subvalues(value, data):
                       for f in fields(value)}
         return type(value)(**field_dict)
     elif isinstance(value, Call):
-        # For Call, replace args and kwargs values
+        # For Call, replace argument values
         return Call(
             name=value.name,
-            args=tuple(randomly_digest_subvalues(arg, data) for arg in value.args),
-            kwargs={k: randomly_digest_subvalues(v, data) for k, v in value.kwargs.items()},
+            arguments={k: randomly_digest_subvalues(v, data) for k, v in value.arguments.items()},
             module=value.module,
             version=value.version,
         )

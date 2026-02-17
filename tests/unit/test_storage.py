@@ -1,4 +1,5 @@
 import pytest
+import string
 from hypothesis import given, strategies as st
 import numpy as np
 import tempfile
@@ -89,21 +90,23 @@ call_storages = [
 # Strategies for generating Call instances with digest-string args/kwargs/result
 st_call_name = st.text(min_size=1, max_size=10)
 st_hex = st.text(min_size=64, max_size=64, alphabet="0123456789abcdef")
-st_call_args = st.lists(st_hex, max_size=3).map(tuple)
-st_call_kwargs = st.dictionaries(st.text(min_size=1, max_size=5), st_hex, max_size=3)
+st_call_arguments = st.dictionaries(
+    st.text(string.ascii_letters + string.digits + "_", min_size=1, max_size=5),
+    st_hex,
+    max_size=6,
+)
 
 
 @pytest.mark.parametrize("call_storage", call_storages)
 @given(
     name=st_call_name,
-    args=st_call_args,
-    kwargs=st_call_kwargs,
+    arguments=st_call_arguments,
     module=st.one_of(st.none(), st.text(min_size=1, max_size=10)),
     version=st.one_of(st.none(), st.integers(min_value=0, max_value=100)),
     result=st.one_of(st.none(), st_hex),
 )
-def test_callstorages_random_calls_roundtrip(call_storage, name, args, kwargs, module, version, result):
-    call = Call(name=name, args=args, kwargs=kwargs, metadata={}, module=module, version=version, result=result)
+def test_callstorages_random_calls_roundtrip(call_storage, name, arguments, module, version, result):
+    call = Call(name=name, arguments=arguments, metadata={}, module=module, version=version, result=result)
     try:
         key = call_storage.save(call)
     except SaveError:
@@ -116,14 +119,13 @@ def test_callstorages_random_calls_roundtrip(call_storage, name, args, kwargs, m
 @pytest.mark.parametrize("call_storage", call_storages)
 @given(
     name=st_call_name,
-    args=st_call_args,
-    kwargs=st_call_kwargs,
+    arguments=st_call_arguments,
     module=st.one_of(st.none(), st.text(min_size=1, max_size=10)),
     version=st.one_of(st.none(), st.integers(min_value=0, max_value=100)),
     result=st.one_of(st.none(), st_hex),
 )
-def test_callstorages_short_prefix_load(call_storage, name, args, kwargs, module, version, result):
-    call = Call(name=name, args=args, kwargs=kwargs, metadata={}, module=module, version=version, result=result)
+def test_callstorages_short_prefix_load(call_storage, name, arguments, module, version, result):
+    call = Call(name=name, arguments=arguments, metadata={}, module=module, version=version, result=result)
     try:
         key = call_storage.save(call)
     except SaveError:
@@ -136,7 +138,7 @@ def test_callstorages_short_prefix_load(call_storage, name, args, kwargs, module
 def test_sql_evict(tmp_path):
     # Evict is specific to Sql backend
     store = Sql(str(tmp_path / "calls.db"))
-    call = Call(name="evict_me", args=("a" * 64,), kwargs={}, metadata={}, module=None, version=None, result=None)
+    call = Call(name="evict_me", arguments={"a": "a" * 64}, metadata={}, module=None, version=None, result=None)
     key = store.save(call)
     assert key in set(store.list())
     store.evict(key)
@@ -148,12 +150,12 @@ def test_sql_metadata_roundtrip_and_query(tmp_path):
     store = Sql(str(tmp_path / "calls.db"))
 
     # Create two calls with metadata
-    c1 = Call(name="f1", args=("a" * 64,), kwargs={}, metadata={
+    c1 = Call(name="f1", arguments={"a": "a" * 64}, metadata={
         "runtime": {"walltime": 1.23, "timestart": 0.1, "timestop": 1.33},
         "tags": {"project": "alpha", "phase": "train"},
     }, module=None, version=None, result=None)
 
-    c2 = Call(name="f2", args=("b" * 64,), kwargs={}, metadata={
+    c2 = Call(name="f2", arguments={"b": "b" * 64}, metadata={
         "runtime": {"walltime": 2.0},
         "tags": {"project": "beta", "phase": "eval"},
     }, module=None, version=None, result=None)

@@ -157,21 +157,19 @@ class Cache(BaseCache):
             # if value is not in storage, leave the digest in place
             return key
 
-    def save(self, inv: Call) -> str:
-        inv = copy(inv)
+    def save(self, call: Call) -> str:
+        call = copy(call)
         try:
-            inv.result = self._recursive_value_save(inv.result)
-            inv.args = tuple(self._handle_args_save(a) for a in inv.args)
-            inv.kwargs = {k: self._handle_args_save(v) for k, v in inv.kwargs.items()}
+            call.result = self._recursive_value_save(call.result)
+            call.arguments = {k: self._handle_args_save(v) for k, v in call.arguments.items()}
         except storage.SaveError as e:
             raise Rejected(e)
 
-        return self.calls.save(inv, key=digest(inv.to_lookup()))
+        return self.calls.save(call, key=digest(call.to_lookup()))
 
     def load(self, key: str) -> Call:
         call = self.calls.load(key)
-        call.args = tuple(self._handle_args_load(a) for a in call.args)
-        call.kwargs = {k: self._handle_args_load(v) for k, v in call.kwargs.items()}
+        call.arguments = {k: self._handle_args_load(v) for k, v in call.arguments.items()}
         call.result = self.load_value(call.result)
         return call
 
@@ -192,8 +190,8 @@ class ReadOnlyCache(BaseCache):
     """A cache that can only be read from."""
     cache: BaseCache
 
-    def save(self, inv: Call):
-        raise Rejected(self, inv)
+    def save(self, call: Call):
+        raise Rejected(self, call)
 
     def load(self, key):
         return self.cache.load(key)
@@ -214,8 +212,8 @@ class CacheStack(BaseCache):
     """
     stack: tuple[Cache]
 
-    def save(self, inv: Call):
-        self.stack[0].save(inv)
+    def save(self, call: Call):
+        self.stack[0].save(call)
 
     def load(self, key):
         for cache in self.stack:

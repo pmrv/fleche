@@ -8,8 +8,7 @@ from fleche.digest import Digest
 def make_call():
     return Call(
         name="f",
-        args=("a" * 64, "b" * 64),
-        kwargs={"x": "c" * 64},
+        arguments={"a": "a" * 64, "b": "b" * 64, "x": "c" * 64},
         metadata={
             "tags": {"project": "alpha", "phase": "train"},
             "runtime": {"walltime": 1.23},
@@ -63,6 +62,5 @@ def test_sql_load_returns_digest_fields(tmp_path):
     key = store.save(make_call())
     loaded = store.load(key)
 
-    assert all(isinstance(a, Digest) for a in loaded.args)
-    assert all(isinstance(v, Digest) for v in loaded.kwargs.values())
+    assert all(isinstance(v, Digest) for v in loaded.arguments.values())
     assert isinstance(loaded.result, Digest)

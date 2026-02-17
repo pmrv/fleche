@@ -13,7 +13,7 @@ def test_cache_save():
     calls_storage = Mock()
     c = Cache(values_storage, calls_storage)
 
-    call = Call(name="test", args=(1,), kwargs={}, result="result")
+    call = Call(name="test", arguments={"x": 1}, result="result")
     call.metadata = {"test": {"key": "value"}}
     c.save(call)
 
@@ -29,8 +29,9 @@ def test_cache_load():
 
     calls_storage.load = Mock(return_value=Call(
         name='test',
-        args=(Digest('arg1'), Digest('arg2')),
-        kwargs={
+        arguments={
+            'arg1': Digest('arg1'),
+            'arg2': Digest('arg2'),
             'key1': Digest('kwarg1'),
             'key2': Digest('kwarg2')
         },
@@ -106,7 +107,7 @@ def test_base_cache_transfer():
 def test_readonly_cache_save():
     from fleche.call import Call
     c = ReadOnlyCache(Mock())
-    call = Call(name="test", args=(1,), kwargs={}, result="result")
+    call = Call(name="test", arguments={"x": 1}, result="result")
     with pytest.raises(Rejected):
         c.save(call)
 
@@ -123,7 +124,7 @@ def test_cache_stack_save():
     c1 = Mock()
     c2 = Mock()
     stack = CacheStack((c1, c2))
-    call = Call(name="test", args=(1,), kwargs={}, result="result")
+    call = Call(name="test", arguments={"x": 1}, result="result")
     stack.save(call)
     c1.save.assert_called_once()
     c2.save.assert_not_called()
@@ -134,7 +135,7 @@ def test_cache_stack_load_hit():
     c1 = Mock()
     c1.load.side_effect = KeyError
     c2 = Mock()
-    call = Call(name="test", args=(1,), kwargs={}, result="result")
+    call = Call(name="test", arguments={"x": 1}, result="result")
     c2.load.return_value = call
     stack = CacheStack((c1, c2))
     result = stack.load("key")

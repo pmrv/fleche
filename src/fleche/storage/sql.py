@@ -31,21 +31,16 @@ class CallModel(Base):
     version = Column(Integer, nullable=True)
     result = Column(String(DIGEST_LENGTH), nullable=True)
 
-    args = relationship(
-        "ArgModel",
+    arguments = relationship(
+        "ArgumentModel",
         back_populates="call",
         cascade="all, delete-orphan",
-        order_by="ArgModel.position",
-    )
-    kwargs = relationship(
-        "KwargModel",
-        back_populates="call",
-        cascade="all, delete-orphan",
+        order_by="ArgumentModel.position",
     )
 
 
-class ArgModel(Base):
-    __tablename__ = "args"
+class ArgumentModel(Base):
+    __tablename__ = "arguments"
     id = Column(Integer, primary_key=True, autoincrement=True)
     call_key = Column(
         String(DIGEST_LENGTH),
@@ -53,31 +48,14 @@ class ArgModel(Base):
         nullable=False,
     )
     position = Column(Integer, nullable=False)
+    name = Column(String, nullable=False)
     value = Column(String(DIGEST_LENGTH), nullable=False)
 
     __table_args__ = (
-        UniqueConstraint("call_key", "position", name="uq_args_call_pos"),
+        UniqueConstraint("call_key", "name", name="uq_arguments_call_name"),
     )
 
-    call = relationship("CallModel", back_populates="args")
-
-
-class KwargModel(Base):
-    __tablename__ = "kwargs"
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    call_key = Column(
-        String(DIGEST_LENGTH),
-        ForeignKey("calls.key", ondelete="CASCADE"),
-        nullable=False,
-    )
-    kwarg_key = Column(String, nullable=False)
-    value = Column(String(DIGEST_LENGTH), nullable=False)
-
-    __table_args__ = (
-        UniqueConstraint("call_key", "kwarg_key", name="uq_kwargs_call_key"),
-    )
-
-    call = relationship("CallModel", back_populates="kwargs")
+    call = relationship("CallModel", back_populates="arguments")
 
 
 class MetaModel(Base):
@@ -153,12 +131,9 @@ class Sql(CallStorage):
             )
             session.add(call_model)
 
-            for i, arg_val in enumerate(value.args):
-                session.add(ArgModel(call_key=str(key), position=i, value=str(arg_val)))
-
-            for k, v in value.kwargs.items():
+            for i, (k, v) in enumerate(value.arguments.items()):
                 session.add(
-                    KwargModel(call_key=str(key), kwarg_key=str(k), value=str(v))
+                    ArgumentModel(call_key=str(key), position=i, name=str(k), value=str(v))
                 )
 
             if value.metadata:
@@ -189,8 +164,7 @@ class Sql(CallStorage):
             if call_model is None:
                 raise KeyError(key)
 
-            args = tuple(Digest(arg.value) for arg in call_model.args)
-            kwargs = {kw.kwarg_key: Digest(kw.value) for kw in call_model.kwargs}
+            arguments = {arg.name: Digest(arg.value) for arg in call_model.arguments}
 
             meta_rows = (
                 session.execute(select(MetaModel).where(MetaModel.call_key == key))
@@ -199,8 +173,7 @@ class Sql(CallStorage):
             )
             call = Call(
                 name=call_model.name,
-                args=args,
-                kwargs=kwargs,
+                arguments=arguments,
                 metadata={row.name: (row.data or {}) for row in meta_rows},
                 module=call_model.module,
                 version=call_model.version,

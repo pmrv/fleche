@@ -14,8 +14,7 @@ def test_fleche_extra_attributes():
         # Test call
         call = add.call(1, b=2)
         assert call.name == "add"
-        assert call.args == (1,)
-        assert call.kwargs == {"b": 2}
+        assert list(call.arguments.items()) == [("a", 1), ("b", 2)]
         assert call.version == 1
 
         # Test digest
