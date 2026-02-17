@@ -126,6 +126,7 @@ def fleche(
     meta: tuple[MetaData] = (),
     hash_version: bool = True,
     hash_module: bool = True,
+    hash_code: bool = False,
     require: None | str | list[str] | tuple[str] = None,
     ignore: None | str | list[str] | tuple[str] = None,
     isolate: bool = False,
@@ -154,6 +155,8 @@ def fleche(
                 inv.version = None
             if not hash_module:
                 inv.module = None
+            if not hash_code:
+                inv.code_digest = None
             return inv
 
         @wraps(func)

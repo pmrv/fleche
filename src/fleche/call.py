@@ -19,6 +19,7 @@ class Call:
     metadata: dict[str, dict[str, Any]] = field(default_factory=dict)
     module: str | None = None
     version: int | None = None
+    code_digest: str | None = None
     result: Any = None
 
     @classmethod
@@ -28,6 +29,8 @@ class Call:
             inv.version = func.__version__
         if hasattr(func, "__module__"):
             inv.module = func.__module__
+        if hasattr(func, "__code__"):
+            inv.code_digest = fleche.digest.digest(func.__code__)
         return inv
 
     def to_lookup(self):
@@ -37,6 +40,7 @@ class Call:
                 kwargs={k: fleche.digest.digest(v) for k, v in self.kwargs.items()},
                 module=self.module,
                 version=self.version,
+                code_digest=self.code_digest,
         )
 
 
@@ -48,3 +52,4 @@ class CallLookup:
     kwargs: dict[str, str]
     module: str | None = None
     version: int | None = None
+    code_digest: str | None = None
