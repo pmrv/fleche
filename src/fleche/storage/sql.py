@@ -82,8 +82,7 @@ def _coerce_sqlite_url(path_or_url: str | None) -> str:
     if isinstance(path_or_url, str) and path_or_url.startswith("sqlite:"):
         url = path_or_url
     else:
-        import os
-        abs_path = os.path.abspath(str(path_or_url))
+        abs_path = Path(str(path_or_url)).absolute()
         url = f"sqlite:///{abs_path}"
 
     if url.startswith("sqlite:///"):
