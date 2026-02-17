@@ -5,7 +5,7 @@ import numpy as np
 import tempfile
 from pathlib import Path
 
-from fleche.storage import SaveError, CloudpickleFile, Memory, BagOfHoldingH5File
+from fleche.storage import SaveError, CloudpickleFile, PickleFile, Memory, BagOfHoldingH5File
 from fleche.storage.sql import Sql
 from fleche.call import Call
 from fleche.digest import digest, Digest
@@ -14,8 +14,9 @@ from fleche.metadata import Runtime
 
 
 temp = tempfile.TemporaryDirectory()
+temp_pickle = tempfile.TemporaryDirectory()
 temp_bag = tempfile.TemporaryDirectory()
-storages = [Memory({}), CloudpickleFile(temp.name), BagOfHoldingH5File(temp_bag.name)]
+storages = [Memory({}), CloudpickleFile(temp.name), PickleFile(temp_pickle.name), BagOfHoldingH5File(temp_bag.name)]
 
 st_data = st.one_of(
     st.integers(),
@@ -77,12 +78,14 @@ def test_digested(storage, value):
 
 # Dedicated temp roots for call storages
 temp_calls_root = tempfile.TemporaryDirectory()
+temp_calls_pickle = tempfile.TemporaryDirectory()
 temp_calls_h5 = tempfile.TemporaryDirectory()
 temp_calls_sql = tempfile.TemporaryDirectory()
 
 call_storages = [
     Memory({}),
     CloudpickleFile(temp_calls_root.name),
+    PickleFile(temp_calls_pickle.name),
     BagOfHoldingH5File(temp_calls_h5.name),
     Sql(Path(temp_calls_sql.name) / "calls.db"),
 ]

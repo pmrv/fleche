@@ -8,6 +8,7 @@ from .base import SaveError, AmbiguousDigestError, Storage, CallStorage
 from .memory import Memory
 from .file import FileStorage
 from .cloudpickle_file import CloudpickleFile
+from .pickle_file import PickleFile
 from .bagofholding_file import BagOfHoldingH5File
 from .sql import Sql
 
@@ -19,6 +20,7 @@ __all__ = [
     "Memory",
     "FileStorage",
     "CloudpickleFile",
+    "PickleFile",
     "BagOfHoldingH5File",
     "Sql",
 ]
