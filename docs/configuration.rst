@@ -74,9 +74,11 @@ Example:
 Available storage types
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-* ``Memory``: Stores data in an in-memory dictionary. It takes no arguments.
-* ``CloudpickleFile``: Stores data as files on the filesystem, using ``cloudpickle`` for serialization. It takes a ``root`` argument, which is the path to the directory where the files will be stored.
-* ``BagOfHoldingH5File``: Stores data in an HDF5 file using the ``bagofholding`` library. It takes a ``root`` argument, which is the path to the directory where the files will be stored.
+* :class:`~fleche.storage.Memory`: Stores data in an in-memory dictionary. It takes no arguments.
+* :class:`~fleche.storage.PickleFile`: Stores data as files on the filesystem, using the standard ``pickle`` module for serialization. It takes a ``root`` argument, which is the path to the directory where the files will be stored.
+* :class:`~fleche.storage.CloudpickleFile`: Stores data as files on the filesystem, using ``cloudpickle`` for serialization. It handles more complex Python objects than standard ``pickle``. It takes a ``root`` argument, which is the path to the directory where the files will be stored.
+* :class:`~fleche.storage.BagOfHoldingH5File`: Stores data in an HDF5 file using the ``bagofholding`` library. It takes a ``root`` argument, which is the path to the directory where the files will be stored.
+* :class:`~fleche.storage.Sql`: Stores call metadata in a SQL database using SQLAlchemy. It is intended for use as a ``calls`` storage. It takes a ``url`` argument (e.g., ``sqlite:///calls.db``).
 
 Nested storage
 ~~~~~~~~~~~~~~
