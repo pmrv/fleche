@@ -174,12 +174,12 @@ class Cache(BaseCache):
         return self.calls.shrink(key)
 
     def table(self) -> pd.DataFrame:
-        calls = [asdict(self.calls.load(k)) for k in self.calls.list()]
-        for call in calls:
+        calls = {k: asdict(self.calls.load(k)) for k in self.calls.list()}
+        for call in calls.values():
             metadata = call.pop('metadata')
             for data in metadata.values():
                 call.update(data)
-        return pd.DataFrame(calls)
+        return pd.DataFrame.from_dict(calls, orient='index')
 
 
 @dataclass(frozen=True)
