@@ -20,11 +20,21 @@ class AmbiguousDigestError(ValueError):
 class Storage(ABC):
     """Abstract base class for defining storage mechanisms."""
 
-    @abstractmethod
-    def save(self, value: Any, key: Digest | None = None) -> str: ...
+    def save(self, value: Any, key: Digest | None = None) -> str:
+        if key is None:
+            key = digest(value)
+        return self._save(value, key)
 
     @abstractmethod
-    def load(self, key: str) -> Any: ...
+    def _save(self, value: Any, key: Digest) -> str: ...
+
+    def load(self, key: str) -> Any:
+        if len(key) < DIGEST_LENGTH:
+            key = self.expand(key)
+        return self._load(key)
+
+    @abstractmethod
+    def _load(self, key: str) -> Any: ...
 
     @abstractmethod
     def list(self) -> Iterable[str]: ...
