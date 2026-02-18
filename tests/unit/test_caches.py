@@ -152,3 +152,18 @@ def test_cache_stack_load_miss():
     stack = CacheStack((c1, c2))
     with pytest.raises(KeyError):
         stack.load("key")
+
+def test_cache_load_restores_complex_arguments_and_result():
+    from fleche.storage import Memory
+    from fleche.call import Call
+    # Set up in‑memory storages
+    values_storage = Memory({})
+    calls_storage = Memory({})
+    cache = Cache(values_storage, calls_storage)
+
+    # Create a Call with list arguments and result
+    original = Call(name="test_func", arguments={"arg": [1, 2, 3]}, result=[4, 5, 6])
+    key = cache.save(original)
+    loaded = cache.load(key)
+    assert loaded.arguments["arg"] == [1, 2, 3]
+    assert loaded.result == [4, 5, 6]

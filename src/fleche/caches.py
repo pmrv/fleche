@@ -149,7 +149,7 @@ class Cache(BaseCache):
         if not isinstance(key, Digest):
             return key  # found a simple value
         try:
-            return self.values.load(key)
+            return self.load_value(key)
         except KeyError:
             # if value is not in storage, leave the digest in place
             return key
