@@ -233,10 +233,7 @@ class Sql(CallStorage):
             f"Short digest {key} is ambiguous; need at least {i+1} characters."
         )
 
-    def evict(self, key: str) -> None:
-        if len(key) < DIGEST_LENGTH:
-            key = self.expand(key)
-
+    def _evict(self, key: str) -> None:
         session: Session = self.Session()
         try:
             instance = session.get(CallModel, key)

@@ -25,3 +25,6 @@ class FileStorage(CallStorage, Storage):
     def list(self) -> Iterable[str]:
         self.root.mkdir(parents=True, exist_ok=True)
         return (p.name for p in self.root.iterdir())
+
+    def _evict(self, key: str) -> None:
+        self._path(key).unlink(missing_ok=True)

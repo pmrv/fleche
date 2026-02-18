@@ -10,7 +10,6 @@ from fleche.storage.sql import Sql
 from fleche.call import Call
 from fleche.digest import digest, Digest
 from fleche.caches import DigestedIterable
-from fleche.metadata import Runtime
 
 
 temp = tempfile.TemporaryDirectory()
@@ -138,15 +137,32 @@ def test_callstorages_short_prefix_load(call_storage, name, arguments, module, v
     assert loaded == call
 
 
-def test_sql_evict(tmp_path):
-    # Evict is specific to Sql backend
-    store = Sql(str(tmp_path / "calls.db"))
+@pytest.mark.parametrize("call_storage", call_storages)
+def test_callstorages_evict(call_storage):
     call = Call(name="evict_me", arguments={"a": "a" * 64}, metadata={}, module=None, version=None, result=None)
-    key = store.save(call)
-    assert key in set(store.list())
-    store.evict(key)
+    try:
+        key = call_storage.save(call)
+    except SaveError:
+        return
+    assert key in set(call_storage.list())
+
+    # Test short-hand eviction
+    short_key = key[:8]
+    call_storage.evict(short_key)
+    assert key not in set(call_storage.list())
     with pytest.raises(KeyError):
-        store.load(key)
+        call_storage.load(key)
+
+    # Test idempotent eviction (full key)
+    call_storage.evict(key)  # Should not raise anything
+
+    # Re-save and test full key eviction
+    key = call_storage.save(call)
+    assert key in set(call_storage.list())
+    call_storage.evict(key)
+    assert key not in set(call_storage.list())
+    with pytest.raises(KeyError):
+        call_storage.load(key)
 
 
 def test_sql_metadata_roundtrip_and_query(tmp_path):
