@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable
 
 from .base import Storage, CallStorage
-from ..digest import digest, Digest, DIGEST_LENGTH
+from ..digest import Digest
 from copy import deepcopy
 
 
@@ -16,17 +16,13 @@ class Memory(CallStorage, Storage):
 
     storage: dict[str, Any]
 
-    def save(self, value: Any, key: Digest | None = None) -> str:
-        if key is None:
-            key = digest(value)
+    def _save(self, value: Any, key: Digest) -> str:
         if key in self.storage:
             return key
         self.storage[key] = deepcopy(value)
         return key
 
-    def load(self, key: str) -> Any:
-        if len(key) < DIGEST_LENGTH:
-            key = self.expand(key)
+    def _load(self, key: str) -> Any:
         return deepcopy(self.storage[key])
 
     def list(self) -> Iterable[str]:

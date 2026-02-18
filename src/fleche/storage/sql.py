@@ -18,7 +18,7 @@ from sqlalchemy.types import JSON
 
 from .base import CallStorage, AmbiguousDigestError
 from ..call import Call
-from ..digest import digest, Digest, DIGEST_LENGTH
+from ..digest import Digest, DIGEST_LENGTH
 
 Base = declarative_base()
 
@@ -115,10 +115,7 @@ class Sql(CallStorage):
             bind=self.engine, expire_on_commit=False, future=True
         )
 
-    def save(self, value: Call, key: Digest | None = None) -> str:
-        if key is None:
-            key = digest(value)
-
+    def _save(self, value: Call, key: Digest) -> str:
         session: Session = self.Session()
         try:
             existing = session.execute(
@@ -158,10 +155,7 @@ class Sql(CallStorage):
         finally:
             session.close()
 
-    def load(self, key: str) -> Call:
-        if len(key) < DIGEST_LENGTH:
-            key = self.expand(key)
-
+    def _load(self, key: str) -> Call:
         session: Session = self.Session()
         try:
             call_model = session.execute(
