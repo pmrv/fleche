@@ -1,35 +1,23 @@
 import pytest
-import tempfile
-from pathlib import Path
 from dataclasses import replace
 from fleche.storage import Memory, Sql, PickleFile, CloudpickleFile, BagOfHoldingH5File
 from fleche.call import Call
 from fleche.digest import Digest
 
-# Setup temporary directories for persistent storages
-temp_calls_root = tempfile.TemporaryDirectory()
-temp_calls_pickle = tempfile.TemporaryDirectory()
-temp_calls_h5 = tempfile.TemporaryDirectory()
-temp_calls_sql = tempfile.TemporaryDirectory()
+@pytest.fixture(params=["memory", "cloudpickle", "pickle", "h5", "sql"])
+def storage(request, tmp_path):
+    if request.param == "memory":
+        return Memory({})
+    elif request.param == "cloudpickle":
+        return CloudpickleFile(tmp_path / "cloudpickle")
+    elif request.param == "pickle":
+        return PickleFile(tmp_path / "pickle")
+    elif request.param == "h5":
+        return BagOfHoldingH5File(tmp_path / "h5")
+    elif request.param == "sql":
+        return Sql(tmp_path / "calls.db")
 
-call_storages = [
-    Memory({}),
-    CloudpickleFile(temp_calls_root.name),
-    PickleFile(temp_calls_pickle.name),
-    BagOfHoldingH5File(temp_calls_h5.name),
-    Sql(Path(temp_calls_sql.name) / "calls.db"),
-]
-
-@pytest.mark.parametrize("storage", call_storages)
 def test_transform_basic(storage):
-    # Clear storage if it's persistent (Memory is fresh each time due to parametrize creating new instances if we define them in a list, but wait, call_storages is defined once)
-    # Actually, for Memory({}) in a list, it's the same dict. Let's make sure it's fresh.
-    if isinstance(storage, Memory):
-        storage.storage.clear()
-    else:
-        for k in list(storage.list()):
-            storage.evict(k)
-
     c1 = Call(name="f1", arguments={"a": Digest("a" * 64)}, metadata={"m": 1}, result=Digest("r" * 64))
     k1 = c1.to_lookup_key()
     storage.save(c1, key=k1)
@@ -45,14 +33,7 @@ def test_transform_basic(storage):
     assert loaded.metadata == {"m": 2}
     assert str(loaded.result) == "r" * 64
 
-@pytest.mark.parametrize("storage", call_storages)
 def test_transform_key_change(storage):
-    if isinstance(storage, Memory):
-        storage.storage.clear()
-    else:
-        for k in list(storage.list()):
-            storage.evict(k)
-
     c1 = Call(name="f1", arguments={"a": Digest("a" * 64)}, metadata={"m": 1}, result=Digest("r" * 64))
     k1 = c1.to_lookup_key()
     storage.save(c1, key=k1)
@@ -73,14 +54,7 @@ def test_transform_key_change(storage):
     loaded = storage.load(new_k)
     assert str(loaded.arguments["a"]) == "b" * 64
 
-@pytest.mark.parametrize("storage", call_storages)
 def test_redigest(storage):
-    if isinstance(storage, Memory):
-        storage.storage.clear()
-    else:
-        for k in list(storage.list()):
-            storage.evict(k)
-
     c1 = Call(name="f1", arguments={"a": Digest("a" * 64)}, metadata={"m": 1}, result=Digest("r" * 64))
     # Save with a WRONG key
     wrong_key = "f" * 64
