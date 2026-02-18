@@ -2,8 +2,6 @@
 from unittest.mock import Mock, MagicMock
 
 from fleche import fleche, Cache, _CACHE, cache
-from fleche.digest import digest
-from fleche.call import Call
 from fleche.storage import Memory
 
 
@@ -83,7 +81,7 @@ def test_fleche_with_version_argument():
         return storage_content[k]
 
     def save_to_storage(v, key=None):
-        k = digest(v.to_lookup())
+        k = v.to_lookup_key()
         storage_content[k] = v
         return k
 

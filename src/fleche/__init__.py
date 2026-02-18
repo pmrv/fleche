@@ -187,7 +187,7 @@ def fleche(
             cache: Cache = _CACHE.get()
             try:
                 call = get_call(*args, **kwargs)
-                key = digest.digest(call.to_lookup())
+                key = call.to_lookup_key()
             except digest.Unhashable as e:
                 print("WARNING NO HASH:", e.args[0])
                 return func(*args, **kwargs)
@@ -232,8 +232,7 @@ def fleche(
         wrapper.call = get_call
 
         def _digest_func(*args, **kwargs):
-            call = get_call(*args, **kwargs)
-            return digest.digest(call.to_lookup())
+            return get_call(*args, **kwargs).to_lookup_key()
 
         wrapper.digest = _digest_func
         wrapper.load = lambda *args, **kwargs: _CACHE.get().load(_digest_func(*args, **kwargs)).result

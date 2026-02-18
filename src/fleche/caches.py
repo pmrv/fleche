@@ -162,7 +162,7 @@ class Cache(BaseCache):
         except storage.SaveError as e:
             raise Rejected(e)
 
-        return self.calls.save(call, key=digest(call.to_lookup()))
+        return self.calls.save(call, key=call.to_lookup_key())
 
     def load(self, key: str) -> Call:
         call = self.calls.load(key)

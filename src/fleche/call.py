@@ -1,8 +1,8 @@
-from dataclasses import dataclass, field
-from typing import Any, Iterable
+from dataclasses import dataclass, field, replace
+from typing import Any
 from inspect import signature
 
-import fleche.digest
+from . import digest
 
 
 @dataclass
@@ -35,29 +35,11 @@ class Call:
         if hasattr(func, "__module__"):
             call.module = func.__module__
         if hasattr(func, "__code__"):
-            call.code_digest = fleche.digest.digest(func.__code__)
+            call.code_digest = digest.digest(func.__code__)
         return call
 
-    def to_lookup(self):
+    def to_lookup_key(self):
         # Iterate explicitly in the preserved parameter order; do not sort
-        arg_pairs = tuple(
-            (k, fleche.digest.digest(v))
-            for k, v in self.arguments.items()
-        )
-        return CallLookup(
-            name=self.name,
-            arguments=arg_pairs,
-            module=self.module,
-            version=self.version,
-            code_digest=self.code_digest,
-        )
-
-
-@dataclass(frozen=True)
-class CallLookup:
-    """Subset of :class:`.Call` to be used as a lookup key """
-    name: str
-    arguments: tuple[tuple[str, str], ...]
-    module: str | None = None
-    version: int | None = None
-    code_digest: str | None = None
+        arg_pairs = tuple(self.arguments.items())
+        call = replace(self, arguments=arg_pairs, metadata=None, result=None)
+        return digest.digest(call)
