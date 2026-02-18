@@ -86,22 +86,30 @@ class Storage(ABC):
 class CallStorage(Storage):
     """Special storage for saving :class:`Call` instances."""
 
-    def transform(self, func: Callable[[Call], Call]) -> None:
+    def transform(self, func: Callable[[Call], Call] | None = None) -> None:
         """
         Applies a transformation function to all Call objects in the storage.
 
         Args:
-            func (Callable[[Call], Call]): A function that takes a Call and returns a transformed Call.
+            func (Callable[[Call], Call] | None): A function that takes a Call and returns a transformed Call.
+                If None, the identity function is used (useful for re-calculating keys).
         """
         for k in list(self.list()):
             try:
                 call = self.load(k)
             except KeyError:
                 continue
-            new_call = func(call)
+
+            new_call = func(call) if func is not None else call
             new_key = new_call.to_lookup_key()
             if new_key != k:
                 self.save(new_call, key=new_key)
                 self.evict(k)
             else:
                 self.save(new_call, key=k)
+
+    def redigest(self) -> None:
+        """
+        Re-calculates lookup keys for all Call objects in the storage.
+        """
+        self.transform(None)

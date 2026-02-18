@@ -120,6 +120,23 @@ class Sql(CallStorage):
         try:
             existing = session.get(CallModel, str(key))
             if existing is not None:
+                # Load arguments and metadata to compare
+                existing_arguments = {arg.name: Digest(arg.value) for arg in existing.arguments}
+                meta_rows = session.execute(select(MetaModel).where(MetaModel.call_key == str(key))).scalars().all()
+                existing_metadata = {row.name: (row.data or {}) for row in meta_rows}
+
+                existing_call = Call(
+                    name=existing.name,
+                    arguments=existing_arguments,
+                    metadata=existing_metadata,
+                    module=existing.module,
+                    version=existing.version,
+                    result=Digest(existing.result) if existing.result is not None else None,
+                )
+
+                if existing_call == value:
+                    return key
+
                 session.delete(existing)
                 session.flush()
 
