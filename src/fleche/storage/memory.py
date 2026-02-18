@@ -31,3 +31,6 @@ class Memory(CallStorage, Storage):
 
     def list(self) -> Iterable[str]:
         return self.storage.keys()
+
+    def _evict(self, key: str) -> None:
+        self.storage.pop(key, None)

@@ -29,6 +29,15 @@ class Storage(ABC):
     @abstractmethod
     def list(self) -> Iterable[str]: ...
 
+    def evict(self, key: str) -> None:
+        """Removes the entry corresponding to the key from the storage."""
+        if len(key) < DIGEST_LENGTH:
+            key = self.expand(key)
+        self._evict(key)
+
+    @abstractmethod
+    def _evict(self, key: str) -> None: ...
+
     def expand(self, key: Digest | str) -> Digest:
         """Expands a short-hand digest to the full length one."""
         if len(key) >= DIGEST_LENGTH:
