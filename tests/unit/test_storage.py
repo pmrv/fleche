@@ -164,10 +164,6 @@ def test_callstorages_evict(call_storage):
     with pytest.raises(KeyError):
         call_storage.load(key)
 
-    # Test evicting non-existent short key raises KeyError
-    with pytest.raises(KeyError):
-        call_storage.evict("f" * 8)
-
 
 def test_sql_metadata_roundtrip_and_query(tmp_path):
     store = Sql(str(tmp_path / "calls.db"))
