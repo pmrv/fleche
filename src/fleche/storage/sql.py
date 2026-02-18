@@ -118,12 +118,13 @@ class Sql(CallStorage):
     def _save(self, value: Call, key: Digest) -> str:
         session: Session = self.Session()
         try:
-            existing = session.execute(
-                select(CallModel).where(CallModel.key == key)
-            ).scalar_one_or_none()
+            existing = session.get(CallModel, str(key))
             if existing is not None:
-                # Always return a Digest instance
-                return key
+                if self._load(str(key)) == value:
+                    return key
+
+                session.delete(existing)
+                session.flush()
 
             call_model = CallModel(
                 key=str(key),

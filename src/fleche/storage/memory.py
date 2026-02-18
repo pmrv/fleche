@@ -17,8 +17,6 @@ class Memory(CallStorage, Storage):
     storage: dict[str, Any]
 
     def _save(self, value: Any, key: Digest) -> str:
-        if key in self.storage:
-            return key
         self.storage[key] = deepcopy(value)
         return key
 
