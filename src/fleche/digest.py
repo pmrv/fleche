@@ -141,6 +141,12 @@ def _digest(value: Any) -> Digest:
             for k, v in sorted_items:
                 m.update(digest(k).encode())
                 m.update(digest(v).encode())
+        case np.bool():
+            return digest(bool(value))
+        case np.integer():
+            return digest(int(value))
+        case np.floating():
+            return digest(float(value))
         case np.ndarray():
             m.update(value.tobytes())
         case types.CodeType():
