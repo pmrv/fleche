@@ -124,11 +124,13 @@ def _digest(value: Any) -> Digest:
             m.update(value.encode())
         case bytes():
             m.update(value)
+        case int():
+            m.update(value.to_bytes((value.bit_length() + 8) // 8, byteorder='little', signed=True))
         case Number():
             # rely on python's 'generic' hash semantics for all numbers to translate all of them to an integer
             value = hash(value)
             # then digest its bytes
-            m.update(value.to_bytes((value.bit_length() + 8) // 8, byteorder='little', signed=True))
+            return digest(value)
         case bool():
             m.update(str(value).encode())
         case None:
