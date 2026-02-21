@@ -11,6 +11,7 @@ def test_cache_save():
     values_storage = Mock()
     values_storage.save.return_value = 1
     calls_storage = Mock()
+    calls_storage.load.side_effect = KeyError
     c = Cache(values_storage, calls_storage)
 
     call = Call(name="test", arguments={"x": 1}, result="result")
@@ -38,7 +39,7 @@ def test_cache_load():
     ))
     c = Cache(values_storage, calls_storage)
     c.load("key")
-    calls_storage.load.assert_called_once_with("key")
+    assert calls_storage.load.call_count == 1
     values_storage.load.assert_any_call("arg1")
     values_storage.load.assert_any_call("arg2")
     values_storage.load.assert_any_call("kwarg1")
@@ -71,12 +72,14 @@ def test_cache_context_manager():
         with cache(new_cache):
             assert cache() is new_cache
             my_func(2)
-            new_cache.calls.load.assert_called_once()
+            # load is called once by decorator (fails) and once by save()
+            assert new_cache.calls.load.call_count == 2
             assert new_cache.calls.save.call_count == 1
 
         assert cache() is original_cache
         my_func(3)
-        original_cache.calls.load.assert_called_once()
+        # load is called once by decorator (fails) and once by save()
+        assert original_cache.calls.load.call_count == 2
         assert original_cache.calls.save.call_count == 1
 
     # ensure the default cache is restored

@@ -6,6 +6,12 @@ from . import digest
 
 
 @dataclass
+class Statistics:
+    hits: int = 0
+    misses: int = 0
+
+
+@dataclass
 class Call:
     """
     Represents a function call, capturing its name, arguments, and keyword arguments.
@@ -21,6 +27,7 @@ class Call:
     version: int | None = None
     code_digest: str | None = None
     result: Any = None
+    stats: Statistics = field(default_factory=Statistics)
 
     @classmethod
     def from_call(cls, func, *args, **kwargs):
@@ -41,5 +48,5 @@ class Call:
     def to_lookup_key(self):
         # Iterate explicitly in the preserved parameter order; do not sort
         arg_pairs = tuple(self.arguments.items())
-        call = replace(self, arguments=arg_pairs, metadata=None, result=None)
+        call = replace(self, arguments=arg_pairs, metadata=None, result=None, stats=None)
         return digest.digest(call)

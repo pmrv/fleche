@@ -17,7 +17,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker, relationship, Session
 from sqlalchemy.types import JSON
 
 from .base import CallStorage, AmbiguousDigestError
-from ..call import Call
+from ..call import Call, Statistics
 from ..digest import Digest, DIGEST_LENGTH
 
 Base = declarative_base()
@@ -30,6 +30,8 @@ class CallModel(Base):
     module = Column(String, nullable=True)
     version = Column(Integer, nullable=True)
     result = Column(String(DIGEST_LENGTH), nullable=True)
+    hits = Column(Integer, default=0, nullable=False)
+    misses = Column(Integer, default=0, nullable=False)
 
     arguments = relationship(
         "ArgumentModel",
@@ -120,20 +122,33 @@ class Sql(CallStorage):
         try:
             existing = session.get(CallModel, str(key))
             if existing is not None:
-                if self._load(str(key)) == value:
-                    return key
+                # Update basic fields
+                existing.name = value.name
+                existing.module = value.module
+                existing.version = value.version
+                existing.result = value.result if value.result is None else str(value.result)
+                existing.hits = value.stats.hits
+                existing.misses = value.stats.misses
 
-                session.delete(existing)
-                session.flush()
-
-            call_model = CallModel(
-                key=str(key),
-                name=value.name,
-                module=value.module,
-                version=value.version,
-                result=value.result if value.result is None else str(value.result),
-            )
-            session.add(call_model)
+                # Replace arguments and metadata to ensure they match the new Call object
+                # (Simple way to handle potential changes in arguments or metadata for the same key)
+                session.execute(
+                    ArgumentModel.__table__.delete().where(ArgumentModel.call_key == str(key))
+                )
+                session.execute(
+                    MetaModel.__table__.delete().where(MetaModel.call_key == str(key))
+                )
+            else:
+                existing = CallModel(
+                    key=str(key),
+                    name=value.name,
+                    module=value.module,
+                    version=value.version,
+                    result=value.result if value.result is None else str(value.result),
+                    hits=value.stats.hits,
+                    misses=value.stats.misses,
+                )
+                session.add(existing)
 
             for i, (k, v) in enumerate(value.arguments.items()):
                 session.add(
@@ -181,6 +196,7 @@ class Sql(CallStorage):
                 result=(
                     Digest(call_model.result) if call_model.result is not None else None
                 ),
+                stats=Statistics(hits=call_model.hits, misses=call_model.misses),
             )
             return call
         finally:

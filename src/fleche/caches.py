@@ -7,7 +7,7 @@ import pandas as pd
 
 from .digest import digest, Digest
 from . import storage
-from .call import Call
+from .call import Call, Statistics
 
 
 class Rejected(Exception):
@@ -162,10 +162,20 @@ class Cache(BaseCache):
         except storage.SaveError as e:
             raise Rejected(e)
 
-        return self.calls.save(call, key=call.to_lookup_key())
+        key = call.to_lookup_key()
+        try:
+            existing = self.calls.load(key)
+            call.stats = Statistics(hits=existing.stats.hits, misses=existing.stats.misses + 1)
+        except KeyError:
+            call.stats = Statistics(hits=0, misses=1)
+
+        return self.calls.save(call, key=key)
 
     def load(self, key: str) -> Call:
         call = self.calls.load(key)
+        call.stats.hits += 1
+        self.calls.save(call, key=key)
+
         call.arguments = {k: self._handle_args_load(v) for k, v in call.arguments.items()}
         call.result = self.load_value(call.result)
         return call
