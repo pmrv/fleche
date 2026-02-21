@@ -4,7 +4,7 @@ This module re-exports the primary storage interfaces and implementations
 for backward compatibility with `from fleche.storage import ...` imports.
 """
 
-from .base import SaveError, AmbiguousDigestError, Storage, CallStorage
+from .base import SaveError, AmbiguousDigestError, Storage, CallStorage, CallStorageAdapter
 from .memory import Memory
 from .file import FileStorage
 from .cloudpickle_file import CloudpickleFile
@@ -17,6 +17,7 @@ __all__ = [
     "AmbiguousDigestError",
     "Storage",
     "CallStorage",
+    "CallStorageAdapter",
     "Memory",
     "FileStorage",
     "CloudpickleFile",

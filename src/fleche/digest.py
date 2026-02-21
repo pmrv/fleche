@@ -82,7 +82,7 @@ def load_entry_points():
             print("ERROR", f"Failed to load entry point {ep.name}: {e}")
 
 
-def digest(value: Any) -> str:
+def digest(value: Any) -> Digest:
     try:
         return _digest(value)
     except Unhashable:
@@ -90,7 +90,7 @@ def digest(value: Any) -> str:
     return _digest(value)
 
 
-def _digest(value: Any) -> str:
+def _digest(value: Any) -> Digest:
     """
     Generates a SHA256 digest for a given Python object.
 

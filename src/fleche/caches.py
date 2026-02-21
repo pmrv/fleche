@@ -18,7 +18,7 @@ class Rejected(Exception):
 class BaseCache(ABC):
 
     @abstractmethod
-    def save(self, value) -> str:
+    def save(self, call: Call) -> str:
         ...
 
     @abstractmethod
@@ -103,7 +103,11 @@ class DigestedDict(Digested):
 @dataclass
 class Cache(BaseCache):
     values: storage.Storage
-    calls: storage.CallStorage
+    calls: storage.CallStorage | storage.Storage
+
+    def __post_init__(self):
+        if isinstance(self.calls, storage.Storage):
+            self.calls = storage.CallStorageAdapter(self.calls)
 
     def _recursive_value_save(self, value):
         match value:
@@ -162,7 +166,7 @@ class Cache(BaseCache):
         except storage.SaveError as e:
             raise Rejected(e)
 
-        return self.calls.save(call, key=call.to_lookup_key())
+        return self.calls.save(call)
 
     def load(self, key: str) -> Call:
         call = self.calls.load(key)
@@ -207,7 +211,7 @@ class CacheStack(BaseCache):
 
     Saving will always hit the lowest level, while loading will traverse up.
     """
-    stack: tuple[Cache]
+    stack: tuple[Cache, ...]
 
     def save(self, call: Call):
         self.stack[0].save(call)

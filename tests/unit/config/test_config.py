@@ -115,7 +115,8 @@ def test_load_cache_config_default(monkeypatch, config_file):
 
     assert isinstance(cache_obj, Cache)
     assert isinstance(cache_obj.values, storage.Memory)
-    assert isinstance(cache_obj.calls, storage.Memory)
+    assert isinstance(cache_obj.calls, storage.CallStorageAdapter)
+    assert isinstance(cache_obj.calls.storage, storage.Memory)
 
 
 def test_load_cache_config_explicit_default(monkeypatch, config_file_explicit_default):
@@ -125,7 +126,8 @@ def test_load_cache_config_explicit_default(monkeypatch, config_file_explicit_de
 
     assert isinstance(cache_obj, Cache)
     assert isinstance(cache_obj.values, storage.Memory)
-    assert isinstance(cache_obj.calls, storage.Memory)
+    assert isinstance(cache_obj.calls, storage.CallStorageAdapter)
+    assert isinstance(cache_obj.calls.storage, storage.Memory)
 
 
 def test_load_cache_config_specific(monkeypatch, config_file):
@@ -136,8 +138,8 @@ def test_load_cache_config_specific(monkeypatch, config_file):
     assert isinstance(cache_obj, Cache)
     assert isinstance(cache_obj.values, storage.CloudpickleFile)
     assert cache_obj.values.root == Path(".fleche/values").absolute()
-    assert isinstance(cache_obj.calls, storage.CloudpickleFile)
-    assert cache_obj.calls.root == Path(".fleche/calls").absolute()
+    assert isinstance(cache_obj.calls.storage, storage.CloudpickleFile)
+    assert cache_obj.calls.storage.root == Path(".fleche/calls").absolute()
 
 
 def test_load_cache_config_no_file(monkeypatch):
@@ -145,7 +147,8 @@ def test_load_cache_config_no_file(monkeypatch):
     cache_obj = load_cache_config()
     assert isinstance(cache_obj, Cache)
     assert isinstance(cache_obj.values, storage.Memory)
-    assert isinstance(cache_obj.calls, storage.Memory)
+    assert isinstance(cache_obj.calls, storage.CallStorageAdapter)
+    assert isinstance(cache_obj.calls.storage, storage.Memory)
 
 
 def test_load_cache_config_no_default(monkeypatch, config_file_no_default):
@@ -153,7 +156,8 @@ def test_load_cache_config_no_default(monkeypatch, config_file_no_default):
     cache_obj = load_cache_config()
     assert isinstance(cache_obj, Cache)
     assert isinstance(cache_obj.values, storage.Memory)
-    assert isinstance(cache_obj.calls, storage.Memory)
+    assert isinstance(cache_obj.calls, storage.CallStorageAdapter)
+    assert isinstance(cache_obj.calls.storage, storage.Memory)
 
 
 def test_cache_function_loads_by_name(monkeypatch, config_file):
@@ -216,10 +220,10 @@ def test_load_default_cache(monkeypatch, config_file):
     assert isinstance(cache_obj, BaseCache)
     if hasattr(cache_obj, "values"):
         assert isinstance(cache_obj.values, storage.Memory)
-        assert isinstance(cache_obj.calls, storage.Memory)
+        assert isinstance(cache_obj.calls.storage, storage.Memory)
     else:
         assert isinstance(cache_obj.cache.values, storage.Memory)
-        assert isinstance(cache_obj.cache.calls, storage.Memory)
+        assert isinstance(cache_obj.cache.calls.storage, storage.Memory)
 
 
 def test_tags_disallowed(monkeypatch, config_file_with_tags):
@@ -239,7 +243,7 @@ def test_load_cache_config_memory_special_case(monkeypatch, config_file):
 
     assert isinstance(cache1, Cache)
     assert isinstance(cache1.values, storage.Memory)
-    assert isinstance(cache1.calls, storage.Memory)
+    assert isinstance(cache1.calls.storage, storage.Memory)
 
     # Should be a singleton
     cache2 = load_cache_config("memory")

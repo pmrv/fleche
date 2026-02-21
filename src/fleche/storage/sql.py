@@ -115,12 +115,13 @@ class Sql(CallStorage):
             bind=self.engine, expire_on_commit=False, future=True
         )
 
-    def _save(self, value: Call, key: Digest) -> str:
+    def _save(self, call: Call) -> Digest:
+        key = call.to_lookup_key()
         session: Session = self.Session()
         try:
             existing = session.get(CallModel, str(key))
             if existing is not None:
-                if self._load(str(key)) == value:
+                if self.load(key) == call:
                     return key
 
                 session.delete(existing)
@@ -128,23 +129,23 @@ class Sql(CallStorage):
 
             call_model = CallModel(
                 key=str(key),
-                name=value.name,
-                module=value.module,
-                version=value.version,
-                result=value.result if value.result is None else str(value.result),
+                name=call.name,
+                module=call.module,
+                version=call.version,
+                result=call.result if call.result is None else str(call.result),
             )
             session.add(call_model)
 
-            for i, (k, v) in enumerate(value.arguments.items()):
+            for i, (k, v) in enumerate(call.arguments.items()):
                 session.add(
                     ArgumentModel(call_key=str(key), position=i, name=str(k), value=str(v))
                 )
 
-            if value.metadata:
+            if call.metadata:
                 session.add_all(
                     [
                         MetaModel(call_key=str(key), name=name, data=data)
-                        for name, data in value.metadata.items()
+                        for name, data in call.metadata.items()
                     ]
                 )
             session.commit()
@@ -186,7 +187,7 @@ class Sql(CallStorage):
         finally:
             session.close()
 
-    def list(self) -> Iterable[str]:
+    def list(self) -> Iterable[Digest]:
         session: Session = self.Session()
         try:
             # Return Digest instances for keys

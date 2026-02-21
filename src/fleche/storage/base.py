@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dataclasses import dataclass
 
 from abc import ABC, abstractmethod
 from typing import Iterable, Any, Callable
@@ -15,36 +16,22 @@ class AmbiguousDigestError(ValueError):
     pass
 
 
-class Storage(ABC):
-    """Abstract base class for defining storage mechanisms."""
-
-    def save(self, value: Any, key: Digest | None = None) -> str:
-        if key is None:
-            key = digest(value)
-        return self._save(value, key)
+class StorageBase(ABC):
+    """Shared functionality between value and call storages."""
 
     @abstractmethod
-    def _save(self, value: Any, key: Digest) -> str: ...
+    def list(self) -> Iterable[Digest]: ...
 
-    def load(self, key: str) -> Any:
-        if len(key) < DIGEST_LENGTH:
-            key = self.expand(key)
-        return self._load(key)
-
-    @abstractmethod
-    def _load(self, key: str) -> Any: ...
-
-    @abstractmethod
-    def list(self) -> Iterable[str]: ...
-
-    def evict(self, key: str) -> None:
+    def evict(self, key: Digest | str) -> None:
         """Removes the entry corresponding to the key from the storage."""
         if len(key) < DIGEST_LENGTH:
             key = self.expand(key)
+        else:
+            key = Digest(key)
         self._evict(key)
 
     @abstractmethod
-    def _evict(self, key: str) -> None: ...
+    def _evict(self, key: Digest) -> None: ...
 
     def expand(self, key: Digest | str) -> Digest:
         """Expands a short-hand digest to the full length one."""
@@ -83,8 +70,57 @@ class Storage(ABC):
         )
 
 
-class CallStorage(Storage):
+class Storage(StorageBase):
+    """Abstract base class for defining storage mechanisms."""
+
+    def save(self, value: Any, key: Digest | None = None) -> Digest:
+        if key is None:
+            key = digest(value)
+        return self._save(value, key)
+
+    @abstractmethod
+    def _save(self, value: Any, key: Digest) -> Digest: ...
+
+    def load(self, key: Digest | str) -> Any:
+        if len(key) < DIGEST_LENGTH:
+            key = self.expand(key)
+        else:
+            key = Digest(key)
+        return self._load(key)
+
+    @abstractmethod
+    def _load(self, key: Digest) -> Any: ...
+
+    def redigest(self):
+        """
+        Loads all values and verifies storage key and digest match, save again if not and evict old value.
+        """
+        for key in self.list():
+            value = self.load(key)
+            new_key = digest(value)
+            if new_key != key:
+                self.save(value)
+                self.evict(key)
+
+
+class CallStorage(StorageBase):
     """Special storage for saving :class:`Call` instances."""
+
+    def save(self, call: Call) -> Digest:
+        return self._save(call)
+
+    @abstractmethod
+    def _save(self, call: Call) -> Digest: ...
+
+    def load(self, key: str) -> Call:
+        if len(key) < DIGEST_LENGTH:
+            key = self.expand(key)
+        else:
+            key = Digest(key)
+        return self._load(key)
+
+    @abstractmethod
+    def _load(self, key: Digest) -> Call: ...
 
     def transform(self, func: Callable[[Call], Call] | None = None) -> None:
         """
@@ -103,13 +139,31 @@ class CallStorage(Storage):
             new_call = func(call) if func is not None else call
             new_key = new_call.to_lookup_key()
             if new_key != k:
-                self.save(new_call, key=new_key)
+                self.save(new_call)
                 self.evict(k)
             else:
-                self.save(new_call, key=k)
+                self.save(new_call)
 
     def redigest(self) -> None:
         """
         Re-calculates lookup keys for all Call objects in the storage.
         """
         self.transform(None)
+
+
+@dataclass(frozen=True, slots=True)
+class CallStorageAdapter(CallStorage):
+    """Implement a CallStorage from a generic Storage."""
+    storage: Storage
+
+    def _save(self, call: Call) -> Digest:
+        return self.storage.save(call, call.to_lookup_key())
+
+    def _load(self, key: Digest) -> Call:
+        return self.storage.load(key)
+
+    def _evict(self, key: Digest) -> None:
+        self.storage.evict(key)
+
+    def list(self) -> Iterable[Digest]:
+        return self.storage.list()

@@ -14,11 +14,11 @@ class PickleFile(FileStorage):
     Store values as files on the filesystem using the standard pickle module for serialization.
     """
 
-    def _save(self, value: Any, key: Digest) -> str:
+    def _save(self, value: Any, key: Digest) -> Digest:
         (self._path(key)).write_bytes(pickle.dumps(value))
         return key
 
-    def _load(self, key: str) -> Any:
+    def _load(self, key: Digest) -> Any:
         try:
             return pickle.loads((self._path(key)).read_bytes())
         except FileNotFoundError:

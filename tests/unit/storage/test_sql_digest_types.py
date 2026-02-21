@@ -47,6 +47,7 @@ def test_sql_find_by_metadata_returns_digests(tmp_path):
     store = Sql(str(tmp_path / "calls.db"))
     c1 = make_call()
     c2 = make_call()
+    c1.name = "g"
     # Slightly vary metadata so queries can differentiate
     c2.metadata["tags"]["project"] = "beta"
     k1 = store.save(c1)
