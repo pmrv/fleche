@@ -187,10 +187,12 @@ def test_sql_metadata_roundtrip_and_query(tmp_path):
     assert lc1.metadata == c1.metadata
     assert lc2.metadata == c2.metadata
 
-    # Query by metadata name and key
-    keys_alpha = set(store.find_by_metadata(name="tags", project="alpha"))
-    assert k1 in keys_alpha and k2 not in keys_alpha
+    # Query by metadata name and key using query(template)
+    t1 = Call(name=None, arguments=None, metadata={"tags": {"project": "alpha"}}, module=None, version=None, result=None)
+    names_alpha = {c.name for c in store.query(t1)}
+    assert names_alpha == {"f1"}
 
-    # Query across all names (e.g., by walltime value)
-    keys_walltime_2 = set(store.find_by_metadata(walltime=2.0))
-    assert k2 in keys_walltime_2 and k1 not in keys_walltime_2
+    # Query across all names (e.g., by walltime value) using query(template)
+    t2 = Call(name=None, arguments=None, metadata={"runtime": {"walltime": 2.0}}, module=None, version=None, result=None)
+    names_walltime_2 = {c.name for c in store.query(t2)}
+    assert names_walltime_2 == {"f2"}

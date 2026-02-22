@@ -150,6 +150,34 @@ class CallStorage(StorageBase):
         """
         self.transform(None)
 
+    def query(self, template: Call) -> Iterable[Call]:
+        """Find cached calls that 'match' the template.
+
+        Returns all calls where the given arguments, results or metadata match exactly the stored ones.  Values may be
+        given either as they are or as :class:`Digest`.
+
+        Args:
+            template (Call): specification for calls to return; use `None` as wildcard.
+
+        Returns:
+            Iterable[Call]: an iterable over all matching call objects
+        """
+        def none_or_equal(a, b):
+            return a is None or digest(a) == digest(b)
+        def fits(call: Call) -> bool:
+            return (
+                    none_or_equal(template.name, call.name)
+                and none_or_equal(template.module, call.module)
+                and none_or_equal(template.version, call.version)
+                and none_or_equal(template.result, call.result)
+                and (template.arguments is None \
+                        or all(none_or_equal(v, call.arguments[k]) for k, v in template.arguments.items()))
+            )
+        for key in self.list():
+            call = self.load(key)
+            if fits(call):
+                yield call
+
 
 @dataclass(frozen=True, slots=True)
 class CallStorageAdapter(CallStorage):

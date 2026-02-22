@@ -1,4 +1,4 @@
-from typing import Iterable, Any, List
+from typing import Iterable, Any
 from pathlib import Path
 
 from sqlalchemy import (
@@ -13,12 +13,12 @@ from sqlalchemy import (
 )
 from sqlalchemy.engine import Engine
 from sqlalchemy import event
-from sqlalchemy.orm import declarative_base, sessionmaker, relationship, Session
+from sqlalchemy.orm import declarative_base, sessionmaker, relationship, Session, aliased
 from sqlalchemy.types import JSON
 
 from .base import CallStorage, AmbiguousDigestError
 from ..call import Call
-from ..digest import Digest, DIGEST_LENGTH
+from ..digest import Digest, DIGEST_LENGTH, digest
 
 Base = declarative_base()
 
@@ -243,51 +243,130 @@ class Sql(CallStorage):
         finally:
             session.close()
 
-    def find_by_metadata(self, name: str | None = None, **filters: Any) -> List[str]:
+    def query(self, template: Call) -> Iterable[Call]:
+        """Find cached calls matching a template using SQL-side filtering.
+
+        Semantics match CallStorage.query:
+        - Fields set to None are wildcards.
+        - Arguments and result are compared by digest(template_value) == digest(stored_value).
+        - Metadata can be filtered by providing template.metadata as a mapping of
+          metadata name -> dict of key/value filters. An empty dict for a given
+          name means "presence of that metadata name". Filters with simple types
+          (str, bool, int, float) are pushed down to SQL via JSON-extract
+          expressions; other types (e.g., lists) or None values fall back to
+          client-side checks after loading.
+
+        This method builds a SELECT over calls, joining the arguments table and
+        metadata table as needed to reduce candidate rows, then loads the
+        resulting calls and performs any remaining client-side validation.
+
+        Args:
+            template: A Call used as a template. None-valued fields are wildcards.
+
+        Yields:
+            Call: Matching calls including their decoded metadata.
+        """
         session: Session = self.Session()
         try:
-            supported = (str, bool, int, float)
-            use_server_side = all(isinstance(v, supported) for v in filters.values())
-            if use_server_side:
-                conditions = []
-                if name is not None:
-                    conditions.append(MetaModel.name == name)
-                for k, v in filters.items():
-                    if isinstance(v, bool):
-                        conditions.append(MetaModel.data[k].as_boolean() == v)
-                    elif isinstance(v, int):
-                        conditions.append(MetaModel.data[k].as_integer() == v)
-                    elif isinstance(v, float):
-                        conditions.append(MetaModel.data[k].as_float() == v)
-                    else:
-                        conditions.append(MetaModel.data[k].as_string() == v)
+            def normalize_value(v: Any) -> str:
+                """Return the stored form used in SQL for argument/result matching.
 
-                if conditions:
-                    stmt = (
-                        select(MetaModel.call_key).where(and_(*conditions)).distinct()
+                We must match the generic CallStorage.query semantics which compare
+                digest(template_value) == digest(stored_call_value).
+                In this backend, stored argument/result values are hex-digest strings,
+                and digest(Digest(x)) == x. Therefore we should always compare
+                Arg.value/CallModel.result to str(digest(template_value)).
+                """
+                return str(digest(v))
+
+            # Start by selecting the keys from calls that match simple field predicates
+            conditions = []
+            if template.name is not None:
+                conditions.append(CallModel.name == template.name)
+            if template.module is not None:
+                conditions.append(CallModel.module == template.module)
+            if template.version is not None:
+                conditions.append(CallModel.version == template.version)
+            if template.result is not None:
+                # Stored as hex string; normalize template value accordingly
+                conditions.append(CallModel.result == normalize_value(template.result))
+
+            stmt = select(CallModel.key).select_from(CallModel)
+
+            # For each argument filter, join an aliased ArgumentModel and constrain name/value
+            if template.arguments:
+                for k, v in template.arguments.items():
+                    Arg = aliased(ArgumentModel)
+                    on_clause = and_(
+                        Arg.call_key == CallModel.key,
+                        Arg.name == str(k),
                     )
-                    try:
-                        result = [Digest(row[0]) for row in session.execute(stmt).all()]
-                        # Ensure uniqueness and stable order
-                        return sorted(set(result))
-                    except Exception:
-                        pass
+                    if v is not None:
+                        on_clause = and_(on_clause, Arg.value == normalize_value(v))
+                    stmt = stmt.join(Arg, on_clause)
 
-            stmt = select(MetaModel.call_key, MetaModel.name, MetaModel.data)
-            if name is not None:
-                stmt = stmt.where(MetaModel.name == name)
-            rows = session.execute(stmt).all()
+            # Optional: metadata filtering
+            server_side_meta = True
+            meta_specs: dict[str, dict[str, Any]] | None = template.metadata
+            if meta_specs:
+                # Determine if all filters are server-side compatible
+                for _mname, filters in meta_specs.items():
+                    for _k, _v in (filters or {}).items():
+                        if _v is None or not isinstance(_v, (str, bool, int, float)):
+                            server_side_meta = False
+                            break
+                    if not server_side_meta:
+                        break
 
-            def matches(data: dict[str, Any]) -> bool:
-                for kk, vv in filters.items():
-                    if kk not in data or data[kk] != vv:
-                        return False
-                return True
+                if server_side_meta:
+                    # Build joins and conditions per metadata name
+                    for mname, filters in meta_specs.items():
+                        M = aliased(MetaModel)
+                        stmt = stmt.join(M, and_(
+                            M.call_key == CallModel.key,
+                            M.name == mname,
+                        ))
+                        for k, v in (filters or {}).items():
+                            if isinstance(v, bool):
+                                stmt = stmt.where(M.data[k].as_boolean() == v)
+                            elif isinstance(v, int):
+                                stmt = stmt.where(M.data[k].as_integer() == v)
+                            elif isinstance(v, float):
+                                stmt = stmt.where(M.data[k].as_float() == v)
+                            else:
+                                stmt = stmt.where(M.data[k].as_string() == v)
 
-            keys: set[Digest] = set()
-            for call_key, _mname, mdata in rows:
-                if matches(mdata or {}):
-                    keys.add(Digest(call_key))
-            return sorted(keys)
+            if conditions:
+                stmt = stmt.where(and_(*conditions))
+
+            # Distinct to avoid duplicate keys if multiple argument joins could overlap
+            stmt = stmt.distinct()
+
+            keys = [Digest(k) for (k,) in session.execute(stmt).all()]
         finally:
             session.close()
+
+        # Yield loaded calls using existing loader (ensures metadata returned too)
+        def meta_matches(call: Call) -> bool:
+            specs = template.metadata
+            if not specs:
+                return True
+            for mname, filters in specs.items():
+                data = (call.metadata or {}).get(mname)
+                if data is None:
+                    return False
+                for kk, vv in (filters or {}).items():
+                    if vv is None:
+                        if kk not in data:
+                            return False
+                    else:
+                        if data.get(kk) != vv:
+                            return False
+            return True
+
+        for k in keys:
+            c = self.load(k)
+            if meta_matches(c):
+                yield c
+
+    # find_by_metadata removed; metadata filtering is supported via query(template)

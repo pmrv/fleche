@@ -8,7 +8,7 @@ from contextvars import ContextVar
 from collections import defaultdict
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, TypeVar, Union
+from typing import Any, Callable, Dict, Iterable, Optional, TypeVar, Union
 
 from . import digest
 from .digest import Digest
@@ -234,7 +234,29 @@ def fleche(
         def _digest_func(*args, **kwargs):
             return get_call(*args, **kwargs).to_lookup_key()
 
+        def _query_func(*args, metadata={}, **kwargs) -> Iterable[Call]:
+            """Return matching results from current cache.
+
+            See :class:`CallStorage.query' for details, except that calls returned from here will have their arguments
+            and results restored from the value storage via :class:`Cache.query`.
+
+            Args:
+                *args, **kwargs: function arguments that should be matched in returned calls; pass `None` as a wildcard
+                metadata (dict[str, dict[str, json]]): metadata tags to additionall filter on; if this shadows a
+                    function kwargs of the same name, you must pass it by position instead.
+
+            Returns:
+                iterable of matching :class:`.Call`
+            """
+            call = get_call(*args, **kwargs)
+            if "metadata" in call.arguments:
+                print("WARNING: the function you're querying has an argument 'metadata' getting shadowed by the same "
+                      "argument to query.")
+            call.metadata = metadata
+            return _CACHE.get().query(call)
+
         wrapper.digest = _digest_func
+        wrapper.query = _query_func
         wrapper.load = lambda *args, **kwargs: _CACHE.get().load(_digest_func(*args, **kwargs)).result
         wrapper.contains = lambda *args, **kwargs: _CACHE.get().contains(_digest_func(*args, **kwargs))
         return wrapper

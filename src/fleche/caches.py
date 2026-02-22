@@ -71,6 +71,34 @@ class BaseCache(ABC):
         """
         ...
 
+    @abstractmethod
+    def query(self, call: Call) -> Iterable[Call]: ...
+
+    def table(self) -> pd.DataFrame:
+        """Return a pandas DataFrame summarizing cached calls via query().
+
+        This implementation uses a fully-wildcard Call template to retrieve
+        all calls through ``self.query`` and then flattens metadata keys into
+        top-level columns for convenience.
+
+        The DataFrame index will be the lookup key (digest) of each call.
+        """
+        # Query all calls using a wildcard template; rely on concrete caches to
+        # handle any necessary decoding (e.g., Cache decodes values on query()).
+        tpl = Call(name=None, arguments=None, metadata=None, module=None, version=None, result=None)
+
+        rows: dict[str, dict[str, Any]] = {}
+        for c in self.query(tpl):
+            row = asdict(c)
+            md = row.pop("metadata", {}) or {}
+            # Flatten each metadata name's dict into the row
+            for data in md.values():
+                if isinstance(data, dict):
+                    row.update(data)
+            rows[str(c.to_lookup_key())] = row
+
+        return pd.DataFrame.from_dict(rows, orient="index")
+
 
 class Digested(ABC):
     @abstractmethod
@@ -177,13 +205,27 @@ class Cache(BaseCache):
     def shrink(self, key: Digest | str) -> Digest:
         return self.calls.shrink(key)
 
-    def table(self) -> pd.DataFrame:
-        calls = {k: asdict(self.calls.load(k)) for k in self.calls.list()}
-        for call in calls.values():
-            metadata = call.pop('metadata')
-            for data in metadata.values():
-                call.update(data)
-        return pd.DataFrame.from_dict(calls, orient='index')
+    def query(self, call: Call) -> Iterable[Call]:
+        """Query for cached calls that match a template and return decoded results.
+
+        This delegates to the underlying :meth:`CallStorage.query` using the provided template ``call``. Any digested
+        argument values and the result are decoded via this cache's value storage before yielding.
+
+        Args:
+            call: A ``Call`` instance used as a template; fields set to ``None``
+                act as wildcards. For arguments and result, comparisons follow
+                digest semantics (i.e., values are matched by their digest).
+
+        Yields:
+            Call: Matching calls with arguments and result decoded from digests
+            where possible.
+        """
+        # Delegate to underlying call storage, but decode any digested
+        # arguments/results before yielding to the caller (same semantics as load()).
+        for c in self.calls.query(call):
+            c.arguments = {k: self._handle_args_load(v) for k, v in c.arguments.items()}
+            c.result = self.load_value(c.result)
+            yield c
 
 
 @dataclass(frozen=True)
@@ -202,6 +244,17 @@ class ReadOnlyCache(BaseCache):
 
     def load_value(self, key):
         return self.cache.load_value(key)
+
+    def query(self, call: Call) -> Iterable[Call]:
+        """Forward queries to the wrapped cache.
+
+        Args:
+            call: A template ``Call`` where ``None`` fields act as wildcards.
+
+        Yields:
+            Call: Results yielded by the wrapped cache's ``query`` method.
+        """
+        return self.cache.query(call)
 
 
 @dataclass(frozen=True)
@@ -239,3 +292,25 @@ class CacheStack(BaseCache):
 
     def shrink(self, key: Digest | str) -> Digest:
         return sorted([c.shrink(key) for c in self.stack], key=len)[-1]
+
+    def query(self, call: Call) -> Iterable[Call]:
+        """Aggregate query results across the stack, avoiding duplicates.
+
+        The caches are queried from bottom to top. Results are deduplicated by
+        their lookup key (via ``Call.to_lookup_key()``) and yielded in the
+        order they are first seen.
+
+        Args:
+            call: A template ``Call`` where ``None`` fields act as wildcards.
+
+        Yields:
+            Call: Matching calls from any cache in the stack, without duplicates.
+        """
+        seen = set()
+        for cache in self.stack:
+            for c in cache.query(call):
+                k = c.to_lookup_key()
+                if k in seen:
+                    continue
+                seen.add(k)
+                yield c

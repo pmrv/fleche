@@ -53,9 +53,15 @@ def test_sql_find_by_metadata_returns_digests(tmp_path):
     k1 = store.save(c1)
     k2 = store.save(c2)
 
-    keys_alpha = store.find_by_metadata(name="tags", project="alpha")
-    assert all(isinstance(k, Digest) for k in keys_alpha)
-    assert k1 in set(keys_alpha) and k2 not in set(keys_alpha)
+    # Use query(template) for metadata filtering
+    lc1 = store.load(k1)
+    lc2 = store.load(k2)
+    k1_loaded = lc1.to_lookup_key()
+    k2_loaded = lc2.to_lookup_key()
+
+    tpl = Call(name=None, arguments=None, metadata={"tags": {"project": "alpha"}}, module=None, version=None, result=None)
+    got = {c.to_lookup_key() for c in store.query(tpl)}
+    assert k1_loaded in got and k2_loaded not in got
 
 
 def test_sql_load_returns_digest_fields(tmp_path):

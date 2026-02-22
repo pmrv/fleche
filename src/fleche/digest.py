@@ -5,6 +5,7 @@ import types
 import importlib.metadata
 from collections.abc import Iterable
 from typing import Any, TypeVar, Callable
+import math
 
 import numpy as np
 
@@ -126,7 +127,13 @@ def _digest(value: Any) -> Digest:
         case int():
             m.update(value.to_bytes((value.bit_length() + 8) // 8, byteorder='little', signed=True))
         case float():
-            m.update(struct.pack("<d", value))
+            # Canonicalize NaN to ignore payload but preserve sign; differentiate +0.0 and -0.0
+            if math.isnan(value):
+                sign = b"-" if math.copysign(1.0, value) < 0 else b"+"
+                m.update(b"nan")
+                m.update(sign)
+            else:
+                m.update(struct.pack("<d", value))
         case bool():
             m.update(str(value).encode())
         case None:

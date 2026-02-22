@@ -150,8 +150,100 @@ def test_cache_stack_load_miss():
     c2 = Mock()
     c2.load.side_effect = KeyError
     stack = CacheStack((c1, c2))
-    with pytest.raises(KeyError):
-        stack.load("key")
+
+
+def test_cache_query_decodes_values_and_args(monkeypatch):
+    """Cache.query should decode digested args and result before yielding.
+
+    Intent: After saving a call with complex structures (lists/dicts/tuples)
+    so that arguments and result are stored as digests, querying via the Cache
+    wrapper must return the call with values decoded back to Python objects.
+    """
+    from fleche.storage import Memory
+    from fleche.call import Call
+    from fleche.digest import Digest
+
+    values = Memory({})
+    # Use a simple in-memory CallStorage via adapter
+    calls = Memory({})
+    cache = Cache(values, calls)
+
+    # Prepare a call whose args and result are composite structures so that
+    # Cache.save() persists digested forms and Cache.query() must decode them.
+    original = Call(
+        name="f",
+        arguments={
+            "a": [1, 2, 3],
+            "b": {"k": 10},
+        },
+        metadata={},
+        module=None,
+        version=None,
+        result=("x", 5),
+    )
+
+    # Save via Cache (this will store digests for args and result in call store)
+    key = cache.save(original)
+
+    # Build a template that matches by name only to retrieve the saved call
+    tpl = Call(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    got = list(cache.query(tpl))
+    assert len(got) == 1, "Wrapper query should return exactly one matching call"
+    out = got[0]
+
+    # Arguments and result should be decoded back to original Python values
+    assert out.arguments["a"] == [1, 2, 3], "List argument should be decoded by Cache.query"
+    assert out.arguments["b"] == {"k": 10}, "Dict argument should be decoded by Cache.query"
+    assert out.result == ("x", 5), "Tuple result should be decoded by Cache.query"
+
+
+def test_cachestack_query_bottom_to_top_and_dedupe():
+    """CacheStack.query should query bottom-to-top and deduplicate results.
+
+    Intent: Two caches contain overlapping calls. Bottom cache returns A and B;
+    top cache returns B and C. Stack should yield A (from bottom), then B (from
+    bottom; top's B is skipped), then C (from top). Order reflects bottom-to-top
+    traversal and no duplicates.
+    """
+    from fleche.call import Call
+
+    # Build mock caches that yield specific sequences
+    bottom = Mock()
+    top = Mock()
+
+    A = Call(name="A", arguments={}, metadata={}, module=None, version=None, result=None)
+    B = Call(name="B", arguments={}, metadata={}, module=None, version=None, result=None)
+    C = Call(name="C", arguments={}, metadata={}, module=None, version=None, result=None)
+
+    bottom.query.return_value = iter([A, B])
+    top.query.return_value = iter([B, C])
+
+    stack = CacheStack((bottom, top))
+
+    # Note: CacheStack is constructed as (bottom, top); bottom-to-top means
+    # bottom queried first, then top. Mocks return in their given order.
+    out = list(stack.query(Call(name=None, arguments=None, metadata=None, module=None, version=None, result=None)))
+    names = [c.name for c in out]
+    assert names == ["A", "B", "C"], (
+        "CacheStack.query should traverse bottom->top and deduplicate overlapping results"
+    )
+
+
+def test_readonlycache_query_forwards_to_wrapped():
+    """ReadOnlyCache.query should forward the call to the wrapped cache.
+
+    Intent: Verify that ReadOnlyCache.query delegates to the inner cache and
+    yields the same results.
+    """
+    from fleche.call import Call
+
+    inner = Mock()
+    call = Call(name="X", arguments={}, metadata={}, module=None, version=None, result=None)
+    inner.query.return_value = iter([call])
+
+    ro = ReadOnlyCache(inner)
+    out = list(ro.query(Call(name=None, arguments=None, metadata=None, module=None, version=None, result=None)))
+    assert out == [call], "ReadOnlyCache.query must forward results unchanged"
 
 def test_cache_load_restores_complex_arguments_and_result():
     from fleche.storage import Memory

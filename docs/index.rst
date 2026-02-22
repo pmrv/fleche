@@ -16,6 +16,7 @@ Welcome to the **Fleche** library documentation.
    digests_as_args
    custom_digests
    configuration
+   query
 
 Indices and tables
 ==================
