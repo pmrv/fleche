@@ -27,7 +27,7 @@ dependencies = [
     'sqlalchemy',
     'bagofholding == 0.1.9',
     'numpy',
-    'pandas >= 3, <4',
+    'pandas >= 2.2, <4',
 ]
 
 [project.optional-dependencies]
