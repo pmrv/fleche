@@ -91,17 +91,6 @@ class Storage(StorageBase):
     @abstractmethod
     def _load(self, key: Digest) -> Any: ...
 
-    def redigest(self):
-        """
-        Loads all values and verifies storage key and digest match, save again if not and evict old value.
-        """
-        for key in self.list():
-            value = self.load(key)
-            new_key = digest(value)
-            if new_key != key:
-                self.save(value)
-                self.evict(key)
-
 
 class CallStorage(StorageBase):
     """Special storage for saving :class:`Call` instances."""
@@ -143,12 +132,6 @@ class CallStorage(StorageBase):
                 self.evict(k)
             else:
                 self.save(new_call)
-
-    def redigest(self) -> None:
-        """
-        Re-calculates lookup keys for all Call objects in the storage.
-        """
-        self.transform(None)
 
     def query(self, template: Call) -> Iterable[Call]:
         """Find cached calls that 'match' the template.

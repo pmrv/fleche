@@ -53,22 +53,3 @@ def test_transform_key_change(storage):
     assert new_k in all_keys
     loaded = storage.load(new_k)
     assert str(loaded.arguments["a"]) == "b" * 64
-
-def test_redigest(storage):
-    c1 = Call(name="f1", arguments={"a": Digest("a" * 64)}, metadata={}, result=Digest("r" * 64))
-    # Save with a WRONG key
-    with patch('fleche.call.Call.to_lookup_key') as mock:
-        mock.return_value = Digest("f" * 64)
-        key = c1.to_lookup_key()
-        storage.save(c1)
-
-    assert key in list(storage.list())
-
-    # force a different key, to check that redigest updates
-
-    storage.redigest()
-
-    all_keys = list(storage.list())
-    assert len(all_keys) == 1
-    assert key not in all_keys
-    assert c1.to_lookup_key() in all_keys

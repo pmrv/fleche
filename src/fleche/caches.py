@@ -5,7 +5,8 @@ from typing import Self, Iterable, Any
 
 import pandas as pd
 
-from .digest import digest, Digest
+from . import digest as _digest
+from .digest import Digest  # type hint convenience
 from . import storage
 from .call import Call
 
@@ -99,7 +100,6 @@ class BaseCache(ABC):
 
         return pd.DataFrame.from_dict(rows, orient="index")
 
-
 class Digested(ABC):
     @abstractmethod
     def underlying(self):
@@ -109,7 +109,7 @@ class Digested(ABC):
     # For the replacement of the 'real' list with the 'digested' list to be invisible to caches, they must hash to the
     # same values.
     def __digest__(self):
-        return digest(self.underlying())
+        return _digest.digest(self.underlying())
 
 
 @dataclass
@@ -175,7 +175,7 @@ class Cache(BaseCache):
             return self._recursive_value_save(value)
         except storage.SaveError:
             print("WARNING NO ARG SAVE:", value)
-            return digest(value)
+            return _digest.digest(value)
 
     def _handle_args_load(self, key):
         if not isinstance(key, Digest):
@@ -226,6 +226,25 @@ class Cache(BaseCache):
             c.arguments = {k: self._handle_args_load(v) for k, v in c.arguments.items()}
             c.result = self.load_value(c.result)
             yield c
+
+    def redigest(self) -> None:
+        """Ensures consistent cache keys in case digest function changed.
+
+        This may take time depending on cache size."""
+        for key in self.calls.list():
+            call = self.load(key)
+            if call.to_lookup_key() != key:
+                # instantiate values too
+                self.save(call)
+                self.calls.evict(key)
+
+        for key in self.values.list():
+            value = self.values.load(key)
+            if _digest.digest(value) != key:
+                # even if call digest changed because a referenced value digest changed (in arguments or result) then we
+                # already loaded the value above and save()d it again, all that's left to do is to evict the value saved
+                # under the wrong digest key
+                self.values.evict(key)
 
 
 @dataclass(frozen=True)
