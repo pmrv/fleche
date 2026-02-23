@@ -148,6 +148,8 @@ def _digest(value: Any) -> Digest:
         case np.floating():
             return digest(float(value))
         case np.ndarray():
+            m.update(digest(value.dtype.str).encode())
+            m.update(digest(value.shape).encode())
             m.update(value.tobytes())
         case types.CodeType():
             # captured properties for behavior stability
