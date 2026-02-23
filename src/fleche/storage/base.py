@@ -1,4 +1,5 @@
 from __future__ import annotations
+import logging
 from dataclasses import dataclass
 
 from abc import ABC, abstractmethod
@@ -6,6 +7,8 @@ from typing import Iterable, Any, Callable
 
 from ..digest import digest, Digest, DIGEST_LENGTH
 from ..call import Call
+
+logger = logging.getLogger("fleche.storage")
 
 
 class SaveError(Exception):
@@ -76,6 +79,7 @@ class Storage(StorageBase):
     def save(self, value: Any, key: Digest | None = None) -> Digest:
         if key is None:
             key = digest(value)
+        logger.debug("Saving value with key %s", key)
         return self._save(value, key)
 
     @abstractmethod
@@ -86,6 +90,7 @@ class Storage(StorageBase):
             key = self.expand(key)
         else:
             key = Digest(key)
+        logger.debug("Loading value with key %s", key)
         return self._load(key)
 
     @abstractmethod
@@ -96,6 +101,7 @@ class CallStorage(StorageBase):
     """Special storage for saving :class:`Call` instances."""
 
     def save(self, call: Call) -> Digest:
+        logger.debug("Saving call %s", call.to_lookup_key())
         return self._save(call)
 
     @abstractmethod
@@ -106,6 +112,7 @@ class CallStorage(StorageBase):
             key = self.expand(key)
         else:
             key = Digest(key)
+        logger.debug("Loading call with key %s", key)
         return self._load(key)
 
     @abstractmethod
