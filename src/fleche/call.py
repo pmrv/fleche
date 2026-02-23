@@ -23,13 +23,20 @@ class Call:
     result: Any = None
 
     @classmethod
-    def from_call(cls, func, *args, **kwargs):
+    def from_call(cls, func, *args, partial=False, **kwargs):
         # Normalize arguments using function signature
-        bound = signature(func).bind(*args, **kwargs)
-        bound.apply_defaults()
+        sig = signature(func)
+        if partial:
+            bound = sig.bind_partial(*args, **kwargs)
+            # missing arguments are set to None
+            arguments = {name: bound.arguments.get(name) for name in sig.parameters}
+        else:
+            bound = sig.bind(*args, **kwargs)
+            bound.apply_defaults()
+            arguments = dict(bound.arguments)
 
         # Preserve declared parameter order via bound.arguments (OrderedDict)
-        call = cls(func.__name__, dict(bound.arguments))
+        call = cls(func.__name__, arguments)
         if hasattr(func, "__version__"):
             call.version = func.__version__
         if hasattr(func, "__module__"):
