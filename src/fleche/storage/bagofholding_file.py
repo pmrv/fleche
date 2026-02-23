@@ -9,7 +9,6 @@ from .file import FileStorage
 from .base import SaveError
 from ..digest import Digest
 
-
 @dataclass
 class BagOfHoldingH5File(FileStorage):
 

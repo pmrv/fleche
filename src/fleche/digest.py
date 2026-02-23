@@ -1,6 +1,6 @@
 import hashlib
 import dataclasses
-import struct
+from numbers import Number
 import types
 import importlib.metadata
 from collections.abc import Iterable
@@ -126,14 +126,11 @@ def _digest(value: Any) -> Digest:
             m.update(value)
         case int():
             m.update(value.to_bytes((value.bit_length() + 8) // 8, byteorder='little', signed=True))
-        case float():
-            # Canonicalize NaN to ignore payload but preserve sign; differentiate +0.0 and -0.0
-            if math.isnan(value):
-                sign = b"-" if math.copysign(1.0, value) < 0 else b"+"
-                m.update(b"nan")
-                m.update(sign)
-            else:
-                m.update(struct.pack("<d", value))
+        case Number():
+            # rely on python's 'generic' hash semantics for all numbers to translate all of them to an integer
+            value = hash(value)
+            # then digest its bytes
+            return digest(value)
         case bool():
             m.update(str(value).encode())
         case None:
@@ -144,6 +141,12 @@ def _digest(value: Any) -> Digest:
             for k, v in sorted_items:
                 m.update(digest(k).encode())
                 m.update(digest(v).encode())
+        case np.bool():
+            return digest(bool(value))
+        case np.integer():
+            return digest(int(value))
+        case np.floating():
+            return digest(float(value))
         case np.ndarray():
             m.update(value.tobytes())
         case types.CodeType():
