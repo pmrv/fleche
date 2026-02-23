@@ -26,12 +26,15 @@ calls.root = "~/.fleche/calls"
 """
 
 import tomllib
+import logging
 from pathlib import Path
 import os
 from typing import Any
 
 from . import storage, metadata
 from .caches import Cache
+
+logger = logging.getLogger("fleche.config")
 
 _live_caches: dict[str, Cache] = {}
 
@@ -40,7 +43,7 @@ def _get_config_path() -> Path | None:
     path = Path("fleche.toml")
     if path.exists():
         return path.absolute()
-    print(f"LOGGING INFO: local config {path} does not exist, trying global")
+    logger.info("Local config %s does not exist, trying global", path)
 
     if "XDG_CONFIG_HOME" in os.environ:
         path = Path(os.environ["XDG_CONFIG_HOME"]) / "fleche" / "cache.toml"
@@ -51,7 +54,7 @@ def _get_config_path() -> Path | None:
 
     if path.exists():
         return path
-    print(f"LOGGING INFO: global config {path} does not exist")
+    logger.info("Global config %s does not exist", path)
 
 
 def load_default_metadata():
@@ -113,7 +116,7 @@ def load_cache_config(name: str | None = None) -> Cache:
     """
     path = _get_config_path()
     if path is None or not path.exists():
-        print("Warning: No config file found. Using default memory cache.")
+        logger.warning("No config file found. Using default memory cache.")
         return Cache(storage.Memory({}), storage.Memory({}))
 
     with open(path, "rb") as f:
@@ -124,7 +127,7 @@ def load_cache_config(name: str | None = None) -> Cache:
 
     if cache_name is None:
         if "default" not in config or "cache" not in config["default"]:
-            print("Warning: No default cache configured. Using default memory cache.")
+            logger.warning("No default cache configured. Using default memory cache.")
             return Cache(storage.Memory({}), storage.Memory({}))
 
         default_cache = config["default"]["cache"]

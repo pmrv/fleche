@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import logging
 from dataclasses import dataclass, asdict
 from copy import copy
 from typing import Self, Iterable, Any
@@ -9,6 +10,8 @@ from . import digest as _digest
 from .digest import Digest  # type hint convenience
 from . import storage
 from .call import Call
+
+logger = logging.getLogger("fleche.cache")
 
 
 class Rejected(Exception):
@@ -174,7 +177,7 @@ class Cache(BaseCache):
         try:
             return self._recursive_value_save(value)
         except storage.SaveError:
-            print("WARNING NO ARG SAVE:", value)
+            logger.warning("Failed to save argument: %s", value)
             return _digest.digest(value)
 
     def _handle_args_load(self, key):

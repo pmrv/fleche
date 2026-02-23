@@ -1,5 +1,6 @@
 """lru_cache on 'roids."""
 import os
+import logging
 from dataclasses import replace
 import tempfile
 import contextlib
@@ -13,6 +14,8 @@ from typing import Any, Callable, Dict, Iterable, Optional, TypeVar, Union
 from . import digest
 from .digest import Digest
 from .call import Call
+
+logger = logging.getLogger("fleche")
 
 
 def D(d: str) -> Digest:
@@ -182,20 +185,22 @@ def fleche(
             else:
                 required_args = require
             if any(r not in kwargs for r in required_args):
-                print(f"WARNING MISSING REQUIRED ARG: {required_args}")
+                logger.warning("Missing required argument: %s", required_args)
                 return func(*args, **kwargs)
             cache: Cache = _CACHE.get()
             try:
                 call = get_call(*args, **kwargs)
                 key = call.to_lookup_key()
             except digest.Unhashable as e:
-                print("WARNING NO HASH:", e.args[0])
+                logger.warning("No hash for argument: %s", e.args[0])
                 return func(*args, **kwargs)
 
             try:
-                return cache.load(key).result
+                result = cache.load(key).result
+                logger.debug("Cache hit for %s with key %s", func.__name__, key)
+                return result
             except KeyError:
-                pass
+                logger.debug("Cache miss for %s with key %s", func.__name__, key)
 
             def _run_and_cache():
                 active_meta = _METADATA.get() + tuple(meta)
@@ -208,15 +213,16 @@ def fleche(
 
                 call.result: _T = func(*expanded_args, **expanded_kwargs)
                 if call.result is None:
-                    print("WARNING NO VALUE")
+                    logger.warning("Function returned None, not caching")
                     return None
                 for m in active_meta:
                     metadata[m.name] |= m.post(metadata[m.name], replace(call, metadata={}))
                 try:
                     call.metadata = metadata
+                    logger.debug("Saving result for %s with key %s", func.__name__, key)
                     cache.save(call)
                 except Rejected as e:
-                    print("WARNING NO SAVE:", *e.args)
+                    logger.warning("Cache rejected save: %s", e.args)
                 return call.result
 
             if isolate:
@@ -250,8 +256,7 @@ def fleche(
             """
             call = get_call(*args, **kwargs)
             if "metadata" in call.arguments:
-                print("WARNING: the function you're querying has an argument 'metadata' getting shadowed by the same "
-                      "argument to query.")
+                logger.warning("Function argument 'metadata' shadowed by query argument")
             call.metadata = metadata
             return _CACHE.get().query(call)
 

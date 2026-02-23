@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import dataclasses
 from numbers import Number
 import types
@@ -8,6 +9,8 @@ from typing import Any, TypeVar, Callable
 import math
 
 import numpy as np
+
+logger = logging.getLogger("fleche.digest")
 
 
 class Unhashable(Exception):
@@ -64,23 +67,21 @@ def load_entry_points():
                 if hook.type in seen_types:
                     source = seen_types[hook.type]
                     if source == "add_hook":
-                        print(
-                            "INFO",
-                            f"add_hook for {hook.type} overrides entry point {ep.value}",
-                        )
+                        logger.info("add_hook for %s overrides entry point %s", hook.type, ep.value)
                     else:
                         for h in _EP_HOOKS:
                             if (h.type is not hook.type) and (h.digest is not hook.digest):
-                                print(
-                                    "INFO",
-                                    f"Digest from {source} overrides later entry point {ep.value}!"
+                                logger.info(
+                                    "Digest from %s overrides later entry point %s!",
+                                    source,
+                                    ep.value,
                                 )
                     continue
 
                 _EP_HOOKS.append(hook)
                 seen_types[hook.type] = ep.value
         except Exception as e:
-            print("ERROR", f"Failed to load entry point {ep.name}: {e}")
+            logger.error("Failed to load entry point %s: %s", ep.name, e)
 
 
 def digest(value: Any) -> Digest:
