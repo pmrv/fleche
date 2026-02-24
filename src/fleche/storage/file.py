@@ -3,14 +3,60 @@ from __future__ import annotations
 import logging
 import os
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Any
+from typing import Iterable, Any, Generator
 
 from .base import CallStorage, Storage, DIGEST_LENGTH
 from ..digest import Digest, digest
 
 logger = logging.getLogger("fleche.storage")
+
+
+@contextmanager
+def file_lock(
+    lock_path: Path, timeout: float, wait_start: float, key: str, mode: str
+) -> Generator[None, None, None]:
+    if mode == "write":
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path.write_text(f"{os.getpid()}\n{time.time()}")
+        try:
+            yield
+        finally:
+            lock_path.unlink(missing_ok=True)
+    elif mode == "read":
+        tried_anyway = False
+        if lock_path.exists():
+            start_time = time.perf_counter()
+            wait_time = wait_start
+            while (
+                lock_path.exists()
+                and (time.perf_counter() - start_time) < timeout
+            ):
+                time.sleep(wait_time)
+                wait_time *= 2
+
+            if lock_path.exists():
+                logger.warning(
+                    "Lock still held for %s after %s seconds, trying to read anyway.",
+                    key,
+                    timeout,
+                )
+                tried_anyway = True
+        try:
+            yield
+        except Exception as e:
+            if tried_anyway:
+                logger.error(
+                    "Failed to read %s after timeout while lock was held: %s",
+                    key,
+                    e,
+                )
+                raise KeyError(key) from None
+            raise
+    else:
+        raise ValueError(f"Invalid mode: {mode}")
 
 
 @dataclass
@@ -43,12 +89,10 @@ class FileStorage(Storage):
             key = digest(value)
 
         lock_path = self.root / f"{key}.lock"
-        self.root.mkdir(parents=True, exist_ok=True)
-        lock_path.write_text(f"{os.getpid()}\n{time.time()}")
-        try:
+        with file_lock(
+            lock_path, self.lock_timeout, self.lock_wait_start, str(key), mode="write"
+        ):
             return super().save(value, key)
-        finally:
-            lock_path.unlink(missing_ok=True)
 
     def load(self, key: Digest | str) -> Any:
         if len(key) < DIGEST_LENGTH:
@@ -57,22 +101,7 @@ class FileStorage(Storage):
             key = Digest(key)
 
         lock_path = self.root / f"{key}.lock"
-        tried_anyway = False
-        if lock_path.exists():
-            start_time = time.perf_counter()
-            wait_time = self.lock_wait_start
-            while lock_path.exists() and (time.perf_counter() - start_time) < self.lock_timeout:
-                time.sleep(wait_time)
-                wait_time *= 2
-
-            if lock_path.exists():
-                logger.warning("Lock still held for %s after %s seconds, trying to read anyway.", key, self.lock_timeout)
-                tried_anyway = True
-
-        try:
+        with file_lock(
+            lock_path, self.lock_timeout, self.lock_wait_start, str(key), mode="read"
+        ):
             return super().load(key)
-        except Exception as e:
-            if tried_anyway:
-                logger.error("Failed to read %s after timeout while lock was held: %s", key, e)
-                raise KeyError(key) from None
-            raise
