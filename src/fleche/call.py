@@ -46,7 +46,7 @@ class Call:
         return digest.digest(call)
 
 
-class DelayedArguments(Mapping):
+class LazyArguments(Mapping):
     def __init__(self, cache, arg_digests):
         self._cache = cache
         self._arg_digests = arg_digests
@@ -61,11 +61,17 @@ class DelayedArguments(Mapping):
         return len(self._arg_digests)
 
     def __repr__(self):
-        return f"DelayedArguments({self._arg_digests!r})"
+        return f"LazyArguments({self._arg_digests!r})"
+
+    def __digest__(self):
+        # Ensuring that LazyArguments digests identically to a dict of the same values.
+        # Since self._arg_digests are already Digests, and digest(Digest(X)) == X,
+        # this will match a dict of raw values because digest(val) == X.
+        return digest.digest(self._arg_digests)
 
 
 @dataclass(frozen=True)
-class DelayedCall:
+class LazyCall:
     name: str
     _arguments: dict[str, Any]
     _result: Any
@@ -77,13 +83,14 @@ class DelayedCall:
 
     @property
     def arguments(self):
-        return DelayedArguments(self._cache, self._arguments)
+        return LazyArguments(self._cache, self._arguments)
 
     @property
     def result(self):
         return self._cache.load_value(self._result)
 
     def to_lookup_key(self) -> str:
+        # Reconstruct a Call object to ensure identical key calculation
         c = Call(
             name=self.name,
             arguments=self._arguments,
@@ -96,6 +103,7 @@ class DelayedCall:
         return c.to_lookup_key()
 
     def __digest__(self):
+        # Reconstruct a Call object to ensure identical digest calculation
         c = Call(
             name=self.name,
             arguments=self._arguments,
