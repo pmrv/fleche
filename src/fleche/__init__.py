@@ -159,6 +159,7 @@ def fleche(
                 return (ignore,)
             return tuple(ignore)
 
+        @wraps(func)
         def get_call(*args, partial=False, **kwargs):
             call = Call.from_call(func, *args, partial=partial, **kwargs)
             # drop ignored arguments for the saved call object to make our lives much simpler when hashing or saving it
@@ -175,6 +176,61 @@ def fleche(
             if not hash_code:
                 call.code_digest = None
             return call
+
+        @wraps(func)
+        def _digest_func(*args, **kwargs):
+            return get_call(*args, **kwargs).to_lookup_key()
+
+        def _query_func(*args, metadata={}, lazy: bool = False, **kwargs) -> Iterable[Call]:
+            """Return matching results from current cache.
+
+            See :class:`CallStorage.query' for details, except that calls returned from here will have their arguments
+            and results restored from the value storage via :class:`Cache.query`.
+
+            Args:
+                *args, **kwargs: function arguments that should be matched in returned calls; pass `None` as a wildcard
+                metadata (dict[str, dict[str, json]]): metadata tags to additionall filter on; if this shadows a
+                    function kwargs of the same name, you must pass it by position instead.
+                lazy (bool, default False): if True, return lazily loaded call, passed through :meth:`.BaseCache.query`.
+
+            Returns:
+                iterable of matching :class:`.Call`
+            """
+            call = get_call(*args, partial=True, **kwargs)
+            if "metadata" in call.arguments:
+                logger.warning("Function argument 'metadata' shadowed by query argument")
+            if "lazy" in call.arguments:
+                logger.warning("Function argument 'lazy' shadowed by query argument")
+            call.metadata = metadata
+            return _CACHE.get().query(call, lazy=lazy)
+        _query_doc = _query_func.__doc__
+        _query_func = wraps(func)(_query_func)
+
+        @wraps(func)
+        def _load_func(*args, **kwargs):
+            return _CACHE.get().load(_digest_func(*args, **kwargs)).result
+
+        @wraps(func)
+        def _contains_func(*args, **kwargs):
+            return _CACHE.get().contains(_digest_func(*args, **kwargs))
+
+        for name, helper, doc_prefix, ret in [
+            ("call", get_call, "Get the Call object for", Call),
+            ("digest", _digest_func, "Get the cache key for", Digest),
+            ("query", _query_func, "Return matching results from current cache for", Iterable[Call]),
+            ("load", _load_func, "Load result from cache for", None),
+            ("contains", _contains_func, "Check if result is in cache for", bool),
+        ]:
+            helper.__name__ = name
+            helper.__qualname__ = f"{helper.__qualname__}.{name}"
+            _doc = f"{doc_prefix} {getattr(func, '__name__', 'unknown')}."
+            if name == "query":
+                _doc += f"\n\n{_query_doc}"
+            _doc += f"\n\n{getattr(func, '__doc__', '') or ''}"
+            helper.__doc__ = _doc
+            helper.__annotations__ = dict(helper.__annotations__)
+            if ret:
+                helper.__annotations__["return"] = ret
 
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> _T:
@@ -236,37 +292,10 @@ def fleche(
                 return _run_and_cache()
 
         wrapper.call = get_call
-
-        def _digest_func(*args, **kwargs):
-            return get_call(*args, **kwargs).to_lookup_key()
-
-        def _query_func(*args, metadata={}, lazy=False, **kwargs) -> Iterable[Call]:
-            """Return matching results from current cache.
-
-            See :class:`CallStorage.query' for details, except that calls returned from here will have their arguments
-            and results restored from the value storage via :class:`Cache.query`.
-
-            Args:
-                *args, **kwargs: function arguments that should be matched in returned calls; pass `None` as a wildcard
-                metadata (dict[str, dict[str, json]]): metadata tags to additionall filter on; if this shadows a
-                    function kwargs of the same name, you must pass it by position instead.
-                lazy (bool): 
-
-            Returns:
-                iterable of matching :class:`.Call`
-            """
-            call = get_call(*args, partial=True, **kwargs)
-            if "metadata" in call.arguments:
-                logger.warning("Function argument 'metadata' shadowed by query argument")
-            if "lazy" in call.arguments:
-                logger.warning("Function argument 'lazy' shadowed by query argument")
-            call.metadata = metadata
-            return _CACHE.get().query(call, lazy=lazy)
-
         wrapper.digest = _digest_func
         wrapper.query = _query_func
-        wrapper.load = lambda *args, **kwargs: _CACHE.get().load(_digest_func(*args, **kwargs)).result
-        wrapper.contains = lambda *args, **kwargs: _CACHE.get().contains(_digest_func(*args, **kwargs))
+        wrapper.load = _load_func
+        wrapper.contains = _contains_func
         return wrapper
 
     if callable(_func):
