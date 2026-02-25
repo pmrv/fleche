@@ -16,53 +16,61 @@ logger = logging.getLogger("fleche.storage")
 
 
 @contextmanager
-def file_lock(
-    lock_path: Path, timeout: float, wait_start: float, key: str, mode: str
-) -> Generator[None, None, None]:
-    if mode == "write":
-        lock_path.parent.mkdir(parents=True, exist_ok=True)
-        lock_path.write_text(f"{socket.gethostname()}\n{os.getpid()}\n{time.time()}")
-        try:
-            yield
-        finally:
-            lock_path.unlink(missing_ok=True)
-    elif mode == "read":
-        tried_anyway = False
-        if lock_path.exists():
-            start_time = time.perf_counter()
-            wait_time = wait_start
-            while (
-                lock_path.exists()
-                and (time.perf_counter() - start_time) < timeout
-            ):
-                time.sleep(wait_time)
-                wait_time *= 2
+def file_write_lock(lock_path: Path) -> Generator[None, None, None]:
+    """Context manager for acquiring a write lock on a file.
 
-            if lock_path.exists():
-                try:
-                    lock_info = lock_path.read_text().replace("\n", " ")
-                except Exception:
-                    lock_info = "unknown"
-                logger.warning(
-                    "Lock still held for %s after %s seconds (info: %s), trying to read anyway.",
-                    key,
-                    timeout,
-                    lock_info,
-                )
-                tried_anyway = True
-        try:
-            yield
-        except Exception as e:
-            if tried_anyway:
-                logger.error(
-                    "Failed to read %s after timeout while lock was held: %s",
-                    key,
-                    e,
-                )
-                raise KeyError(key) from None
-            raise
-    else:
-        raise ValueError(f"Invalid mode: {mode}")
+    Creates a lock file with hostname, PID, and timestamp.
+    """
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path.write_text(f"{socket.gethostname()}\n{os.getpid()}\n{time.time()}")
+    try:
+        yield
+    finally:
+        lock_path.unlink(missing_ok=True)
+
+
+@contextmanager
+def file_read_lock(
+    lock_path: Path, timeout: float, wait_start: float, key: str
+) -> Generator[None, None, None]:
+    """Context manager for acquiring a read lock on a file.
+
+    Waits for a lock file to be removed with exponential backoff.
+    """
+    tried_anyway = False
+    if lock_path.exists():
+        start_time = time.perf_counter()
+        wait_time = wait_start
+        while (
+            lock_path.exists()
+            and (time.perf_counter() - start_time) < timeout
+        ):
+            time.sleep(wait_time)
+            wait_time *= 2
+
+        if lock_path.exists():
+            try:
+                lock_info = lock_path.read_text().replace("\n", " ")
+            except Exception:
+                lock_info = "unknown"
+            logger.warning(
+                "Lock still held for %s after %s seconds (info: %s), trying to read anyway.",
+                key,
+                timeout,
+                lock_info,
+            )
+            tried_anyway = True
+    try:
+        yield
+    except Exception as e:
+        if tried_anyway:
+            logger.error(
+                "Failed to read %s after timeout while lock was held: %s",
+                key,
+                e,
+            )
+            raise KeyError(key) from None
+        raise
 
 
 @dataclass
@@ -95,9 +103,7 @@ class FileStorage(Storage):
             key = digest(value)
 
         lock_path = self._path(f"{key}.lock")
-        with file_lock(
-            lock_path, self.lock_timeout, self.lock_wait_start, str(key), mode="write"
-        ):
+        with file_write_lock(lock_path):
             return super().save(value, key)
 
     def load(self, key: Digest | str) -> Any:
@@ -107,7 +113,7 @@ class FileStorage(Storage):
             key = Digest(key)
 
         lock_path = self._path(f"{key}.lock")
-        with file_lock(
-            lock_path, self.lock_timeout, self.lock_wait_start, str(key), mode="read"
+        with file_read_lock(
+            lock_path, self.lock_timeout, self.lock_wait_start, str(key)
         ):
             return super().load(key)

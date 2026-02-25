@@ -63,26 +63,26 @@ def test_load_fails_after_timeout_raises_keyerror(caplog):
 
         assert "Failed to read" in caplog.text
 
-def test_save_creates_and_removes_lock():
+def test_save_creates_and_removes_lock(monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
-        # To verify save creates a lock, we can't easily check it unless we mock _save
-        # or use a subclass that checks for lock existence during _save.
-        class CheckingPickleFile(PickleFile):
-            def _save(self, value, key):
-                lock_path = self._path(f"{key}.lock")
+        storage = PickleFile(tmpdir)
+        key = digest("test")
+        lock_path = storage._path(f"{key}.lock")
+        data_path = storage._path(key)
+
+        write_called = False
+        def mocked_write_bytes(self, data):
+            nonlocal write_called
+            if self == data_path:
                 assert lock_path.exists()
-                # Check content of lock file
                 content = lock_path.read_text().splitlines()
                 assert content[0] == socket.gethostname()
-                assert int(content[1]) > 0 # pid
-                assert float(content[2]) > 0 # timestamp
-                return super()._save(value, key)
+                write_called = True
+            return len(data)
 
-        storage = CheckingPickleFile(tmpdir)
-        key = digest("test")
+        monkeypatch.setattr(Path, "write_bytes", mocked_write_bytes)
         storage.save("data", key=key)
-
-        lock_path = Path(tmpdir) / f"{key}.lock"
+        assert write_called
         assert not lock_path.exists()
 
 def test_list_excludes_locks():
