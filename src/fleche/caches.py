@@ -142,6 +142,8 @@ class Cache(BaseCache):
             self.calls = storage.CallStorageAdapter(self.calls)
 
     def _recursive_value_save(self, value):
+        if isinstance(value, Digest):
+            return value
         match value:
             case list() | tuple():
                 return self.values.save(
@@ -174,6 +176,8 @@ class Cache(BaseCache):
         return value
 
     def _handle_args_save(self, value):
+        if isinstance(value, Digest):
+            return value
         # for arguments saving is not critical, substitute digest and move on
         try:
             return self._recursive_value_save(value)
