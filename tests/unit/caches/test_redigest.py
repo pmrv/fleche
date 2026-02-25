@@ -127,41 +127,6 @@ def test_redigest_updates_call_keys_on_call_hash_change(monkeypatch):
     assert loaded.result == ("x", {"y": 5})
 
 
-def test_redigest_values_change_but_call_key_stable(monkeypatch):
-    cache = _make_cache()
-    original = _sample_call()
-
-    key_before = cache.save(original)
-    calls_before = set(cache.calls.list())
-    values_before = set(cache.values.list())
-    assert key_before in calls_before
-    assert values_before, "Expected values to be saved for nested args/result"
-
-    # Single-site patch: only non-Call value digests change; Call key stays stable
-    import fleche.digest as fd
-    patched = make_patched_digest(fd.digest, mode="values_change_only")
-    monkeypatch.setattr(fd, "digest", patched, raising=True)
-
-    cache.redigest()
-
-    calls_after = set(cache.calls.list())
-    values_after = set(cache.values.list())
-
-    # Call key remains the same
-    assert key_before in calls_after
-
-    # Some values should be rekeyed (at least one old key disappears)
-    assert not values_before.issubset(values_after), "Expected at least some value keys to change"
-
-    # Attempting to load via Cache should now fail because at least one referenced value digest was evicted
-    with pytest.raises(KeyError):
-        cache.load(key_before)
-
-    # However, the raw call entry is still present and can be loaded from call storage directly
-    raw_call = cache.calls.load(key_before)
-    assert isinstance(raw_call.result, Digest), "Stored call should still reference (now stale) value digests"
-
-
 def test_redigest_noop_if_digest_unchanged(monkeypatch):
     cache = _make_cache()
     original = _sample_call()

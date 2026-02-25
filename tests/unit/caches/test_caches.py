@@ -1,4 +1,4 @@
-from unittest.mock import Mock
+from unittest.mock import Mock, MagicMock
 import pytest
 from fleche import fleche, cache
 from fleche.call import Call
@@ -23,26 +23,34 @@ def test_cache_save():
 
 
 def test_cache_load():
-    values_storage = Mock()
+    values_storage = MagicMock()
+    values_storage.list.return_value = [
+        Digest("arg1" + "0" * 60),
+        Digest("arg2" + "0" * 60),
+        Digest("kwarg1" + "0" * 58),
+        Digest("kwarg2" + "0" * 58),
+    ]
     values_storage.load = Mock()
     calls_storage = Mock()
 
-    calls_storage.load = Mock(return_value=Call(
-        name='test',
-        arguments={
-            'arg1': Digest('arg1'),
-            'arg2': Digest('arg2'),
-            'key1': Digest('kwarg1'),
-            'key2': Digest('kwarg2')
-        },
-    ))
+    calls_storage.load = Mock(
+        return_value=Call(
+            name="test",
+            arguments={
+                "arg1": Digest("arg1" + "0" * 60),
+                "arg2": Digest("arg2" + "0" * 60),
+                "key1": Digest("kwarg1" + "0" * 58),
+                "key2": Digest("kwarg2" + "0" * 58),
+            },
+        )
+    )
     c = Cache(values_storage, calls_storage)
     c.load("key")
     calls_storage.load.assert_called_once_with("key")
-    values_storage.load.assert_any_call("arg1")
-    values_storage.load.assert_any_call("arg2")
-    values_storage.load.assert_any_call("kwarg1")
-    values_storage.load.assert_any_call("kwarg2")
+    values_storage.load.assert_any_call(Digest("arg1" + "0" * 60))
+    values_storage.load.assert_any_call(Digest("arg2" + "0" * 60))
+    values_storage.load.assert_any_call(Digest("kwarg1" + "0" * 58))
+    values_storage.load.assert_any_call(Digest("kwarg2" + "0" * 58))
 
 
 def test_cache_context_manager():

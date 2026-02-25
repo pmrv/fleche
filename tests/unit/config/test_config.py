@@ -108,13 +108,19 @@ def config_file_no_default():
         yield tmpdir
 
 
+def _get_values_storage(cache_obj):
+    if isinstance(cache_obj.values, storage.DestructuringStorage):
+        return cache_obj.values.storage
+    return cache_obj.values
+
+
 def test_load_cache_config_default(monkeypatch, config_file):
     monkeypatch.setenv("XDG_CONFIG_HOME", config_file)
 
     cache_obj = load_cache_config()
 
     assert isinstance(cache_obj, Cache)
-    assert isinstance(cache_obj.values, storage.Memory)
+    assert isinstance(_get_values_storage(cache_obj), storage.Memory)
     assert isinstance(cache_obj.calls, storage.CallStorageAdapter)
     assert isinstance(cache_obj.calls.storage, storage.Memory)
 
@@ -125,7 +131,7 @@ def test_load_cache_config_explicit_default(monkeypatch, config_file_explicit_de
     cache_obj = load_cache_config()
 
     assert isinstance(cache_obj, Cache)
-    assert isinstance(cache_obj.values, storage.Memory)
+    assert isinstance(_get_values_storage(cache_obj), storage.Memory)
     assert isinstance(cache_obj.calls, storage.CallStorageAdapter)
     assert isinstance(cache_obj.calls.storage, storage.Memory)
 
@@ -136,8 +142,9 @@ def test_load_cache_config_specific(monkeypatch, config_file):
     cache_obj = load_cache_config("transient")
 
     assert isinstance(cache_obj, Cache)
-    assert isinstance(cache_obj.values, storage.CloudpickleFile)
-    assert cache_obj.values.root == Path(".fleche/values").absolute()
+    values_storage = _get_values_storage(cache_obj)
+    assert isinstance(values_storage, storage.CloudpickleFile)
+    assert values_storage.root == Path(".fleche/values").absolute()
     assert isinstance(cache_obj.calls.storage, storage.CloudpickleFile)
     assert cache_obj.calls.storage.root == Path(".fleche/calls").absolute()
 
@@ -146,7 +153,7 @@ def test_load_cache_config_no_file(monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", "/tmp/nonexistent")
     cache_obj = load_cache_config()
     assert isinstance(cache_obj, Cache)
-    assert isinstance(cache_obj.values, storage.Memory)
+    assert isinstance(_get_values_storage(cache_obj), storage.Memory)
     assert isinstance(cache_obj.calls, storage.CallStorageAdapter)
     assert isinstance(cache_obj.calls.storage, storage.Memory)
 
@@ -155,7 +162,7 @@ def test_load_cache_config_no_default(monkeypatch, config_file_no_default):
     monkeypatch.setenv("XDG_CONFIG_HOME", config_file_no_default)
     cache_obj = load_cache_config()
     assert isinstance(cache_obj, Cache)
-    assert isinstance(cache_obj.values, storage.Memory)
+    assert isinstance(_get_values_storage(cache_obj), storage.Memory)
     assert isinstance(cache_obj.calls, storage.CallStorageAdapter)
     assert isinstance(cache_obj.calls.storage, storage.Memory)
 
@@ -166,8 +173,9 @@ def test_cache_function_loads_by_name(monkeypatch, config_file):
     with cache("global"):
         cache_obj = cache()
         assert isinstance(cache_obj, Cache)
-        assert isinstance(cache_obj.values, storage.BagOfHoldingH5File)
-        assert cache_obj.values.root == Path("~/.fleche/values").expanduser()
+        values_storage = _get_values_storage(cache_obj)
+        assert isinstance(values_storage, storage.BagOfHoldingH5File)
+        assert values_storage.root == Path("~/.fleche/values").expanduser()
 
 
 def test_cache_instances_are_persistent(monkeypatch, config_file):
@@ -190,9 +198,10 @@ def test_nested_storage(monkeypatch, config_file):
     cache_obj = load_cache_config("nested")
 
     assert isinstance(cache_obj, Cache)
-    assert isinstance(cache_obj.values, NestedStorage)
-    assert cache_obj.values.arg == "test"
-    assert isinstance(cache_obj.values.inner, storage.Memory)
+    values_storage = _get_values_storage(cache_obj)
+    assert isinstance(values_storage, NestedStorage)
+    assert values_storage.arg == "test"
+    assert isinstance(values_storage.inner, storage.Memory)
 
 
 def test_load_default_metadata(monkeypatch, config_file):
@@ -219,10 +228,10 @@ def test_load_default_cache(monkeypatch, config_file):
     cache_obj = fleche._CACHE.get()
     assert isinstance(cache_obj, BaseCache)
     if hasattr(cache_obj, "values"):
-        assert isinstance(cache_obj.values, storage.Memory)
+        assert isinstance(_get_values_storage(cache_obj), storage.Memory)
         assert isinstance(cache_obj.calls.storage, storage.Memory)
     else:
-        assert isinstance(cache_obj.cache.values, storage.Memory)
+        assert isinstance(_get_values_storage(cache_obj.cache), storage.Memory)
         assert isinstance(cache_obj.cache.calls.storage, storage.Memory)
 
 
@@ -242,7 +251,7 @@ def test_load_cache_config_memory_special_case(monkeypatch, config_file):
     cache1 = load_cache_config("memory")
 
     assert isinstance(cache1, Cache)
-    assert isinstance(cache1.values, storage.Memory)
+    assert isinstance(_get_values_storage(cache1), storage.Memory)
     assert isinstance(cache1.calls.storage, storage.Memory)
 
     # Should be a singleton

@@ -9,7 +9,7 @@ from fleche.storage import SaveError, CloudpickleFile, PickleFile, Memory, BagOf
 from fleche.storage.sql import Sql
 from fleche.call import Call
 from fleche.digest import digest, Digest
-from fleche.caches import DigestedIterable
+from fleche.storage.base import DigestedIterable
 
 
 temp = tempfile.TemporaryDirectory()

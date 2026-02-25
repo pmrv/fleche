@@ -3,7 +3,7 @@ import logging
 from dataclasses import dataclass
 
 from abc import ABC, abstractmethod
-from typing import Iterable, Any, Callable
+from typing import Iterable, Any, Callable, Self
 
 from ..digest import digest, Digest, DIGEST_LENGTH
 from ..call import Call
@@ -95,6 +95,71 @@ class Storage(StorageBase):
 
     @abstractmethod
     def _load(self, key: Digest) -> Any: ...
+
+
+class Digested(ABC):
+    @abstractmethod
+    def underlying(self):
+        ...
+
+    # mess with our hash to ensure that we are referentially transparent with respect to the underlying list.
+    # For the replacement of the 'real' list with the 'digested' list to be invisible to caches, they must hash to the
+    # same values.
+    def __digest__(self):
+        return digest(self.underlying())
+
+
+@dataclass
+class DigestedIterable(Digested):
+    items: Iterable
+
+    def underlying(self):
+        return self.items
+
+
+@dataclass
+class DigestedDict(Digested):
+    items: dict
+
+    def underlying(self):
+        return self.items
+
+
+@dataclass
+class DestructuringStorage(Storage):
+    storage: Storage
+
+    def _save(self, value: Any, key: Digest) -> Digest:
+        if isinstance(value, Digest):
+            return value
+        match value:
+            case list() | tuple():
+                return self.storage.save(
+                    DigestedIterable(type(value)(self.save(v) for v in value))
+                )
+            case dict():
+                return self.storage.save(
+                    DigestedDict({self.save(k): self.save(v) for k, v in value.items()})
+                )
+            case _:
+                return self.storage.save(value, key)
+
+    def _load(self, key: Digest) -> Any:
+        value = self.storage.load(key)
+
+        match value:
+            case DigestedIterable(items=items):
+                return type(items)(self.load(v) for v in items)
+            case DigestedDict(items=items):
+                return {self.load(k): self.load(v) for k, v in items.items()}
+            case _:
+                return value
+
+    def _evict(self, key: Digest) -> None:
+        self.storage.evict(key)
+
+    def list(self) -> Iterable[Digest]:
+        return self.storage.list()
 
 
 class CallStorage(StorageBase):

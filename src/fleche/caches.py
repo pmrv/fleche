@@ -104,34 +104,6 @@ class BaseCache(ABC):
 
         return pd.DataFrame.from_dict(rows, orient="index")
 
-class Digested(ABC):
-    @abstractmethod
-    def underlying(self):
-        ...
-
-    # mess with our hash to ensure that we are referentially transparent with respect to the underlying list.
-    # For the replacement of the 'real' list with the 'digested' list to be invisible to caches, they must hash to the
-    # same values.
-    def __digest__(self):
-        return _digest.digest(self.underlying())
-
-
-@dataclass
-class DigestedIterable(Digested):
-    items: Iterable
-
-    def underlying(self):
-        return self.items
-
-
-@dataclass
-class DigestedDict(Digested):
-    items: dict
-
-    def underlying(self):
-        return self.items
-
-
 @dataclass
 class Cache(BaseCache):
     values: storage.Storage
@@ -141,46 +113,21 @@ class Cache(BaseCache):
         if isinstance(self.calls, storage.Storage):
             self.calls = storage.CallStorageAdapter(self.calls)
 
-    def _recursive_value_save(self, value):
-        if isinstance(value, Digest):
-            return value
-        match value:
-            case list() | tuple():
-                return self.values.save(
-                        DigestedIterable(type(value)(self._recursive_value_save(v) for v in value))
-                )
-            case dict():
-                return self.values.save(
-                        DigestedDict(
-                            {self._recursive_value_save(k): self._recursive_value_save(v)
-                                for k, v in value.items()}
-                        )
-                )
-            case _:
-                return self.values.save(value)
+        if not isinstance(self.values, storage.DestructuringStorage):
+            self.values = storage.DestructuringStorage(self.values)
 
     def load_value(self, key):
         if not isinstance(key, Digest):
             return key
 
-        value = self.values.load(key)
-
-        match value:
-            case DigestedIterable(items=items):
-                value = type(items)(self.load_value(v) for v in items)
-            case DigestedDict(items=items):
-                value = {
-                        self.load_value(k): self.load_value(v)
-                        for k, v in value.items.items()
-                }
-        return value
+        return self.values.load(key)
 
     def _handle_args_save(self, value):
         if isinstance(value, Digest):
             return value
         # for arguments saving is not critical, substitute digest and move on
         try:
-            return self._recursive_value_save(value)
+            return self.values.save(value)
         except storage.SaveError:
             logger.warning("Failed to save argument: %s", value)
             return _digest.digest(value)
@@ -197,8 +144,10 @@ class Cache(BaseCache):
     def save(self, call: Call) -> str:
         call = copy(call)
         try:
-            call.result = self._recursive_value_save(call.result)
-            call.arguments = {k: self._handle_args_save(v) for k, v in call.arguments.items()}
+            call.result = self.values.save(call.result)
+            call.arguments = {
+                k: self._handle_args_save(v) for k, v in call.arguments.items()
+            }
         except storage.SaveError as e:
             raise Rejected(e)
 
@@ -259,13 +208,6 @@ class Cache(BaseCache):
                 self.save(call)
                 self.calls.evict(key)
 
-        for key in self.values.list():
-            value = self.values.load(key)
-            if _digest.digest(value) != key:
-                # even if call digest changed because a referenced value digest changed (in arguments or result) then we
-                # already loaded the value above and save()d it again, all that's left to do is to evict the value saved
-                # under the wrong digest key
-                self.values.evict(key)
 
 
 @dataclass(frozen=True)
