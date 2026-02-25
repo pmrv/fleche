@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import socket
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -20,7 +21,7 @@ def file_lock(
 ) -> Generator[None, None, None]:
     if mode == "write":
         lock_path.parent.mkdir(parents=True, exist_ok=True)
-        lock_path.write_text(f"{os.getpid()}\n{time.time()}")
+        lock_path.write_text(f"{socket.gethostname()}\n{os.getpid()}\n{time.time()}")
         try:
             yield
         finally:
@@ -38,10 +39,15 @@ def file_lock(
                 wait_time *= 2
 
             if lock_path.exists():
+                try:
+                    lock_info = lock_path.read_text().replace("\n", " ")
+                except Exception:
+                    lock_info = "unknown"
                 logger.warning(
-                    "Lock still held for %s after %s seconds, trying to read anyway.",
+                    "Lock still held for %s after %s seconds (info: %s), trying to read anyway.",
                     key,
                     timeout,
+                    lock_info,
                 )
                 tried_anyway = True
         try:
@@ -82,13 +88,13 @@ class FileStorage(Storage):
 
     def _evict(self, key: Digest) -> None:
         self._path(key).unlink(missing_ok=True)
-        (self.root / f"{key}.lock").unlink(missing_ok=True)
+        self._path(f"{key}.lock").unlink(missing_ok=True)
 
     def save(self, value: Any, key: Digest | None = None) -> Digest:
         if key is None:
             key = digest(value)
 
-        lock_path = self.root / f"{key}.lock"
+        lock_path = self._path(f"{key}.lock")
         with file_lock(
             lock_path, self.lock_timeout, self.lock_wait_start, str(key), mode="write"
         ):
@@ -100,7 +106,7 @@ class FileStorage(Storage):
         else:
             key = Digest(key)
 
-        lock_path = self.root / f"{key}.lock"
+        lock_path = self._path(f"{key}.lock")
         with file_lock(
             lock_path, self.lock_timeout, self.lock_wait_start, str(key), mode="read"
         ):

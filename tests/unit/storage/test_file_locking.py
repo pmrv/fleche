@@ -1,6 +1,7 @@
 import time
 import threading
 import tempfile
+import socket
 from pathlib import Path
 import pytest
 from fleche.storage import PickleFile
@@ -68,12 +69,13 @@ def test_save_creates_and_removes_lock():
         # or use a subclass that checks for lock existence during _save.
         class CheckingPickleFile(PickleFile):
             def _save(self, value, key):
-                lock_path = self.root / f"{key}.lock"
+                lock_path = self._path(f"{key}.lock")
                 assert lock_path.exists()
                 # Check content of lock file
                 content = lock_path.read_text().splitlines()
-                assert int(content[0]) > 0 # pid
-                assert float(content[1]) > 0 # timestamp
+                assert content[0] == socket.gethostname()
+                assert int(content[1]) > 0 # pid
+                assert float(content[2]) > 0 # timestamp
                 return super()._save(value, key)
 
         storage = CheckingPickleFile(tmpdir)
