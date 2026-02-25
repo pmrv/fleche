@@ -195,7 +195,10 @@ class Cache(BaseCache):
         # Delegate to underlying call storage, but decode any digested
         # arguments/results before yielding to the caller (same semantics as load()).
         for c in self.calls.query(call):
-            yield self._decode_call(c, lazy=lazy)
+            try:
+                yield self._decode_call(c, lazy=lazy)
+            except Exception as err:
+                logger.error(f"Failed to load matching call {c.to_lookup_key()}! Indicates corrupt cache.")
 
     def redigest(self) -> None:
         """Ensures consistent cache keys in case digest function changed.
