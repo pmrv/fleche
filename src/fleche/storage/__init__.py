@@ -13,6 +13,7 @@ from .base import (
     DestructuringStorage,
 )
 from .memory import Memory
+from .void import Void
 from .file import FileStorage
 from .cloudpickle_file import CloudpickleFile
 from .pickle_file import PickleFile
@@ -27,6 +28,7 @@ __all__ = [
     "CallStorageAdapter",
     "DestructuringStorage",
     "Memory",
+    "Void",
     "FileStorage",
     "CloudpickleFile",
     "PickleFile",
