@@ -2,6 +2,7 @@ import hashlib
 import logging
 import dataclasses
 from numbers import Number
+import struct
 import types
 import importlib.metadata
 from collections.abc import Iterable
@@ -128,10 +129,24 @@ def _digest(value: Any) -> Digest:
         case int():
             m.update(value.to_bytes((value.bit_length() + 8) // 8, byteorder='little', signed=True))
         case Number():
-            # rely on python's 'generic' hash semantics for all numbers to translate all of them to an integer
-            value = hash(value)
-            # then digest its bytes
-            return digest(value)
+            # lest we have nice things
+            if math.isnan(value):
+                # somehow hash(float('nan')) can yield different values even if having the same sign, because the
+                # bespoke python hash special cases nan such that their location in memory is taken into account
+                # apparently this is useful:
+                # https://github.com/python/cpython/blob/1ac9d138ae0563f2829ba91efe7989af507f47e0/Python/pyhash.c#L59
+                # because nans are not singletons this causes the code below to potentially assign different digests to
+                # the same nan!  So in this case we revert back to just packing it into binary rep, because negative and
+                # positive nans have different binary rep
+                m.update(struct.pack("<d", value))
+                # on the other hand the IEEE standard does *not* assign a unique binary representation to NaN, but let's
+                # burn that bridge we someone else tries to cross it.
+                # the good news is that numpy nans seem to map to the same binary and are also detected by math.isnan
+            else:
+                # rely on python's 'generic' hash semantics for all numbers to translate all of them to an integer
+                value = hash(value)
+                # then digest its bytes
+                return digest(value)
         case bool():
             m.update(str(value).encode())
         case None:
