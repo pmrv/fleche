@@ -19,6 +19,12 @@ class Rejected(Exception):
     pass
 
 
+# backwards compat imports
+# from breaking introduced in 0.4.0
+DigestedIterable = storage.base.DigestedIterable
+DigestedDict = storage.base.DigestedDict
+
+
 class BaseCache(ABC):
 
     @abstractmethod
