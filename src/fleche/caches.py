@@ -9,7 +9,7 @@ import pandas as pd
 from . import digest as _digest
 from .digest import Digest  # type hint convenience
 from . import storage
-from .call import Call
+from .call import Call, LazyCall
 
 logger = logging.getLogger("fleche.cache")
 
@@ -26,7 +26,7 @@ class BaseCache(ABC):
         ...
 
     @abstractmethod
-    def load(self, key: str) -> Call:
+    def load(self, key: str, lazy: bool = False) -> Call | LazyCall:
         ...
 
     @abstractmethod
@@ -35,7 +35,7 @@ class BaseCache(ABC):
 
     def contains(self, key: str) -> bool:
         try:
-            self.load(key)
+            self.load(key, lazy=True)
             return True
         except KeyError:
             return False
@@ -76,7 +76,7 @@ class BaseCache(ABC):
         ...
 
     @abstractmethod
-    def query(self, call: Call) -> Iterable[Call]: ...
+    def query(self, call: Call, lazy: bool = False) -> Iterable[Call | LazyCall]: ...
 
     def table(self) -> pd.DataFrame:
         """Return a pandas DataFrame summarizing cached calls via query().
@@ -92,7 +92,8 @@ class BaseCache(ABC):
         tpl = Call(name=None, arguments=None, metadata=None, module=None, version=None, result=None)
 
         rows: dict[str, dict[str, Any]] = {}
-        for c in self.query(tpl):
+        # Use lazy=False to ensure we have actual values for the table
+        for c in self.query(tpl, lazy=False):
             row = asdict(c)
             md = row.pop("metadata", {}) or {}
             # Flatten each metadata name's dict into the row
@@ -141,6 +142,8 @@ class Cache(BaseCache):
             self.calls = storage.CallStorageAdapter(self.calls)
 
     def _recursive_value_save(self, value):
+        if isinstance(value, Digest):
+            return value
         match value:
             case list() | tuple():
                 return self.values.save(
@@ -173,6 +176,8 @@ class Cache(BaseCache):
         return value
 
     def _handle_args_save(self, value):
+        if isinstance(value, Digest):
+            return value
         # for arguments saving is not critical, substitute digest and move on
         try:
             return self._recursive_value_save(value)
@@ -199,16 +204,30 @@ class Cache(BaseCache):
 
         return self.calls.save(call)
 
-    def load(self, key: str) -> Call:
-        call = self.calls.load(key)
+    def _decode_call(self, call: Call, lazy: bool = False) -> Call | LazyCall:
+        if lazy:
+            return LazyCall(
+                name=call.name,
+                _arguments=call.arguments,
+                _result=call.result,
+                _cache=self,
+                metadata=call.metadata,
+                module=call.module,
+                version=call.version,
+                code_digest=call.code_digest
+            )
         call.arguments = {k: self._handle_args_load(v) for k, v in call.arguments.items()}
         call.result = self.load_value(call.result)
         return call
 
+    def load(self, key: str, lazy: bool = False) -> Call | LazyCall:
+        call = self.calls.load(key)
+        return self._decode_call(call, lazy=lazy)
+
     def shrink(self, key: Digest | str) -> Digest:
         return self.calls.shrink(key)
 
-    def query(self, call: Call) -> Iterable[Call]:
+    def query(self, call: Call, lazy: bool = False) -> Iterable[Call | LazyCall]:
         """Query for cached calls that match a template and return decoded results.
 
         This delegates to the underlying :meth:`CallStorage.query` using the provided template ``call``. Any digested
@@ -218,17 +237,16 @@ class Cache(BaseCache):
             call: A ``Call`` instance used as a template; fields set to ``None``
                 act as wildcards. For arguments and result, comparisons follow
                 digest semantics (i.e., values are matched by their digest).
+            lazy: If True, return LazyCall instances instead of Call instances.
 
         Yields:
-            Call: Matching calls with arguments and result decoded from digests
+            Call | LazyCall: Matching calls with arguments and result decoded from digests
             where possible.
         """
         # Delegate to underlying call storage, but decode any digested
         # arguments/results before yielding to the caller (same semantics as load()).
         for c in self.calls.query(call):
-            c.arguments = {k: self._handle_args_load(v) for k, v in c.arguments.items()}
-            c.result = self.load_value(c.result)
-            yield c
+            yield self._decode_call(c, lazy=lazy)
 
     def redigest(self) -> None:
         """Ensures consistent cache keys in case digest function changed.
@@ -258,8 +276,8 @@ class ReadOnlyCache(BaseCache):
     def save(self, call: Call):
         raise Rejected(self, call)
 
-    def load(self, key):
-        return self.cache.load(key)
+    def load(self, key, lazy: bool = False):
+        return self.cache.load(key, lazy=lazy)
 
     def shrink(self, key: Digest | str) -> Digest:
         return self.cache.shrink(key)
@@ -267,16 +285,17 @@ class ReadOnlyCache(BaseCache):
     def load_value(self, key):
         return self.cache.load_value(key)
 
-    def query(self, call: Call) -> Iterable[Call]:
+    def query(self, call: Call, lazy: bool = False) -> Iterable[Call | LazyCall]:
         """Forward queries to the wrapped cache.
 
         Args:
             call: A template ``Call`` where ``None`` fields act as wildcards.
+            lazy: If True, return LazyCall instances.
 
         Yields:
-            Call: Results yielded by the wrapped cache's ``query`` method.
+            Call | LazyCall: Results yielded by the wrapped cache's ``query`` method.
         """
-        return self.cache.query(call)
+        return self.cache.query(call, lazy=lazy)
 
 
 @dataclass(frozen=True)
@@ -291,10 +310,10 @@ class CacheStack(BaseCache):
     def save(self, call: Call):
         self.stack[0].save(call)
 
-    def load(self, key):
+    def load(self, key, lazy: bool = False):
         for cache in self.stack:
             try:
-                return cache.load(key)
+                return cache.load(key, lazy=lazy)
             except KeyError:
                 continue
         else:
@@ -315,7 +334,7 @@ class CacheStack(BaseCache):
     def shrink(self, key: Digest | str) -> Digest:
         return sorted([c.shrink(key) for c in self.stack], key=len)[-1]
 
-    def query(self, call: Call) -> Iterable[Call]:
+    def query(self, call: Call, lazy: bool = False) -> Iterable[Call | LazyCall]:
         """Aggregate query results across the stack, avoiding duplicates.
 
         The caches are queried from bottom to top. Results are deduplicated by
@@ -324,13 +343,14 @@ class CacheStack(BaseCache):
 
         Args:
             call: A template ``Call`` where ``None`` fields act as wildcards.
+            lazy: If True, return LazyCall instances.
 
         Yields:
-            Call: Matching calls from any cache in the stack, without duplicates.
+            Call | LazyCall: Matching calls from any cache in the stack, without duplicates.
         """
         seen = set()
         for cache in self.stack:
-            for c in cache.query(call):
+            for c in cache.query(call, lazy=lazy):
                 k = c.to_lookup_key()
                 if k in seen:
                     continue

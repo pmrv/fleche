@@ -116,7 +116,7 @@ def test_readonly_cache_load():
     mock_cache = Mock()
     c = ReadOnlyCache(mock_cache)
     c.load("key")
-    mock_cache.load.assert_called_once_with("key")
+    mock_cache.load.assert_called_once_with("key", lazy=False)
 
 
 def test_cache_stack_save():
@@ -139,8 +139,8 @@ def test_cache_stack_load_hit():
     c2.load.return_value = call
     stack = CacheStack((c1, c2))
     result = stack.load("key")
-    c1.load.assert_called_once_with("key")
-    c2.load.assert_called_once_with("key")
+    c1.load.assert_called_once_with("key", lazy=False)
+    c2.load.assert_called_once_with("key", lazy=False)
     assert result == call
 
 
