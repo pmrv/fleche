@@ -2,7 +2,7 @@ import pytest
 from fleche.storage import Void
 from fleche.digest import digest
 
-def test_void_storage_save():
+def test_void_storage_save_and_load():
     storage = Void()
     value = "hello"
     key = digest(value)
@@ -14,10 +14,7 @@ def test_void_storage_save():
     # Storage should be empty
     assert list(storage.list()) == []
 
-def test_void_storage_load():
-    storage = Void()
-    key = digest("something")
-
+    # Even after save, load should raise KeyError
     with pytest.raises(KeyError):
         storage.load(key)
 
