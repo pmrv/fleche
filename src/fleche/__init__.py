@@ -240,7 +240,7 @@ def fleche(
         def _digest_func(*args, **kwargs):
             return get_call(*args, **kwargs).to_lookup_key()
 
-        def _query_func(*args, metadata={}, **kwargs) -> Iterable[Call]:
+        def _query_func(*args, metadata={}, lazy=False, **kwargs) -> Iterable[Call]:
             """Return matching results from current cache.
 
             See :class:`CallStorage.query' for details, except that calls returned from here will have their arguments
@@ -250,6 +250,7 @@ def fleche(
                 *args, **kwargs: function arguments that should be matched in returned calls; pass `None` as a wildcard
                 metadata (dict[str, dict[str, json]]): metadata tags to additionall filter on; if this shadows a
                     function kwargs of the same name, you must pass it by position instead.
+                lazy (bool): 
 
             Returns:
                 iterable of matching :class:`.Call`
@@ -257,8 +258,10 @@ def fleche(
             call = get_call(*args, partial=True, **kwargs)
             if "metadata" in call.arguments:
                 logger.warning("Function argument 'metadata' shadowed by query argument")
+            if "lazy" in call.arguments:
+                logger.warning("Function argument 'lazy' shadowed by query argument")
             call.metadata = metadata
-            return _CACHE.get().query(call)
+            return _CACHE.get().query(call, lazy=lazy)
 
         wrapper.digest = _digest_func
         wrapper.query = _query_func
