@@ -91,7 +91,12 @@ class BaseCache(ABC):
         all calls through ``self.query`` and then flattens metadata keys into
         top-level columns for convenience.
 
+        Arguments and results are elided.
+
         The DataFrame index will be the lookup key (digest) of each call.
+
+        Returns:
+            :class:`pandas.DataFrame`: table of all calls on cache
         """
         # Query all calls using a wildcard template; rely on concrete caches to
         # handle any necessary decoding (e.g., Cache decodes values on query()).
@@ -99,8 +104,10 @@ class BaseCache(ABC):
 
         rows: dict[str, dict[str, Any]] = {}
         # Use lazy=False to ensure we have actual values for the table
-        for c in self.query(tpl, lazy=False):
-            row = asdict(c)
+        for c in self.query(tpl, lazy=True):
+            row = {
+                    prop: getattr(c, prop) for prop in ("name", "module", "metadata")
+            }
             md = row.pop("metadata", {}) or {}
             # Flatten each metadata name's dict into the row
             for data in md.values():
@@ -109,6 +116,7 @@ class BaseCache(ABC):
             rows[str(c.to_lookup_key())] = row
 
         return pd.DataFrame.from_dict(rows, orient="index")
+
 
 @dataclass
 class Cache(BaseCache):
@@ -216,7 +224,6 @@ class Cache(BaseCache):
                 # instantiate values too
                 self.save(call)
                 self.calls.evict(key)
-
 
 
 @dataclass(frozen=True)
