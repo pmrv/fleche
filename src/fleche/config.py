@@ -90,6 +90,8 @@ def _get_storage(config: dict[str, Any]) -> storage.Storage:
     match storage_type:
         case "Memory":
             return storage.Memory({})
+        case "Void":
+            return storage.Void()
         case "FileLinkingStorage":
             config["store"] = _get_storage(config.pop("store"))
             return storage.FileLinkingStorage(**config)
@@ -110,13 +112,30 @@ def load_cache_config(name: str | None = None) -> Cache:
     Load a cache from the configuration file.
 
     If name is None, the default cache is loaded.
-    The name 'memory' is special-cased to return a transient in-memory cache.
+    The names 'memory' and 'void' are special-cased to return a transient
+    in-memory cache and a no-op cache respectively.
 
     Note: The `Tags` metadata cannot be configured from the config file.
     """
+    if name in _live_caches:
+        return _live_caches[name]
+
+    if name == "memory":
+        cache = Cache(storage.Memory({}), storage.Memory({}))
+        _live_caches[name] = cache
+        return cache
+
+    if name == "void":
+        cache = Cache(storage.Void(), storage.Void())
+        _live_caches[name] = cache
+        return cache
+
     path = _get_config_path()
     if path is None or not path.exists():
-        logger.warning("No config file found. Using default memory cache.")
+        if name is not None:
+            logger.warning("No config file found. Using default memory cache for '%s'.", name)
+        else:
+            logger.warning("No config file found. Using default memory cache.")
         return Cache(storage.Memory({}), storage.Memory({}))
 
     with open(path, "rb") as f:
@@ -132,18 +151,10 @@ def load_cache_config(name: str | None = None) -> Cache:
 
         default_cache = config["default"]["cache"]
         if isinstance(default_cache, str):
-            cache_name = default_cache
+            return load_cache_config(default_cache)
         else:
             cache_name = "default"
             cache_config = default_cache
-
-    if cache_name in _live_caches:
-        return _live_caches[cache_name]
-
-    if cache_name == "memory":
-        cache = Cache(storage.Memory({}), storage.Memory({}))
-        _live_caches[cache_name] = cache
-        return cache
 
     if cache_config is None:
         cache_config = config[cache_name]

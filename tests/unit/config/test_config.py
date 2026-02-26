@@ -257,3 +257,31 @@ def test_load_cache_config_memory_special_case(monkeypatch, config_file):
     # Should be a singleton
     cache2 = load_cache_config("memory")
     assert cache1 is cache2
+
+
+def test_load_cache_config_void_special_case(monkeypatch, config_file):
+    monkeypatch.setenv("XDG_CONFIG_HOME", config_file)
+
+    # Even with a config file that doesn't have 'void', it should work
+    cache1 = load_cache_config("void")
+
+    assert isinstance(cache1, Cache)
+    assert isinstance(_get_values_storage(cache1), storage.Void)
+    assert isinstance(cache1.calls.storage, storage.Void)
+
+    # Should be a singleton
+    cache2 = load_cache_config("void")
+    assert cache1 is cache2
+
+
+def test_load_cache_config_no_file_singleton(monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", "/tmp/nonexistent")
+
+    cache1 = load_cache_config("memory")
+    cache2 = load_cache_config("memory")
+    assert cache1 is cache2
+
+    cache_void1 = load_cache_config("void")
+    cache_void2 = load_cache_config("void")
+    assert cache_void1 is cache_void2
+    assert cache1 is not cache_void1
