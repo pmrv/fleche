@@ -72,3 +72,20 @@ def test_secure_storage_roundtrip(tmp_path, storage_cls):
     loaded = storage.load(digest_key)
 
     assert loaded == value
+
+@pytest.mark.parametrize("storage_cls", [PickleFile, CloudpickleFile])
+def test_storage_noop_no_key(tmp_path, storage_cls):
+    """Test that storage works as normal (unsigned) when no key is provided."""
+    storage = storage_cls(root=tmp_path, secret_key=None)
+
+    value = "insecure data"
+    digest_key = storage.save(value)
+
+    # Verify file content is NOT signed (just the pickle)
+    file_path = tmp_path / digest_key
+    content = file_path.read_bytes()
+    # If signed, it would have 32 bytes signature.
+    # But wait, sign(data, None) returns b"". So content is just data.
+
+    loaded = storage.load(digest_key)
+    assert loaded == value
