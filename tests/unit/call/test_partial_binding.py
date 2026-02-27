@@ -34,12 +34,8 @@ def test_simple_full():
 
 def test_args_partial():
     call = Call.from_call(func_args, 1, partial=True)
-    # When partial=True, *args (VAR_POSITIONAL) is None if not provided? No, signature logic sets missing to None.
-    # Let's verify what `sig.parameters` contains for *args. It contains 'args'.
-    # `bound.arguments.get('args')` will return None if not present in partial bind?
-    # Actually bind_partial will only populate what is passed. So if nothing passed for *args, it's not in bound.arguments.
-    # Then `bound.arguments.get(name)` returns None.
-    assert call.arguments == {'a': 1, 'args': None}
+    # *args defaults to empty tuple with apply_defaults()
+    assert call.arguments == {'a': 1, 'args': ()}
 
 def test_args_partial_with_values():
     call = Call.from_call(func_args, 1, 2, 3, partial=True)
@@ -47,8 +43,8 @@ def test_args_partial_with_values():
 
 def test_kwargs_partial():
     call = Call.from_call(func_kwargs, 1, partial=True)
-    # Similar logic for **kwargs (VAR_KEYWORD). If not present, get returns None.
-    assert call.arguments == {'a': 1, 'kwargs': None}
+    # **kwargs defaults to empty dict with apply_defaults()
+    assert call.arguments == {'a': 1, 'kwargs': {}}
 
 def test_kwargs_partial_with_values():
     call = Call.from_call(func_kwargs, 1, x=2, partial=True)
@@ -71,9 +67,9 @@ def test_posonly_partial_with_values():
     assert call.arguments == {'a': 1, 'b': 2}
 
 def test_defaults_partial():
-    # Verify that defaults are NOT applied when partial=True.
+    # Verify that defaults ARE applied even when partial=True.
     call = Call.from_call(func_defaults, partial=True)
-    assert call.arguments == {'a': None, 'b': None}
+    assert call.arguments == {'a': 1, 'b': 2}
 
 def test_defaults_full():
     # Verify that defaults ARE applied when partial=False (default behavior).
@@ -81,5 +77,6 @@ def test_defaults_full():
     assert call.arguments == {'a': 1, 'b': 2}
 
 def test_defaults_partial_explicit():
+    # If explicitly passed, overrides default
     call = Call.from_call(func_defaults, a=10, partial=True)
-    assert call.arguments == {'a': 10, 'b': None}
+    assert call.arguments == {'a': 10, 'b': 2}
