@@ -11,10 +11,6 @@ except ImportError:
 
 from hypothesis import strategies as st
 
-# Add src to path to allow importing fleche
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
-sys.path.insert(0, os.path.dirname(__file__))
-
 from fleche.digest import digest
 from utils import st_nested_values, st_base_values, generate_examples
 
