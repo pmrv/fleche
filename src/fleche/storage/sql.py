@@ -368,5 +368,3 @@ class Sql(CallStorage):
             c = self.load(k)
             if meta_matches(c):
                 yield c
-
-    # find_by_metadata removed; metadata filtering is supported via query(template)
