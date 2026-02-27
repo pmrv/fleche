@@ -4,7 +4,6 @@ from pathlib import Path
 from fleche.storage.pickle_file import PickleFile
 from fleche.storage.cloudpickle_file import CloudpickleFile
 from fleche.digest import digest
-from fleche.security import sign
 
 @pytest.mark.parametrize("storage_cls", [PickleFile, CloudpickleFile])
 def test_secure_storage_tampering(tmp_path, storage_cls):
@@ -20,7 +19,6 @@ def test_secure_storage_tampering(tmp_path, storage_cls):
     content = file_path.read_bytes()
 
     # Modify the data part (after signature)
-    # The previous attempt replaced b"1" with b"2", but pickle might encode 1 as K\x01
     # Let's append garbage to the end, which changes the data and should invalidate the signature
     tampered_content = content + b"garbage"
     file_path.write_bytes(tampered_content)
@@ -39,7 +37,6 @@ def test_secure_storage_unsigned_data(tmp_path, storage_cls):
     file_path = tmp_path / digest_key
 
     # Write raw pickle data without signature
-    import pickle
     file_path.write_bytes(pickle.dumps(value))
 
     with pytest.raises(KeyError):
@@ -84,8 +81,10 @@ def test_storage_noop_no_key(tmp_path, storage_cls):
     # Verify file content is NOT signed (just the pickle)
     file_path = tmp_path / digest_key
     content = file_path.read_bytes()
-    # If signed, it would have 32 bytes signature.
-    # But wait, sign(data, None) returns b"". So content is just data.
+
+    # Since we can load it directly with pickle, it means cloudpickle uses the same protocol/format internally
+    # and no signature is present.
+    assert pickle.loads(content) == value
 
     loaded = storage.load(digest_key)
     assert loaded == value
