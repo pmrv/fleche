@@ -159,8 +159,8 @@ def fleche(
                 return (ignore,)
             return tuple(ignore)
 
-        def get_call(*args, partial=False, apply_defaults=True, **kwargs):
-            call = Call.from_call(func, *args, partial=partial, apply_defaults=apply_defaults, **kwargs)
+        def get_call(*args, partial=False, **kwargs):
+            call = Call.from_call(func, *args, partial=partial, **kwargs)
             # drop ignored arguments for the saved call object to make our lives much simpler when hashing or saving it
             # if we leave them in, then Cache.save needs to know about them indirectly to ensure correct digest key
             # generation, but then we'd also have to save it somehow and that just seems bothersome in particular for
@@ -255,7 +255,7 @@ def fleche(
             Returns:
                 iterable of matching :class:`.Call`
             """
-            call = get_call(*args, partial=True, apply_defaults=False, **kwargs)
+            call = get_call(*args, partial=True, **kwargs)
             if "metadata" in call.arguments:
                 logger.warning("Function argument 'metadata' shadowed by query argument")
             if "lazy" in call.arguments:

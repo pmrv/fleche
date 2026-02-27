@@ -81,7 +81,7 @@ def test_defaults_partial_explicit():
     call = Call.from_call(func_defaults, a=10, partial=True)
     assert call.arguments == {'a': 10, 'b': 2}
 
-def test_defaults_partial_no_apply():
-    # Verify that defaults are NOT applied when apply_defaults=False
-    call = Call.from_call(func_defaults, partial=True, apply_defaults=False)
-    assert call.arguments == {'a': None, 'b': None}
+def test_defaults_partial_explicit_none():
+    # If explicitly passed None, it overrides default (wildcard behavior)
+    call = Call.from_call(func_defaults, b=None, partial=True)
+    assert call.arguments == {'a': 1, 'b': None}

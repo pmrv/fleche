@@ -26,15 +26,12 @@ def test_query_lazy(test_cache):
 
 
 def test_query_partial_arguments(test_cache):
-    # Setup a fresh memory cache
-    test_cache = Cache(values=Memory({}), calls=Memory({}))
-
     with cache(test_cache):
         @fleche
         def bar(x, y, z=10):
             return x + y + z
 
-        # Test that .call with partial=True works and produces None for missing
+        # Test that .call with partial=True works and applies defaults for missing
         # We need to access the wrapper's get_call which is exposed as .call
         call_obj = bar.call(y=5, partial=True)
         assert call_obj.arguments == {'x': None, 'y': 5, 'z': 10}
@@ -44,12 +41,14 @@ def test_query_partial_arguments(test_cache):
         bar(2, 5, 20)
         bar(1, 6, 10)
 
-        # Querying for y=5 should return 2 results (x=1, z=10 and x=2, z=20)
-        results = list(bar.query(y=5))
+        # Querying for y=5 with z=None explicitly restores wildcard behavior
+        # Should return 2 results (x=1, y=5, z=10 and x=2, y=5, z=20)
+        results = list(bar.query(y=5, z=None))
         assert len(results) == 2
 
-        # Querying for x=1 should return 2 results (y=5, z=10 and y=6, z=10)
-        results = list(bar.query(x=1))
+        # Querying for x=1 with z=None explicitly restores wildcard behavior
+        # Should return 2 results (x=1, y=5, z=10 and x=1, y=6, z=10)
+        results = list(bar.query(x=1, z=None))
         assert len(results) == 2
 
 def test_query_preserves_order_with_partial():
