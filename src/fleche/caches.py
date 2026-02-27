@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import logging
 from dataclasses import dataclass, asdict, replace
 from copy import copy
-from typing import Self, Iterable, Any
+from typing import Self, Iterable, Any, Callable
 
 import pandas as pd
 
@@ -116,6 +116,42 @@ class BaseCache(ABC):
             rows[str(c.to_lookup_key())] = row
 
         return pd.DataFrame.from_dict(rows, orient="index")
+
+    def filter(self, predicate: Callable[[Call | LazyCall], bool]) -> 'Cache':
+        """Create a new in-memory Cache containing only calls matching the predicate.
+
+        All values (arguments and result) associated with the matching calls are
+        copied into the new cache, making it self-contained for those calls.
+
+        Args:
+            predicate: A function that takes a Call or LazyCall and returns True
+                if it should be included in the new cache.
+
+        Returns:
+            Cache: A new in-memory Cache instance.
+        """
+        new_cache = Cache(values=storage.Memory({}), calls=storage.Memory({}))
+
+        # Query all calls; lazy=True is more efficient if the predicate only
+        # inspects metadata or names.
+        tpl = Call(name=None, arguments=None, metadata=None, module=None, version=None, result=None)
+        for c in self.query(tpl, lazy=True):
+            if predicate(c):
+                # Reconstruct as a full Call object to ensure everything is loaded and then re-saved.
+                # c.arguments is a LazyArguments, converting to dict loads values.
+                # c.result is a property that loads the value.
+                full_call = Call(
+                    name=c.name,
+                    arguments=dict(c.arguments),
+                    metadata=c.metadata,
+                    module=c.module,
+                    version=c.version,
+                    code_digest=c.code_digest,
+                    result=c.result
+                )
+                new_cache.save(full_call)
+
+        return new_cache
 
 
 @dataclass
