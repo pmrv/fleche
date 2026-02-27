@@ -1,8 +1,31 @@
+from pytest import fixture
+
 from fleche import fleche, cache
+from fleche.call import LazyCall
 from fleche.caches import Cache
 from fleche.storage import Memory
 
-def test_query_partial_arguments():
+@fixture
+def test_cache():
+    return Cache(values=Memory({}), calls=Memory({}))
+
+def test_query_lazy(test_cache):
+    """lazy keyword should be supported by .query on wrapped function."""
+    # Setup a fresh memory cache
+
+    with cache(test_cache):
+        @fleche
+        def bar(x, y, z=10):
+            return x + y + z
+
+        bar(1, 5, 10)
+
+        call = list(bar.query(1, lazy=True))[0]
+        assert isinstance(call, LazyCall), "lazy keyword must yield LazyCall"
+
+
+
+def test_query_partial_arguments(test_cache):
     # Setup a fresh memory cache
     test_cache = Cache(values=Memory({}), calls=Memory({}))
 
