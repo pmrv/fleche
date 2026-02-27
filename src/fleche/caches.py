@@ -117,16 +117,21 @@ class BaseCache(ABC):
 
         return pd.DataFrame.from_dict(rows, orient="index")
 
-    def filter(self, predicate: Callable[[Call | LazyCall], bool]) -> 'FilteredCache':
+    def filter(self, predicate: Callable[[Call | LazyCall], bool] | Call) -> 'FilteredCache':
         """Create a read-only view of this cache that only exposes calls matching the predicate.
 
         Args:
             predicate: A function that takes a Call or LazyCall and returns True
-                if it should be included in the new cache.
+                if it should be included in the new cache, or a Call object to
+                use as a template.
 
         Returns:
             FilteredCache: A read-only view of the cache.
         """
+        if isinstance(predicate, Call):
+            template = predicate
+            predicate = lambda call: template.matches(call)
+
         return FilteredCache(self, predicate)
 
 
@@ -191,9 +196,6 @@ class Cache(BaseCache):
                 version=call.version,
                 code_digest=call.code_digest
             )
-        # If call is a LazyCall, we must convert it back to a mutable Call
-        if hasattr(call, 'to_call'):
-            return call.to_call()
 
         call.arguments = {k: self._handle_args_load(v) for k, v in call.arguments.items()}
         call.result = self.load_value(call.result)
@@ -293,8 +295,6 @@ class FilteredCache(ReadOnlyCache):
     def load(self, key, lazy: bool = False):
         call = self.cache.load(key, lazy=True)
         if self.predicate(call):
-            if not lazy and hasattr(call, 'to_call'):
-                return call.to_call()
             return self.cache.load(key, lazy=lazy)
         raise KeyError(key)
 
