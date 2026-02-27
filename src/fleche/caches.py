@@ -102,7 +102,11 @@ class BaseCache(ABC):
         # handle any necessary decoding (e.g., Cache decodes values on query()).
         tpl = Call(name=None, arguments=None, metadata=None, module=None, version=None, result=None)
 
-        rows: dict[str, dict[str, Any]] = {}
+        dfs = []
+        chunk_size = 10000
+        current_rows: list[dict[str, Any]] = []
+        current_indices: list[str] = []
+
         # Use lazy=False to ensure we have actual values for the table
         for c in self.query(tpl, lazy=True):
             row = {
@@ -113,9 +117,22 @@ class BaseCache(ABC):
             for data in md.values():
                 if isinstance(data, dict):
                     row.update(data)
-            rows[str(c.to_lookup_key())] = row
 
-        return pd.DataFrame.from_dict(rows, orient="index")
+            current_rows.append(row)
+            current_indices.append(str(c.to_lookup_key()))
+
+            if len(current_rows) >= chunk_size:
+                dfs.append(pd.DataFrame(current_rows, index=current_indices))
+                current_rows = []
+                current_indices = []
+
+        if current_rows:
+            dfs.append(pd.DataFrame(current_rows, index=current_indices))
+
+        if not dfs:
+            return pd.DataFrame()
+
+        return pd.concat(dfs)
 
 
 @dataclass
