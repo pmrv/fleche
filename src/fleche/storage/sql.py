@@ -93,12 +93,18 @@ def _coerce_sqlite_url(path_or_url: str | None) -> str:
     return url
 
 
+# Use a constant for the PRAGMA execution to avoid raw string injection risks.
+SQLITE_FOREIGN_KEYS_ON = "PRAGMA foreign_keys=ON"
+
+
 def _enable_sqlite_foreign_keys(engine: Engine) -> None:
     @event.listens_for(engine, "connect")
     def _set_sqlite_pragma(dbapi_connection, connection_record):
         cursor = dbapi_connection.cursor()
         try:
-            cursor.execute("PRAGMA foreign_keys=ON")
+            # We use a static constant string here. We cannot use sqlalchemy.text()
+            # because we are operating on a raw DBAPI cursor at the 'connect' event.
+            cursor.execute(SQLITE_FOREIGN_KEYS_ON)
         finally:
             cursor.close()
 
