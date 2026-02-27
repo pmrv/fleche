@@ -117,41 +117,17 @@ class BaseCache(ABC):
 
         return pd.DataFrame.from_dict(rows, orient="index")
 
-    def filter(self, predicate: Callable[[Call | LazyCall], bool]) -> 'Cache':
-        """Create a new in-memory Cache containing only calls matching the predicate.
-
-        All values (arguments and result) associated with the matching calls are
-        copied into the new cache, making it self-contained for those calls.
+    def filter(self, predicate: Callable[[Call | LazyCall], bool]) -> 'FilteredCache':
+        """Create a read-only view of this cache that only exposes calls matching the predicate.
 
         Args:
             predicate: A function that takes a Call or LazyCall and returns True
                 if it should be included in the new cache.
 
         Returns:
-            Cache: A new in-memory Cache instance.
+            FilteredCache: A read-only view of the cache.
         """
-        new_cache = Cache(values=storage.Memory({}), calls=storage.Memory({}))
-
-        # Query all calls; lazy=True is more efficient if the predicate only
-        # inspects metadata or names.
-        tpl = Call(name=None, arguments=None, metadata=None, module=None, version=None, result=None)
-        for c in self.query(tpl, lazy=True):
-            if predicate(c):
-                # Reconstruct as a full Call object to ensure everything is loaded and then re-saved.
-                # c.arguments is a LazyArguments, converting to dict loads values.
-                # c.result is a property that loads the value.
-                full_call = Call(
-                    name=c.name,
-                    arguments=dict(c.arguments),
-                    metadata=c.metadata,
-                    module=c.module,
-                    version=c.version,
-                    code_digest=c.code_digest,
-                    result=c.result
-                )
-                new_cache.save(full_call)
-
-        return new_cache
+        return FilteredCache(self, predicate)
 
 
 @dataclass
@@ -215,6 +191,10 @@ class Cache(BaseCache):
                 version=call.version,
                 code_digest=call.code_digest
             )
+        # If call is a LazyCall, we must convert it back to a mutable Call
+        if hasattr(call, 'to_call'):
+            return call.to_call()
+
         call.arguments = {k: self._handle_args_load(v) for k, v in call.arguments.items()}
         call.result = self.load_value(call.result)
         return call
@@ -303,6 +283,25 @@ class ReadOnlyCache(BaseCache):
             Call | LazyCall: Results yielded by the wrapped cache's ``query`` method.
         """
         return self.cache.query(call, lazy=lazy)
+
+
+@dataclass(frozen=True)
+class FilteredCache(ReadOnlyCache):
+    """A read-only view of a cache that only exposes calls matching a predicate."""
+    predicate: Callable[[Call | LazyCall], bool]
+
+    def load(self, key, lazy: bool = False):
+        call = self.cache.load(key, lazy=True)
+        if self.predicate(call):
+            if not lazy and hasattr(call, 'to_call'):
+                return call.to_call()
+            return self.cache.load(key, lazy=lazy)
+        raise KeyError(key)
+
+    def query(self, call: Call, lazy: bool = False) -> Iterable[Call | LazyCall]:
+        for c in self.cache.query(call, lazy=lazy):
+            if self.predicate(c):
+                yield c
 
 
 @dataclass(frozen=True)

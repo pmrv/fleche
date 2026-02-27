@@ -1,6 +1,6 @@
 import pytest
 from fleche.storage import Memory
-from fleche.caches import Cache
+from fleche.caches import Cache, FilteredCache
 from fleche.call import Call
 from fleche import fleche, cache, D
 
@@ -19,6 +19,7 @@ def test_filter_by_name():
 
     # Filter only foo calls
     c_foo = c.filter(lambda call: call.name == 'foo')
+    assert isinstance(c_foo, FilteredCache)
 
     assert len(list(c_foo.query(Call(name='foo', arguments=None)))) == 2
     assert len(list(c_foo.query(Call(name='bar', arguments=None)))) == 0
@@ -29,20 +30,19 @@ def test_filter_by_name():
     with pytest.raises(KeyError):
         c_foo.load(bar.digest(3))
 
-def test_filter_composite_values():
+def test_filter_reflects_changes():
     c = Cache(Memory({}), Memory({}))
 
     @fleche
-    def make_complex(x):
-        return {"a": [x, x+1], "b": x*2}
+    def foo(x): return x + 1
+
+    c_foo = c.filter(lambda call: call.name == 'foo')
 
     with cache(c):
-        make_complex(10)
+        foo(1)
 
-    c_filtered = c.filter(lambda call: True) # Keep everything
-
-    loaded = c_filtered.load(make_complex.digest(10))
-    assert loaded.result == {"a": [10, 11], "b": 20}
+    # View should reflect changes in original cache
+    assert c_foo.load(foo.digest(1)).result == 2
 
 def test_filter_with_digests():
     c = Cache(Memory({}), Memory({}))
@@ -58,7 +58,6 @@ def test_filter_with_digests():
     with cache(c):
         l_res = producer(5)
         l_digest = producer.digest(5)
-        # Pass result of producer (which is [5, 5, 5])
         consumer(l_res)
 
     # Filter only consumer calls
@@ -67,26 +66,48 @@ def test_filter_with_digests():
     assert len(list(c_consumer.query(Call(name='consumer', arguments=None)))) == 1
     assert len(list(c_consumer.query(Call(name='producer', arguments=None)))) == 0
 
-    # Check that consumer's argument is still valid in c_consumer
-    # This means c_consumer must have the value for the list in its value storage.
+    # Values should still be loadable because FilteredCache refers to original cache
     res = list(c_consumer.query(Call(name='consumer', arguments=None)))[0]
     assert res.arguments['l'] == [5, 5, 5]
 
-def test_filter_by_result():
+def test_lazy_call_to_call():
     c = Cache(Memory({}), Memory({}))
-
     @fleche
-    def calc(x): return x * x
+    def foo(x): return x + 1
 
     with cache(c):
-        calc(1)
-        calc(2)
-        calc(3)
-        calc(4)
+        foo(1)
 
-    # Filter only calls with result > 5
-    # Since we use lazy=True in filter, c.result will trigger a load from the source cache
-    c_large = c.filter(lambda call: call.result > 5)
+    lc = c.load(foo.digest(1), lazy=True)
+    full_call = lc.to_call()
 
-    results = sorted([call.result for call in c_large.query(Call(name='calc', arguments=None))])
-    assert results == [9, 16]
+    assert isinstance(full_call, Call)
+    assert full_call.name == "foo"
+    assert full_call.arguments == {"x": 1}
+    assert full_call.result == 2
+
+def test_filter_on_cache_stack():
+    c1 = Cache(Memory({}), Memory({}))
+    c2 = Cache(Memory({}), Memory({}))
+    stack = c1.push(c2)
+
+    @fleche
+    def foo(x): return x + 1
+
+    with cache(c1):
+        foo(1)
+    with cache(c2):
+        foo(2)
+
+    c_filtered = stack.filter(lambda call: call.arguments['x'] == 1)
+
+    # Should find call from c1
+    assert c_filtered.load(foo.digest(1)).result == 2
+    # Should NOT find call from c2
+    with pytest.raises(KeyError):
+        c_filtered.load(foo.digest(2))
+
+    # Test query
+    results = list(c_filtered.query(Call(name='foo', arguments=None)))
+    assert len(results) == 1
+    assert results[0].arguments['x'] == 1

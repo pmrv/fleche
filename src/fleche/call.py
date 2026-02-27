@@ -109,6 +109,18 @@ class LazyCall:
         )
         return c.to_lookup_key()
 
+    def to_call(self) -> Call:
+        """Reconstruct a full Call object by loading all values from the cache."""
+        return Call(
+            name=self.name,
+            arguments=dict(self.arguments),
+            metadata=self.metadata,
+            module=self.module,
+            version=self.version,
+            code_digest=self.code_digest,
+            result=self.result
+        )
+
     def __digest__(self):
         # Reconstruct a Call object to ensure identical digest calculation
         c = Call(
