@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 import logging
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, replace
 from copy import copy
 from typing import Self, Iterable, Any
 
@@ -206,8 +206,18 @@ class Cache(BaseCache):
             Call | LazyCall: Matching calls with arguments and result decoded from digests
             where possible.
         """
-        # Delegate to underlying call storage, but decode any digested
+        # Delegate to underlying call storage, but first expand possible value digests and decode any digested
         # arguments/results before yielding to the caller (same semantics as load()).
+        def maybe_expand(value):
+            if isinstance(value, Digest):
+                return self.values.expand(value)
+            else:
+                return value
+        call = replace(
+                call,
+                arguments={k: maybe_expand(v) for k, v in call.arguments.items()},
+                result=maybe_expand(call.result),
+        )
         for c in self.calls.query(call):
             try:
                 yield self._decode_call(c, lazy=lazy)
