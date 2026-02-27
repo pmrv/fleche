@@ -39,4 +39,6 @@ docs = [
 tests = [
     "pytest",
     "hypothesis",
+    "nbconvert",
+    "ipykernel",
 ]
