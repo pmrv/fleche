@@ -5,6 +5,32 @@ from ..call import Call
 from ..digest import Digest, DIGEST_LENGTH, digest
 
 try:
+    from pyiron_snippets.import_alarm import ImportAlarm
+except ImportError:
+    class ImportAlarm:
+        def __init__(self, message=None, raise_exception=False):
+            self.message = message
+            self.raise_exception = raise_exception
+            self.failed = False
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            if exc_type is not None and issubclass(exc_type, ImportError):
+                self.failed = True
+                return True
+        def __call__(self, func):
+            def wrapper(*args, **kwargs):
+                if self.failed and self.message and self.raise_exception:
+                    raise ImportError(self.message)
+                return func(*args, **kwargs)
+            return wrapper
+
+
+with ImportAlarm(
+    "Sql requires 'sqlalchemy' to be installed. "
+    "Install it with `pip install fleche[sqlalchemy]`.",
+    raise_exception=True
+) as sqlalchemy_alarm:
     from sqlalchemy import (
         create_engine,
         Column,
@@ -71,17 +97,6 @@ try:
             UniqueConstraint("call_key", "name", name="uq_metadata_call_name"),
         )
 
-except ImportError:
-    Base = None
-    CallModel = None
-    ArgumentModel = None
-    MetaModel = None
-    create_engine = None
-    sessionmaker = None
-    select = None
-    and_ = None
-    aliased = None
-
 
 def _coerce_sqlite_url(path_or_url: str | None) -> str:
     if path_or_url is None:
@@ -114,13 +129,8 @@ def _enable_sqlite_foreign_keys(engine) -> None:
 class Sql(CallStorage):
     """SQLAlchemy-backed CallStorage with JSON metadata and DB-backed expand()."""
 
+    @sqlalchemy_alarm
     def __init__(self, url: str | None = None, echo: bool = False):
-        if create_engine is None:
-             raise ImportError(
-                "Sql requires 'sqlalchemy' to be installed. "
-                "Install it with `pip install fleche[sqlalchemy]`."
-            )
-
         url = _coerce_sqlite_url(url)
         self.engine = create_engine(url, echo=echo, future=True)
         _enable_sqlite_foreign_keys(self.engine)

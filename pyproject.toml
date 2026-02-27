@@ -33,6 +33,9 @@ docs = [
     "sphinx-rtd-theme",
     "sphinx-autoapi",
 ]
+import_alarm = [
+    "pyiron-snippets",
+]
 cloudpickle = [
     "cloudpickle",
 ]
@@ -45,5 +48,5 @@ bagofholding = [
 tests = [
     "pytest",
     "hypothesis",
-    "fleche[cloudpickle,sqlalchemy,bagofholding]",
+    "fleche[cloudpickle,sqlalchemy,bagofholding,import_alarm]",
 ]
