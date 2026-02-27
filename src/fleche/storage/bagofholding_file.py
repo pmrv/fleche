@@ -7,26 +7,7 @@ from .file import FileStorage
 from .base import SaveError
 from ..digest import Digest
 
-try:
-    from pyiron_snippets.import_alarm import ImportAlarm
-except ImportError:
-    class ImportAlarm:
-        def __init__(self, message=None, raise_exception=False):
-            self.message = message
-            self.raise_exception = raise_exception
-            self.failed = False
-        def __enter__(self):
-            return self
-        def __exit__(self, exc_type, exc_val, exc_tb):
-            if exc_type is not None and issubclass(exc_type, ImportError):
-                self.failed = True
-                return True
-        def __call__(self, func):
-            def wrapper(*args, **kwargs):
-                if self.failed and self.message and self.raise_exception:
-                    raise ImportError(self.message)
-                return func(*args, **kwargs)
-            return wrapper
+from pyiron_snippets.import_alarm import ImportAlarm
 
 
 with ImportAlarm(
