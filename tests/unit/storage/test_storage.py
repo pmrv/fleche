@@ -15,7 +15,15 @@ from fleche.storage.base import DigestedIterable
 temp = tempfile.TemporaryDirectory()
 temp_pickle = tempfile.TemporaryDirectory()
 temp_bag = tempfile.TemporaryDirectory()
-storages = [Memory({}), CloudpickleFile(temp.name), PickleFile(temp_pickle.name), BagOfHoldingH5File(temp_bag.name)]
+
+# Use fixed secret keys for tests
+secret_key = b"test_secret_key_32_bytes_long!!!!"
+storages = [
+    Memory({}),
+    CloudpickleFile(temp.name, secret_key=secret_key),
+    PickleFile(temp_pickle.name, secret_key=secret_key),
+    BagOfHoldingH5File(temp_bag.name)
+]
 
 st_data = st.one_of(
     st.integers(),
@@ -83,8 +91,8 @@ temp_calls_sql = tempfile.TemporaryDirectory()
 
 call_storages = [
     Memory({}),
-    CloudpickleFile(temp_calls_root.name),
-    PickleFile(temp_calls_pickle.name),
+    CloudpickleFile(temp_calls_root.name, secret_key=secret_key),
+    PickleFile(temp_calls_pickle.name, secret_key=secret_key),
     BagOfHoldingH5File(temp_calls_h5.name),
     Sql(Path(temp_calls_sql.name) / "calls.db"),
 ]
