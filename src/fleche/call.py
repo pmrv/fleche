@@ -159,10 +159,6 @@ class LazyCall:
             result=self.result
         )
 
-    def matches(self, other: 'Call | LazyCall') -> bool:
-        """Check if this call matches another call, treating None as a wildcard in this object."""
-        return self.to_call().matches(other)
-
     def __digest__(self):
         # Reconstruct a Call object to ensure identical digest calculation
         c = Call(

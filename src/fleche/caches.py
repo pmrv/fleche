@@ -129,8 +129,7 @@ class BaseCache(ABC):
             FilteredCache: A read-only view of the cache.
         """
         if isinstance(predicate, Call):
-            template = predicate
-            predicate = lambda call: template.matches(call)
+            predicate = predicate.matches
 
         return FilteredCache(self, predicate)
 
