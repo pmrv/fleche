@@ -33,10 +33,6 @@ docs = [
     "sphinx-rtd-theme",
     "sphinx-autoapi",
 ]
-tests = [
-    "pytest",
-    "hypothesis",
-]
 cloudpickle = [
     "cloudpickle",
 ]
@@ -45,4 +41,9 @@ sqlalchemy = [
 ]
 bagofholding = [
     "bagofholding == 0.1.9",
+]
+tests = [
+    "pytest",
+    "hypothesis",
+    "fleche[cloudpickle,sqlalchemy,bagofholding]",
 ]
