@@ -1,78 +1,86 @@
 from typing import Iterable, Any
 from pathlib import Path
-
-from sqlalchemy import (
-    create_engine,
-    Column,
-    String,
-    Integer,
-    ForeignKey,
-    UniqueConstraint,
-    select,
-    and_,
-)
-from sqlalchemy.engine import Engine
-from sqlalchemy import event
-from sqlalchemy.orm import declarative_base, sessionmaker, relationship, Session, aliased
-from sqlalchemy.types import JSON
-
 from .base import CallStorage, AmbiguousDigestError
 from ..call import Call
 from ..digest import Digest, DIGEST_LENGTH, digest
 
-Base = declarative_base()
-
-
-class CallModel(Base):
-    __tablename__ = "calls"
-    key = Column(String(DIGEST_LENGTH), primary_key=True)
-    name = Column(String, nullable=False)
-    module = Column(String, nullable=True)
-    version = Column(Integer, nullable=True)
-    result = Column(String(DIGEST_LENGTH), nullable=True)
-
-    arguments = relationship(
-        "ArgumentModel",
-        back_populates="call",
-        cascade="all, delete-orphan",
-        order_by="ArgumentModel.position",
+try:
+    from sqlalchemy import (
+        create_engine,
+        Column,
+        String,
+        Integer,
+        ForeignKey,
+        UniqueConstraint,
+        select,
+        and_,
     )
+    from sqlalchemy.engine import Engine
+    from sqlalchemy import event
+    from sqlalchemy.orm import declarative_base, sessionmaker, relationship, Session, aliased
+    from sqlalchemy.types import JSON
 
+    Base = declarative_base()
 
-class ArgumentModel(Base):
-    __tablename__ = "arguments"
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    call_key = Column(
-        String(DIGEST_LENGTH),
-        ForeignKey("calls.key", ondelete="CASCADE"),
-        nullable=False,
-    )
-    position = Column(Integer, nullable=False)
-    name = Column(String, nullable=False)
-    value = Column(String(DIGEST_LENGTH), nullable=False)
+    class CallModel(Base):
+        __tablename__ = "calls"
+        key = Column(String(DIGEST_LENGTH), primary_key=True)
+        name = Column(String, nullable=False)
+        module = Column(String, nullable=True)
+        version = Column(Integer, nullable=True)
+        result = Column(String(DIGEST_LENGTH), nullable=True)
 
-    __table_args__ = (
-        UniqueConstraint("call_key", "name", name="uq_arguments_call_name"),
-    )
+        arguments = relationship(
+            "ArgumentModel",
+            back_populates="call",
+            cascade="all, delete-orphan",
+            order_by="ArgumentModel.position",
+        )
 
-    call = relationship("CallModel", back_populates="arguments")
+    class ArgumentModel(Base):
+        __tablename__ = "arguments"
+        id = Column(Integer, primary_key=True, autoincrement=True)
+        call_key = Column(
+            String(DIGEST_LENGTH),
+            ForeignKey("calls.key", ondelete="CASCADE"),
+            nullable=False,
+        )
+        position = Column(Integer, nullable=False)
+        name = Column(String, nullable=False)
+        value = Column(String(DIGEST_LENGTH), nullable=False)
 
+        __table_args__ = (
+            UniqueConstraint("call_key", "name", name="uq_arguments_call_name"),
+        )
 
-class MetaModel(Base):
-    __tablename__ = "metadata"
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    call_key = Column(
-        String(DIGEST_LENGTH),
-        ForeignKey("calls.key", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    name = Column(String, nullable=False, index=True)
-    data = Column(JSON, nullable=False)
+        call = relationship("CallModel", back_populates="arguments")
 
-    __table_args__ = (
-        UniqueConstraint("call_key", "name", name="uq_metadata_call_name"),
-    )
+    class MetaModel(Base):
+        __tablename__ = "metadata"
+        id = Column(Integer, primary_key=True, autoincrement=True)
+        call_key = Column(
+            String(DIGEST_LENGTH),
+            ForeignKey("calls.key", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        )
+        name = Column(String, nullable=False, index=True)
+        data = Column(JSON, nullable=False)
+
+        __table_args__ = (
+            UniqueConstraint("call_key", "name", name="uq_metadata_call_name"),
+        )
+
+except ImportError:
+    Base = None
+    CallModel = None
+    ArgumentModel = None
+    MetaModel = None
+    create_engine = None
+    sessionmaker = None
+    select = None
+    and_ = None
+    aliased = None
 
 
 def _coerce_sqlite_url(path_or_url: str | None) -> str:
@@ -93,7 +101,7 @@ def _coerce_sqlite_url(path_or_url: str | None) -> str:
     return url
 
 
-def _enable_sqlite_foreign_keys(engine: Engine) -> None:
+def _enable_sqlite_foreign_keys(engine) -> None:
     @event.listens_for(engine, "connect")
     def _set_sqlite_pragma(dbapi_connection, connection_record):
         cursor = dbapi_connection.cursor()
@@ -107,6 +115,12 @@ class Sql(CallStorage):
     """SQLAlchemy-backed CallStorage with JSON metadata and DB-backed expand()."""
 
     def __init__(self, url: str | None = None, echo: bool = False):
+        if create_engine is None:
+             raise ImportError(
+                "Sql requires 'sqlalchemy' to be installed. "
+                "Install it with `pip install fleche[sqlalchemy]`."
+            )
+
         url = _coerce_sqlite_url(url)
         self.engine = create_engine(url, echo=echo, future=True)
         _enable_sqlite_foreign_keys(self.engine)
@@ -117,7 +131,7 @@ class Sql(CallStorage):
 
     def _save(self, call: Call) -> Digest:
         key = call.to_lookup_key()
-        session: Session = self.Session()
+        session = self.Session()
         try:
             existing = session.get(CallModel, str(key))
             if existing is not None:
@@ -158,7 +172,7 @@ class Sql(CallStorage):
             session.close()
 
     def _load(self, key: str) -> Call:
-        session: Session = self.Session()
+        session = self.Session()
         try:
             call_model = session.execute(
                 select(CallModel).where(CallModel.key == key)
@@ -188,7 +202,7 @@ class Sql(CallStorage):
             session.close()
 
     def list(self) -> Iterable[Digest]:
-        session: Session = self.Session()
+        session = self.Session()
         try:
             # Return Digest instances for keys
             return [Digest(row[0]) for row in session.execute(select(CallModel.key))]
@@ -202,7 +216,7 @@ class Sql(CallStorage):
             raise KeyError(key)
 
         prefix = str(key)
-        session: Session = self.Session()
+        session = self.Session()
         try:
             rows = session.execute(
                 select(CallModel.key)
@@ -230,7 +244,7 @@ class Sql(CallStorage):
         )
 
     def _evict(self, key: str) -> None:
-        session: Session = self.Session()
+        session = self.Session()
         try:
             instance = session.get(CallModel, key)
             if instance is None:
@@ -266,7 +280,7 @@ class Sql(CallStorage):
         Yields:
             Call: Matching calls including their decoded metadata.
         """
-        session: Session = self.Session()
+        session = self.Session()
         try:
             def normalize_value(v: Any) -> str:
                 """Return the stored form used in SQL for argument/result matching.
@@ -368,5 +382,3 @@ class Sql(CallStorage):
             c = self.load(k)
             if meta_matches(c):
                 yield c
-
-    # find_by_metadata removed; metadata filtering is supported via query(template)

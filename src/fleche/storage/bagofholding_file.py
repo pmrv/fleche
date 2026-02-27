@@ -3,14 +3,25 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from bagofholding import H5Bag
-
 from .file import FileStorage
 from .base import SaveError
 from ..digest import Digest
 
+try:
+    from bagofholding import H5Bag
+except ImportError:
+    H5Bag = None
+
 @dataclass
 class BagOfHoldingH5File(FileStorage):
+
+    def __post_init__(self):
+        if H5Bag is None:
+            raise ImportError(
+                "BagOfHoldingH5File requires 'bagofholding' to be installed. "
+                "Install it with `pip install fleche[bagofholding]`."
+            )
+        super().__post_init__()
 
     def _save(self, value: Any, key: Digest) -> str:
         try:
