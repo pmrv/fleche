@@ -10,10 +10,6 @@ import gc
 from pathlib import Path
 from typing import Any
 
-# Add src to path to allow importing fleche
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
-sys.path.insert(0, os.path.dirname(__file__))
-
 from fleche.storage import Memory, PickleFile, CloudpickleFile, Sql, BagOfHoldingH5File
 from fleche.digest import digest
 from fleche.call import Call
