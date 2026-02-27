@@ -2,9 +2,11 @@ name: Benchmarks
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
 
 jobs:
   benchmark:
+    if: contains(github.event.pull_request.labels.*.name, 'benchmark')
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
@@ -39,6 +41,6 @@ jobs:
               issue_number: issue_number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `## Benchmark Results\n\n\`\`\`text\n${output}\n\`\`\``
+              body: `## Benchmark Results\n\n${output}`
             });
           }

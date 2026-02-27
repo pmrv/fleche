@@ -79,24 +79,52 @@ def main():
 
         final_df = df[[c for c in display_cols if c in df.columns]]
 
-        # Print table
-        # Adjust pandas display options
-        pd.set_option('display.max_rows', None)
-        pd.set_option('display.max_columns', None)
-        pd.set_option('display.width', 1000)
-        pd.set_option('display.colheader_justify', 'left')
+        # Group categories
+        categories = {
+            "Digest Benchmarks": final_df[final_df['benchmark'] == 'digest'],
+            "Storage Benchmarks": final_df[final_df['benchmark'].str.startswith('storage_')],
+            "Integration Benchmarks": final_df[final_df['benchmark'].str.startswith('integration_')]
+        }
 
-        print("\nBenchmark Results:\n")
-        print(final_df.to_string(index=False))
+        def to_markdown_table(df):
+            # Fallback markdown table generator if tabulate is not installed
+            headers = df.columns.tolist()
+            rows = df.values.tolist()
+
+            header_row = "| " + " | ".join(str(h) for h in headers) + " |"
+            separator_row = "| " + " | ".join("---" for _ in headers) + " |"
+
+            table = [header_row, separator_row]
+            for row in rows:
+                table.append("| " + " | ".join(str(r) if pd.notna(r) else "" for r in row) + " |")
+
+            return "\n".join(table)
+
+        print()
+        for title, sub_df in categories.items():
+            if sub_df.empty:
+                continue
+
+            # Print Markdown fold
+            print(f"<details>")
+            print(f"<summary><b>{title}</b></summary>\n")
+            try:
+                print(sub_df.to_markdown(index=False))
+            except ImportError:
+                print(to_markdown_table(sub_df))
+            print()
+            print("</details>\n")
 
         # Also save to CSV
         output_csv = os.path.join(benchmark_dir, "results.csv")
         final_df.to_csv(output_csv, index=False)
-        print(f"\nResults saved to {output_csv}")
+        print(f"Results saved to {output_csv}", file=sys.stderr)
     else:
         # Fallback if pandas is not available
         print("\nBenchmark Results (Pandas not available for pretty printing):\n")
+        print("```json")
         print(json.dumps(all_results, indent=2))
+        print("```")
 
 if __name__ == "__main__":
     main()

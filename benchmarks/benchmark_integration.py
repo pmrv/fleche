@@ -10,10 +10,6 @@ import gc
 from typing import Any
 import numpy as np
 
-# Add src to path to allow importing fleche
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
-sys.path.insert(0, os.path.dirname(__file__))
-
 from fleche import fleche, cache
 from fleche.caches import Cache
 from fleche.storage import Memory, PickleFile, Sql, BagOfHoldingH5File
