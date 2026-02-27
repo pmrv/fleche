@@ -80,3 +80,8 @@ def test_defaults_partial_explicit():
     # If explicitly passed, overrides default
     call = Call.from_call(func_defaults, a=10, partial=True)
     assert call.arguments == {'a': 10, 'b': 2}
+
+def test_defaults_partial_no_apply():
+    # Verify that defaults are NOT applied when apply_defaults=False
+    call = Call.from_call(func_defaults, partial=True, apply_defaults=False)
+    assert call.arguments == {'a': None, 'b': None}

@@ -37,7 +37,7 @@ def test_query_partial_arguments(test_cache):
         # Test that .call with partial=True works and produces None for missing
         # We need to access the wrapper's get_call which is exposed as .call
         call_obj = bar.call(y=5, partial=True)
-        assert call_obj.arguments == {'x': None, 'y': 5, 'z': None}
+        assert call_obj.arguments == {'x': None, 'y': 5, 'z': 10}
 
         # Test that .query uses partial binding
         bar(1, 5, 10)

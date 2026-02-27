@@ -24,12 +24,13 @@ class Call:
     result: Any = None
 
     @classmethod
-    def from_call(cls, func, *args, partial=False, **kwargs):
+    def from_call(cls, func, *args, partial=False, apply_defaults=True, **kwargs):
         # Normalize arguments using function signature
         sig = signature(func)
         if partial:
             bound = sig.bind_partial(*args, **kwargs)
-            bound.apply_defaults()
+            if apply_defaults:
+                bound.apply_defaults()
             # missing arguments are set to None
             arguments = {name: bound.arguments.get(name) for name in sig.parameters}
         else:
