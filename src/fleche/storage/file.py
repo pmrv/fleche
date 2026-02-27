@@ -92,7 +92,13 @@ class FileStorage(Storage):
 
     def list(self) -> Iterable[Digest]:
         self.root.mkdir(parents=True, exist_ok=True)
-        return (Digest(p.name) for p in self.root.iterdir() if not p.name.endswith(".lock"))
+        return (
+            Digest(p.name)
+            for p in self.root.iterdir()
+            if not p.name.endswith(".lock")
+            and not p.name.startswith(".")
+            and p.is_file()
+        )
 
     def _evict(self, key: Digest) -> None:
         self._path(key).unlink(missing_ok=True)
