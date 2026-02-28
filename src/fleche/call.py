@@ -29,6 +29,7 @@ class Call:
         sig = signature(func)
         if partial:
             bound = sig.bind_partial(*args, **kwargs)
+            bound.apply_defaults()
             # missing arguments are set to None
             arguments = {name: bound.arguments.get(name) for name in sig.parameters}
         else:
