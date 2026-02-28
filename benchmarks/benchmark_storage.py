@@ -48,7 +48,7 @@ def benchmark_storage_ops(storage_name, storage_factory, values_to_store, iterat
                 "benchmark": "storage_save",
                 "storage": storage_name,
                 "iterations": len(save_times),
-                "avg_time": statistics.mean(save_times),
+                "avg_time": statistics.median(save_times),
                 "stdev_time": statistics.stdev(save_times) if len(save_times) > 1 else 0,
                 "min_time": min(save_times),
                 "max_time": max(save_times)
@@ -71,7 +71,7 @@ def benchmark_storage_ops(storage_name, storage_factory, values_to_store, iterat
                 "benchmark": "storage_load",
                 "storage": storage_name,
                 "iterations": len(load_times),
-                "avg_time": statistics.mean(load_times),
+                "avg_time": statistics.median(load_times),
                 "stdev_time": statistics.stdev(load_times) if len(load_times) > 1 else 0,
                 "min_time": min(load_times),
                 "max_time": max(load_times)
@@ -96,7 +96,7 @@ def benchmark_storage_ops(storage_name, storage_factory, values_to_store, iterat
                 "benchmark": "storage_evict",
                 "storage": storage_name,
                 "iterations": len(evict_times),
-                "avg_time": statistics.mean(evict_times),
+                "avg_time": statistics.median(evict_times),
                 "stdev_time": statistics.stdev(evict_times) if len(evict_times) > 1 else 0,
                 "min_time": min(evict_times),
                 "max_time": max(evict_times)
@@ -198,7 +198,7 @@ def main():
             "benchmark": "storage_save",
             "storage": "Sql/calls",
             "iterations": len(save_times),
-            "avg_time": statistics.mean(save_times),
+            "avg_time": statistics.median(save_times),
             "stdev_time": statistics.stdev(save_times),
             "min_time": min(save_times),
             "max_time": max(save_times)
@@ -215,7 +215,7 @@ def main():
             "benchmark": "storage_load",
             "storage": "Sql/calls",
             "iterations": len(load_times),
-            "avg_time": statistics.mean(load_times),
+            "avg_time": statistics.median(load_times),
             "stdev_time": statistics.stdev(load_times),
             "min_time": min(load_times),
             "max_time": max(load_times)
@@ -233,7 +233,7 @@ def main():
             "benchmark": "storage_evict",
             "storage": "Sql/calls",
             "iterations": len(evict_times),
-            "avg_time": statistics.mean(evict_times),
+            "avg_time": statistics.median(evict_times),
             "stdev_time": statistics.stdev(evict_times),
             "min_time": min(evict_times),
             "max_time": max(evict_times)
