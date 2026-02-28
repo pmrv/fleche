@@ -122,11 +122,37 @@ def main():
 
             return f"{emoji} {val_str}"
 
+        # Color mapping for storage backends
+        def get_storage_color(storage_name):
+            if pd.isna(storage_name) or storage_name == "":
+                return ""
+            backend = str(storage_name).split('/')[0] if '/' in str(storage_name) else str(storage_name)
+            colors = {
+                "Memory": "🟣",
+                "PickleFile": "🟢",
+                "CloudpickleFile": "🔵",
+                "BagOfHoldingH5File": "🟠",
+                "Sql": "🔴",
+                "Pickle+Sql": "🟢",
+                "H5+Sql": "🟠",
+            }
+            return colors.get(backend, "⚪️")
+
         # Group categories using raw dataframe to keep avg_time for coloring
         categories_raw = {
             "Digest Benchmarks": df[df['benchmark'] == 'digest'],
-            "Storage Benchmarks": df[df['benchmark'].str.startswith('storage_')],
-            "Integration Benchmarks": df[df['benchmark'].str.startswith('integration_')]
+            "Storage Load": df[df['benchmark'] == 'storage_load'],
+            "Storage Save": df[df['benchmark'] == 'storage_save'],
+            "Storage Evict": df[df['benchmark'] == 'storage_evict'],
+            "Integration Hit": df[df['benchmark'] == 'integration_hit'],
+            "Integration Miss": df[df['benchmark'] == 'integration_miss']
+        }
+
+        # Parent categories for folding
+        parent_categories = {
+            "Digest Benchmarks": ["Digest Benchmarks"],
+            "Storage Benchmarks": ["Storage Load", "Storage Save", "Storage Evict"],
+            "Integration Benchmarks": ["Integration Hit", "Integration Miss"]
         }
 
         def to_markdown_table(df):
@@ -144,64 +170,61 @@ def main():
             return "\n".join(table)
 
         print()
-        for title, raw_df in categories_raw.items():
-            if raw_df.empty:
+        for parent_title, child_keys in parent_categories.items():
+            # Check if any child has data
+            if not any(not categories_raw[k].empty for k in child_keys):
                 continue
 
-            # Prepare formatted slice
-            sub_df = final_df.loc[raw_df.index].copy()
-
-            # Add emoji gradient to avg
-            min_val = raw_df['avg_time'].min()
-            max_val = raw_df['avg_time'].max()
-
-            # We can use HTML image for better gradient instead of emoji?
-            # GitHub supports `![](https://placehold.co/15x15/COLOR/COLOR.png)`
-            # Let's use the placehold.co or simple html styling for the cell if we could, but markdown tables don't support row styles.
-            # Let's use image tags!
-
-            def get_color_hex(value: float, min_val: float, max_val: float) -> str:
-                # simple red to green gradient (or green to red)
-                if max_val == min_val:
-                    ratio = 0
-                else:
-                    ratio = (value - min_val) / (max_val - min_val)
-
-                # HSL to RGB approximation for Green (120) to Red (0)
-                # Green is 0, 255, 0. Red is 255, 0, 0
-                r = int(ratio * 255)
-                g = int((1 - ratio) * 255)
-                return f"{r:02x}{g:02x}00"
-
-            # Alternatively, since placehold.co might fail, let's use the HTML colored text block.
-            # github markdown does not support `color` or `background-color` in standard tags.
-            # We will use the emoji gradient as a safe and reliable method.
-
-            sub_df['avg'] = [add_color_to_cell(a, r, min_val, max_val) for a, r in zip(sub_df['avg'], raw_df['avg_time'])]
-
-            # Drop empty columns
-            for col in sub_df.columns:
-                # pandas replaces empty string with NaN sometimes, or if all are empty string
-                if (sub_df[col] == "").all() or sub_df[col].isna().all():
-                    sub_df = sub_df.drop(columns=[col])
-
-            # Drop iterations as requested
-            if 'iterations' in sub_df.columns:
-                sub_df = sub_df.drop(columns=['iterations'])
-
-            # If the category is digest, benchmark column might be redundant
-            if title == "Digest Benchmarks" and 'benchmark' in sub_df.columns:
-                sub_df = sub_df.drop(columns=['benchmark'])
-
-            # Print Markdown fold with overflow auto for horizontal scrolling
             print(f"<details>")
-            print(f"<summary><b>{title}</b></summary>\n")
+            print(f"<summary><b>{parent_title}</b></summary>\n")
             print('<div style="overflow-x: auto;">\n')
-            try:
-                print(sub_df.to_markdown(index=False))
-            except ImportError:
-                print(to_markdown_table(sub_df))
-            print('\n</div>')
+
+            for title in child_keys:
+                raw_df = categories_raw[title]
+                if raw_df.empty:
+                    continue
+
+                print(f"### {title}\n")
+
+                # Prepare formatted slice
+                sub_df = final_df.loc[raw_df.index].copy()
+
+                # Add emoji gradient to avg
+                min_val = raw_df['avg_time'].min()
+                max_val = raw_df['avg_time'].max()
+
+                sub_df['avg'] = [add_color_to_cell(a, r, min_val, max_val) for a, r in zip(sub_df['avg'], raw_df['avg_time'])]
+
+                # Apply storage color
+                if 'storage' in sub_df.columns:
+                    sub_df['storage'] = [f"{get_storage_color(s)} {s}" if pd.notna(s) and s != "" else s for s in sub_df['storage']]
+
+                # We can also color 'name' column if it encodes storage, but integration tests encode it in 'name'
+                if title.startswith('Integration'):
+                    if 'name' in sub_df.columns:
+                        sub_df['name'] = [f"{get_storage_color(s)} {s}" if pd.notna(s) and s != "" else s for s in sub_df['name']]
+
+                # Drop empty columns
+                for col in sub_df.columns:
+                    # pandas replaces empty string with NaN sometimes, or if all are empty string
+                    if (sub_df[col] == "").all() or sub_df[col].isna().all():
+                        sub_df = sub_df.drop(columns=[col])
+
+                # Drop iterations as requested
+                if 'iterations' in sub_df.columns:
+                    sub_df = sub_df.drop(columns=['iterations'])
+
+                # Drop benchmark column since it's redundant with the child title
+                if 'benchmark' in sub_df.columns:
+                    sub_df = sub_df.drop(columns=['benchmark'])
+
+                try:
+                    print(sub_df.to_markdown(index=False))
+                except ImportError:
+                    print(to_markdown_table(sub_df))
+                print("\n")
+
+            print('</div>')
             print("</details>\n")
 
         # Also save to CSV
