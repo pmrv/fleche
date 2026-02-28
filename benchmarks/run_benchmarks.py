@@ -138,12 +138,18 @@ def main():
             }
             return colors.get(backend, "⚪️")
 
+        # Split out call storage (which only uses "Sql/calls") from value storage
+        is_call_storage = df['storage'] == "Sql/calls"
+
         # Group categories using raw dataframe to keep avg_time for coloring
         categories_raw = {
             "Digest Benchmarks": df[df['benchmark'] == 'digest'],
-            "Storage Load": df[df['benchmark'] == 'storage_load'],
-            "Storage Save": df[df['benchmark'] == 'storage_save'],
-            "Storage Evict": df[df['benchmark'] == 'storage_evict'],
+            "Storage Load": df[(df['benchmark'] == 'storage_load') & ~is_call_storage],
+            "Storage Save": df[(df['benchmark'] == 'storage_save') & ~is_call_storage],
+            "Storage Evict": df[(df['benchmark'] == 'storage_evict') & ~is_call_storage],
+            "Call Storage Load": df[(df['benchmark'] == 'storage_load') & is_call_storage],
+            "Call Storage Save": df[(df['benchmark'] == 'storage_save') & is_call_storage],
+            "Call Storage Evict": df[(df['benchmark'] == 'storage_evict') & is_call_storage],
             "Integration Hit": df[df['benchmark'] == 'integration_hit'],
             "Integration Miss": df[df['benchmark'] == 'integration_miss']
         }
@@ -151,7 +157,8 @@ def main():
         # Parent categories for folding
         parent_categories = {
             "Digest Benchmarks": ["Digest Benchmarks"],
-            "Storage Benchmarks": ["Storage Load", "Storage Save", "Storage Evict"],
+            "Value Storage Benchmarks": ["Storage Load", "Storage Save", "Storage Evict"],
+            "Call Storage Benchmarks": ["Call Storage Load", "Call Storage Save", "Call Storage Evict"],
             "Integration Benchmarks": ["Integration Hit", "Integration Miss"]
         }
 
