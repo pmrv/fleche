@@ -105,6 +105,20 @@ def main():
             if sub_df.empty:
                 continue
 
+            # Drop empty columns
+            for col in sub_df.columns:
+                # pandas replaces empty string with NaN sometimes, or if all are empty string
+                if (sub_df[col] == "").all() or sub_df[col].isna().all():
+                    sub_df = sub_df.drop(columns=[col])
+
+            # Drop iterations as requested
+            if 'iterations' in sub_df.columns:
+                sub_df = sub_df.drop(columns=['iterations'])
+
+            # If the category is digest, benchmark column might be redundant
+            if title == "Digest Benchmarks" and 'benchmark' in sub_df.columns:
+                sub_df = sub_df.drop(columns=['benchmark'])
+
             # Print Markdown fold
             print(f"<details>")
             print(f"<summary><b>{title}</b></summary>\n")
