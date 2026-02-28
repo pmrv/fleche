@@ -49,4 +49,6 @@ tests = [
     "cloudpickle",
     "sqlalchemy",
     "bagofholding == 0.1.9",
+    "nbconvert",
+    "ipykernel",
 ]
