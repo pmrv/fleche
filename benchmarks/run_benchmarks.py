@@ -64,13 +64,16 @@ def main():
         df = pd.DataFrame(all_results)
 
         # Format times
-        df['median'] = df['avg_time'].apply(format_time)
-        df['min'] = df['min_time'].apply(format_time)
-        df['max'] = df['max_time'].apply(format_time)
-        df['stdev'] = df['stdev_time'].apply(format_time)
+        df['median'] = df['median_time'].apply(format_time)
+        if 'min_time' in df.columns:
+            df['min'] = df['min_time'].apply(format_time)
+        if 'max_time' in df.columns:
+            df['max'] = df['max_time'].apply(format_time)
+        if 'stdev_time' in df.columns:
+            df['stdev'] = df['stdev_time'].apply(format_time)
 
         # Select and reorder columns
-        display_cols = ['benchmark', 'name', 'storage', 'iterations', 'median', 'stdev', 'min', 'max']
+        display_cols = ['benchmark', 'name', 'storage', 'iterations', 'median']
         # 'storage' column might not exist in all results
         if 'storage' not in df.columns:
             df['storage'] = ""
@@ -79,8 +82,8 @@ def main():
 
         final_df = df[[c for c in display_cols if c in df.columns]]
 
-        # Sort the dataframe by raw average time before grouping to preserve order (descending: largest value on top)
-        df = df.sort_values(by='avg_time', ascending=False)
+        # Sort the dataframe by raw median time before grouping to preserve order (descending: largest value on top)
+        df = df.sort_values(by='median_time', ascending=False)
         final_df = df[[c for c in display_cols if c in df.columns]]
 
         # We need the raw value to compute the color gradient, let's keep it in a parallel series
@@ -197,10 +200,10 @@ def main():
                 sub_df = final_df.loc[raw_df.index].copy()
 
                 # Add emoji gradient to median
-                min_val = raw_df['avg_time'].min()
-                max_val = raw_df['avg_time'].max()
+                min_val = raw_df['median_time'].min()
+                max_val = raw_df['median_time'].max()
 
-                sub_df['median'] = [add_color_to_cell(a, r, min_val, max_val) for a, r in zip(sub_df['median'], raw_df['avg_time'])]
+                sub_df['median'] = [add_color_to_cell(a, r, min_val, max_val) for a, r in zip(sub_df['median'], raw_df['median_time'])]
 
                 # Apply storage color
                 if 'storage' in sub_df.columns:
