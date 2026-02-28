@@ -18,20 +18,21 @@ def test_secure_storage_tampering(tmp_path, storage_cls):
     file_path = tmp_path / digest_key
     content = file_path.read_bytes()
 
-    # Modify the data part (after signature)
-    # Let's append garbage to the end, which changes the data and should invalidate the signature
-    tampered_content = content + b"garbage"
+    # Modify the data part (before signature)
+    # Let's prepend garbage to the beginning, which changes the data and should invalidate the signature
+    tampered_content = b"garbage" + content
     file_path.write_bytes(tampered_content)
 
     with pytest.raises(KeyError):
         storage.load(digest_key)
 
 @pytest.mark.parametrize("storage_cls", [PickleFile, CloudpickleFile])
-def test_secure_storage_unsigned_data(tmp_path, storage_cls):
-    """Test that unsigned data (too short or missing signature) raises KeyError."""
+def test_secure_storage_short_unsigned_data_loads(tmp_path, storage_cls):
+    """Test that short unsigned data (< 32 bytes) is loaded without signature check."""
     key = b"B" * 32
     storage = storage_cls(root=tmp_path, secret_key=key)
 
+    # Short value that will result in pickle < 32 bytes
     value = "test"
     digest_key = digest(value)
     file_path = tmp_path / digest_key
@@ -39,6 +40,25 @@ def test_secure_storage_unsigned_data(tmp_path, storage_cls):
     # Write raw pickle data without signature
     file_path.write_bytes(pickle.dumps(value))
 
+    # Should load successfully
+    loaded = storage.load(digest_key)
+    assert loaded == value
+
+@pytest.mark.parametrize("storage_cls", [PickleFile, CloudpickleFile])
+def test_secure_storage_long_unsigned_data_fails(tmp_path, storage_cls):
+    """Test that long unsigned data (>= 32 bytes) fails signature check."""
+    key = b"B" * 32
+    storage = storage_cls(root=tmp_path, secret_key=key)
+
+    # Long value that will result in pickle >= 32 bytes
+    value = "A" * 100
+    digest_key = digest(value)
+    file_path = tmp_path / digest_key
+
+    # Write raw pickle data without signature
+    file_path.write_bytes(pickle.dumps(value))
+
+    # Fails signature check
     with pytest.raises(KeyError):
         storage.load(digest_key)
 

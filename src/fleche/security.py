@@ -30,18 +30,18 @@ class SignedBytes:
         if self.key is None:
             return content
         signature = self._sign(content)
-        return signature + content
+        return content + signature
 
     def loads(self, content: bytes) -> bytes:
         if self.key is None:
             return content
 
         if len(content) < 32:
-            logger.warning("Cache entry too short to be valid signed data.")
-            raise KeyError("Invalid signature")
+            logger.warning("Cache entry too short to be valid signed data. Data may be old/unsigned.")
+            return content
 
-        signature = content[:32]
-        data = content[32:]
+        data = content[:-32]
+        signature = content[-32:]
 
         expected_signature = self._sign(data)
         if not hmac.compare_digest(expected_signature, signature):
