@@ -108,3 +108,18 @@ def test_storage_noop_no_key(tmp_path, storage_cls):
 
     loaded = storage.load(digest_key)
     assert loaded == value
+
+@pytest.mark.parametrize("storage_cls", [PickleFile, CloudpickleFile])
+def test_unauthenticating_storage_can_read_authenticated_data(tmp_path, storage_cls):
+    """Test that a storage without a secret key can successfully load data written by an authenticating storage."""
+    key = b"D" * 32
+    storage_auth = storage_cls(root=tmp_path, secret_key=key)
+    storage_noauth = storage_cls(root=tmp_path, secret_key=None)
+
+    value = {"secure": "data", "id": 12345}
+    digest_key = storage_auth.save(value)
+
+    # The unauthenticating storage should load the value successfully,
+    # relying on pickle.loads to ignore the appended 32-byte signature.
+    loaded = storage_noauth.load(digest_key)
+    assert loaded == value
