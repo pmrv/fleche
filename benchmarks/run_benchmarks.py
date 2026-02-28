@@ -79,11 +79,54 @@ def main():
 
         final_df = df[[c for c in display_cols if c in df.columns]]
 
-        # Group categories
-        categories = {
-            "Digest Benchmarks": final_df[final_df['benchmark'] == 'digest'],
-            "Storage Benchmarks": final_df[final_df['benchmark'].str.startswith('storage_')],
-            "Integration Benchmarks": final_df[final_df['benchmark'].str.startswith('integration_')]
+        # Sort the dataframe by raw average time before grouping to preserve order
+        df = df.sort_values(by='avg_time', ascending=True)
+        final_df = df[[c for c in display_cols if c in df.columns]]
+
+        # We need the raw value to compute the color gradient, let's keep it in a parallel series
+        # or compute the markdown explicitly row by row.
+        # But we also have to drop it from final_df. We can map `avg_time` to colors.
+
+        def get_color(value: float, min_val: float, max_val: float) -> str:
+            import math
+            # Using a simple perceptually uniform-ish colormap (viridis-like or simple heatmap)
+            # We will use HSL to create a gradient from green (fast) to red (slow)
+            if max_val == min_val:
+                ratio = 0
+            else:
+                # log scale might be better for times, but let's use linear first or slightly compressed
+                ratio = (value - min_val) / (max_val - min_val)
+
+            # 120 (Green) to 0 (Red)
+            hue = 120 - int(ratio * 120)
+            return f"hsl({hue}, 70%, 50%)"
+
+        def add_color_to_cell(val_str: str, raw_val: float, min_val: float, max_val: float) -> str:
+            color = get_color(raw_val, min_val, max_val)
+            # Github Markdown supports img shields or html. But wait, Github Markdown strips most style tags and raw CSS on tables!
+            # Using 🟢, 🟡, 🔴 emojis as a fallback gradient is safer for Github markdown.
+
+            if max_val == min_val:
+                ratio = 0
+            else:
+                ratio = (raw_val - min_val) / (max_val - min_val)
+
+            if ratio < 0.33:
+                emoji = "🟩"
+            elif ratio < 0.66:
+                emoji = "🟨"
+            elif ratio < 0.9:
+                emoji = "🟧"
+            else:
+                emoji = "🟥"
+
+            return f"{emoji} {val_str}"
+
+        # Group categories using raw dataframe to keep avg_time for coloring
+        categories_raw = {
+            "Digest Benchmarks": df[df['benchmark'] == 'digest'],
+            "Storage Benchmarks": df[df['benchmark'].str.startswith('storage_')],
+            "Integration Benchmarks": df[df['benchmark'].str.startswith('integration_')]
         }
 
         def to_markdown_table(df):
@@ -101,9 +144,40 @@ def main():
             return "\n".join(table)
 
         print()
-        for title, sub_df in categories.items():
-            if sub_df.empty:
+        for title, raw_df in categories_raw.items():
+            if raw_df.empty:
                 continue
+
+            # Prepare formatted slice
+            sub_df = final_df.loc[raw_df.index].copy()
+
+            # Add emoji gradient to avg
+            min_val = raw_df['avg_time'].min()
+            max_val = raw_df['avg_time'].max()
+
+            # We can use HTML image for better gradient instead of emoji?
+            # GitHub supports `![](https://placehold.co/15x15/COLOR/COLOR.png)`
+            # Let's use the placehold.co or simple html styling for the cell if we could, but markdown tables don't support row styles.
+            # Let's use image tags!
+
+            def get_color_hex(value: float, min_val: float, max_val: float) -> str:
+                # simple red to green gradient (or green to red)
+                if max_val == min_val:
+                    ratio = 0
+                else:
+                    ratio = (value - min_val) / (max_val - min_val)
+
+                # HSL to RGB approximation for Green (120) to Red (0)
+                # Green is 0, 255, 0. Red is 255, 0, 0
+                r = int(ratio * 255)
+                g = int((1 - ratio) * 255)
+                return f"{r:02x}{g:02x}00"
+
+            # Alternatively, since placehold.co might fail, let's use the HTML colored text block.
+            # github markdown does not support `color` or `background-color` in standard tags.
+            # We will use the emoji gradient as a safe and reliable method.
+
+            sub_df['avg'] = [add_color_to_cell(a, r, min_val, max_val) for a, r in zip(sub_df['avg'], raw_df['avg_time'])]
 
             # Drop empty columns
             for col in sub_df.columns:
