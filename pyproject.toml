@@ -25,6 +25,7 @@ license = "BSD-3-Clause"
 dependencies = [
     'numpy',
     'pandas >= 2.2, <4',
+    'pyiron-snippets',
 ]
 
 [project.optional-dependencies]
@@ -32,9 +33,6 @@ docs = [
     "sphinx",
     "sphinx-rtd-theme",
     "sphinx-autoapi",
-]
-import_alarm = [
-    "pyiron-snippets",
 ]
 cloudpickle = [
     "cloudpickle",
@@ -48,5 +46,7 @@ bagofholding = [
 tests = [
     "pytest",
     "hypothesis",
-    "fleche[cloudpickle,sqlalchemy,bagofholding,import_alarm]",
+    "cloudpickle",
+    "sqlalchemy",
+    "bagofholding == 0.1.9",
 ]
