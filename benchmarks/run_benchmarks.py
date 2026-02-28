@@ -79,8 +79,8 @@ def main():
 
         final_df = df[[c for c in display_cols if c in df.columns]]
 
-        # Sort the dataframe by raw average time before grouping to preserve order
-        df = df.sort_values(by='avg_time', ascending=True)
+        # Sort the dataframe by raw average time before grouping to preserve order (descending: largest value on top)
+        df = df.sort_values(by='avg_time', ascending=False)
         final_df = df[[c for c in display_cols if c in df.columns]]
 
         # We need the raw value to compute the color gradient, let's keep it in a parallel series
@@ -193,14 +193,15 @@ def main():
             if title == "Digest Benchmarks" and 'benchmark' in sub_df.columns:
                 sub_df = sub_df.drop(columns=['benchmark'])
 
-            # Print Markdown fold
+            # Print Markdown fold with overflow auto for horizontal scrolling
             print(f"<details>")
             print(f"<summary><b>{title}</b></summary>\n")
+            print('<div style="overflow-x: auto;">\n')
             try:
                 print(sub_df.to_markdown(index=False))
             except ImportError:
                 print(to_markdown_table(sub_df))
-            print()
+            print('\n</div>')
             print("</details>\n")
 
         # Also save to CSV
