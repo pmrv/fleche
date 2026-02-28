@@ -113,7 +113,18 @@ def main():
     # Test Data
     small_data = [f"value_{i}" for i in range(100)]
 
-    workloads = [("small_strings", small_data)]
+    # Generate some complex nested structures
+    from utils import st_nested_values
+    try:
+        nested_data = [st_nested_values.example() for _ in range(50)]
+    except Exception as e:
+        print(f"Failed to generate nested data: {e}", file=sys.stderr)
+        nested_data = [{"a": 1, "b": [2, 3], "c": {"d": "test"}}] * 50
+
+    workloads = [
+        ("small_strings", small_data),
+        ("nested_structures", nested_data)
+    ]
 
     if np:
         large_data = [np.random.rand(100, 100) for _ in range(20)] # 20 large arrays
