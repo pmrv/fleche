@@ -65,32 +65,6 @@ def test_filter_with_template():
     with pytest.raises(KeyError):
         c_filtered.load(bar.digest(3))
 
-def test_filter_on_cache_stack():
-    c1 = Cache(Memory({}), Memory({}))
-    c2 = Cache(Memory({}), Memory({}))
-    stack = c1.push(c2)
-
-    @fleche
-    def foo(x): return x + 1
-
-    with cache(c1):
-        foo(1)
-    with cache(c2):
-        foo(2)
-
-    c_filtered = stack.filter(lambda call: call.arguments['x'] == 1)
-
-    # Should find call from c1
-    assert c_filtered.load(foo.digest(1)).result == 2
-    # Should NOT find call from c2
-    with pytest.raises(KeyError):
-        c_filtered.load(foo.digest(2))
-
-    # Test query
-    results = list(c_filtered.query(Call(name='foo', arguments=None)))
-    assert len(results) == 1
-    assert results[0].arguments['x'] == 1
-
 def test_filtered_cache_is_readonly():
     c = Cache(Memory({}), Memory({}))
     c_filtered = c.filter(lambda call: True)

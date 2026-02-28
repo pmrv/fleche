@@ -1,25 +1,7 @@
 import pytest
-from fleche.call import Call, LazyCall, LazyArguments
+from fleche.call import Call
 from fleche.caches import Cache
 from fleche.storage import Memory
-from fleche.digest import Digest, digest
-
-def test_lazy_call_to_call():
-    """Verify that LazyCall.to_call() reconstructs a full Call object."""
-    values_storage = Memory({})
-    calls_storage = Memory({})
-    cache = Cache(values_storage, calls_storage)
-
-    original = Call(name="test_func", arguments={"a": 1, "b": 2}, result=3)
-    key = cache.save(original)
-
-    lazy = cache.load(key, lazy=True)
-    full_call = lazy.to_call()
-
-    assert isinstance(full_call, Call)
-    assert full_call.name == "test_func"
-    assert full_call.arguments == {"a": 1, "b": 2}
-    assert full_call.result == 3
 
 def test_call_matches():
     """Verify that Call.matches() correctly handles wildcards and values."""

@@ -294,7 +294,9 @@ class FilteredCache(ReadOnlyCache):
     def load(self, key, lazy: bool = False):
         call = self.cache.load(key, lazy=True)
         if self.predicate(call):
-            return self.cache.load(key, lazy=lazy)
+            if not lazy:
+                return call.reify()
+            return call
         raise KeyError(key)
 
     def query(self, call: Call, lazy: bool = False) -> Iterable[Call | LazyCall]:
