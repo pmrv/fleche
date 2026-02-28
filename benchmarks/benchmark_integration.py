@@ -33,36 +33,47 @@ def data_heavy_func(n):
 def benchmark_integration(name, cache_obj, func, args, iterations=10):
     results = []
 
-    # 1. First Call (Miss)
-    # We want to measure the overhead of fleche + storage save
-    # We need to make sure it's a miss every time for this part of the benchmark
+    # Pre-calculate base execution times for the function (without cache overhead)
+    base_times = []
+    raw_func = getattr(func, "__wrapped__", func)
 
-    miss_times = []
+    for i in range(iterations):
+        arg = args[i] if isinstance(args, list) else i
+        start = time.perf_counter()
+        raw_func(arg)
+        end = time.perf_counter()
+        base_times.append(end - start)
+
+    # We will subtract the average base execution time from the miss times
+    # to isolate the framework overhead (fleche logic + storage save).
+    # Since hit times don't execute the function, they don't need this adjustment.
+    avg_base_time = statistics.mean(base_times)
+
+    # 1. First Call (Miss)
+    miss_overhead_times = []
     for i in range(iterations):
         # vary argument to ensure miss
-        arg = args[i] if isinstance(args, list) else args
-        if isinstance(args, list):
-             arg = args[i]
-        else:
-             arg = i
-
-        # Clear cache for this key if we are reusing args, or just rely on varying args
-        # Varying args is better as it mimics real usage pattern of new calls
+        arg = args[i] if isinstance(args, list) else i
 
         start = time.perf_counter()
         with cache(cache_obj):
             func(arg)
         end = time.perf_counter()
-        miss_times.append(end - start)
+
+        # Calculate overhead by subtracting base execution time for this specific call
+        # Or just subtract the general average. Subtracting specific base time might be better
+        # if execution time varies widely, but here it's fine to subtract the specific one since
+        # we ran the same arguments in the same order.
+        miss_overhead_times.append(max(0, (end - start) - base_times[i]))
 
     results.append({
         "benchmark": "integration_miss",
         "name": name,
         "iterations": iterations,
-        "avg_time": statistics.mean(miss_times),
-        "stdev_time": statistics.stdev(miss_times) if len(miss_times) > 1 else 0,
-        "min_time": min(miss_times),
-        "max_time": max(miss_times)
+        "avg_time": statistics.mean(miss_overhead_times),
+        "stdev_time": statistics.stdev(miss_overhead_times) if len(miss_overhead_times) > 1 else 0,
+        "min_time": min(miss_overhead_times),
+        "max_time": max(miss_overhead_times)
     })
 
     # 2. Second Call (Hit)
