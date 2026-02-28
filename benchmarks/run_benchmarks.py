@@ -64,13 +64,13 @@ def main():
         df = pd.DataFrame(all_results)
 
         # Format times
-        df['avg'] = df['avg_time'].apply(format_time)
+        df['median'] = df['avg_time'].apply(format_time)
         df['min'] = df['min_time'].apply(format_time)
         df['max'] = df['max_time'].apply(format_time)
         df['stdev'] = df['stdev_time'].apply(format_time)
 
         # Select and reorder columns
-        display_cols = ['benchmark', 'name', 'storage', 'iterations', 'avg', 'stdev', 'min', 'max']
+        display_cols = ['benchmark', 'name', 'storage', 'iterations', 'median', 'stdev', 'min', 'max']
         # 'storage' column might not exist in all results
         if 'storage' not in df.columns:
             df['storage'] = ""
@@ -196,11 +196,11 @@ def main():
                 # Prepare formatted slice
                 sub_df = final_df.loc[raw_df.index].copy()
 
-                # Add emoji gradient to avg
+                # Add emoji gradient to median
                 min_val = raw_df['avg_time'].min()
                 max_val = raw_df['avg_time'].max()
 
-                sub_df['avg'] = [add_color_to_cell(a, r, min_val, max_val) for a, r in zip(sub_df['avg'], raw_df['avg_time'])]
+                sub_df['median'] = [add_color_to_cell(a, r, min_val, max_val) for a, r in zip(sub_df['median'], raw_df['avg_time'])]
 
                 # Apply storage color
                 if 'storage' in sub_df.columns:
