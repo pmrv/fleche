@@ -70,10 +70,7 @@ def benchmark_integration(name, cache_obj, func, args, iterations=10):
         "benchmark": "integration_miss",
         "name": name,
         "iterations": iterations,
-        "avg_time": statistics.median(miss_overhead_times),
-        "stdev_time": statistics.stdev(miss_overhead_times) if len(miss_overhead_times) > 1 else 0,
-        "min_time": min(miss_overhead_times),
-        "max_time": max(miss_overhead_times)
+        "median_time": statistics.median(miss_overhead_times)
     })
 
     # 2. Second Call (Hit)
@@ -92,10 +89,7 @@ def benchmark_integration(name, cache_obj, func, args, iterations=10):
         "benchmark": "integration_hit",
         "name": name,
         "iterations": iterations,
-        "avg_time": statistics.median(hit_times),
-        "stdev_time": statistics.stdev(hit_times) if len(hit_times) > 1 else 0,
-        "min_time": min(hit_times),
-        "max_time": max(hit_times)
+        "median_time": statistics.median(hit_times)
     })
 
     return results
@@ -128,8 +122,7 @@ def main():
 
             # Data Heavy
             # args are size N
-            if np is not None:
-                all_results.extend(benchmark_integration(f"{config_name}/data_heavy", cache_inst, data_heavy_func, [100] * 20, iterations=20)) # 100x100 array
+            all_results.extend(benchmark_integration(f"{config_name}/data_heavy", cache_inst, data_heavy_func, [100] * 20, iterations=20)) # 100x100 array
 
     finally:
         shutil.rmtree(tmp_dir)

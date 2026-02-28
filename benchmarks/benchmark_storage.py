@@ -13,12 +13,11 @@ from typing import Any
 from fleche.storage import Memory, PickleFile, CloudpickleFile, Sql, BagOfHoldingH5File
 from fleche.digest import digest
 from fleche.call import Call
-try:
-    import numpy as np
-except ImportError:
-    np = None
+import numpy as np
+import timeit
+from functools import partial
 
-def benchmark_storage_ops(storage_name, storage_factory, values_to_store, iterations=100):
+def benchmark_storage_ops(storage_name, storage_factory, values_to_store):
     results = []
 
     # Create temp dir for storage
@@ -26,61 +25,65 @@ def benchmark_storage_ops(storage_name, storage_factory, values_to_store, iterat
     try:
         storage = storage_factory(tmp_dir)
 
+        # Pre-compute keys
+        keys = []
+        for val in values_to_store:
+            try:
+                keys.append(digest(val))
+            except Exception as e:
+                print(f"Error digesting for {storage_name}: {e}", file=sys.stderr)
+                keys.append(None)
+
+        valid_items = [(val, k) for val, k in zip(values_to_store, keys) if k is not None]
+
+        if not valid_items:
+            return []
+
         # Benchmark Save
         save_times = []
-        keys = []
-        for i, val in enumerate(values_to_store):
-            # We use string keys for simplicity, digest(val) would also work
-            try:
-                key = digest(val)
-                keys.append(key)
-
-                start = time.perf_counter()
-                storage.save(val, key)
-                end = time.perf_counter()
-                save_times.append(end - start)
-            except Exception as e:
-                print(f"Error saving to {storage_name}: {e}", file=sys.stderr)
-                continue
+        for val, key in valid_items:
+            timer = timeit.Timer(partial(storage.save, val, key))
+            # Use smaller number for storage since it's much slower than digest
+            number = 10
+            times = timer.repeat(repeat=3, number=number)
+            save_times.extend([t / number for t in times])
 
         if save_times:
             results.append({
                 "benchmark": "storage_save",
                 "storage": storage_name,
-                "iterations": len(save_times),
-                "avg_time": statistics.median(save_times),
-                "stdev_time": statistics.stdev(save_times) if len(save_times) > 1 else 0,
-                "min_time": min(save_times),
-                "max_time": max(save_times)
+                "iterations": len(valid_items) * 30,
+                "median_time": statistics.median(save_times)
             })
 
         # Benchmark Load
         load_times = []
-        for key in keys:
+        for _, key in valid_items:
             try:
-                start = time.perf_counter()
-                _ = storage.load(key)
-                end = time.perf_counter()
-                load_times.append(end - start)
+                timer = timeit.Timer(partial(storage.load, key))
+                number = 10
+                times = timer.repeat(repeat=3, number=number)
+                load_times.extend([t / number for t in times])
             except Exception as e:
-                 print(f"Error loading from {storage_name}: {e}", file=sys.stderr)
-                 continue
+                print(f"Error loading from {storage_name}: {e}", file=sys.stderr)
+                continue
 
         if load_times:
             results.append({
                 "benchmark": "storage_load",
                 "storage": storage_name,
                 "iterations": len(load_times),
-                "avg_time": statistics.median(load_times),
-                "stdev_time": statistics.stdev(load_times) if len(load_times) > 1 else 0,
-                "min_time": min(load_times),
-                "max_time": max(load_times)
+                "median_time": statistics.median(load_times)
             })
 
-        # Benchmark Evict (if supported, Memory supports it, FileStorage supports it)
+        # Benchmark Evict
         evict_times = []
-        for key in keys:
+        for _, key in valid_items:
             try:
+                # Eviction removes it, so we can't repeat it simply with timeit without setup.
+                # Since evict alters state, we need to do a manual setup and single pass per iteration,
+                # or just use a simple loop. Timeit allows setup string, but we just want to measure evict.
+                # Best way for evict is to time one execution per key.
                 start = time.perf_counter()
                 storage.evict(key)
                 end = time.perf_counter()
@@ -96,10 +99,7 @@ def benchmark_storage_ops(storage_name, storage_factory, values_to_store, iterat
                 "benchmark": "storage_evict",
                 "storage": storage_name,
                 "iterations": len(evict_times),
-                "avg_time": statistics.median(evict_times),
-                "stdev_time": statistics.stdev(evict_times) if len(evict_times) > 1 else 0,
-                "min_time": min(evict_times),
-                "max_time": max(evict_times)
+                "median_time": statistics.median(evict_times)
             })
 
     finally:
@@ -188,42 +188,37 @@ def main():
         save_times = []
         keys = []
         for c in calls_data:
-             start = time.perf_counter()
-             key = storage.save(c) # CallStorage.save takes only call
-             end = time.perf_counter()
-             save_times.append(end - start)
-             keys.append(key)
+            timer = timeit.Timer(partial(storage.save, c))
+            number = 10
+            times = timer.repeat(repeat=3, number=number)
+            save_times.extend([t / number for t in times])
+            keys.append(digest(c)) # Call keys are their digest
 
         sql_results.append({
             "benchmark": "storage_save",
             "storage": "Sql/calls",
-            "iterations": len(save_times),
-            "avg_time": statistics.median(save_times),
-            "stdev_time": statistics.stdev(save_times),
-            "min_time": min(save_times),
-            "max_time": max(save_times)
+            "iterations": len(calls_data) * 30,
+            "median_time": statistics.median(save_times)
         })
 
         load_times = []
         for key in keys:
-            start = time.perf_counter()
-            _ = storage.load(key)
-            end = time.perf_counter()
-            load_times.append(end - start)
+            timer = timeit.Timer(partial(storage.load, key))
+            number = 10
+            times = timer.repeat(repeat=3, number=number)
+            load_times.extend([t / number for t in times])
 
         sql_results.append({
             "benchmark": "storage_load",
             "storage": "Sql/calls",
-            "iterations": len(load_times),
-            "avg_time": statistics.median(load_times),
-            "stdev_time": statistics.stdev(load_times),
-            "min_time": min(load_times),
-            "max_time": max(load_times)
+            "iterations": len(keys) * 30,
+            "median_time": statistics.median(load_times)
         })
 
         # Sql supports evict(key)
         evict_times = []
         for key in keys:
+            # Single run for eviction
             start = time.perf_counter()
             storage.evict(key)
             end = time.perf_counter()
@@ -233,10 +228,7 @@ def main():
             "benchmark": "storage_evict",
             "storage": "Sql/calls",
             "iterations": len(evict_times),
-            "avg_time": statistics.median(evict_times),
-            "stdev_time": statistics.stdev(evict_times),
-            "min_time": min(evict_times),
-            "max_time": max(evict_times)
+            "median_time": statistics.median(evict_times)
         })
 
         all_results.extend(sql_results)

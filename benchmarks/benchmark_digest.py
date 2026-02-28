@@ -4,10 +4,7 @@ import sys
 import os
 import json
 import statistics
-try:
-    import numpy as np
-except ImportError:
-    np = None
+import numpy as np
 
 from hypothesis import strategies as st
 
@@ -17,7 +14,7 @@ from utils import st_nested_values, st_base_values, generate_examples
 import timeit
 from functools import partial
 
-def benchmark(name, value, iterations=1000):
+def benchmark(name, value):
     # Warmup
     try:
         digest(value)
@@ -27,22 +24,25 @@ def benchmark(name, value, iterations=1000):
 
     timer = timeit.Timer(partial(digest, value))
 
-    # timeit.repeat runs the benchmark multiple times and returns a list of total times per repeat.
-    # To get per-iteration times that we can calculate stddev from, we can run repeat(iterations, number=1).
-    # This measures individual calls, similar to the hand-rolled loop but via timeit.
-    times = timer.repeat(repeat=iterations, number=1)
+    # Determine a good number of iterations automatically
+    number, _ = timer.autorange()
 
-    avg_time = statistics.median(times)
-    stdev_time = statistics.stdev(times) if len(times) > 1 else 0
+    # Run the benchmark multiple times to get a median
+    repeats = 3
+    # Cap number to avoid overly long runs for expensive operations
+    if number > 1000:
+        number = 1000
+    times = timer.repeat(repeat=repeats, number=number)
+
+    # Calculate time per call
+    times_per_call = [t / number for t in times]
+    median_time = statistics.median(times_per_call)
 
     return {
         "benchmark": "digest",
         "name": name,
-        "iterations": iterations,
-        "avg_time": avg_time,
-        "stdev_time": stdev_time,
-        "min_time": min(times),
-        "max_time": max(times)
+        "iterations": number * repeats,
+        "median_time": median_time
     }
 
 def main():
@@ -63,14 +63,10 @@ def main():
     results.append(benchmark("Dict (small)", {"a": 1, "b": 2}))
 
     # Numpy
-    if np is not None:
-        try:
-            arr_small = np.array([1, 2, 3])
-            arr_large = np.random.rand(100, 100)
-            results.append(benchmark("Numpy (small)", arr_small))
-            results.append(benchmark("Numpy (100x100)", arr_large))
-        except ImportError:
-            pass
+    arr_small = np.array([1, 2, 3])
+    arr_large = np.random.rand(100, 100)
+    results.append(benchmark("Numpy (small)", arr_small))
+    results.append(benchmark("Numpy (100x100)", arr_large))
 
     # Nested structures from hypothesis
     # We take one example
