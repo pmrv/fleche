@@ -23,11 +23,9 @@ classifiers = [
 ]
 license = "BSD-3-Clause"
 dependencies = [
-    'cloudpickle',
-    'sqlalchemy',
-    'bagofholding == 0.1.9',
     'numpy',
     'pandas >= 2.2, <4',
+    'pyiron-snippets',
 ]
 
 [project.optional-dependencies]
@@ -36,9 +34,21 @@ docs = [
     "sphinx-rtd-theme",
     "sphinx-autoapi",
 ]
+cloudpickle = [
+    "cloudpickle",
+]
+sqlalchemy = [
+    "sqlalchemy",
+]
+bagofholding = [
+    "bagofholding == 0.1.9",
+]
 tests = [
     "pytest",
     "hypothesis",
+    "cloudpickle",
+    "sqlalchemy",
+    "bagofholding == 0.1.9",
     "nbconvert",
     "ipykernel",
 ]
