@@ -1,0 +1,33 @@
+name: render notebooks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+jobs:
+  build:
+    if: contains(github.event.pull_request.labels.*.name, 'rendernb')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.head_ref }}
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+        cache: pip
+    - name: Setup
+      shell: bash -l {0}
+      run: |
+        pip install -e .[tests] jupyter nbconvert ipykernel
+    - name: render
+      shell: bash -l {0}
+      run: |
+        jupyter nbconvert --to notebook --execute --inplace notebooks/*.ipynb
+    - uses: stefanzweifel/git-auto-commit-action@v5
+      with:
+        commit_message: "docs: render notebooks"
+        file_pattern: "notebooks/*.ipynb"
