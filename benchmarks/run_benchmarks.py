@@ -132,6 +132,7 @@ def main():
             backend = str(storage_name).split('/')[0] if '/' in str(storage_name) else str(storage_name)
             colors = {
                 "Memory": "🟣",
+                "Memory+Sqlite(:memory:)": "🟤",
                 "PickleFile": "🟢",
                 "CloudpickleFile": "🔵",
                 "BagOfHoldingH5File": "🟠",
