@@ -26,23 +26,20 @@ def test_secure_storage_tampering(tmp_path, storage_cls):
         storage.load(digest_key)
 
 @pytest.mark.parametrize("storage_cls", [PickleFile, CloudpickleFile])
-def test_secure_storage_unsigned_data_loads(tmp_path, storage_cls):
-    """Test that unsigned data (whether short or long) is loaded without signature check but with a warning."""
+def test_secure_storage_unsigned_data_fails_when_auth_enabled(tmp_path, storage_cls):
+    """Test that unsigned data fails to load when an authenticated storage reads it."""
     # First, write unsigned data (no secret key)
     storage_noauth = storage_cls(root=tmp_path, secret_key=[])
-    value_short = "test"
-    value_long = "A" * 100
-
-    digest_short = storage_noauth.save(value_short)
-    digest_long = storage_noauth.save(value_long)
+    value = "test"
+    digest_key = storage_noauth.save(value)
 
     # Now try to read it with an authenticated storage
     key = b"B" * 32
     storage_auth = storage_cls(root=tmp_path, secret_key=[key])
 
-    # Should load successfully (it parses STOP opcode and finds no signature)
-    assert storage_auth.load(digest_short) == value_short
-    assert storage_auth.load(digest_long) == value_long
+    # Should fail to load because security is enabled but no signature exists
+    with pytest.raises(KeyError, match="Value present but failed signature check."):
+        storage_auth.load(digest_key)
 
 @pytest.mark.parametrize("storage_cls", [PickleFile, CloudpickleFile])
 def test_secure_storage_wrong_key(tmp_path, storage_cls):

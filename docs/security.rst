@@ -19,19 +19,19 @@ When enabled, ``fleche`` will compute an HMAC-SHA256 signature for all newly cac
 Backward Compatibility
 --------------------
 
-The signing implementation is designed to be backward compatible. Signatures are appended to the *end* of the ``pickle`` byte stream.
+The signing implementation is designed to be partially backward compatible. Signatures are appended to the *end* of the ``pickle`` byte stream.
 
-1. **Unsigned to Signed:** If you enable a secret key on an existing cache, ``fleche`` will attempt to verify signatures. If an existing cache file is completely unsigned (lacks the 32-byte signature tail), it will gracefully load the data and emit a warning indicating the data may be old.
+1. **Unsigned to Signed:** Once security is enabled with a secret key, **all** cache entries must be signed. Existing completely unsigned cache files will fail validation and be treated as misses, requiring caches to be rebuilt securely.
 2. **Signed to Unsigned:** If you disable the secret key, or a different unauthenticating instance reads the cache, the standard ``pickle`` library will successfully load the data and naturally ignore the trailing 32-byte signature.
 
 Key Rotation and Distributed Trust
 ----------------------------------
 
-You can specify multiple keys separated by commas in the environment variable.
+You can specify multiple keys separated by colons in the environment variable.
 
 .. code-block:: bash
 
-    export FLECHE_SECRET_KEY="new-key-123,old-key-456,trusted-peer-key-789"
+    export FLECHE_SECRET_KEY="new-key-123:old-key-456:trusted-peer-key-789"
 
 When multiple keys are provided:
 * **Writing:** The *first* key in the list (``new-key-123``) is always used to sign new cache entries.

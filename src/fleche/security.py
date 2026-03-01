@@ -16,7 +16,7 @@ def get_secret_key() -> list[bytes]:
     Retrieve the secret key(s) for signing cache entries.
 
     Only supports FLECHE_SECRET_KEY environment variable.
-    If multiple keys are present, they should be comma-separated.
+    If multiple keys are present, they should be colon-separated.
     If no key is found, returns an empty list (security is disabled).
 
     Returns:
@@ -24,7 +24,7 @@ def get_secret_key() -> list[bytes]:
     """
     env_key = os.environ.get("FLECHE_SECRET_KEY")
     if env_key:
-        return [k.encode("utf-8") for k in env_key.split(",")]
+        return [k.encode("utf-8") for k in env_key.split(":")]
     return []
 
 @dataclass(slots=True, frozen=True)
@@ -99,13 +99,13 @@ class SignedBytes:
         signature = content[stop_index + 1:]
 
         if not signature:
-            logger.warning("Cache entry has no signature. Loading unsigned values. Data may be old/unsigned.")
-            return data
+            logger.error("Cache entry has no signature but security is enabled.")
+            raise SignatureError("No signature found")
 
         for key in self.keys:
             expected_signature = self._sign(data, key)
             if hmac.compare_digest(expected_signature, signature):
                 return data
 
-        logger.warning("Invalid signature for cache entry. Potential tampering or key mismatch.")
+        logger.error("Invalid signature for cache entry. Potential tampering or key mismatch.")
         raise SignatureError("Invalid signature")
