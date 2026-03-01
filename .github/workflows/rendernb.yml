@@ -34,5 +34,9 @@ jobs:
         git add notebooks/*.ipynb
         if ! git diff-index --quiet HEAD; then
           git commit -m "docs: render notebooks"
-          git push
         fi
+    - name: push
+      uses: ad-m/github-push-action@master
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        branch: ${{ github.head_ref }}
