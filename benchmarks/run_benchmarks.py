@@ -132,6 +132,7 @@ def main():
             backend = str(storage_name).split('/')[0] if '/' in str(storage_name) else str(storage_name)
             colors = {
                 "Memory": "🟣",
+                "Memory+Sqlite(:memory:)": "🟣",
                 "PickleFile": "🟢",
                 "CloudpickleFile": "🔵",
                 "BagOfHoldingH5File": "🟠",
@@ -139,7 +140,7 @@ def main():
                 "Pickle+Sql": "🟢",
                 "H5+Sql": "🟠",
             }
-            return colors.get(backend, "⚪️")
+            return colors.get(backend, "🟤")
 
         # Split out call storage (which only uses "Sql/calls") from value storage
         is_call_storage = df['storage'] == "Sql/calls"
