@@ -3,14 +3,27 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from bagofholding import H5Bag
-
 from .file import FileStorage
 from .base import SaveError
 from ..digest import Digest
 
+from pyiron_snippets.import_alarm import ImportAlarm
+
+
+with ImportAlarm(
+    "BagOfHoldingH5File requires 'bagofholding' to be installed. "
+    "Install it with `pip install fleche[bagofholding]`.",
+    raise_exception=True
+) as bagofholding_alarm:
+    from bagofholding import H5Bag
+
 @dataclass
 class BagOfHoldingH5File(FileStorage):
+
+    @bagofholding_alarm
+    def __post_init__(self):
+        if hasattr(super(), "__post_init__"):
+            super().__post_init__()
 
     def _save(self, value: Any, key: Digest) -> str:
         try:
