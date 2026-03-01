@@ -41,27 +41,29 @@ class SignedBytes:
 
     def _sign(self, data: bytes, key: bytes) -> bytes:
         """
-        Generate HMAC-SHA256 signature for data using the specified key.
+        Generate HMAC-SHA256 hex signature for data using the specified key.
+        Hex encoding ensures the signature string (0-9a-f) never contains
+        the pickle STOP opcode byte (ASCII 46, `.`).
 
         Args:
             data (bytes): The data to sign.
             key (bytes): The secret key to use for signing.
 
         Returns:
-            bytes: The resulting 32-byte HMAC signature.
+            bytes: The resulting 64-byte hex-encoded HMAC signature.
         """
-        return hmac.new(key, data, hashlib.sha256).digest()
+        return hmac.new(key, data, hashlib.sha256).hexdigest().encode("ascii")
 
     def dumps(self, content: bytes) -> bytes:
         """
-        Signs the content using the first key in the list and appends the signature.
+        Signs the content using the first key in the list and appends the hex signature.
         If no keys are provided, returns the content unmodified.
 
         Args:
             content (bytes): The serialized data to sign.
 
         Returns:
-            bytes: The original data with the 32-byte signature appended (if keys exist).
+            bytes: The original data with the 64-byte hex signature appended (if keys exist).
         """
         if not self.keys:
             return content
