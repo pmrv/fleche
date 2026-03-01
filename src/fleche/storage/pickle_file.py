@@ -7,7 +7,7 @@ from typing import Any
 
 from .file import FileStorage
 from ..digest import Digest
-from ..security import get_secret_key, SignedBytes
+from ..security import get_secret_key, SignedBytes, SignatureError
 
 logger = logging.getLogger("fleche.storage.pickle_file")
 
@@ -16,7 +16,7 @@ class PickleFile(FileStorage):
     """
     Store values as files on the filesystem using the standard pickle module for serialization.
     """
-    secret_key: bytes | None = None
+    secret_key: list[bytes] | bytes | None = None
 
     def __post_init__(self):
         super().__post_init__()
@@ -37,3 +37,5 @@ class PickleFile(FileStorage):
             return pickle.loads(data)
         except FileNotFoundError:
             raise KeyError(key) from None
+        except SignatureError:
+            raise KeyError(key, "Value present but failed signature check.")
