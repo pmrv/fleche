@@ -18,6 +18,7 @@ Welcome to the **Fleche** library documentation.
    custom_digests
    configuration
    query
+   security
 
 Indices and tables
 ==================
