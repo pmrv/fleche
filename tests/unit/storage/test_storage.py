@@ -17,7 +17,7 @@ temp_pickle = tempfile.TemporaryDirectory()
 temp_bag = tempfile.TemporaryDirectory()
 
 # Use fixed secret keys for tests
-secret_key = b"test_secret_key_32_bytes_long!!!!"
+secret_key = [b"test_secret_key_32_bytes_long!!!!"]
 storages = [
     Memory({}),
     CloudpickleFile(temp.name, secret_key=secret_key),

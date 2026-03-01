@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pickle
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from .file import FileStorage
@@ -16,11 +16,11 @@ class PickleFile(FileStorage):
     """
     Store values as files on the filesystem using the standard pickle module for serialization.
     """
-    secret_key: list[bytes] | bytes | None = None
+    secret_key: list[bytes] = field(default_factory=list)
 
     def __post_init__(self):
         super().__post_init__()
-        if self.secret_key is None:
+        if not self.secret_key:
             self.secret_key = get_secret_key()
 
     def _save(self, value: Any, key: Digest) -> Digest:
