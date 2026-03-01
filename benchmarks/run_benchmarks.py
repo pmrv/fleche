@@ -136,13 +136,15 @@ def main():
                 "CloudpickleFile": "🔵",
                 "BagOfHoldingH5File": "🟠",
                 "Sql": "🔴",
+                "SqlFile": "🔴",
+                "SqlMemory": "🔴",
                 "Pickle+Sql": "🟢",
                 "H5+Sql": "🟠",
             }
             return colors.get(backend, "⚪️")
 
         # Split out call storage (which only uses "Sql/calls") from value storage
-        is_call_storage = df['storage'] == "Sql/calls"
+        is_call_storage = df['storage'].str.endswith('/calls', na=False)
 
         # Group categories using raw dataframe to keep avg_time for coloring
         categories_raw = {

@@ -180,61 +180,68 @@ def main():
         print(f"Failed Sql/calls: {e}", file=sys.stderr)
 
     # Let's do Sql benchmark separately
-    sql_results = []
     tmp_dir = tempfile.mkdtemp()
     try:
-        storage = Sql(f"sqlite:///{tmp_dir}/db.sqlite")
+        for storage_label, url in [
+            ("SqlFile/calls", f"sqlite:///{tmp_dir}/db.sqlite"),
+            ("SqlMemory/calls", "sqlite:///:memory:")
+        ]:
+            sql_results = []
+            try:
+                storage = Sql(url)
 
-        save_times = []
-        keys = []
-        for c in calls_data:
-            timer = timeit.Timer(partial(storage.save, c))
-            number = 10
-            times = timer.repeat(repeat=3, number=number)
-            save_times.extend([t / number for t in times])
-            keys.append(digest(c)) # Call keys are their digest
+                save_times = []
+                keys = []
+                for c in calls_data:
+                    timer = timeit.Timer(partial(storage.save, c))
+                    number = 10
+                    times = timer.repeat(repeat=3, number=number)
+                    save_times.extend([t / number for t in times])
+                    keys.append(c.to_lookup_key()) # Call keys are their lookup key
 
-        sql_results.append({
-            "benchmark": "storage_save",
-            "storage": "Sql/calls",
-            "iterations": len(calls_data) * 30,
-            "median_time": statistics.median(save_times)
-        })
+                sql_results.append({
+                    "benchmark": "storage_save",
+                    "storage": storage_label,
+                    "iterations": len(calls_data) * 30,
+                    "median_time": statistics.median(save_times)
+                })
 
-        load_times = []
-        for key in keys:
-            timer = timeit.Timer(partial(storage.load, key))
-            number = 10
-            times = timer.repeat(repeat=3, number=number)
-            load_times.extend([t / number for t in times])
+                load_times = []
+                for key in keys:
+                    timer = timeit.Timer(partial(storage.load, key))
+                    number = 10
+                    times = timer.repeat(repeat=3, number=number)
+                    load_times.extend([t / number for t in times])
 
-        sql_results.append({
-            "benchmark": "storage_load",
-            "storage": "Sql/calls",
-            "iterations": len(keys) * 30,
-            "median_time": statistics.median(load_times)
-        })
+                sql_results.append({
+                    "benchmark": "storage_load",
+                    "storage": storage_label,
+                    "iterations": len(keys) * 30,
+                    "median_time": statistics.median(load_times)
+                })
 
-        # Sql supports evict(key)
-        evict_times = []
-        for key in keys:
-            # Single run for eviction
-            start = time.perf_counter()
-            storage.evict(key)
-            end = time.perf_counter()
-            evict_times.append(end - start)
+                # Sql supports evict(key)
+                evict_times = []
+                for key in keys:
+                    # Single run for eviction
+                    start = time.perf_counter()
+                    storage.evict(key)
+                    end = time.perf_counter()
+                    evict_times.append(end - start)
 
-        sql_results.append({
-            "benchmark": "storage_evict",
-            "storage": "Sql/calls",
-            "iterations": len(evict_times),
-            "median_time": statistics.median(evict_times)
-        })
+                sql_results.append({
+                    "benchmark": "storage_evict",
+                    "storage": storage_label,
+                    "iterations": len(evict_times),
+                    "median_time": statistics.median(evict_times)
+                })
 
-        all_results.extend(sql_results)
+                all_results.extend(sql_results)
 
-    except Exception as e:
-        print(f"Failed Sql/calls: {e}", file=sys.stderr)
+            except Exception as e:
+                import traceback
+                print(f"Failed {storage_label}: {e}", file=sys.stderr)
+                traceback.print_exc(file=sys.stderr)
     finally:
         shutil.rmtree(tmp_dir)
 
