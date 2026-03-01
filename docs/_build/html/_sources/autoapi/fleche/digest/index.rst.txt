@@ -1,0 +1,124 @@
+fleche.digest
+=============
+
+.. py:module:: fleche.digest
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   fleche.digest.logger
+   fleche.digest.DIGEST_LENGTH
+   fleche.digest.T
+   fleche.digest._HOOKS
+   fleche.digest._EP_HOOKS
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   fleche.digest.Unhashable
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   fleche.digest.Digest
+   fleche.digest.Hook
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   fleche.digest.get_hooks
+   fleche.digest.add_hook
+   fleche.digest.load_entry_points
+   fleche.digest.digest
+   fleche.digest._digest
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:exception:: Unhashable
+
+   Bases: :py:obj:`Exception`
+
+
+   Exception raised when an object cannot be digested.
+
+
+.. py:class:: Digest
+
+   Bases: :py:obj:`str`
+
+
+   str(object='') -> str
+   str(bytes_or_buffer[, encoding[, errors]]) -> str
+
+   Create a new string object from the given object. If encoding or
+   errors is specified, then the object must expose a data buffer
+   that will be decoded using the given encoding and error handler.
+   Otherwise, returns the result of object.__str__() (if defined)
+   or repr(object).
+   encoding defaults to sys.getdefaultencoding().
+   errors defaults to 'strict'.
+
+
+.. py:data:: DIGEST_LENGTH
+   :value: 64
+
+
+.. py:data:: T
+
+.. py:class:: Hook
+
+   .. py:attribute:: type
+      :type:  T
+
+
+   .. py:attribute:: digest
+      :type:  Callable[[T], str]
+
+
+.. py:data:: _HOOKS
+   :value: []
+
+
+.. py:data:: _EP_HOOKS
+   :value: []
+
+
+.. py:function:: get_hooks()
+
+.. py:function:: add_hook(hook: Hook | tuple[str, Callable[[T], str]])
+
+.. py:function:: load_entry_points()
+
+.. py:function:: digest(value: Any) -> Digest
+
+.. py:function:: _digest(value: Any) -> Digest
+
+   Generates a SHA256 digest for a given Python object.
+
+   This function handles various types including strings, bytes, integers, floats, booleans,
+   None, dictionaries, numpy arrays, dataclasses, and iterables.
+   If an unhashable type is encountered, an Unhashable exception is raised.
+
+   :param value: The object to be digested.
+   :type value: Any
+
+   :returns: The SHA256 hexdigest of the object.
+   :rtype: str
+
+   :raises Unhashable: If the provided value cannot be digested.

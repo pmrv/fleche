@@ -1,0 +1,377 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>fleche.metadata &mdash; Fleche  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+
+
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="fleche.security" href="../security/index.html" />
+    <link rel="prev" title="fleche.digest" href="../digest/index.html" />
+</head>
+
+<body class="wy-body-for-nav">
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+
+
+          <a href="../../../index.html" class="icon icon-home">
+            Fleche
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../helpers.html">Decorator Helpers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../lazy_call.html">Lazy Loading with LazyCall</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../digests_as_args.html">Digests as Arguments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../custom_digests.html">Customizing Digests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../configuration.html">Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../query.html">Querying cached calls</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../security.html">Security</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../index.html">fleche</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../caches/index.html">fleche.caches</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../call/index.html">fleche.call</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../config/index.html">fleche.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../digest/index.html">fleche.digest</a></li>
+<li class="toctree-l4 current"><a class="current reference internal" href="#">fleche.metadata</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../security/index.html">fleche.security</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../storage/index.html">fleche.storage</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../index.html#attributes">Attributes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../index.html#exceptions">Exceptions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../index.html#classes">Classes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../index.html#functions">Functions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../index.html#package-contents">Package Contents</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Fleche</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">fleche</a></li>
+      <li class="breadcrumb-item active">fleche.metadata</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../_sources/autoapi/fleche/metadata/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+
+  <section id="module-fleche.metadata">
+<span id="fleche-metadata"></span><h1>fleche.metadata<a class="headerlink" href="#module-fleche.metadata" title="Link to this heading"></a></h1>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fleche.metadata.JSONValue" title="fleche.metadata.JSONValue"><code class="xref py py-obj docutils literal notranslate"><span class="pre">JSONValue</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fleche.metadata.MetaData" title="fleche.metadata.MetaData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MetaData</span></code></a></p></td>
+<td><p>Abstract base class for defining metadata types.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fleche.metadata.Runtime" title="fleche.metadata.Runtime"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Runtime</span></code></a></p></td>
+<td><p>Metadata type for capturing runtime information.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fleche.metadata.Tags" title="fleche.metadata.Tags"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Tags</span></code></a></p></td>
+<td><p>Metadata type for storing arbitrary tags.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py type">
+<dt class="sig sig-object py" id="fleche.metadata.JSONValue">
+<span class="property"><span class="k"><span class="pre">type</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">fleche.metadata.</span></span><span class="sig-name descname"><span class="pre">JSONValue</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'JSONValue'</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'JSONValue'</span></span><span class="p"><span class="pre">]</span></span></span><a class="reference internal" href="../../../_modules/fleche/metadata.html#JSONValue"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.metadata.JSONValue" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="fleche.metadata.MetaData">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">fleche.metadata.</span></span><span class="sig-name descname"><span class="pre">MetaData</span></span><a class="reference internal" href="../../../_modules/fleche/metadata.html#MetaData"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.metadata.MetaData" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">abc.ABC</span></code></p>
+<p>Abstract base class for defining metadata types.</p>
+<p>Implementations must return only JSON-serializable values from pre() and post().
+That means scalars (str, int, float, bool, None), lists of those, or dicts with str keys
+and JSON-serializable values.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.metadata.MetaData.pre">
+<span class="sig-name descname"><span class="pre">pre</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">call</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../call/index.html#fleche.call.Call" title="fleche.call.Call"><span class="pre">fleche.call.Call</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#fleche.metadata.JSONValue" title="fleche.metadata.JSONValue"><span class="pre">JSONValue</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../_modules/fleche/metadata.html#MetaData.pre"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.metadata.MetaData.pre" title="Link to this definition"></a></dt>
+<dd><p>Hook for collecting metadata before the function execution.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>call</strong> (<a class="reference internal" href="../call/index.html#fleche.call.Call" title="fleche.call.Call"><em>Call</em></a>) – The call object of the decorated function.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A flat dictionary of JSON-serializable metadata collected before execution.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict[str, <a class="reference internal" href="#fleche.metadata.JSONValue" title="fleche.metadata.JSONValue">JSONValue</a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.metadata.MetaData.post">
+<span class="sig-name descname"><span class="pre">post</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pre</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#fleche.metadata.JSONValue" title="fleche.metadata.JSONValue"><span class="pre">JSONValue</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">call</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../call/index.html#fleche.call.Call" title="fleche.call.Call"><span class="pre">fleche.call.Call</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#fleche.metadata.JSONValue" title="fleche.metadata.JSONValue"><span class="pre">JSONValue</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../_modules/fleche/metadata.html#MetaData.post"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.metadata.MetaData.post" title="Link to this definition"></a></dt>
+<dd><p>Hook for collecting metadata after the function execution.</p>
+<p>The return value of the function is available on the <cite>call.result</cite> attribute.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>pre</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="#fleche.metadata.JSONValue" title="fleche.metadata.JSONValue"><em>JSONValue</em></a><em>]</em>) – Metadata collected during the pre-execution phase.</p></li>
+<li><p><strong>call</strong> (<a class="reference internal" href="../call/index.html#fleche.call.Call" title="fleche.call.Call"><em>Call</em></a>) – The call object of the decorated function.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A flat dictionary of JSON-serializable metadata collected after execution.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict[str, <a class="reference internal" href="#fleche.metadata.JSONValue" title="fleche.metadata.JSONValue">JSONValue</a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="fleche.metadata.MetaData.keys">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">keys</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="../digest/index.html#fleche.digest.Hook.type" title="fleche.digest.Hook.type"><span class="pre">type</span></a><span class="p"><span class="pre">]</span></span></span><a class="reference internal" href="../../../_modules/fleche/metadata.html#MetaData.keys"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.metadata.MetaData.keys" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Abstractmethod<span class="colon">:</span></dt>
+<dd class="field-odd"><p></p></dd>
+</dl>
+<p>Defines the schema of the metadata, mapping metadata keys to their expected types.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A dictionary representing the metadata schema.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>dict[str, <a class="reference internal" href="../digest/index.html#fleche.digest.Hook.type" title="fleche.digest.Hook.type">type</a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="fleche.metadata.MetaData.name">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="reference internal" href="../../../_modules/fleche/metadata.html#MetaData.name"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.metadata.MetaData.name" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Abstractmethod<span class="colon">:</span></dt>
+<dd class="field-odd"><p></p></dd>
+</dl>
+<p>The unique name of this metadata type.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The name of the metadata type.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="fleche.metadata.Runtime">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">fleche.metadata.</span></span><span class="sig-name descname"><span class="pre">Runtime</span></span><a class="reference internal" href="../../../_modules/fleche/metadata.html#Runtime"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.metadata.Runtime" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#fleche.metadata.MetaData" title="fleche.metadata.MetaData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MetaData</span></code></a></p>
+<p>Metadata type for capturing runtime information.</p>
+<dl class="simple">
+<dt>Keys:</dt><dd><p>timestart (float): The timestamp when the execution started.
+timestop (float): The timestamp when the execution stopped.
+walltime (float): The total execution time in seconds.</p>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>Values are JSON-serializable.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.metadata.Runtime.pre">
+<span class="sig-name descname"><span class="pre">pre</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">call</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../call/index.html#fleche.call.Call" title="fleche.call.Call"><span class="pre">fleche.call.Call</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../_modules/fleche/metadata.html#Runtime.pre"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.metadata.Runtime.pre" title="Link to this definition"></a></dt>
+<dd><p>Records the start time before function execution.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.metadata.Runtime.post">
+<span class="sig-name descname"><span class="pre">post</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pre</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">call</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../call/index.html#fleche.call.Call" title="fleche.call.Call"><span class="pre">fleche.call.Call</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../_modules/fleche/metadata.html#Runtime.post"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.metadata.Runtime.post" title="Link to this definition"></a></dt>
+<dd><p>Records the stop time and calculates the wall time after function execution.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="fleche.metadata.Runtime.name">
+<span class="sig-name descname"><span class="pre">name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'runtime'</span></span><a class="reference internal" href="../../../_modules/fleche/metadata.html#Runtime.name"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.metadata.Runtime.name" title="Link to this definition"></a></dt>
+<dd><p>The unique name of this metadata type.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The name of the metadata type.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="fleche.metadata.Runtime.keys">
+<span class="sig-name descname"><span class="pre">keys</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="../digest/index.html#fleche.digest.Hook.type" title="fleche.digest.Hook.type"><span class="pre">type</span></a><span class="p"><span class="pre">]</span></span></span><a class="reference internal" href="../../../_modules/fleche/metadata.html#Runtime.keys"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.metadata.Runtime.keys" title="Link to this definition"></a></dt>
+<dd><p>Defines the schema of the metadata, mapping metadata keys to their expected types.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A dictionary representing the metadata schema.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>dict[str, <a class="reference internal" href="../digest/index.html#fleche.digest.Hook.type" title="fleche.digest.Hook.type">type</a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="fleche.metadata.Tags">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">fleche.metadata.</span></span><span class="sig-name descname"><span class="pre">Tags</span></span><a class="reference internal" href="../../../_modules/fleche/metadata.html#Tags"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.metadata.Tags" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#fleche.metadata.MetaData" title="fleche.metadata.MetaData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MetaData</span></code></a></p>
+<p>Metadata type for storing arbitrary tags.</p>
+<p>For each key in the <code class="docutils literal notranslate"><span class="pre">tags</span></code> dictionary, a new metadata column is created.</p>
+<dl class="simple">
+<dt>Keys:</dt><dd><p>tags (dict): A dictionary of user-defined tags.</p>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>Tag values must be JSON-serializable.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="fleche.metadata.Tags.tags">
+<span class="sig-name descname"><span class="pre">tags</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><a class="reference internal" href="../../../_modules/fleche/metadata.html#Tags.tags"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.metadata.Tags.tags" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.metadata.Tags.pre">
+<span class="sig-name descname"><span class="pre">pre</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">call</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../call/index.html#fleche.call.Call" title="fleche.call.Call"><span class="pre">fleche.call.Call</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../_modules/fleche/metadata.html#Tags.pre"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.metadata.Tags.pre" title="Link to this definition"></a></dt>
+<dd><p>Hook for collecting metadata before the function execution.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>call</strong> (<a class="reference internal" href="../call/index.html#fleche.call.Call" title="fleche.call.Call"><em>Call</em></a>) – The call object of the decorated function.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A flat dictionary of JSON-serializable metadata collected before execution.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict[str, <a class="reference internal" href="#fleche.metadata.JSONValue" title="fleche.metadata.JSONValue">JSONValue</a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="fleche.metadata.Tags.name">
+<span class="sig-name descname"><span class="pre">name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'tags'</span></span><a class="reference internal" href="../../../_modules/fleche/metadata.html#Tags.name"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.metadata.Tags.name" title="Link to this definition"></a></dt>
+<dd><p>The unique name of this metadata type.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The name of the metadata type.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="fleche.metadata.Tags.keys">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">keys</span></span><a class="reference internal" href="../../../_modules/fleche/metadata.html#Tags.keys"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.metadata.Tags.keys" title="Link to this definition"></a></dt>
+<dd><p>Defines the schema of the metadata, mapping metadata keys to their expected types.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A dictionary representing the metadata schema.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>dict[str, <a class="reference internal" href="../digest/index.html#fleche.digest.Hook.type" title="fleche.digest.Hook.type">type</a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../digest/index.html" class="btn btn-neutral float-left" title="fleche.digest" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../security/index.html" class="btn btn-neutral float-right" title="fleche.security" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Marvin Poul.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+</body>
+</html>

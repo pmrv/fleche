@@ -1,0 +1,39 @@
+fleche.storage.memory
+=====================
+
+.. py:module:: fleche.storage.memory
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   fleche.storage.memory.Memory
+
+
+Module Contents
+---------------
+
+.. py:class:: Memory
+
+   Bases: :py:obj:`fleche.storage.base.Storage`
+
+
+   A concrete implementation of Storage that stores values in an in-memory dictionary.
+
+
+   .. py:attribute:: storage
+      :type:  dict[fleche.digest.Digest, Any]
+
+
+   .. py:method:: _save(value: Any, key: fleche.digest.Digest) -> fleche.digest.Digest
+
+
+   .. py:method:: _load(key: fleche.digest.Digest) -> Any
+
+
+   .. py:method:: list() -> Iterable[fleche.digest.Digest]
+
+
+   .. py:method:: _evict(key: fleche.digest.Digest) -> None

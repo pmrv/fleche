@@ -1,0 +1,246 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>fleche.security &mdash; Fleche  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
+
+
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+</head>
+
+<body class="wy-body-for-nav">
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+
+
+          <a href="../../index.html" class="icon icon-home">
+            Fleche
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../helpers.html">Decorator Helpers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../lazy_call.html">Lazy Loading with LazyCall</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../digests_as_args.html">Digests as Arguments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../custom_digests.html">Customizing Digests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../configuration.html">Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../query.html">Querying cached calls</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../security.html">Security</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../autoapi/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">Fleche</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+          <li class="breadcrumb-item"><a href="../fleche.html">fleche</a></li>
+      <li class="breadcrumb-item active">fleche.security</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+
+  <h1>Source code for fleche.security</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">hmac</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">hashlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pickle</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+
+<div class="viewcode-block" id="logger">
+<a class="viewcode-back" href="../../autoapi/fleche/security/index.html#fleche.security.logger">[docs]</a>
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">&quot;fleche.security&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SignatureError">
+<a class="viewcode-back" href="../../autoapi/fleche/security/index.html#fleche.security.SignatureError">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SignatureError</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Exception raised when signature verification fails.&quot;&quot;&quot;</span>
+    <span class="k">pass</span></div>
+
+
+<div class="viewcode-block" id="get_secret_key">
+<a class="viewcode-back" href="../../autoapi/fleche/security/index.html#fleche.security.get_secret_key">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_secret_key</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Retrieve the secret key(s) for signing cache entries.</span>
+<span class="sd">    </span>
+<span class="sd">    Only supports FLECHE_SECRET_KEY environment variable.</span>
+<span class="sd">    If multiple keys are present, they should be comma-separated.</span>
+<span class="sd">    If no key is found, returns an empty list (security is disabled).</span>
+<span class="sd">    </span>
+<span class="sd">    Returns:</span>
+<span class="sd">        list[bytes]: A list of secret keys as bytes.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">env_key</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;FLECHE_SECRET_KEY&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">env_key</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">k</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">env_key</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;,&quot;</span><span class="p">)]</span>
+    <span class="k">return</span> <span class="p">[]</span></div>
+
+
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">slots</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<div class="viewcode-block" id="SignedBytes">
+<a class="viewcode-back" href="../../autoapi/fleche/security/index.html#fleche.security.SignedBytes">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SignedBytes</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Helper class to sign and verify serialized data using HMAC-SHA256.</span>
+<span class="sd">    Allows for key rotation by accepting a list of keys.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">        keys (list[bytes]): A list of secret keys. The first key is used for signing,</span>
+<span class="sd">                            and all keys are attempted during verification.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+<div class="viewcode-block" id="SignedBytes.keys">
+<a class="viewcode-back" href="../../autoapi/fleche/security/index.html#fleche.security.SignedBytes.keys">[docs]</a>
+    <span class="n">keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="SignedBytes._sign">
+<a class="viewcode-back" href="../../autoapi/fleche/security/index.html#fleche.security.SignedBytes._sign">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_sign</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Generate HMAC-SHA256 signature for data using the specified key.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            data (bytes): The data to sign.</span>
+<span class="sd">            key (bytes): The secret key to use for signing.</span>
+<span class="sd">            </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            bytes: The resulting 32-byte HMAC signature.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">hmac</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">)</span><span class="o">.</span><span class="n">digest</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="SignedBytes.dumps">
+<a class="viewcode-back" href="../../autoapi/fleche/security/index.html#fleche.security.SignedBytes.dumps">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dumps</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">content</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Signs the content using the first key in the list and appends the signature.</span>
+<span class="sd">        If no keys are provided, returns the content unmodified.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            content (bytes): The serialized data to sign.</span>
+<span class="sd">            </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            bytes: The original data with the 32-byte signature appended (if keys exist).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">keys</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">content</span>
+        <span class="n">signature</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sign</span><span class="p">(</span><span class="n">content</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">keys</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">content</span> <span class="o">+</span> <span class="n">signature</span></div>
+
+
+<div class="viewcode-block" id="SignedBytes.loads">
+<a class="viewcode-back" href="../../autoapi/fleche/security/index.html#fleche.security.SignedBytes.loads">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">loads</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">content</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Verifies the signature of the content.</span>
+<span class="sd">        Extracts the signature by searching for the pickle STOP opcode.</span>
+<span class="sd">        Iterates through all provided keys for verification.</span>
+<span class="sd">        Returns the original content if verification passes.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            content (bytes): The payload containing the data and the appended signature.</span>
+<span class="sd">            </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            bytes: The original serialized data, stripped of the signature.</span>
+<span class="sd">            </span>
+<span class="sd">        Raises:</span>
+<span class="sd">            SignatureError: If verification fails, if the data is corrupted, or if the</span>
+<span class="sd">                            STOP opcode is missing.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">keys</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">content</span>
+
+        <span class="n">stop_index</span> <span class="o">=</span> <span class="n">content</span><span class="o">.</span><span class="n">rfind</span><span class="p">(</span><span class="n">pickle</span><span class="o">.</span><span class="n">STOP</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">stop_index</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;No STOP opcode found in cache entry. Data is corrupted or not a pickle.&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="n">SignatureError</span><span class="p">(</span><span class="s2">&quot;No STOP opcode found&quot;</span><span class="p">)</span>
+
+        <span class="c1"># The data includes the STOP opcode itself</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">content</span><span class="p">[:</span><span class="n">stop_index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="n">signature</span> <span class="o">=</span> <span class="n">content</span><span class="p">[</span><span class="n">stop_index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">:]</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">signature</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Cache entry has no signature. Loading unsigned values. Data may be old/unsigned.&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">data</span>
+
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">keys</span><span class="p">:</span>
+            <span class="n">expected_signature</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sign</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">hmac</span><span class="o">.</span><span class="n">compare_digest</span><span class="p">(</span><span class="n">expected_signature</span><span class="p">,</span> <span class="n">signature</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">data</span>
+
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Invalid signature for cache entry. Potential tampering or key mismatch.&quot;</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="n">SignatureError</span><span class="p">(</span><span class="s2">&quot;Invalid signature&quot;</span><span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Marvin Poul.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+</body>
+</html>

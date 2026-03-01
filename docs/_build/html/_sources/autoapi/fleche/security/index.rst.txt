@@ -1,0 +1,119 @@
+fleche.security
+===============
+
+.. py:module:: fleche.security
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   fleche.security.logger
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   fleche.security.SignatureError
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   fleche.security.SignedBytes
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   fleche.security.get_secret_key
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:exception:: SignatureError
+
+   Bases: :py:obj:`Exception`
+
+
+   Exception raised when signature verification fails.
+
+
+.. py:function:: get_secret_key() -> list[bytes]
+
+   Retrieve the secret key(s) for signing cache entries.
+
+   Only supports FLECHE_SECRET_KEY environment variable.
+   If multiple keys are present, they should be comma-separated.
+   If no key is found, returns an empty list (security is disabled).
+
+   :returns: A list of secret keys as bytes.
+   :rtype: list[bytes]
+
+
+.. py:class:: SignedBytes
+
+   Helper class to sign and verify serialized data using HMAC-SHA256.
+   Allows for key rotation by accepting a list of keys.
+
+   :param keys: A list of secret keys. The first key is used for signing,
+                and all keys are attempted during verification.
+   :type keys: list[bytes]
+
+
+   .. py:attribute:: keys
+      :type:  list[bytes]
+
+
+   .. py:method:: _sign(data: bytes, key: bytes) -> bytes
+
+      Generate HMAC-SHA256 signature for data using the specified key.
+
+      :param data: The data to sign.
+      :type data: bytes
+      :param key: The secret key to use for signing.
+      :type key: bytes
+
+      :returns: The resulting 32-byte HMAC signature.
+      :rtype: bytes
+
+
+
+   .. py:method:: dumps(content: bytes) -> bytes
+
+      Signs the content using the first key in the list and appends the signature.
+      If no keys are provided, returns the content unmodified.
+
+      :param content: The serialized data to sign.
+      :type content: bytes
+
+      :returns: The original data with the 32-byte signature appended (if keys exist).
+      :rtype: bytes
+
+
+
+   .. py:method:: loads(content: bytes) -> bytes
+
+      Verifies the signature of the content.
+      Extracts the signature by searching for the pickle STOP opcode.
+      Iterates through all provided keys for verification.
+      Returns the original content if verification passes.
+
+      :param content: The payload containing the data and the appended signature.
+      :type content: bytes
+
+      :returns: The original serialized data, stripped of the signature.
+      :rtype: bytes
+
+      :raises SignatureError: If verification fails, if the data is corrupted, or if the
+          STOP opcode is missing.

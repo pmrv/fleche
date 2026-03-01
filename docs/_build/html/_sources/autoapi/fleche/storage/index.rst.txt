@@ -1,0 +1,402 @@
+fleche.storage
+==============
+
+.. py:module:: fleche.storage
+
+.. autoapi-nested-parse::
+
+   Storage subpackage public API.
+
+   This module re-exports the primary storage interfaces and implementations
+   for backward compatibility with `from fleche.storage import ...` imports.
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/fleche/storage/bagofholding_file/index
+   /autoapi/fleche/storage/base/index
+   /autoapi/fleche/storage/cloudpickle_file/index
+   /autoapi/fleche/storage/file/index
+   /autoapi/fleche/storage/memory/index
+   /autoapi/fleche/storage/pickle_file/index
+   /autoapi/fleche/storage/sql/index
+   /autoapi/fleche/storage/void/index
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   fleche.storage.SaveError
+   fleche.storage.AmbiguousDigestError
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   fleche.storage.Storage
+   fleche.storage.CallStorage
+   fleche.storage.CallStorageAdapter
+   fleche.storage.DestructuringStorage
+   fleche.storage.Memory
+   fleche.storage.Void
+   fleche.storage.FileStorage
+   fleche.storage.CloudpickleFile
+   fleche.storage.PickleFile
+   fleche.storage.BagOfHoldingH5File
+   fleche.storage.Sql
+
+
+Package Contents
+----------------
+
+.. py:exception:: SaveError
+
+   Bases: :py:obj:`Exception`
+
+
+   Common base class for all non-exit exceptions.
+
+
+.. py:exception:: AmbiguousDigestError
+
+   Bases: :py:obj:`ValueError`
+
+
+   Inappropriate argument value (of correct type).
+
+
+.. py:class:: Storage
+
+   Bases: :py:obj:`StorageBase`
+
+
+   Abstract base class for defining storage mechanisms.
+
+
+   .. py:method:: save(value: Any, key: fleche.digest.Digest | None = None) -> fleche.digest.Digest
+
+
+   .. py:method:: _save(value: Any, key: fleche.digest.Digest) -> fleche.digest.Digest
+      :abstractmethod:
+
+
+
+   .. py:method:: load(key: fleche.digest.Digest | str) -> Any
+
+
+   .. py:method:: _load(key: fleche.digest.Digest) -> Any
+      :abstractmethod:
+
+
+
+.. py:class:: CallStorage
+
+   Bases: :py:obj:`StorageBase`
+
+
+   Special storage for saving :class:`Call` instances.
+
+
+   .. py:method:: save(call: fleche.call.Call) -> fleche.digest.Digest
+
+
+   .. py:method:: _save(call: fleche.call.Call) -> fleche.digest.Digest
+      :abstractmethod:
+
+
+
+   .. py:method:: load(key: str) -> fleche.call.Call
+
+
+   .. py:method:: _load(key: fleche.digest.Digest) -> fleche.call.Call
+      :abstractmethod:
+
+
+
+   .. py:method:: transform(func: Callable[[fleche.call.Call], fleche.call.Call] | None = None) -> None
+
+      Applies a transformation function to all Call objects in the storage.
+
+      :param func: A function that takes a Call and returns a transformed Call.
+                   If None, the identity function is used (useful for re-calculating keys).
+      :type func: Callable[[Call], Call] | None
+
+
+
+   .. py:method:: query(template: fleche.call.Call) -> Iterable[fleche.call.Call]
+
+      Find cached calls that 'match' the template.
+
+      Returns all calls where the given arguments, results or metadata match exactly the stored ones.  Values may be
+      given either as they are or as :class:`Digest`.
+
+      :param template: specification for calls to return; use `None` as wildcard.
+      :type template: Call
+
+      :returns: an iterable over all matching call objects
+      :rtype: Iterable[Call]
+
+
+
+.. py:class:: CallStorageAdapter
+
+   Bases: :py:obj:`CallStorage`
+
+
+   Implement a CallStorage from a generic Storage.
+
+
+   .. py:attribute:: storage
+      :type:  Storage
+
+
+   .. py:method:: _save(call: fleche.call.Call) -> fleche.digest.Digest
+
+
+   .. py:method:: _load(key: fleche.digest.Digest) -> fleche.call.Call
+
+
+   .. py:method:: _evict(key: fleche.digest.Digest) -> None
+
+
+   .. py:method:: list() -> Iterable[fleche.digest.Digest]
+
+
+.. py:class:: DestructuringStorage
+
+   Bases: :py:obj:`Storage`
+
+
+   Abstract base class for defining storage mechanisms.
+
+
+   .. py:attribute:: storage
+      :type:  Storage
+
+
+   .. py:method:: _save(value: Any, key: fleche.digest.Digest) -> fleche.digest.Digest
+
+
+   .. py:method:: _load(key: fleche.digest.Digest) -> Any
+
+
+   .. py:method:: _evict(key: fleche.digest.Digest) -> None
+
+
+   .. py:method:: list() -> Iterable[fleche.digest.Digest]
+
+
+.. py:class:: Memory
+
+   Bases: :py:obj:`fleche.storage.base.Storage`
+
+
+   A concrete implementation of Storage that stores values in an in-memory dictionary.
+
+
+   .. py:attribute:: storage
+      :type:  dict[fleche.digest.Digest, Any]
+
+
+   .. py:method:: _save(value: Any, key: fleche.digest.Digest) -> fleche.digest.Digest
+
+
+   .. py:method:: _load(key: fleche.digest.Digest) -> Any
+
+
+   .. py:method:: list() -> Iterable[fleche.digest.Digest]
+
+
+   .. py:method:: _evict(key: fleche.digest.Digest) -> None
+
+
+.. py:class:: Void
+
+   Bases: :py:obj:`fleche.storage.base.Storage`
+
+
+   A concrete implementation of Storage that does not store anything.
+
+
+   .. py:method:: _save(value: Any, key: fleche.digest.Digest) -> fleche.digest.Digest
+
+
+   .. py:method:: _load(key: fleche.digest.Digest) -> Any
+
+
+   .. py:method:: list() -> Iterable[fleche.digest.Digest]
+
+
+   .. py:method:: _evict(key: fleche.digest.Digest) -> None
+
+
+.. py:class:: FileStorage
+
+   Bases: :py:obj:`fleche.storage.base.Storage`
+
+
+   File-based storage backend using pickle.
+
+   Stores objects on the filesystem.
+
+
+   .. py:attribute:: root
+      :type:  pathlib.Path
+
+
+   .. py:attribute:: lock_timeout
+      :type:  float
+      :value: 1.0
+
+
+
+   .. py:attribute:: lock_wait_start
+      :type:  float
+      :value: 0.001
+
+
+
+   .. py:method:: __post_init__() -> None
+
+
+   .. py:method:: _path(key: str) -> pathlib.Path
+
+
+   .. py:method:: list() -> Iterable[fleche.digest.Digest]
+
+
+   .. py:method:: _evict(key: fleche.digest.Digest) -> None
+
+
+   .. py:method:: save(value: Any, key: fleche.digest.Digest | None = None) -> fleche.digest.Digest
+
+
+   .. py:method:: load(key: fleche.digest.Digest | str) -> Any
+
+
+.. py:class:: CloudpickleFile
+
+   Bases: :py:obj:`fleche.storage.file.FileStorage`
+
+
+   Store values as files on the filesystem using cloudpickle for serialization.
+
+
+   .. py:attribute:: secret_key
+      :type:  list[bytes]
+      :value: []
+
+
+
+   .. py:method:: __post_init__()
+
+
+   .. py:method:: _save(value: Any, key: fleche.digest.Digest) -> fleche.digest.Digest
+
+
+   .. py:method:: _load(key: fleche.digest.Digest) -> Any
+
+
+.. py:class:: PickleFile
+
+   Bases: :py:obj:`fleche.storage.file.FileStorage`
+
+
+   Store values as files on the filesystem using the standard pickle module for serialization.
+
+
+   .. py:attribute:: secret_key
+      :type:  list[bytes]
+      :value: []
+
+
+
+   .. py:method:: __post_init__()
+
+
+   .. py:method:: _save(value: Any, key: fleche.digest.Digest) -> fleche.digest.Digest
+
+
+   .. py:method:: _load(key: fleche.digest.Digest) -> Any
+
+
+.. py:class:: BagOfHoldingH5File
+
+   Bases: :py:obj:`fleche.storage.file.FileStorage`
+
+
+   File-based storage backend using pickle.
+
+   Stores objects on the filesystem.
+
+
+   .. py:method:: _save(value: Any, key: fleche.digest.Digest) -> str
+
+
+   .. py:method:: _load(key: str) -> Any
+
+
+.. py:class:: Sql(url: str | None = None, echo: bool = False)
+
+   Bases: :py:obj:`fleche.storage.base.CallStorage`
+
+
+   SQLAlchemy-backed CallStorage with JSON metadata and DB-backed expand().
+
+
+   .. py:attribute:: engine
+      :value: None
+
+
+
+   .. py:attribute:: Session
+
+
+   .. py:method:: _save(call: fleche.call.Call) -> fleche.digest.Digest
+
+
+   .. py:method:: _load(key: str) -> fleche.call.Call
+
+
+   .. py:method:: list() -> Iterable[fleche.digest.Digest]
+
+
+   .. py:method:: expand(key: fleche.digest.Digest | str) -> fleche.digest.Digest
+
+      Expands a short-hand digest to the full length one.
+
+
+
+   .. py:method:: _evict(key: str) -> None
+
+
+   .. py:method:: query(template: fleche.call.Call) -> Iterable[fleche.call.Call]
+
+      Find cached calls matching a template using SQL-side filtering.
+
+      Semantics match CallStorage.query:
+      - Fields set to None are wildcards.
+      - Arguments and result are compared by digest(template_value) == digest(stored_value).
+      - Metadata can be filtered by providing template.metadata as a mapping of
+        metadata name -> dict of key/value filters. An empty dict for a given
+        name means "presence of that metadata name". Filters with simple types
+        (str, bool, int, float) are pushed down to SQL via JSON-extract
+        expressions; other types (e.g., lists) or None values fall back to
+        client-side checks after loading.
+
+      This method builds a SELECT over calls, joining the arguments table and
+      metadata table as needed to reduce candidate rows, then loads the
+      resulting calls and performs any remaining client-side validation.
+
+      :param template: A Call used as a template. None-valued fields are wildcards.
+
+      :Yields: *Call* -- Matching calls including their decoded metadata.

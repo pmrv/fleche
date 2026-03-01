@@ -1,0 +1,172 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Digests as Arguments &mdash; Fleche  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
+
+
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Customizing Digests" href="custom_digests.html" />
+    <link rel="prev" title="Lazy Loading with LazyCall" href="lazy_call.html" />
+</head>
+
+<body class="wy-body-for-nav">
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+
+
+          <a href="index.html" class="icon icon-home">
+            Fleche
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="helpers.html">Decorator Helpers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="lazy_call.html">Lazy Loading with LazyCall</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Digests as Arguments</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#usage">Usage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#behavior">Behavior</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#the-d-wrapper">The <cite>D</cite> Wrapper</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#fleche.D"><code class="docutils literal notranslate"><span class="pre">D()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="custom_digests.html">Customizing Digests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="query.html">Querying cached calls</a></li>
+<li class="toctree-l1"><a class="reference internal" href="security.html">Security</a></li>
+<li class="toctree-l1"><a class="reference internal" href="autoapi/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Fleche</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Digests as Arguments</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/digests_as_args.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+
+  <section id="digests-as-arguments">
+<h1>Digests as Arguments<a class="headerlink" href="#digests-as-arguments" title="Link to this heading"></a></h1>
+<p><cite>fleche</cite> supports passing <cite>Digest</cite> objects as arguments to functions. When a <cite>Digest</cite> is passed as a top-level argument (either positional or keyword), <cite>fleche</cite> automatically expands it to its cached value before calling the decorated function.</p>
+<p>This allows for efficient chaining of cached functions where you don’t need to load the full result into memory if you’re just going to pass it to another cached function.</p>
+<section id="usage">
+<h2>Usage<a class="headerlink" href="#usage" title="Link to this heading"></a></h2>
+<p>You can use the convenience wrapper <cite>D</cite> to mark a string as a digest:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">fleche</span><span class="w"> </span><span class="kn">import</span> <span class="n">fleche</span><span class="p">,</span> <span class="n">D</span>
+
+<span class="nd">@fleche</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">func_a</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">x</span> <span class="o">+</span> <span class="mi">1</span>
+
+<span class="nd">@fleche</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">func_b</span><span class="p">(</span><span class="n">y</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">y</span> <span class="o">*</span> <span class="mi">2</span>
+
+<span class="c1"># Get the digest of the result of func_a(5)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">func_a</span><span class="o">.</span><span class="n">digest</span><span class="p">(</span><span class="mi">5</span><span class="p">))</span>
+<span class="c1"># &#39;0e69e4e8496e7caebdefd277a0dfbd65929419a52f6183ace4000d4029add987&#39;</span>
+
+<span class="c1"># Pass it to func_b. func_b will receive the value 6, not the digest string.</span>
+<span class="c1"># You can even use a short digest!</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">func_b</span><span class="p">(</span><span class="n">D</span><span class="p">(</span><span class="s1">&#39;0e69e4e8&#39;</span><span class="p">))</span>
+<span class="k">assert</span> <span class="n">result</span> <span class="o">==</span> <span class="mi">12</span>
+</pre></div>
+</div>
+</section>
+<section id="behavior">
+<h2>Behavior<a class="headerlink" href="#behavior" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong>Automatic Expansion</strong>: Only immediate <cite>Digest</cite> arguments are expanded.</p></li>
+<li><p><strong>Non-recursive</strong>: If you pass a list of digests like <cite>[D(a), D(b)]</cite>, the list will be passed as-is to the function, and the digests inside it will NOT be expanded.</p></li>
+<li><p><strong>Missing Digests</strong>: If a <cite>Digest</cite> is passed but its value cannot be found in the current cache, a <cite>KeyError</cite> will be raised.</p></li>
+<li><p><strong>Short Digests</strong>: If the underlying storage supports short-hand digest expansion, you can pass a short digest (at least 4 characters) to <cite>D()</cite>, and it will be expanded to the full value.</p></li>
+</ul>
+</section>
+<section id="the-d-wrapper">
+<h2>The <cite>D</cite> Wrapper<a class="headerlink" href="#the-d-wrapper" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="fleche.D">
+<span class="sig-prename descclassname"><span class="pre">fleche.</span></span><span class="sig-name descname"><span class="pre">D</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">d</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="autoapi/fleche/digest/index.html#fleche.digest.Digest" title="fleche.digest.Digest"><span class="pre">Digest</span></a></span></span><a class="reference internal" href="_modules/fleche.html#D"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.D" title="Link to this definition"></a></dt>
+<dd><p>Convenience wrapper to create a Digest from a string.</p>
+<p>Digests passed as arguments to &#64;fleche decorated functions are automatically expanded
+to their cached values.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="lazy_call.html" class="btn btn-neutral float-left" title="Lazy Loading with LazyCall" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="custom_digests.html" class="btn btn-neutral float-right" title="Customizing Digests" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Marvin Poul.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,319 @@
+fleche.caches
+=============
+
+.. py:module:: fleche.caches
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   fleche.caches.logger
+   fleche.caches.DigestedIterable
+   fleche.caches.DigestedDict
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   fleche.caches.Rejected
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   fleche.caches.BaseCache
+   fleche.caches.Cache
+   fleche.caches.ReadOnlyCache
+   fleche.caches.CacheStack
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:exception:: Rejected
+
+   Bases: :py:obj:`Exception`
+
+
+   Cache refused to cache the call for some reason or other.
+
+
+.. py:data:: DigestedIterable
+
+.. py:data:: DigestedDict
+
+.. py:class:: BaseCache
+
+   Bases: :py:obj:`abc.ABC`
+
+
+   Helper class that provides a standard way to create an ABC using
+   inheritance.
+
+
+   .. py:method:: save(call: fleche.call.Call) -> str
+      :abstractmethod:
+
+
+
+   .. py:method:: load(key: str, lazy: bool = False) -> fleche.call.Call | fleche.call.LazyCall
+      :abstractmethod:
+
+
+
+   .. py:method:: load_value(key: str) -> Any
+      :abstractmethod:
+
+
+
+   .. py:method:: contains(key: str) -> bool
+
+
+   .. py:method:: push(cache: BaseCache) -> CacheStack
+
+
+   .. py:method:: shrink(key: fleche.digest.Digest | str) -> fleche.digest.Digest
+      :abstractmethod:
+
+
+      Find the shortest substring that is still an unambigious reference to the same call.
+
+      .. warning::
+
+          This is a property of how many values there are in your storage!
+          A key returned from this function may become ambigious in the future when more values are added.
+          Do not rely on this function in your programs, it is provided as a convenience for users only!
+
+      :param key: the key to shorten
+      :type key: str or :class:`Digest`
+
+      :returns: shortest key possible
+      :rtype: :class:`Digest`
+
+      :raises AmbiguousDigestError: if no shorter key is possible
+
+
+
+   .. py:method:: query(call: fleche.call.Call, lazy: bool = False) -> Iterable[fleche.call.Call | fleche.call.LazyCall]
+      :abstractmethod:
+
+
+
+   .. py:method:: table() -> pandas.DataFrame
+
+      Return a pandas DataFrame summarizing cached calls via query().
+
+      This implementation uses a fully-wildcard Call template to retrieve
+      all calls through ``self.query`` and then flattens metadata keys into
+      top-level columns for convenience.
+
+      Arguments and results are elided.
+
+      The DataFrame index will be the lookup key (digest) of each call.
+
+      :returns: table of all calls on cache
+      :rtype: :class:`pandas.DataFrame`
+
+
+
+.. py:class:: Cache
+
+   Bases: :py:obj:`BaseCache`
+
+
+   Helper class that provides a standard way to create an ABC using
+   inheritance.
+
+
+   .. py:attribute:: values
+      :type:  fleche.storage.Storage
+
+
+   .. py:attribute:: calls
+      :type:  fleche.storage.CallStorage | fleche.storage.Storage
+
+
+   .. py:method:: __post_init__()
+
+
+   .. py:method:: load_value(key)
+
+
+   .. py:method:: _handle_args_save(value)
+
+
+   .. py:method:: _handle_args_load(key)
+
+
+   .. py:method:: save(call: fleche.call.Call) -> str
+
+
+   .. py:method:: _decode_call(call: fleche.call.Call, lazy: bool = False) -> fleche.call.Call | fleche.call.LazyCall
+
+
+   .. py:method:: load(key: str, lazy: bool = False) -> fleche.call.Call | fleche.call.LazyCall
+
+
+   .. py:method:: shrink(key: fleche.digest.Digest | str) -> fleche.digest.Digest
+
+      Find the shortest substring that is still an unambigious reference to the same call.
+
+      .. warning::
+
+          This is a property of how many values there are in your storage!
+          A key returned from this function may become ambigious in the future when more values are added.
+          Do not rely on this function in your programs, it is provided as a convenience for users only!
+
+      :param key: the key to shorten
+      :type key: str or :class:`Digest`
+
+      :returns: shortest key possible
+      :rtype: :class:`Digest`
+
+      :raises AmbiguousDigestError: if no shorter key is possible
+
+
+
+   .. py:method:: query(call: fleche.call.Call, lazy: bool = False) -> Iterable[fleche.call.Call | fleche.call.LazyCall]
+
+      Query for cached calls that match a template and return decoded results.
+
+      This delegates to the underlying :meth:`CallStorage.query` using the provided template ``call``. Any digested
+      argument values and the result are decoded via this cache's value storage before yielding.
+
+      :param call: A ``Call`` instance used as a template; fields set to ``None``
+                   act as wildcards. For arguments and result, comparisons follow
+                   digest semantics (i.e., values are matched by their digest).
+      :param lazy: If True, return LazyCall instances instead of Call instances.
+
+      :Yields: *Call | LazyCall* -- Matching calls with arguments and result decoded from digests
+               where possible.
+
+
+
+   .. py:method:: redigest() -> None
+
+      Ensures consistent cache keys in case digest function changed.
+
+      This may take time depending on cache size.
+
+
+
+.. py:class:: ReadOnlyCache
+
+   Bases: :py:obj:`BaseCache`
+
+
+   A cache that can only be read from.
+
+
+   .. py:attribute:: cache
+      :type:  BaseCache
+
+
+   .. py:method:: save(call: fleche.call.Call)
+
+
+   .. py:method:: load(key, lazy: bool = False)
+
+
+   .. py:method:: shrink(key: fleche.digest.Digest | str) -> fleche.digest.Digest
+
+      Find the shortest substring that is still an unambigious reference to the same call.
+
+      .. warning::
+
+          This is a property of how many values there are in your storage!
+          A key returned from this function may become ambigious in the future when more values are added.
+          Do not rely on this function in your programs, it is provided as a convenience for users only!
+
+      :param key: the key to shorten
+      :type key: str or :class:`Digest`
+
+      :returns: shortest key possible
+      :rtype: :class:`Digest`
+
+      :raises AmbiguousDigestError: if no shorter key is possible
+
+
+
+   .. py:method:: load_value(key)
+
+
+   .. py:method:: query(call: fleche.call.Call, lazy: bool = False) -> Iterable[fleche.call.Call | fleche.call.LazyCall]
+
+      Forward queries to the wrapped cache.
+
+      :param call: A template ``Call`` where ``None`` fields act as wildcards.
+      :param lazy: If True, return LazyCall instances.
+
+      :Yields: *Call | LazyCall* -- Results yielded by the wrapped cache's ``query`` method.
+
+
+
+.. py:class:: CacheStack
+
+   Bases: :py:obj:`BaseCache`
+
+
+   Represents a combination of caches.
+
+   Saving will always hit the lowest level, while loading will traverse up.
+
+
+   .. py:attribute:: stack
+      :type:  tuple[Cache, Ellipsis]
+
+
+   .. py:method:: save(call: fleche.call.Call)
+
+
+   .. py:method:: load(key, lazy: bool = False)
+
+
+   .. py:method:: load_value(key)
+
+
+   .. py:method:: push(cache: BaseCache) -> Self
+
+
+   .. py:method:: shrink(key: fleche.digest.Digest | str) -> fleche.digest.Digest
+
+      Find the shortest substring that is still an unambigious reference to the same call.
+
+      .. warning::
+
+          This is a property of how many values there are in your storage!
+          A key returned from this function may become ambigious in the future when more values are added.
+          Do not rely on this function in your programs, it is provided as a convenience for users only!
+
+      :param key: the key to shorten
+      :type key: str or :class:`Digest`
+
+      :returns: shortest key possible
+      :rtype: :class:`Digest`
+
+      :raises AmbiguousDigestError: if no shorter key is possible
+
+
+
+   .. py:method:: query(call: fleche.call.Call, lazy: bool = False) -> Iterable[fleche.call.Call | fleche.call.LazyCall]
+
+      Aggregate query results across the stack, avoiding duplicates.
+
+      The caches are queried from bottom to top. Results are deduplicated by
+      their lookup key (via ``Call.to_lookup_key()``) and yielded in the
+      order they are first seen.
+
+      :param call: A template ``Call`` where ``None`` fields act as wildcards.
+      :param lazy: If True, return LazyCall instances.
+
+      :Yields: *Call | LazyCall* -- Matching calls from any cache in the stack, without duplicates.

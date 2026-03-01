@@ -1,0 +1,48 @@
+fleche.storage.cloudpickle_file
+===============================
+
+.. py:module:: fleche.storage.cloudpickle_file
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   fleche.storage.cloudpickle_file.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   fleche.storage.cloudpickle_file.CloudpickleFile
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: CloudpickleFile
+
+   Bases: :py:obj:`fleche.storage.file.FileStorage`
+
+
+   Store values as files on the filesystem using cloudpickle for serialization.
+
+
+   .. py:attribute:: secret_key
+      :type:  list[bytes]
+      :value: []
+
+
+
+   .. py:method:: __post_init__()
+
+
+   .. py:method:: _save(value: Any, key: fleche.digest.Digest) -> fleche.digest.Digest
+
+
+   .. py:method:: _load(key: fleche.digest.Digest) -> Any

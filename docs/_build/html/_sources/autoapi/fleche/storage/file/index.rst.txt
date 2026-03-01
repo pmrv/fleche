@@ -1,0 +1,92 @@
+fleche.storage.file
+===================
+
+.. py:module:: fleche.storage.file
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   fleche.storage.file.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   fleche.storage.file.FileStorage
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   fleche.storage.file.file_write_lock
+   fleche.storage.file.file_read_lock
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: file_write_lock(lock_path: pathlib.Path) -> Generator[None, None, None]
+
+   Context manager for acquiring a write lock on a file.
+
+   Creates a lock file with hostname, PID, and timestamp.
+
+
+.. py:function:: file_read_lock(lock_path: pathlib.Path, timeout: float, wait_start: float, key: str) -> Generator[None, None, None]
+
+   Context manager for acquiring a read lock on a file.
+
+   Waits for a lock file to be removed with exponential backoff.
+
+
+.. py:class:: FileStorage
+
+   Bases: :py:obj:`fleche.storage.base.Storage`
+
+
+   File-based storage backend using pickle.
+
+   Stores objects on the filesystem.
+
+
+   .. py:attribute:: root
+      :type:  pathlib.Path
+
+
+   .. py:attribute:: lock_timeout
+      :type:  float
+      :value: 1.0
+
+
+
+   .. py:attribute:: lock_wait_start
+      :type:  float
+      :value: 0.001
+
+
+
+   .. py:method:: __post_init__() -> None
+
+
+   .. py:method:: _path(key: str) -> pathlib.Path
+
+
+   .. py:method:: list() -> Iterable[fleche.digest.Digest]
+
+
+   .. py:method:: _evict(key: fleche.digest.Digest) -> None
+
+
+   .. py:method:: save(value: Any, key: fleche.digest.Digest | None = None) -> fleche.digest.Digest
+
+
+   .. py:method:: load(key: fleche.digest.Digest | str) -> Any

@@ -1,0 +1,550 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>fleche.caches &mdash; Fleche  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+
+
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="fleche.call" href="../call/index.html" />
+    <link rel="prev" title="fleche" href="../index.html" />
+</head>
+
+<body class="wy-body-for-nav">
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+
+
+          <a href="../../../index.html" class="icon icon-home">
+            Fleche
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../helpers.html">Decorator Helpers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../lazy_call.html">Lazy Loading with LazyCall</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../digests_as_args.html">Digests as Arguments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../custom_digests.html">Customizing Digests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../configuration.html">Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../query.html">Querying cached calls</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../security.html">Security</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../index.html">fleche</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4 current"><a class="current reference internal" href="#">fleche.caches</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../call/index.html">fleche.call</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../config/index.html">fleche.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../digest/index.html">fleche.digest</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../metadata/index.html">fleche.metadata</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../security/index.html">fleche.security</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../storage/index.html">fleche.storage</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../index.html#attributes">Attributes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../index.html#exceptions">Exceptions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../index.html#classes">Classes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../index.html#functions">Functions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../index.html#package-contents">Package Contents</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Fleche</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">fleche</a></li>
+      <li class="breadcrumb-item active">fleche.caches</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../_sources/autoapi/fleche/caches/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+
+  <section id="module-fleche.caches">
+<span id="fleche-caches"></span><h1>fleche.caches<a class="headerlink" href="#module-fleche.caches" title="Link to this heading"></a></h1>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fleche.caches.logger" title="fleche.caches.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fleche.caches.DigestedIterable" title="fleche.caches.DigestedIterable"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DigestedIterable</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fleche.caches.DigestedDict" title="fleche.caches.DigestedDict"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DigestedDict</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="exceptions">
+<h2>Exceptions<a class="headerlink" href="#exceptions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fleche.caches.Rejected" title="fleche.caches.Rejected"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Rejected</span></code></a></p></td>
+<td><p>Cache refused to cache the call for some reason or other.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fleche.caches.BaseCache" title="fleche.caches.BaseCache"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BaseCache</span></code></a></p></td>
+<td><p>Helper class that provides a standard way to create an ABC using</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fleche.caches.Cache" title="fleche.caches.Cache"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Cache</span></code></a></p></td>
+<td><p>Helper class that provides a standard way to create an ABC using</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fleche.caches.ReadOnlyCache" title="fleche.caches.ReadOnlyCache"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReadOnlyCache</span></code></a></p></td>
+<td><p>A cache that can only be read from.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fleche.caches.CacheStack" title="fleche.caches.CacheStack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CacheStack</span></code></a></p></td>
+<td><p>Represents a combination of caches.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="fleche.caches.logger">
+<span class="sig-prename descclassname"><span class="pre">fleche.caches.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="reference internal" href="../../../_modules/fleche/caches.html#logger"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="fleche.caches.Rejected">
+<span class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">fleche.caches.</span></span><span class="sig-name descname"><span class="pre">Rejected</span></span><a class="reference internal" href="../../../_modules/fleche/caches.html#Rejected"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.Rejected" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">Exception</span></code></p>
+<p>Cache refused to cache the call for some reason or other.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="fleche.caches.DigestedIterable">
+<span class="sig-prename descclassname"><span class="pre">fleche.caches.</span></span><span class="sig-name descname"><span class="pre">DigestedIterable</span></span><a class="reference internal" href="../../../_modules/fleche/caches.html#DigestedIterable"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.DigestedIterable" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="fleche.caches.DigestedDict">
+<span class="sig-prename descclassname"><span class="pre">fleche.caches.</span></span><span class="sig-name descname"><span class="pre">DigestedDict</span></span><a class="reference internal" href="../../../_modules/fleche/caches.html#DigestedDict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.DigestedDict" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="fleche.caches.BaseCache">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">fleche.caches.</span></span><span class="sig-name descname"><span class="pre">BaseCache</span></span><a class="reference internal" href="../../../_modules/fleche/caches.html#BaseCache"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.BaseCache" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">abc.ABC</span></code></p>
+<p>Helper class that provides a standard way to create an ABC using
+inheritance.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.caches.BaseCache.save">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">save</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">call</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../call/index.html#fleche.call.Call" title="fleche.call.Call"><span class="pre">fleche.call.Call</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="reference internal" href="../../../_modules/fleche/caches.html#BaseCache.save"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.BaseCache.save" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.caches.BaseCache.load">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lazy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../call/index.html#fleche.call.Call" title="fleche.call.Call"><span class="pre">fleche.call.Call</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="../call/index.html#fleche.call.LazyCall" title="fleche.call.LazyCall"><span class="pre">fleche.call.LazyCall</span></a></span></span><a class="reference internal" href="../../../_modules/fleche/caches.html#BaseCache.load"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.BaseCache.load" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.caches.BaseCache.load_value">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">load_value</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="reference internal" href="../../../_modules/fleche/caches.html#BaseCache.load_value"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.BaseCache.load_value" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.caches.BaseCache.contains">
+<span class="sig-name descname"><span class="pre">contains</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="reference internal" href="../../../_modules/fleche/caches.html#BaseCache.contains"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.BaseCache.contains" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.caches.BaseCache.push">
+<span class="sig-name descname"><span class="pre">push</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cache</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#fleche.caches.BaseCache" title="fleche.caches.BaseCache"><span class="pre">BaseCache</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#fleche.caches.CacheStack" title="fleche.caches.CacheStack"><span class="pre">CacheStack</span></a></span></span><a class="reference internal" href="../../../_modules/fleche/caches.html#BaseCache.push"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.BaseCache.push" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.caches.BaseCache.shrink">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">shrink</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../digest/index.html#fleche.digest.Digest" title="fleche.digest.Digest"><span class="pre">fleche.digest.Digest</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../digest/index.html#fleche.digest.Digest" title="fleche.digest.Digest"><span class="pre">fleche.digest.Digest</span></a></span></span><a class="reference internal" href="../../../_modules/fleche/caches.html#BaseCache.shrink"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.BaseCache.shrink" title="Link to this definition"></a></dt>
+<dd><p>Find the shortest substring that is still an unambigious reference to the same call.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>This is a property of how many values there are in your storage!
+A key returned from this function may become ambigious in the future when more values are added.
+Do not rely on this function in your programs, it is provided as a convenience for users only!</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>key</strong> (str or <code class="xref py py-class docutils literal notranslate"><span class="pre">Digest</span></code>) – the key to shorten</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>shortest key possible</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="xref py py-class docutils literal notranslate"><span class="pre">Digest</span></code></p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="../storage/base/index.html#fleche.storage.base.AmbiguousDigestError" title="fleche.storage.base.AmbiguousDigestError"><strong>AmbiguousDigestError</strong></a> – if no shorter key is possible</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.caches.BaseCache.query">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">query</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">call</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../call/index.html#fleche.call.Call" title="fleche.call.Call"><span class="pre">fleche.call.Call</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">lazy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../call/index.html#fleche.call.Call" title="fleche.call.Call"><span class="pre">fleche.call.Call</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="../call/index.html#fleche.call.LazyCall" title="fleche.call.LazyCall"><span class="pre">fleche.call.LazyCall</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../_modules/fleche/caches.html#BaseCache.query"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.BaseCache.query" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.caches.BaseCache.table">
+<span class="sig-name descname"><span class="pre">table</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">pandas.DataFrame</span></span></span><a class="reference internal" href="../../../_modules/fleche/caches.html#BaseCache.table"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.BaseCache.table" title="Link to this definition"></a></dt>
+<dd><p>Return a pandas DataFrame summarizing cached calls via query().</p>
+<p>This implementation uses a fully-wildcard Call template to retrieve
+all calls through <code class="docutils literal notranslate"><span class="pre">self.query</span></code> and then flattens metadata keys into
+top-level columns for convenience.</p>
+<p>Arguments and results are elided.</p>
+<p>The DataFrame index will be the lookup key (digest) of each call.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>table of all calls on cache</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="fleche.caches.Cache">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">fleche.caches.</span></span><span class="sig-name descname"><span class="pre">Cache</span></span><a class="reference internal" href="../../../_modules/fleche/caches.html#Cache"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.Cache" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#fleche.caches.BaseCache" title="fleche.caches.BaseCache"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BaseCache</span></code></a></p>
+<p>Helper class that provides a standard way to create an ABC using
+inheritance.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="fleche.caches.Cache.values">
+<span class="sig-name descname"><span class="pre">values</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="../storage/index.html#fleche.storage.Storage" title="fleche.storage.Storage"><span class="pre">fleche.storage.Storage</span></a></span><a class="reference internal" href="../../../_modules/fleche/caches.html#Cache.values"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.Cache.values" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="fleche.caches.Cache.calls">
+<span class="sig-name descname"><span class="pre">calls</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="../storage/index.html#fleche.storage.CallStorage" title="fleche.storage.CallStorage"><span class="pre">fleche.storage.CallStorage</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="../storage/index.html#fleche.storage.Storage" title="fleche.storage.Storage"><span class="pre">fleche.storage.Storage</span></a></span><a class="reference internal" href="../../../_modules/fleche/caches.html#Cache.calls"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.Cache.calls" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.caches.Cache.__post_init__">
+<span class="sig-name descname"><span class="pre">__post_init__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/fleche/caches.html#Cache.__post_init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.Cache.__post_init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.caches.Cache.load_value">
+<span class="sig-name descname"><span class="pre">load_value</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/fleche/caches.html#Cache.load_value"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.Cache.load_value" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.caches.Cache._handle_args_save">
+<span class="sig-name descname"><span class="pre">_handle_args_save</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/fleche/caches.html#Cache._handle_args_save"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.Cache._handle_args_save" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.caches.Cache._handle_args_load">
+<span class="sig-name descname"><span class="pre">_handle_args_load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/fleche/caches.html#Cache._handle_args_load"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.Cache._handle_args_load" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.caches.Cache.save">
+<span class="sig-name descname"><span class="pre">save</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">call</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../call/index.html#fleche.call.Call" title="fleche.call.Call"><span class="pre">fleche.call.Call</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="reference internal" href="../../../_modules/fleche/caches.html#Cache.save"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.Cache.save" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.caches.Cache._decode_call">
+<span class="sig-name descname"><span class="pre">_decode_call</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">call</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../call/index.html#fleche.call.Call" title="fleche.call.Call"><span class="pre">fleche.call.Call</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">lazy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../call/index.html#fleche.call.Call" title="fleche.call.Call"><span class="pre">fleche.call.Call</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="../call/index.html#fleche.call.LazyCall" title="fleche.call.LazyCall"><span class="pre">fleche.call.LazyCall</span></a></span></span><a class="reference internal" href="../../../_modules/fleche/caches.html#Cache._decode_call"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.Cache._decode_call" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.caches.Cache.load">
+<span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lazy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../call/index.html#fleche.call.Call" title="fleche.call.Call"><span class="pre">fleche.call.Call</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="../call/index.html#fleche.call.LazyCall" title="fleche.call.LazyCall"><span class="pre">fleche.call.LazyCall</span></a></span></span><a class="reference internal" href="../../../_modules/fleche/caches.html#Cache.load"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.Cache.load" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.caches.Cache.shrink">
+<span class="sig-name descname"><span class="pre">shrink</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../digest/index.html#fleche.digest.Digest" title="fleche.digest.Digest"><span class="pre">fleche.digest.Digest</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../digest/index.html#fleche.digest.Digest" title="fleche.digest.Digest"><span class="pre">fleche.digest.Digest</span></a></span></span><a class="reference internal" href="../../../_modules/fleche/caches.html#Cache.shrink"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.Cache.shrink" title="Link to this definition"></a></dt>
+<dd><p>Find the shortest substring that is still an unambigious reference to the same call.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>This is a property of how many values there are in your storage!
+A key returned from this function may become ambigious in the future when more values are added.
+Do not rely on this function in your programs, it is provided as a convenience for users only!</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>key</strong> (str or <code class="xref py py-class docutils literal notranslate"><span class="pre">Digest</span></code>) – the key to shorten</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>shortest key possible</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="xref py py-class docutils literal notranslate"><span class="pre">Digest</span></code></p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="../storage/base/index.html#fleche.storage.base.AmbiguousDigestError" title="fleche.storage.base.AmbiguousDigestError"><strong>AmbiguousDigestError</strong></a> – if no shorter key is possible</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.caches.Cache.query">
+<span class="sig-name descname"><span class="pre">query</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">call</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../call/index.html#fleche.call.Call" title="fleche.call.Call"><span class="pre">fleche.call.Call</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">lazy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../call/index.html#fleche.call.Call" title="fleche.call.Call"><span class="pre">fleche.call.Call</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="../call/index.html#fleche.call.LazyCall" title="fleche.call.LazyCall"><span class="pre">fleche.call.LazyCall</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../_modules/fleche/caches.html#Cache.query"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.Cache.query" title="Link to this definition"></a></dt>
+<dd><p>Query for cached calls that match a template and return decoded results.</p>
+<p>This delegates to the underlying <code class="xref py py-meth docutils literal notranslate"><span class="pre">CallStorage.query()</span></code> using the provided template <code class="docutils literal notranslate"><span class="pre">call</span></code>. Any digested
+argument values and the result are decoded via this cache’s value storage before yielding.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>call</strong> – A <code class="docutils literal notranslate"><span class="pre">Call</span></code> instance used as a template; fields set to <code class="docutils literal notranslate"><span class="pre">None</span></code>
+act as wildcards. For arguments and result, comparisons follow
+digest semantics (i.e., values are matched by their digest).</p></li>
+<li><p><strong>lazy</strong> – If True, return LazyCall instances instead of Call instances.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Yields<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>Call | LazyCall</em> – Matching calls with arguments and result decoded from digests
+where possible.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.caches.Cache.redigest">
+<span class="sig-name descname"><span class="pre">redigest</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../../_modules/fleche/caches.html#Cache.redigest"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.Cache.redigest" title="Link to this definition"></a></dt>
+<dd><p>Ensures consistent cache keys in case digest function changed.</p>
+<p>This may take time depending on cache size.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="fleche.caches.ReadOnlyCache">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">fleche.caches.</span></span><span class="sig-name descname"><span class="pre">ReadOnlyCache</span></span><a class="reference internal" href="../../../_modules/fleche/caches.html#ReadOnlyCache"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.ReadOnlyCache" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#fleche.caches.BaseCache" title="fleche.caches.BaseCache"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BaseCache</span></code></a></p>
+<p>A cache that can only be read from.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="fleche.caches.ReadOnlyCache.cache">
+<span class="sig-name descname"><span class="pre">cache</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#fleche.caches.BaseCache" title="fleche.caches.BaseCache"><span class="pre">BaseCache</span></a></span><a class="reference internal" href="../../../_modules/fleche/caches.html#ReadOnlyCache.cache"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.ReadOnlyCache.cache" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.caches.ReadOnlyCache.save">
+<span class="sig-name descname"><span class="pre">save</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">call</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../call/index.html#fleche.call.Call" title="fleche.call.Call"><span class="pre">fleche.call.Call</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/fleche/caches.html#ReadOnlyCache.save"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.ReadOnlyCache.save" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.caches.ReadOnlyCache.load">
+<span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lazy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/fleche/caches.html#ReadOnlyCache.load"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.ReadOnlyCache.load" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.caches.ReadOnlyCache.shrink">
+<span class="sig-name descname"><span class="pre">shrink</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../digest/index.html#fleche.digest.Digest" title="fleche.digest.Digest"><span class="pre">fleche.digest.Digest</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../digest/index.html#fleche.digest.Digest" title="fleche.digest.Digest"><span class="pre">fleche.digest.Digest</span></a></span></span><a class="reference internal" href="../../../_modules/fleche/caches.html#ReadOnlyCache.shrink"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.ReadOnlyCache.shrink" title="Link to this definition"></a></dt>
+<dd><p>Find the shortest substring that is still an unambigious reference to the same call.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>This is a property of how many values there are in your storage!
+A key returned from this function may become ambigious in the future when more values are added.
+Do not rely on this function in your programs, it is provided as a convenience for users only!</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>key</strong> (str or <code class="xref py py-class docutils literal notranslate"><span class="pre">Digest</span></code>) – the key to shorten</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>shortest key possible</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="xref py py-class docutils literal notranslate"><span class="pre">Digest</span></code></p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="../storage/base/index.html#fleche.storage.base.AmbiguousDigestError" title="fleche.storage.base.AmbiguousDigestError"><strong>AmbiguousDigestError</strong></a> – if no shorter key is possible</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.caches.ReadOnlyCache.load_value">
+<span class="sig-name descname"><span class="pre">load_value</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/fleche/caches.html#ReadOnlyCache.load_value"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.ReadOnlyCache.load_value" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.caches.ReadOnlyCache.query">
+<span class="sig-name descname"><span class="pre">query</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">call</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../call/index.html#fleche.call.Call" title="fleche.call.Call"><span class="pre">fleche.call.Call</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">lazy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../call/index.html#fleche.call.Call" title="fleche.call.Call"><span class="pre">fleche.call.Call</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="../call/index.html#fleche.call.LazyCall" title="fleche.call.LazyCall"><span class="pre">fleche.call.LazyCall</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../_modules/fleche/caches.html#ReadOnlyCache.query"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.ReadOnlyCache.query" title="Link to this definition"></a></dt>
+<dd><p>Forward queries to the wrapped cache.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>call</strong> – A template <code class="docutils literal notranslate"><span class="pre">Call</span></code> where <code class="docutils literal notranslate"><span class="pre">None</span></code> fields act as wildcards.</p></li>
+<li><p><strong>lazy</strong> – If True, return LazyCall instances.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Yields<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>Call | LazyCall</em> – Results yielded by the wrapped cache’s <code class="docutils literal notranslate"><span class="pre">query</span></code> method.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="fleche.caches.CacheStack">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">fleche.caches.</span></span><span class="sig-name descname"><span class="pre">CacheStack</span></span><a class="reference internal" href="../../../_modules/fleche/caches.html#CacheStack"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.CacheStack" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#fleche.caches.BaseCache" title="fleche.caches.BaseCache"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BaseCache</span></code></a></p>
+<p>Represents a combination of caches.</p>
+<p>Saving will always hit the lowest level, while loading will traverse up.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="fleche.caches.CacheStack.stack">
+<span class="sig-name descname"><span class="pre">stack</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#fleche.caches.Cache" title="fleche.caches.Cache"><span class="pre">Cache</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Ellipsis</span><span class="p"><span class="pre">]</span></span></span><a class="reference internal" href="../../../_modules/fleche/caches.html#CacheStack.stack"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.CacheStack.stack" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.caches.CacheStack.save">
+<span class="sig-name descname"><span class="pre">save</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">call</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../call/index.html#fleche.call.Call" title="fleche.call.Call"><span class="pre">fleche.call.Call</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/fleche/caches.html#CacheStack.save"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.CacheStack.save" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.caches.CacheStack.load">
+<span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lazy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/fleche/caches.html#CacheStack.load"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.CacheStack.load" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.caches.CacheStack.load_value">
+<span class="sig-name descname"><span class="pre">load_value</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/fleche/caches.html#CacheStack.load_value"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.CacheStack.load_value" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.caches.CacheStack.push">
+<span class="sig-name descname"><span class="pre">push</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cache</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#fleche.caches.BaseCache" title="fleche.caches.BaseCache"><span class="pre">BaseCache</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="reference internal" href="../../../_modules/fleche/caches.html#CacheStack.push"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.CacheStack.push" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.caches.CacheStack.shrink">
+<span class="sig-name descname"><span class="pre">shrink</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../digest/index.html#fleche.digest.Digest" title="fleche.digest.Digest"><span class="pre">fleche.digest.Digest</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../digest/index.html#fleche.digest.Digest" title="fleche.digest.Digest"><span class="pre">fleche.digest.Digest</span></a></span></span><a class="reference internal" href="../../../_modules/fleche/caches.html#CacheStack.shrink"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.CacheStack.shrink" title="Link to this definition"></a></dt>
+<dd><p>Find the shortest substring that is still an unambigious reference to the same call.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>This is a property of how many values there are in your storage!
+A key returned from this function may become ambigious in the future when more values are added.
+Do not rely on this function in your programs, it is provided as a convenience for users only!</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>key</strong> (str or <code class="xref py py-class docutils literal notranslate"><span class="pre">Digest</span></code>) – the key to shorten</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>shortest key possible</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="xref py py-class docutils literal notranslate"><span class="pre">Digest</span></code></p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="../storage/base/index.html#fleche.storage.base.AmbiguousDigestError" title="fleche.storage.base.AmbiguousDigestError"><strong>AmbiguousDigestError</strong></a> – if no shorter key is possible</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fleche.caches.CacheStack.query">
+<span class="sig-name descname"><span class="pre">query</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">call</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../call/index.html#fleche.call.Call" title="fleche.call.Call"><span class="pre">fleche.call.Call</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">lazy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../call/index.html#fleche.call.Call" title="fleche.call.Call"><span class="pre">fleche.call.Call</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="../call/index.html#fleche.call.LazyCall" title="fleche.call.LazyCall"><span class="pre">fleche.call.LazyCall</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../_modules/fleche/caches.html#CacheStack.query"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.caches.CacheStack.query" title="Link to this definition"></a></dt>
+<dd><p>Aggregate query results across the stack, avoiding duplicates.</p>
+<p>The caches are queried from bottom to top. Results are deduplicated by
+their lookup key (via <code class="docutils literal notranslate"><span class="pre">Call.to_lookup_key()</span></code>) and yielded in the
+order they are first seen.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>call</strong> – A template <code class="docutils literal notranslate"><span class="pre">Call</span></code> where <code class="docutils literal notranslate"><span class="pre">None</span></code> fields act as wildcards.</p></li>
+<li><p><strong>lazy</strong> – If True, return LazyCall instances.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Yields<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>Call | LazyCall</em> – Matching calls from any cache in the stack, without duplicates.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../index.html" class="btn btn-neutral float-left" title="fleche" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../call/index.html" class="btn btn-neutral float-right" title="fleche.call" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Marvin Poul.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+</body>
+</html>

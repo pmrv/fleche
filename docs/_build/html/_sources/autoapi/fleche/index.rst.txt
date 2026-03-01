@@ -1,0 +1,512 @@
+fleche
+======
+
+.. py:module:: fleche
+
+.. autoapi-nested-parse::
+
+   lru_cache on 'roids.
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/fleche/caches/index
+   /autoapi/fleche/call/index
+   /autoapi/fleche/config/index
+   /autoapi/fleche/digest/index
+   /autoapi/fleche/metadata/index
+   /autoapi/fleche/security/index
+   /autoapi/fleche/storage/index
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   fleche.logger
+   fleche._T
+   fleche._CACHE
+   fleche._METADATA
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   fleche.Rejected
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   fleche.Digest
+   fleche.Call
+   fleche.MetaData
+   fleche.Tags
+   fleche.BaseCache
+   fleche.Cache
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   fleche.D
+   fleche.load_cache_config
+   fleche.load_default_metadata
+   fleche.cache
+   fleche.metadata
+   fleche.tags
+   fleche.project
+   fleche._get_working_directory_root
+   fleche.fleche
+
+
+Package Contents
+----------------
+
+.. py:class:: Digest
+
+   Bases: :py:obj:`str`
+
+
+   str(object='') -> str
+   str(bytes_or_buffer[, encoding[, errors]]) -> str
+
+   Create a new string object from the given object. If encoding or
+   errors is specified, then the object must expose a data buffer
+   that will be decoded using the given encoding and error handler.
+   Otherwise, returns the result of object.__str__() (if defined)
+   or repr(object).
+   encoding defaults to sys.getdefaultencoding().
+   errors defaults to 'strict'.
+
+
+.. py:class:: Call
+
+   Represents a function call, capturing its name, arguments, and keyword arguments.
+
+   `module` and `version` can be optionally set to be included in the hash of the call.
+   `version` should be a plain integer and monotonically increase.  Each different version will completely change the
+   hash of the call, invalidating previously cached results.
+
+
+   .. py:attribute:: name
+      :type:  str
+
+
+   .. py:attribute:: arguments
+      :type:  dict[str, Any]
+
+
+   .. py:attribute:: metadata
+      :type:  dict[str, dict[str, Any]]
+
+
+   .. py:attribute:: module
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: version
+      :type:  int | None
+      :value: None
+
+
+
+   .. py:attribute:: code_digest
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: result
+      :type:  Any
+      :value: None
+
+
+
+   .. py:method:: from_call(func, *args, partial=False, **kwargs)
+      :classmethod:
+
+
+
+   .. py:method:: to_lookup_key()
+
+
+.. py:data:: logger
+
+.. py:function:: D(d: str) -> digest.Digest
+
+   Convenience wrapper to create a Digest from a string.
+
+   Digests passed as arguments to @fleche decorated functions are automatically expanded
+   to their cached values.
+
+
+.. py:class:: MetaData
+
+   Bases: :py:obj:`abc.ABC`
+
+
+   Abstract base class for defining metadata types.
+
+   Implementations must return only JSON-serializable values from pre() and post().
+   That means scalars (str, int, float, bool, None), lists of those, or dicts with str keys
+   and JSON-serializable values.
+
+
+   .. py:method:: pre(call: fleche.call.Call) -> dict[str, JSONValue]
+
+      Hook for collecting metadata before the function execution.
+
+      :param call: The call object of the decorated function.
+      :type call: Call
+
+      :returns: A flat dictionary of JSON-serializable metadata collected before execution.
+      :rtype: dict[str, JSONValue]
+
+
+
+   .. py:method:: post(pre: dict[str, JSONValue], call: fleche.call.Call) -> dict[str, JSONValue]
+
+      Hook for collecting metadata after the function execution.
+
+      The return value of the function is available on the `call.result` attribute.
+
+      :param pre: Metadata collected during the pre-execution phase.
+      :type pre: dict[str, JSONValue]
+      :param call: The call object of the decorated function.
+      :type call: Call
+
+      :returns: A flat dictionary of JSON-serializable metadata collected after execution.
+      :rtype: dict[str, JSONValue]
+
+
+
+   .. py:property:: keys
+      :type: dict[str, type]
+
+      :abstractmethod:
+
+
+      Defines the schema of the metadata, mapping metadata keys to their expected types.
+
+      :returns: A dictionary representing the metadata schema.
+      :rtype: dict[str, type]
+
+
+   .. py:property:: name
+      :type: str
+
+      :abstractmethod:
+
+
+      The unique name of this metadata type.
+
+      :returns: The name of the metadata type.
+      :rtype: str
+
+
+.. py:class:: Tags
+
+   Bases: :py:obj:`MetaData`
+
+
+   Metadata type for storing arbitrary tags.
+
+   For each key in the ``tags`` dictionary, a new metadata column is created.
+
+   Keys:
+       tags (dict): A dictionary of user-defined tags.
+
+   .. rubric:: Notes
+
+   Tag values must be JSON-serializable.
+
+
+   .. py:attribute:: tags
+      :type:  dict[str, Any]
+
+
+   .. py:method:: pre(call: fleche.call.Call) -> dict[str, Any]
+
+      Hook for collecting metadata before the function execution.
+
+      :param call: The call object of the decorated function.
+      :type call: Call
+
+      :returns: A flat dictionary of JSON-serializable metadata collected before execution.
+      :rtype: dict[str, JSONValue]
+
+
+
+   .. py:attribute:: name
+      :type:  str
+      :value: 'tags'
+
+
+      The unique name of this metadata type.
+
+      :returns: The name of the metadata type.
+      :rtype: str
+
+
+   .. py:property:: keys
+
+      Defines the schema of the metadata, mapping metadata keys to their expected types.
+
+      :returns: A dictionary representing the metadata schema.
+      :rtype: dict[str, type]
+
+
+.. py:class:: BaseCache
+
+   Bases: :py:obj:`abc.ABC`
+
+
+   Helper class that provides a standard way to create an ABC using
+   inheritance.
+
+
+   .. py:method:: save(call: fleche.call.Call) -> str
+      :abstractmethod:
+
+
+
+   .. py:method:: load(key: str, lazy: bool = False) -> fleche.call.Call | fleche.call.LazyCall
+      :abstractmethod:
+
+
+
+   .. py:method:: load_value(key: str) -> Any
+      :abstractmethod:
+
+
+
+   .. py:method:: contains(key: str) -> bool
+
+
+   .. py:method:: push(cache: BaseCache) -> CacheStack
+
+
+   .. py:method:: shrink(key: fleche.digest.Digest | str) -> fleche.digest.Digest
+      :abstractmethod:
+
+
+      Find the shortest substring that is still an unambigious reference to the same call.
+
+      .. warning::
+
+          This is a property of how many values there are in your storage!
+          A key returned from this function may become ambigious in the future when more values are added.
+          Do not rely on this function in your programs, it is provided as a convenience for users only!
+
+      :param key: the key to shorten
+      :type key: str or :class:`Digest`
+
+      :returns: shortest key possible
+      :rtype: :class:`Digest`
+
+      :raises AmbiguousDigestError: if no shorter key is possible
+
+
+
+   .. py:method:: query(call: fleche.call.Call, lazy: bool = False) -> Iterable[fleche.call.Call | fleche.call.LazyCall]
+      :abstractmethod:
+
+
+
+   .. py:method:: table() -> pandas.DataFrame
+
+      Return a pandas DataFrame summarizing cached calls via query().
+
+      This implementation uses a fully-wildcard Call template to retrieve
+      all calls through ``self.query`` and then flattens metadata keys into
+      top-level columns for convenience.
+
+      Arguments and results are elided.
+
+      The DataFrame index will be the lookup key (digest) of each call.
+
+      :returns: table of all calls on cache
+      :rtype: :class:`pandas.DataFrame`
+
+
+
+.. py:class:: Cache
+
+   Bases: :py:obj:`BaseCache`
+
+
+   Helper class that provides a standard way to create an ABC using
+   inheritance.
+
+
+   .. py:attribute:: values
+      :type:  fleche.storage.Storage
+
+
+   .. py:attribute:: calls
+      :type:  fleche.storage.CallStorage | fleche.storage.Storage
+
+
+   .. py:method:: __post_init__()
+
+
+   .. py:method:: load_value(key)
+
+
+   .. py:method:: _handle_args_save(value)
+
+
+   .. py:method:: _handle_args_load(key)
+
+
+   .. py:method:: save(call: fleche.call.Call) -> str
+
+
+   .. py:method:: _decode_call(call: fleche.call.Call, lazy: bool = False) -> fleche.call.Call | fleche.call.LazyCall
+
+
+   .. py:method:: load(key: str, lazy: bool = False) -> fleche.call.Call | fleche.call.LazyCall
+
+
+   .. py:method:: shrink(key: fleche.digest.Digest | str) -> fleche.digest.Digest
+
+      Find the shortest substring that is still an unambigious reference to the same call.
+
+      .. warning::
+
+          This is a property of how many values there are in your storage!
+          A key returned from this function may become ambigious in the future when more values are added.
+          Do not rely on this function in your programs, it is provided as a convenience for users only!
+
+      :param key: the key to shorten
+      :type key: str or :class:`Digest`
+
+      :returns: shortest key possible
+      :rtype: :class:`Digest`
+
+      :raises AmbiguousDigestError: if no shorter key is possible
+
+
+
+   .. py:method:: query(call: fleche.call.Call, lazy: bool = False) -> Iterable[fleche.call.Call | fleche.call.LazyCall]
+
+      Query for cached calls that match a template and return decoded results.
+
+      This delegates to the underlying :meth:`CallStorage.query` using the provided template ``call``. Any digested
+      argument values and the result are decoded via this cache's value storage before yielding.
+
+      :param call: A ``Call`` instance used as a template; fields set to ``None``
+                   act as wildcards. For arguments and result, comparisons follow
+                   digest semantics (i.e., values are matched by their digest).
+      :param lazy: If True, return LazyCall instances instead of Call instances.
+
+      :Yields: *Call | LazyCall* -- Matching calls with arguments and result decoded from digests
+               where possible.
+
+
+
+   .. py:method:: redigest() -> None
+
+      Ensures consistent cache keys in case digest function changed.
+
+      This may take time depending on cache size.
+
+
+
+.. py:exception:: Rejected
+
+   Bases: :py:obj:`Exception`
+
+
+   Cache refused to cache the call for some reason or other.
+
+
+.. py:function:: load_cache_config(name: str | None = None) -> fleche.caches.Cache
+
+   Load a cache from the configuration file.
+
+   If name is None, the default cache is loaded.
+   The names 'memory' and 'void' are special-cased to return a transient
+   in-memory cache and a no-op cache respectively.
+
+   Note: The `Tags` metadata cannot be configured from the config file.
+
+
+.. py:function:: load_default_metadata()
+
+   Load the default metadata from the configuration file.
+
+
+.. py:data:: _T
+
+.. py:data:: _CACHE
+   :type:  contextvars.ContextVar[caches.Cache]
+
+.. py:function:: cache(new_cache: Optional[Union[caches.Cache, str]] = None, stack=False) -> Union[caches.Cache, contextlib.AbstractContextManager[None]]
+
+   Manages the active cache for Fleche. If `new_cache` is provided, it returns a context manager
+   that sets the cache for the duration of the context. If `new_cache` is None, it returns
+   the currently active cache.
+
+   :param new_cache: An optional Cache object to set as the active cache.
+   :type new_cache: Optional[Cache]
+   :param stack: if True, construct a CacheStack, with new_cache at the bottom
+   :type stack: bool, default False
+
+   :returns:
+
+             The current Cache object if `new_cache` is None,
+                                            otherwise a context manager to set a new cache.
+   :rtype: Union[Cache, Callable[..., Any]]
+
+
+.. py:data:: _METADATA
+   :type:  contextvars.ContextVar[tuple[metadata.MetaData]]
+
+.. py:function:: metadata(*new_metadata: metadata.MetaData, stack=False)
+
+.. py:function:: tags(**kwargs)
+
+   A context manager to add arbitrary tags to results.
+
+   :param \*\*kwargs: The tags to add to the results.
+
+
+.. py:function:: project(name)
+
+   A context manager to tag results with a project name.
+
+   :param name: The name of the project.
+   :type name: str
+
+
+.. py:function:: _get_working_directory_root() -> pathlib.Path
+
+   Determines the root directory for fleche working directories, following the XDG spec.
+
+
+.. py:function:: fleche(_func=None, *, version: int | None = None, meta: tuple[metadata.MetaData] = (), hash_version: bool = True, hash_module: bool = True, hash_code: bool = False, require: None | str | list[str] | tuple[str] = None, ignore: None | str | list[str] | tuple[str] = None, isolate: bool = False)
+
+   Cache decorator for functions.
+
+   The decorated function is enhanced with helper methods:
+   - .call(*args, **kwargs): Get the Call object.
+   - .digest(*args, **kwargs): Get the cache key.
+   - .load(*args, **kwargs): Load result from cache.
+   - .contains(*args, **kwargs): Check if result is in cache.
+   The original function is available via .__wrapped__.

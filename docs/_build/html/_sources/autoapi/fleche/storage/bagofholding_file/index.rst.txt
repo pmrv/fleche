@@ -1,0 +1,31 @@
+fleche.storage.bagofholding_file
+================================
+
+.. py:module:: fleche.storage.bagofholding_file
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   fleche.storage.bagofholding_file.BagOfHoldingH5File
+
+
+Module Contents
+---------------
+
+.. py:class:: BagOfHoldingH5File
+
+   Bases: :py:obj:`fleche.storage.file.FileStorage`
+
+
+   File-based storage backend using pickle.
+
+   Stores objects on the filesystem.
+
+
+   .. py:method:: _save(value: Any, key: fleche.digest.Digest) -> str
+
+
+   .. py:method:: _load(key: str) -> Any

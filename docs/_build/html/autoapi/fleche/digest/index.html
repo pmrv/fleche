@@ -1,0 +1,315 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>fleche.digest &mdash; Fleche  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+
+
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="fleche.metadata" href="../metadata/index.html" />
+    <link rel="prev" title="fleche.config" href="../config/index.html" />
+</head>
+
+<body class="wy-body-for-nav">
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+
+
+          <a href="../../../index.html" class="icon icon-home">
+            Fleche
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../helpers.html">Decorator Helpers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../lazy_call.html">Lazy Loading with LazyCall</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../digests_as_args.html">Digests as Arguments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../custom_digests.html">Customizing Digests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../configuration.html">Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../query.html">Querying cached calls</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../security.html">Security</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../index.html">fleche</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../caches/index.html">fleche.caches</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../call/index.html">fleche.call</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../config/index.html">fleche.config</a></li>
+<li class="toctree-l4 current"><a class="current reference internal" href="#">fleche.digest</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../metadata/index.html">fleche.metadata</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../security/index.html">fleche.security</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../storage/index.html">fleche.storage</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../index.html#attributes">Attributes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../index.html#exceptions">Exceptions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../index.html#classes">Classes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../index.html#functions">Functions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../index.html#package-contents">Package Contents</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Fleche</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">fleche</a></li>
+      <li class="breadcrumb-item active">fleche.digest</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../_sources/autoapi/fleche/digest/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+
+  <section id="module-fleche.digest">
+<span id="fleche-digest"></span><h1>fleche.digest<a class="headerlink" href="#module-fleche.digest" title="Link to this heading"></a></h1>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fleche.digest.logger" title="fleche.digest.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fleche.digest.DIGEST_LENGTH" title="fleche.digest.DIGEST_LENGTH"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DIGEST_LENGTH</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fleche.digest.T" title="fleche.digest.T"><code class="xref py py-obj docutils literal notranslate"><span class="pre">T</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fleche.digest._HOOKS" title="fleche.digest._HOOKS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">_HOOKS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fleche.digest._EP_HOOKS" title="fleche.digest._EP_HOOKS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">_EP_HOOKS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="exceptions">
+<h2>Exceptions<a class="headerlink" href="#exceptions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fleche.digest.Unhashable" title="fleche.digest.Unhashable"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Unhashable</span></code></a></p></td>
+<td><p>Exception raised when an object cannot be digested.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fleche.digest.Digest" title="fleche.digest.Digest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Digest</span></code></a></p></td>
+<td><p>str(object='') -&gt; str</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fleche.digest.Hook" title="fleche.digest.Hook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Hook</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fleche.digest.get_hooks" title="fleche.digest.get_hooks"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_hooks</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fleche.digest.add_hook" title="fleche.digest.add_hook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_hook</span></code></a>(hook)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fleche.digest.load_entry_points" title="fleche.digest.load_entry_points"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_entry_points</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fleche.digest.digest" title="fleche.digest.digest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">digest</span></code></a>(→ Digest)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fleche.digest._digest" title="fleche.digest._digest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">_digest</span></code></a>(→ Digest)</p></td>
+<td><p>Generates a SHA256 digest for a given Python object.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="fleche.digest.logger">
+<span class="sig-prename descclassname"><span class="pre">fleche.digest.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="reference internal" href="../../../_modules/fleche/digest.html#logger"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.digest.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="fleche.digest.Unhashable">
+<span class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">fleche.digest.</span></span><span class="sig-name descname"><span class="pre">Unhashable</span></span><a class="reference internal" href="../../../_modules/fleche/digest.html#Unhashable"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.digest.Unhashable" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">Exception</span></code></p>
+<p>Exception raised when an object cannot be digested.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="fleche.digest.Digest">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">fleche.digest.</span></span><span class="sig-name descname"><span class="pre">Digest</span></span><a class="reference internal" href="../../../_modules/fleche/digest.html#Digest"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.digest.Digest" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">str</span></code></p>
+<p>str(object=’’) -&gt; str
+str(bytes_or_buffer[, encoding[, errors]]) -&gt; str</p>
+<p>Create a new string object from the given object. If encoding or
+errors is specified, then the object must expose a data buffer
+that will be decoded using the given encoding and error handler.
+Otherwise, returns the result of object.__str__() (if defined)
+or repr(object).
+encoding defaults to sys.getdefaultencoding().
+errors defaults to ‘strict’.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="fleche.digest.DIGEST_LENGTH">
+<span class="sig-prename descclassname"><span class="pre">fleche.digest.</span></span><span class="sig-name descname"><span class="pre">DIGEST_LENGTH</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">64</span></span><a class="reference internal" href="../../../_modules/fleche/digest.html#DIGEST_LENGTH"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.digest.DIGEST_LENGTH" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="fleche.digest.T">
+<span class="sig-prename descclassname"><span class="pre">fleche.digest.</span></span><span class="sig-name descname"><span class="pre">T</span></span><a class="reference internal" href="../../../_modules/fleche/digest.html#T"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.digest.T" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="fleche.digest.Hook">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">fleche.digest.</span></span><span class="sig-name descname"><span class="pre">Hook</span></span><a class="reference internal" href="../../../_modules/fleche/digest.html#Hook"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.digest.Hook" title="Link to this definition"></a></dt>
+<dd><dl class="py attribute">
+<dt class="sig sig-object py" id="fleche.digest.Hook.type">
+<span class="sig-name descname"><span class="pre">type</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#fleche.digest.T" title="fleche.digest.T"><span class="pre">T</span></a></span><a class="reference internal" href="../../../_modules/fleche/digest.html#Hook.type"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.digest.Hook.type" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="fleche.digest.Hook.digest">
+<span class="sig-name descname"><span class="pre">digest</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#fleche.digest.T" title="fleche.digest.T"><span class="pre">T</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><a class="reference internal" href="../../../_modules/fleche/digest.html#Hook.digest"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.digest.Hook.digest" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="fleche.digest._HOOKS">
+<span class="sig-prename descclassname"><span class="pre">fleche.digest.</span></span><span class="sig-name descname"><span class="pre">_HOOKS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></span><a class="reference internal" href="../../../_modules/fleche/digest.html#_HOOKS"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.digest._HOOKS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="fleche.digest._EP_HOOKS">
+<span class="sig-prename descclassname"><span class="pre">fleche.digest.</span></span><span class="sig-name descname"><span class="pre">_EP_HOOKS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></span><a class="reference internal" href="../../../_modules/fleche/digest.html#_EP_HOOKS"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.digest._EP_HOOKS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fleche.digest.get_hooks">
+<span class="sig-prename descclassname"><span class="pre">fleche.digest.</span></span><span class="sig-name descname"><span class="pre">get_hooks</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/fleche/digest.html#get_hooks"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.digest.get_hooks" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fleche.digest.add_hook">
+<span class="sig-prename descclassname"><span class="pre">fleche.digest.</span></span><span class="sig-name descname"><span class="pre">add_hook</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hook</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#fleche.digest.Hook" title="fleche.digest.Hook"><span class="pre">Hook</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#fleche.digest.T" title="fleche.digest.T"><span class="pre">T</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/fleche/digest.html#add_hook"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.digest.add_hook" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fleche.digest.load_entry_points">
+<span class="sig-prename descclassname"><span class="pre">fleche.digest.</span></span><span class="sig-name descname"><span class="pre">load_entry_points</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/fleche/digest.html#load_entry_points"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.digest.load_entry_points" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fleche.digest.digest">
+<span class="sig-prename descclassname"><span class="pre">fleche.digest.</span></span><span class="sig-name descname"><span class="pre">digest</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#fleche.digest.Digest" title="fleche.digest.Digest"><span class="pre">Digest</span></a></span></span><a class="reference internal" href="../../../_modules/fleche/digest.html#digest"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.digest.digest" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fleche.digest._digest">
+<span class="sig-prename descclassname"><span class="pre">fleche.digest.</span></span><span class="sig-name descname"><span class="pre">_digest</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#fleche.digest.Digest" title="fleche.digest.Digest"><span class="pre">Digest</span></a></span></span><a class="reference internal" href="../../../_modules/fleche/digest.html#_digest"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#fleche.digest._digest" title="Link to this definition"></a></dt>
+<dd><p>Generates a SHA256 digest for a given Python object.</p>
+<p>This function handles various types including strings, bytes, integers, floats, booleans,
+None, dictionaries, numpy arrays, dataclasses, and iterables.
+If an unhashable type is encountered, an Unhashable exception is raised.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>value</strong> (<em>Any</em>) – The object to be digested.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The SHA256 hexdigest of the object.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#fleche.digest.Unhashable" title="fleche.digest.Unhashable"><strong>Unhashable</strong></a> – If the provided value cannot be digested.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../config/index.html" class="btn btn-neutral float-left" title="fleche.config" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../metadata/index.html" class="btn btn-neutral float-right" title="fleche.metadata" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Marvin Poul.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+</body>
+</html>

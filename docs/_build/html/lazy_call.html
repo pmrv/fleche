@@ -1,0 +1,172 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lazy Loading with LazyCall &mdash; Fleche  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
+
+
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Digests as Arguments" href="digests_as_args.html" />
+    <link rel="prev" title="Decorator Helpers" href="helpers.html" />
+</head>
+
+<body class="wy-body-for-nav">
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+
+
+          <a href="index.html" class="icon icon-home">
+            Fleche
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="helpers.html">Decorator Helpers</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Lazy Loading with LazyCall</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#what-is-lazycall">What is LazyCall?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#using-lazy-loading">Using Lazy Loading</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#parity-with-call">Parity with Call</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#lazyarguments">LazyArguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#performance-benefits">Performance Benefits</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="digests_as_args.html">Digests as Arguments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="custom_digests.html">Customizing Digests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="query.html">Querying cached calls</a></li>
+<li class="toctree-l1"><a class="reference internal" href="security.html">Security</a></li>
+<li class="toctree-l1"><a class="reference internal" href="autoapi/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Fleche</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Lazy Loading with LazyCall</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/lazy_call.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+
+  <section id="lazy-loading-with-lazycall">
+<h1>Lazy Loading with LazyCall<a class="headerlink" href="#lazy-loading-with-lazycall" title="Link to this heading"></a></h1>
+<p>In many caching scenarios, function results or arguments can be large objects (e.g., massive datasets, trained models, or high-resolution images). Loading these objects from the cache every time you inspect a call can be expensive and slow.</p>
+<p>To address this, Fleche provides a <strong>lazy loading</strong> mechanism via the <code class="docutils literal notranslate"><span class="pre">LazyCall</span></code> class.</p>
+<section id="what-is-lazycall">
+<h2>What is LazyCall?<a class="headerlink" href="#what-is-lazycall" title="Link to this heading"></a></h2>
+<p>A <code class="docutils literal notranslate"><span class="pre">LazyCall</span></code> is a lightweight sibling to the standard <code class="docutils literal notranslate"><span class="pre">Call</span></code> object. Instead of holding the actual Python objects for arguments and results, it holds their <strong>digests</strong> (unique identifiers) and a reference to the cache.</p>
+<p>The actual data is only loaded from the underlying storage when you explicitly access it.</p>
+</section>
+<section id="using-lazy-loading">
+<h2>Using Lazy Loading<a class="headerlink" href="#using-lazy-loading" title="Link to this heading"></a></h2>
+<p>You can request lazy loading by passing <code class="docutils literal notranslate"><span class="pre">lazy=True</span></code> to the <code class="docutils literal notranslate"><span class="pre">load()</span></code> or <code class="docutils literal notranslate"><span class="pre">query()</span></code> methods of a cache.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">fleche</span><span class="w"> </span><span class="kn">import</span> <span class="n">cache</span>
+
+<span class="c1"># Normal load: loads everything into memory</span>
+<span class="n">call</span> <span class="o">=</span> <span class="n">cache</span><span class="p">()</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">call</span><span class="o">.</span><span class="n">result</span><span class="p">)</span>  <span class="c1"># Already loaded</span>
+
+<span class="c1"># Lazy load: loads only metadata and digests</span>
+<span class="n">lazy_call</span> <span class="o">=</span> <span class="n">cache</span><span class="p">()</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="c1"># Arguments and results are fetched only when accessed</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">lazy_call</span><span class="o">.</span><span class="n">result</span><span class="p">)</span>  <span class="c1"># Triggers a load from value storage</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">lazy_call</span><span class="o">.</span><span class="n">arguments</span><span class="p">[</span><span class="s1">&#39;x&#39;</span><span class="p">])</span>  <span class="c1"># Triggers a load for argument &#39;x&#39;</span>
+</pre></div>
+</div>
+</section>
+<section id="parity-with-call">
+<h2>Parity with Call<a class="headerlink" href="#parity-with-call" title="Link to this heading"></a></h2>
+<p>Despite being “lazy”, <code class="docutils literal notranslate"><span class="pre">LazyCall</span></code> maintains full parity with <code class="docutils literal notranslate"><span class="pre">Call</span></code>:</p>
+<ul class="simple">
+<li><p><strong>Digests</strong>: <code class="docutils literal notranslate"><span class="pre">digest(lazy_call)</span></code> is identical to <code class="docutils literal notranslate"><span class="pre">digest(original_call)</span></code>.</p></li>
+<li><p><strong>Lookup Keys</strong>: <code class="docutils literal notranslate"><span class="pre">lazy_call.to_lookup_key()</span></code> returns the same key as the non-lazy version.</p></li>
+<li><p><strong>Immutability</strong>: Like <code class="docutils literal notranslate"><span class="pre">Call</span></code>, <code class="docutils literal notranslate"><span class="pre">LazyCall</span></code> is a frozen dataclass.</p></li>
+</ul>
+</section>
+<section id="lazyarguments">
+<h2>LazyArguments<a class="headerlink" href="#lazyarguments" title="Link to this heading"></a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">arguments</span></code> attribute of a <code class="docutils literal notranslate"><span class="pre">LazyCall</span></code> returns a <code class="docutils literal notranslate"><span class="pre">LazyArguments</span></code> proxy. This proxy implements the standard Python <code class="docutils literal notranslate"><span class="pre">Mapping</span></code> interface, allowing you to use it like a dictionary while benefiting from lazy retrieval of individual arguments.</p>
+</section>
+<section id="performance-benefits">
+<h2>Performance Benefits<a class="headerlink" href="#performance-benefits" title="Link to this heading"></a></h2>
+<p>Lazy loading is particularly beneficial when:</p>
+<ol class="arabic simple">
+<li><p><strong>Browsing Cache</strong>: You are iterating over many calls (e.g., via <code class="docutils literal notranslate"><span class="pre">query()</span></code>) and only need to inspect metadata or specific arguments.</p></li>
+<li><p><strong>Existence Checks</strong>: The <code class="docutils literal notranslate"><span class="pre">contains()</span></code> method in Fleche uses lazy loading internally to check for a call’s existence without deserializing its result.</p></li>
+<li><p><strong>Large Objects</strong>: Your cache contains large data structures that are not always needed.</p></li>
+</ol>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="helpers.html" class="btn btn-neutral float-left" title="Decorator Helpers" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="digests_as_args.html" class="btn btn-neutral float-right" title="Digests as Arguments" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Marvin Poul.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,327 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>fleche.call &mdash; Fleche  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
+
+
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+</head>
+
+<body class="wy-body-for-nav">
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+
+
+          <a href="../../index.html" class="icon icon-home">
+            Fleche
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../helpers.html">Decorator Helpers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../lazy_call.html">Lazy Loading with LazyCall</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../digests_as_args.html">Digests as Arguments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../custom_digests.html">Customizing Digests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../configuration.html">Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../query.html">Querying cached calls</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../security.html">Security</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../autoapi/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">Fleche</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+          <li class="breadcrumb-item"><a href="../fleche.html">fleche</a></li>
+      <li class="breadcrumb-item active">fleche.call</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+
+  <h1>Source code for fleche.call</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">replace</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">inspect</span><span class="w"> </span><span class="kn">import</span> <span class="n">signature</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">digest</span>
+
+
+<span class="nd">@dataclass</span>
+<div class="viewcode-block" id="Call">
+<a class="viewcode-back" href="../../autoapi/fleche/index.html#fleche.call.Call">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Call</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Represents a function call, capturing its name, arguments, and keyword arguments.</span>
+
+<span class="sd">    `module` and `version` can be optionally set to be included in the hash of the call.</span>
+<span class="sd">    `version` should be a plain integer and monotonically increase.  Each different version will completely change the</span>
+<span class="sd">    hash of the call, invalidating previously cached results.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+<div class="viewcode-block" id="Call.name">
+<a class="viewcode-back" href="../../autoapi/fleche/call/index.html#fleche.call.Call.name">[docs]</a>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span></div>
+
+<div class="viewcode-block" id="Call.arguments">
+<a class="viewcode-back" href="../../autoapi/fleche/call/index.html#fleche.call.Call.arguments">[docs]</a>
+    <span class="n">arguments</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="Call.metadata">
+<a class="viewcode-back" href="../../autoapi/fleche/call/index.html#fleche.call.Call.metadata">[docs]</a>
+    <span class="n">metadata</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Call.module">
+<a class="viewcode-back" href="../../autoapi/fleche/call/index.html#fleche.call.Call.module">[docs]</a>
+    <span class="n">module</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+<div class="viewcode-block" id="Call.version">
+<a class="viewcode-back" href="../../autoapi/fleche/call/index.html#fleche.call.Call.version">[docs]</a>
+    <span class="n">version</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+<div class="viewcode-block" id="Call.code_digest">
+<a class="viewcode-back" href="../../autoapi/fleche/call/index.html#fleche.call.Call.code_digest">[docs]</a>
+    <span class="n">code_digest</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+<div class="viewcode-block" id="Call.result">
+<a class="viewcode-back" href="../../autoapi/fleche/call/index.html#fleche.call.Call.result">[docs]</a>
+    <span class="n">result</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+    <span class="nd">@classmethod</span>
+<div class="viewcode-block" id="Call.from_call">
+<a class="viewcode-back" href="../../autoapi/fleche/index.html#fleche.call.Call.from_call">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_call</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">partial</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="c1"># Normalize arguments using function signature</span>
+        <span class="n">sig</span> <span class="o">=</span> <span class="n">signature</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">partial</span><span class="p">:</span>
+            <span class="n">bound</span> <span class="o">=</span> <span class="n">sig</span><span class="o">.</span><span class="n">bind_partial</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="c1"># missing arguments are set to None</span>
+            <span class="n">arguments</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">bound</span><span class="o">.</span><span class="n">arguments</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">sig</span><span class="o">.</span><span class="n">parameters</span><span class="p">}</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">bound</span> <span class="o">=</span> <span class="n">sig</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="n">bound</span><span class="o">.</span><span class="n">apply_defaults</span><span class="p">()</span>
+            <span class="n">arguments</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">bound</span><span class="o">.</span><span class="n">arguments</span><span class="p">)</span>
+
+        <span class="c1"># Preserve declared parameter order via bound.arguments (OrderedDict)</span>
+        <span class="n">call</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">(</span><span class="n">func</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">arguments</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="s2">&quot;__version__&quot;</span><span class="p">):</span>
+            <span class="n">call</span><span class="o">.</span><span class="n">version</span> <span class="o">=</span> <span class="n">func</span><span class="o">.</span><span class="n">__version__</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="s2">&quot;__module__&quot;</span><span class="p">):</span>
+            <span class="n">call</span><span class="o">.</span><span class="n">module</span> <span class="o">=</span> <span class="n">func</span><span class="o">.</span><span class="vm">__module__</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="s2">&quot;__code__&quot;</span><span class="p">):</span>
+            <span class="n">call</span><span class="o">.</span><span class="n">code_digest</span> <span class="o">=</span> <span class="n">digest</span><span class="o">.</span><span class="n">digest</span><span class="p">(</span><span class="n">func</span><span class="o">.</span><span class="vm">__code__</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">call</span></div>
+
+
+<div class="viewcode-block" id="Call.to_lookup_key">
+<a class="viewcode-back" href="../../autoapi/fleche/index.html#fleche.call.Call.to_lookup_key">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_lookup_key</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># Iterate explicitly in the preserved parameter order; do not sort</span>
+        <span class="n">arg_pairs</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">arguments</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+        <span class="n">call</span> <span class="o">=</span> <span class="n">replace</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arguments</span><span class="o">=</span><span class="n">arg_pairs</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">result</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">digest</span><span class="o">.</span><span class="n">digest</span><span class="p">(</span><span class="n">call</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="LazyArguments">
+<a class="viewcode-back" href="../../autoapi/fleche/call/index.html#fleche.call.LazyArguments">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">LazyArguments</span><span class="p">(</span><span class="n">Mapping</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cache</span><span class="p">,</span> <span class="n">arg_digests</span><span class="p">):</span>
+<div class="viewcode-block" id="LazyArguments._cache">
+<a class="viewcode-back" href="../../autoapi/fleche/call/index.html#fleche.call.LazyArguments._cache">[docs]</a>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span> <span class="o">=</span> <span class="n">cache</span></div>
+
+<div class="viewcode-block" id="LazyArguments._arg_digests">
+<a class="viewcode-back" href="../../autoapi/fleche/call/index.html#fleche.call.LazyArguments._arg_digests">[docs]</a>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_arg_digests</span> <span class="o">=</span> <span class="n">arg_digests</span></div>
+
+
+<div class="viewcode-block" id="LazyArguments.__getitem__">
+<a class="viewcode-back" href="../../autoapi/fleche/call/index.html#fleche.call.LazyArguments.__getitem__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span><span class="o">.</span><span class="n">_handle_args_load</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_arg_digests</span><span class="p">[</span><span class="n">key</span><span class="p">])</span></div>
+
+
+<div class="viewcode-block" id="LazyArguments.__iter__">
+<a class="viewcode-back" href="../../autoapi/fleche/call/index.html#fleche.call.LazyArguments.__iter__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_arg_digests</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="LazyArguments.__len__">
+<a class="viewcode-back" href="../../autoapi/fleche/call/index.html#fleche.call.LazyArguments.__len__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_arg_digests</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="LazyArguments.__repr__">
+<a class="viewcode-back" href="../../autoapi/fleche/call/index.html#fleche.call.LazyArguments.__repr__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;LazyArguments(</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_arg_digests</span><span class="si">!r}</span><span class="s2">)&quot;</span></div>
+
+
+<div class="viewcode-block" id="LazyArguments.__digest__">
+<a class="viewcode-back" href="../../autoapi/fleche/call/index.html#fleche.call.LazyArguments.__digest__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">__digest__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># Ensuring that LazyArguments digests identically to a dict of the same values.</span>
+        <span class="c1"># Since self._arg_digests are already Digests, and digest(Digest(X)) == X,</span>
+        <span class="c1"># this will match a dict of raw values because digest(val) == X.</span>
+        <span class="k">return</span> <span class="n">digest</span><span class="o">.</span><span class="n">digest</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_arg_digests</span><span class="p">)</span></div>
+</div>
+
+
+
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<div class="viewcode-block" id="LazyCall">
+<a class="viewcode-back" href="../../autoapi/fleche/call/index.html#fleche.call.LazyCall">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">LazyCall</span><span class="p">:</span>
+<div class="viewcode-block" id="LazyCall.name">
+<a class="viewcode-back" href="../../autoapi/fleche/call/index.html#fleche.call.LazyCall.name">[docs]</a>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span></div>
+
+<div class="viewcode-block" id="LazyCall._arguments">
+<a class="viewcode-back" href="../../autoapi/fleche/call/index.html#fleche.call.LazyCall._arguments">[docs]</a>
+    <span class="n">_arguments</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="LazyCall._result">
+<a class="viewcode-back" href="../../autoapi/fleche/call/index.html#fleche.call.LazyCall._result">[docs]</a>
+    <span class="n">_result</span><span class="p">:</span> <span class="n">Any</span></div>
+
+<div class="viewcode-block" id="LazyCall._cache">
+<a class="viewcode-back" href="../../autoapi/fleche/call/index.html#fleche.call.LazyCall._cache">[docs]</a>
+    <span class="n">_cache</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">compare</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="LazyCall.metadata">
+<a class="viewcode-back" href="../../autoapi/fleche/call/index.html#fleche.call.LazyCall.metadata">[docs]</a>
+    <span class="n">metadata</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="LazyCall.module">
+<a class="viewcode-back" href="../../autoapi/fleche/call/index.html#fleche.call.LazyCall.module">[docs]</a>
+    <span class="n">module</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+<div class="viewcode-block" id="LazyCall.version">
+<a class="viewcode-back" href="../../autoapi/fleche/call/index.html#fleche.call.LazyCall.version">[docs]</a>
+    <span class="n">version</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+<div class="viewcode-block" id="LazyCall.code_digest">
+<a class="viewcode-back" href="../../autoapi/fleche/call/index.html#fleche.call.LazyCall.code_digest">[docs]</a>
+    <span class="n">code_digest</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+    <span class="nd">@property</span>
+<div class="viewcode-block" id="LazyCall.arguments">
+<a class="viewcode-back" href="../../autoapi/fleche/call/index.html#fleche.call.LazyCall.arguments">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">arguments</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">LazyArguments</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_cache</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_arguments</span><span class="p">)</span></div>
+
+
+    <span class="nd">@property</span>
+<div class="viewcode-block" id="LazyCall.result">
+<a class="viewcode-back" href="../../autoapi/fleche/call/index.html#fleche.call.LazyCall.result">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">result</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span><span class="o">.</span><span class="n">load_value</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_result</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="LazyCall.to_lookup_key">
+<a class="viewcode-back" href="../../autoapi/fleche/call/index.html#fleche.call.LazyCall.to_lookup_key">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_lookup_key</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="c1"># Reconstruct a Call object to ensure identical key calculation</span>
+        <span class="n">c</span> <span class="o">=</span> <span class="n">Call</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+            <span class="n">arguments</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_arguments</span><span class="p">,</span>
+            <span class="n">metadata</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span>
+            <span class="n">module</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">,</span>
+            <span class="n">version</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">version</span><span class="p">,</span>
+            <span class="n">code_digest</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">code_digest</span><span class="p">,</span>
+            <span class="n">result</span><span class="o">=</span><span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">c</span><span class="o">.</span><span class="n">to_lookup_key</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="LazyCall.__digest__">
+<a class="viewcode-back" href="../../autoapi/fleche/call/index.html#fleche.call.LazyCall.__digest__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">__digest__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># Reconstruct a Call object to ensure identical digest calculation</span>
+        <span class="n">c</span> <span class="o">=</span> <span class="n">Call</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+            <span class="n">arguments</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_arguments</span><span class="p">,</span>
+            <span class="n">metadata</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span>
+            <span class="n">module</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">,</span>
+            <span class="n">version</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">version</span><span class="p">,</span>
+            <span class="n">code_digest</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">code_digest</span><span class="p">,</span>
+            <span class="n">result</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_result</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">digest</span><span class="o">.</span><span class="n">digest</span><span class="p">(</span><span class="n">c</span><span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Marvin Poul.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+</body>
+</html>
