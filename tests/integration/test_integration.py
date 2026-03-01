@@ -10,7 +10,11 @@ from fleche.storage import CloudpickleFile, Memory
 from fleche.storage.sql import Sql
 
 temp = tempfile.TemporaryDirectory()
-storages = [Memory({}), CloudpickleFile(temp.name)]
+storages = [
+    (Memory({}), Memory({})),
+    (CloudpickleFile(temp.name), CloudpickleFile(temp.name)),
+    (Memory({}), Sql()),
+]
 
 
 @fleche
@@ -32,10 +36,10 @@ functions_to_test = [
 ]
 
 
-@pytest.mark.parametrize("storage", storages)
+@pytest.mark.parametrize("values_storage, calls_storage", storages)
 @pytest.mark.parametrize("func, arg", functions_to_test)
-def test_fleche_performance(storage, func, arg):
-    with cache(Cache(storage, storage)):
+def test_fleche_performance(values_storage, calls_storage, func, arg):
+    with cache(Cache(values=values_storage, calls=calls_storage)):
 
         start_time = time.time()
         func(arg)
