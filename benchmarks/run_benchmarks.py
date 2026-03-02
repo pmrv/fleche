@@ -32,13 +32,13 @@ def run_script(script_path: str) -> List[Dict]:
 
 def format_time(seconds: float) -> str:
     if seconds < 1e-6:
-        return f"{seconds * 1e9:.2f} ns"
+        return f"{seconds * 1e9:.3f} ns"
     elif seconds < 1e-3:
-        return f"{seconds * 1e6:.2f} µs"
+        return f"{seconds * 1e6:.3f} µs"
     elif seconds < 1:
-        return f"{seconds * 1e3:.2f} ms"
+        return f"{seconds * 1e3:.3f} ms"
     else:
-        return f"{seconds:.2f} s"
+        return f"{seconds:.3f} s"
 
 
 def main():
