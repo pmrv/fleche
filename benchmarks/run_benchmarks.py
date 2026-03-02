@@ -65,12 +65,6 @@ def main():
 
         # Format times
         df["median"] = df["median_time"].apply(format_time)
-        if "min_time" in df.columns:
-            df["min"] = df["min_time"].apply(format_time)
-        if "max_time" in df.columns:
-            df["max"] = df["max_time"].apply(format_time)
-        if "stdev_time" in df.columns:
-            df["stdev"] = df["stdev_time"].apply(format_time)
 
         # Select and reorder columns
         display_cols = ["benchmark", "name", "storage", "iterations", "median"]
