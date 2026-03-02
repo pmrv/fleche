@@ -47,7 +47,7 @@ def benchmark_integration(name, cache_obj, func, args, iterations=10):
     # We will subtract the average base execution time from the miss times
     # to isolate the framework overhead (fleche logic + storage save).
     # Since hit times don't execute the function, they don't need this adjustment.
-    avg_base_time = statistics.mean(base_times)
+    avg_base_time = min(base_times)
 
     # 1. First Call (Miss)
     miss_overhead_times = []
@@ -70,7 +70,7 @@ def benchmark_integration(name, cache_obj, func, args, iterations=10):
         "benchmark": "integration_miss",
         "name": name,
         "iterations": iterations,
-        "median_time": statistics.median(miss_overhead_times)
+        "time": min(miss_overhead_times)
     })
 
     # 2. Second Call (Hit)
@@ -89,7 +89,7 @@ def benchmark_integration(name, cache_obj, func, args, iterations=10):
         "benchmark": "integration_hit",
         "name": name,
         "iterations": iterations,
-        "median_time": statistics.median(hit_times)
+        "time": min(hit_times)
     })
 
     return results

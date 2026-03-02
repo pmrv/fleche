@@ -32,13 +32,13 @@ def run_script(script_path: str) -> List[Dict]:
 
 def format_time(seconds: float) -> str:
     if seconds < 1e-6:
-        return f"{seconds * 1e9:.3f} ns"
+        return f"{seconds * 1e9: 5.1f} ns"
     elif seconds < 1e-3:
-        return f"{seconds * 1e6:.3f} µs"
+        return f"{seconds * 1e6: 5.1f} µs"
     elif seconds < 1:
-        return f"{seconds * 1e3:.3f} ms"
+        return f"{seconds * 1e3: 5.1f} ms"
     else:
-        return f"{seconds:.3f} s"
+        return f"{seconds:03.5f} s"
 
 
 def main():
@@ -63,11 +63,8 @@ def main():
         # Process results into a DataFrame for display
         df = pd.DataFrame(all_results)
 
-        # Format times
-        df["median"] = df["median_time"].apply(format_time)
-
         # Select and reorder columns
-        display_cols = ["benchmark", "name", "storage", "iterations", "median"]
+        display_cols = ["benchmark", "name", "storage", "iterations", "time"]
         # 'storage' column might not exist in all results
         if "storage" not in df.columns:
             df["storage"] = ""
@@ -76,8 +73,8 @@ def main():
 
         final_df = df[[c for c in display_cols if c in df.columns]]
 
-        # Sort the dataframe by raw median time before grouping to preserve order (descending: largest value on top)
-        df = df.sort_values(by="median_time", ascending=False)
+        # Sort the dataframe by time before grouping to preserve order (descending: largest value on top)
+        df = df.sort_values(by="time", ascending=False)
         final_df = df[[c for c in display_cols if c in df.columns]]
 
         def add_color_to_cell(
@@ -181,13 +178,13 @@ def main():
 
             # For Digest benchmarks, we might just want a simple table without pivoting since 'benchmark' is just 'digest'
             if parent_title == "Digest Benchmarks":
-                pivoted = sub_df.set_index(index_col)[["median_time"]]
+                pivoted = sub_df.set_index(index_col)[["time"]]
                 pivoted.columns = ["digest"]
                 # Sort by time
                 pivoted = pivoted.sort_values(by="digest", ascending=False)
             else:
                 pivoted = sub_df.pivot(
-                    index=index_col, columns="benchmark", values="median_time"
+                    index=index_col, columns="benchmark", values="time"
                 )
                 # Sort rows by sum
                 pivoted["sum_time"] = pivoted.sum(axis=1)

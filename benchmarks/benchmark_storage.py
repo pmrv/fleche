@@ -3,7 +3,6 @@ import time
 import sys
 import os
 import json
-import statistics
 import shutil
 import tempfile
 import gc
@@ -53,7 +52,7 @@ def benchmark_storage_ops(storage_name, storage_factory, values_to_store):
                 "benchmark": "storage_save",
                 "storage": storage_name,
                 "iterations": len(valid_items) * 30,
-                "median_time": statistics.median(save_times)
+                "time": min(save_times)
             })
 
         # Benchmark Load
@@ -73,7 +72,7 @@ def benchmark_storage_ops(storage_name, storage_factory, values_to_store):
                 "benchmark": "storage_load",
                 "storage": storage_name,
                 "iterations": len(load_times),
-                "median_time": statistics.median(load_times)
+                "time": min(load_times)
             })
 
         # Benchmark Evict
@@ -99,7 +98,7 @@ def benchmark_storage_ops(storage_name, storage_factory, values_to_store):
                 "benchmark": "storage_evict",
                 "storage": storage_name,
                 "iterations": len(evict_times),
-                "median_time": statistics.median(evict_times)
+                "time": min(evict_times)
             })
 
     finally:
@@ -203,7 +202,7 @@ def main():
                     "benchmark": "storage_save",
                     "storage": storage_label,
                     "iterations": len(calls_data) * 30,
-                    "median_time": statistics.median(save_times)
+                    "time": min(save_times)
                 })
 
                 load_times = []
@@ -217,7 +216,7 @@ def main():
                     "benchmark": "storage_load",
                     "storage": storage_label,
                     "iterations": len(keys) * 30,
-                    "median_time": statistics.median(load_times)
+                    "time": min(load_times)
                 })
 
                 # Sql supports evict(key)
@@ -233,7 +232,7 @@ def main():
                     "benchmark": "storage_evict",
                     "storage": storage_label,
                     "iterations": len(evict_times),
-                    "median_time": statistics.median(evict_times)
+                    "time": min(evict_times)
                 })
 
                 all_results.extend(sql_results)

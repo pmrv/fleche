@@ -3,7 +3,6 @@ import time
 import sys
 import os
 import json
-import statistics
 import numpy as np
 
 from hypothesis import strategies as st
@@ -27,7 +26,6 @@ def benchmark(name, value):
     # Determine a good number of iterations automatically
     number, _ = timer.autorange()
 
-    # Run the benchmark multiple times to get a median
     repeats = 3
     # Cap number to avoid overly long runs for expensive operations
     if number > 1000:
@@ -36,13 +34,12 @@ def benchmark(name, value):
 
     # Calculate time per call
     times_per_call = [t / number for t in times]
-    median_time = statistics.median(times_per_call)
 
     return {
         "benchmark": "digest",
         "name": name,
         "iterations": number * repeats,
-        "median_time": median_time
+        "time": min(times_per_call)
     }
 
 def main():
