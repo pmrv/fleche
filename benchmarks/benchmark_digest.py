@@ -6,22 +6,29 @@ import json
 import numpy as np
 
 from hypothesis import strategies as st
+from hypothesis.extra.numpy import arrays as st_arrays
 
 from fleche.digest import digest
-from utils import st_nested_values, st_base_values, generate_examples
+from utils import st_nested_values, st_base_values, st_nested_values, generate_examples
 
 import timeit
 from functools import partial
 
-def benchmark(name, value):
-    # Warmup
+def benchmark(name, strategy):
     try:
-        digest(value)
+        digest(generate_examples(strategy))
     except Exception as e:
         print(f"Skipping {name}: {e}")
         return None
 
-    timer = timeit.Timer(partial(digest, value))
+    timer = timeit.Timer(
+            stmt='digest(value)', setup='value = generate_examples(strategy)',
+            globals={
+                "generate_examples": generate_examples,
+                "strategy": strategy,
+                'digest': digest
+                }
+    )
 
     # Determine a good number of iterations automatically
     number, _ = timer.autorange()
@@ -48,32 +55,23 @@ def main():
     print("Running Digest Benchmarks...", file=sys.stderr)
 
     # Simple types
-    results.append(benchmark("Integer", 123456789))
-    results.append(benchmark("String (short)", "hello world"))
-    results.append(benchmark("String (long)", "x" * 10000))
-    results.append(benchmark("Float", 123.456))
-    results.append(benchmark("None", None))
+    results.append(benchmark("Integer", st.integers()))
+    results.append(benchmark("String (len<100)", st.text(max_size=100)))
+    results.append(benchmark("String (len>100)", st.text(min_size=100)))
+    results.append(benchmark("Float", st.floats()))
+    results.append(benchmark("None", st.none()))
 
     # Complex types
-    results.append(benchmark("List (integers, small)", [1, 2, 3, 4, 5]))
-    results.append(benchmark("List (integers, large)", list(range(1000))))
-    results.append(benchmark("Dict (small)", {"a": 1, "b": 2}))
+    results.append(benchmark("List (integers, len<100)", st.lists(st.integers(), max_size=100)))
+    results.append(benchmark("List (integers, len>100)", st.lists(st.integers(), min_size=100)))
+    results.append(benchmark("Dict (small)", st.dictionaries(st.text(max_size=10), st.text(max_size=10))))
 
     # Numpy
-    arr_small = np.array([1, 2, 3])
-    arr_large = np.random.rand(100, 100)
-    results.append(benchmark("Numpy (small)", arr_small))
-    results.append(benchmark("Numpy (100x100)", arr_large))
-
-    # Nested structures from hypothesis
-    # We take one example
-    try:
-        nested_example = st_nested_values.example()
-        res = benchmark("Nested (Random Hypothesis)", nested_example)
-        if res:
-            results.append(res)
-    except Exception as e:
-        print(f"Failed to generate/digest nested example: {e}", file=sys.stderr)
+    results.append(benchmark("Numpy (integers, len<100)",
+                             st_arrays(int, st.integers(min_value=0, max_value=100))))
+    results.append(benchmark("Numpy (integers, len>100)",
+                             st_arrays(int, st.integers(min_value=100, max_value=10_000))))
+    results.append(benchmark("Nested (Random Hypothesis)", st_nested_values))
 
     # Filter None results
     results = [r for r in results if r is not None]
