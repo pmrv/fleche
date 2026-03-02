@@ -4,6 +4,7 @@ import sys
 import os
 import json
 import numpy as np
+from statistics import median
 
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays as st_arrays
@@ -46,7 +47,7 @@ def benchmark(name, strategy):
         "benchmark": "digest",
         "name": name,
         "iterations": number * repeats,
-        "time": min(times_per_call)
+        "time": median(times_per_call)
     }
 
 def main():
