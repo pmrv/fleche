@@ -86,30 +86,9 @@ def main():
         df = df.sort_values(by="median_time", ascending=False)
         final_df = df[[c for c in display_cols if c in df.columns]]
 
-        # We need the raw value to compute the color gradient, let's keep it in a parallel series
-        # or compute the markdown explicitly row by row.
-        # But we also have to drop it from final_df. We can map `avg_time` to colors.
-
-        def get_color(value: float, min_val: float, max_val: float) -> str:
-            import math
-
-            # Using a simple perceptually uniform-ish colormap (viridis-like or simple heatmap)
-            # We will use HSL to create a gradient from green (fast) to red (slow)
-            if max_val == min_val:
-                ratio = 0
-            else:
-                # log scale might be better for times, but let's use linear first or slightly compressed
-                ratio = (value - min_val) / (max_val - min_val)
-
-            # 120 (Green) to 0 (Red)
-            hue = 120 - int(ratio * 120)
-            return f"hsl({hue}, 70%, 50%)"
-
         def add_color_to_cell(
             val_str: str, raw_val: float, min_val: float, max_val: float
         ) -> str:
-            color = get_color(raw_val, min_val, max_val)
-            # Github Markdown supports img shields or html. But wait, Github Markdown strips most style tags and raw CSS on tables!
             # Using 🟢, 🟡, 🔴 emojis as a fallback gradient is safer for Github markdown.
 
             if max_val == min_val:
