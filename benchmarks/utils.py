@@ -46,14 +46,6 @@ key_strategies = [
 ]
 key_strategies.append(dataclasses(st.one_of(*key_strategies), frozen=True))
 
-try:
-    if np:
-        from hypothesis.extra.numpy import arrays
-        # Add numpy arrays to strategies
-        key_strategies.append(arrays(np.int32, (2, 2)))
-except ImportError:
-    pass
-
 # Base values include all key strategies plus unhashable types like Call
 value_strategies = key_strategies.copy()
 value_strategies.append(calls(st.one_of(*key_strategies)))
