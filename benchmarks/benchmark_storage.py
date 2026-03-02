@@ -156,28 +156,6 @@ def main():
         c = Call(name="func", arguments={"a": i}, module="mod", version=1)
         calls_data.append(c)
 
-    try:
-         gc.collect()
-         # Sql requires a proper SQL URL.
-         # And it saves a Call object
-
-         # Note: Sql.save() signature is save(self, call: Call) -> Digest
-         # But benchmark_storage_ops calls storage.save(val, key) which is from Storage base class
-         # Storage.save(self, value, key) calls self._save(value, key)
-         # Sql._save(self, call: Call) -> Digest
-         # Wait, Sql inherits from CallStorage which inherits from StorageBase (not Storage)
-         # CallStorage.save(self, call: Call) -> Digest
-         # So CallStorage.save does not take a key argument in the signature of save, but _save takes call
-
-         # Let's write a wrapper for Sql to adapt it to the interface used in benchmark_storage_ops if we want to reuse it,
-         # or just adapt benchmark_storage_ops to handle CallStorage if it detects it.
-
-         # Adapting benchmark_storage_ops is better.
-         pass
-
-    except Exception as e:
-        print(f"Failed Sql/calls: {e}", file=sys.stderr)
-
     # Let's do Sql benchmark separately
     tmp_dir = tempfile.mkdtemp()
     try:
