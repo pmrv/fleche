@@ -1,4 +1,3 @@
-
 import time
 import sys
 import os
@@ -14,10 +13,12 @@ from fleche import fleche, cache
 from fleche.caches import Cache
 from fleche.storage import Memory, PickleFile, Sql, BagOfHoldingH5File
 
+
 # Define some test functions
 @fleche
 def lightweight_func(x):
     return x * 2
+
 
 @fleche
 def compute_heavy_func(n):
@@ -25,10 +26,12 @@ def compute_heavy_func(n):
     time.sleep(0.01)
     return n * n
 
+
 @fleche
 def data_heavy_func(n):
     # Returns a large numpy array
     return np.random.rand(n, n)
+
 
 def benchmark_integration(name, cache_obj, func, args, iterations=10):
     results = []
@@ -66,12 +69,14 @@ def benchmark_integration(name, cache_obj, func, args, iterations=10):
         # we ran the same arguments in the same order.
         miss_overhead_times.append(max(0, (end - start) - base_times[i]))
 
-    results.append({
-        "benchmark": "integration_miss",
-        "name": name,
-        "iterations": iterations,
-        "time": min(miss_overhead_times)
-    })
+    results.append(
+        {
+            "benchmark": "integration_miss",
+            "name": name,
+            "iterations": iterations,
+            "time": min(miss_overhead_times),
+        }
+    )
 
     # 2. Second Call (Hit)
     hit_times = []
@@ -85,14 +90,17 @@ def benchmark_integration(name, cache_obj, func, args, iterations=10):
         end = time.perf_counter()
         hit_times.append(end - start)
 
-    results.append({
-        "benchmark": "integration_hit",
-        "name": name,
-        "iterations": iterations,
-        "time": min(hit_times)
-    })
+    results.append(
+        {
+            "benchmark": "integration_hit",
+            "name": name,
+            "iterations": iterations,
+            "time": min(hit_times),
+        }
+    )
 
     return results
+
 
 def main():
     print("Running Integration Benchmarks...", file=sys.stderr)
@@ -105,13 +113,33 @@ def main():
         configs = [
             ("Memory", Cache(Memory({}), Memory({}))),
             ("Memory+Sqlite(:memory:)", Cache(Memory({}), Sql())),
-            ("Pickle+Sql", Cache(PickleFile(os.path.join(tmp_dir, "pickle")), Sql(f"sqlite:///{tmp_dir}/db.sqlite"))),
-            ("H5+Sql", Cache(BagOfHoldingH5File(os.path.join(tmp_dir, "h5")), Sql(f"sqlite:///{tmp_dir}/db_h5.sqlite")))
+            (
+                "Pickle+Sql",
+                Cache(
+                    PickleFile.with_pickle(root=os.path.join(tmp_dir, "pickle")),
+                    Sql(f"sqlite:///{tmp_dir}/db.sqlite"),
+                ),
+            ),
+            (
+                "H5+Sql",
+                Cache(
+                    BagOfHoldingH5File(root=os.path.join(tmp_dir, "h5")),
+                    Sql(f"sqlite:///{tmp_dir}/db_h5.sqlite"),
+                ),
+            ),
         ]
 
         for config_name, cache_inst in configs:
             # Lightweight
-            all_results.extend(benchmark_integration(f"{config_name}/lightweight", cache_inst, lightweight_func, list(range(20)), iterations=20))
+            all_results.extend(
+                benchmark_integration(
+                    f"{config_name}/lightweight",
+                    cache_inst,
+                    lightweight_func,
+                    list(range(20)),
+                    iterations=20,
+                )
+            )
 
             # Compute Heavy
             # We subtract the sleep time to see overhead? No, total time is what matters for user usually,
@@ -119,16 +147,33 @@ def main():
             # Or just accept that "miss" time includes execution time.
             # Ideally we compare "miss time" vs "raw execution time".
             # But here we just compare different storage backends for the same function.
-            all_results.extend(benchmark_integration(f"{config_name}/compute_heavy", cache_inst, compute_heavy_func, list(range(20)), iterations=20))
+            all_results.extend(
+                benchmark_integration(
+                    f"{config_name}/compute_heavy",
+                    cache_inst,
+                    compute_heavy_func,
+                    list(range(20)),
+                    iterations=20,
+                )
+            )
 
             # Data Heavy
             # args are size N
-            all_results.extend(benchmark_integration(f"{config_name}/data_heavy", cache_inst, data_heavy_func, [100] * 20, iterations=20)) # 100x100 array
+            all_results.extend(
+                benchmark_integration(
+                    f"{config_name}/data_heavy",
+                    cache_inst,
+                    data_heavy_func,
+                    [100] * 20,
+                    iterations=20,
+                )
+            )  # 100x100 array
 
     finally:
         shutil.rmtree(tmp_dir)
 
     print(json.dumps(all_results, indent=2))
+
 
 if __name__ == "__main__":
     main()
