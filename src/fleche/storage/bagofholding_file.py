@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+import logging
+
+logger = logging.getLogger("fleche.storage.bagofholding_file")
 
 from .file import FileStorage
 from .base import SaveError
@@ -9,13 +12,13 @@ from ..digest import Digest
 
 from pyiron_snippets.import_alarm import ImportAlarm
 
-
 with ImportAlarm(
     "BagOfHoldingH5File requires 'bagofholding' to be installed. "
     "Install it with `pip install fleche[bagofholding]`.",
-    raise_exception=True
+    raise_exception=True,
 ) as bagofholding_alarm:
     from bagofholding import H5Bag
+
 
 @dataclass
 class BagOfHoldingH5File(FileStorage):
@@ -37,3 +40,6 @@ class BagOfHoldingH5File(FileStorage):
             return H5Bag(self._path(key)).load()
         except FileNotFoundError:
             raise KeyError(key) from None
+        except OSError as e:
+            logger.error(f"Corrupt file present in cache for key {key}: {e}")
+            raise KeyError(key) from e
