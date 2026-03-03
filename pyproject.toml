@@ -37,6 +37,9 @@ docs = [
 cloudpickle = [
     "cloudpickle",
 ]
+dill = [
+    "dill",
+]
 sqlalchemy = [
     "sqlalchemy",
 ]
@@ -47,6 +50,7 @@ tests = [
     "pytest",
     "hypothesis",
     "cloudpickle",
+    "dill",
     "sqlalchemy",
     "bagofholding == 0.1.9",
     "nbconvert",

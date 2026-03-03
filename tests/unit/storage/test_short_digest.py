@@ -3,12 +3,14 @@ from fleche.storage import Memory, PickleFile, BagOfHoldingH5File, AmbiguousDige
 from fleche.digest import DIGEST_LENGTH
 
 
-@pytest.fixture(params=["memory", "cloudpickle", "h5"])
+@pytest.fixture(params=["memory", "cloudpickle", "dill", "h5"])
 def storage(request, tmp_path):
     if request.param == "memory":
         return Memory(storage={})
     elif request.param == "cloudpickle":
         return PickleFile.with_cloudpickle(root=tmp_path)
+    elif request.param == "dill":
+        return PickleFile.with_dill(root=tmp_path)
     elif request.param == "h5":
         return BagOfHoldingH5File(root=tmp_path)
 

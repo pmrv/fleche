@@ -13,8 +13,17 @@ def test_cloudpickle_missing():
         importlib.reload(fleche.storage.pickle_file)
         from fleche.storage.pickle_file import PickleFile
 
-        with pytest.raises(ImportError, match="CloudpickleFile requires"):
+        with pytest.raises(ImportError, match="PickleFile.with_cloudpickle requires"):
             PickleFile.with_cloudpickle("dummy")
+
+
+def test_dill_missing():
+    with patch.dict(sys.modules, {"dill": None}):
+        importlib.reload(fleche.storage.pickle_file)
+        from fleche.storage.pickle_file import PickleFile
+
+        with pytest.raises(ImportError, match="PickleFile.with_dill requires"):
+            PickleFile.with_dill("dummy")
 
 
 def test_bagofholding_missing():

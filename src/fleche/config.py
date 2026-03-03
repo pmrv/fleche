@@ -99,6 +99,8 @@ def _get_storage(config: dict[str, Any]) -> storage.Storage:
             return storage.PickleFile.with_pickle(**config)
         case "CloudpickleFile":
             return storage.PickleFile.with_cloudpickle(**config)
+        case "DillFile":
+            return storage.PickleFile.with_dill(**config)
         case "BagOfHoldingH5File" | "Sql":
             return getattr(storage, storage_type)(**config)
         case _:

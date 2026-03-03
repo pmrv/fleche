@@ -319,6 +319,15 @@ wheels = [
 ]
 
 [[package]]
+name = "dill"
+version = "0.4.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/81/e1/56027a71e31b02ddc53c7d65b01e68edf64dea2932122fe7746a516f75d5/dill-0.4.1.tar.gz", hash = "sha256:423092df4182177d4d8ba8290c8a5b640c66ab35ec7da59ccfa00f6fa3eea5fa", size = 187315, upload-time = "2026-01-19T02:36:56.85Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1e/77/dc8c558f7593132cf8fefec57c4f60c83b16941c574ac5f619abb3ae7933/dill-0.4.1-py3-none-any.whl", hash = "sha256:1e1ce33e978ae97fcfcff5638477032b801c46c7c65cf717f95fbc2248f79a9d", size = 120019, upload-time = "2026-01-19T02:36:55.663Z" },
+]
+
+[[package]]
 name = "docutils"
 version = "0.22.4"
 source = { registry = "https://pypi.org/simple" }
@@ -361,6 +370,9 @@ bagofholding = [
 cloudpickle = [
     { name = "cloudpickle" },
 ]
+dill = [
+    { name = "dill" },
+]
 docs = [
     { name = "sphinx", version = "9.0.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "sphinx", version = "9.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
@@ -373,6 +385,7 @@ sqlalchemy = [
 tests = [
     { name = "bagofholding" },
     { name = "cloudpickle" },
+    { name = "dill" },
     { name = "hypothesis" },
     { name = "ipykernel" },
     { name = "nbconvert" },
@@ -386,6 +399,8 @@ requires-dist = [
     { name = "bagofholding", marker = "extra == 'tests'", specifier = "==0.1.9" },
     { name = "cloudpickle", marker = "extra == 'cloudpickle'" },
     { name = "cloudpickle", marker = "extra == 'tests'" },
+    { name = "dill", marker = "extra == 'dill'" },
+    { name = "dill", marker = "extra == 'tests'" },
     { name = "hypothesis", marker = "extra == 'tests'" },
     { name = "ipykernel", marker = "extra == 'tests'" },
     { name = "nbconvert", marker = "extra == 'tests'" },
@@ -399,7 +414,7 @@ requires-dist = [
     { name = "sqlalchemy", marker = "extra == 'sqlalchemy'" },
     { name = "sqlalchemy", marker = "extra == 'tests'" },
 ]
-provides-extras = ["docs", "cloudpickle", "sqlalchemy", "bagofholding", "tests"]
+provides-extras = ["docs", "cloudpickle", "dill", "sqlalchemy", "bagofholding", "tests"]
 
 [[package]]
 name = "greenlet"
