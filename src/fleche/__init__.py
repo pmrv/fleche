@@ -152,7 +152,7 @@ def fleche(
         if version is not None:
             func.__version__ = version
 
-        def _ignored_args_tuple() -> tuple[str, ...] | None:
+        def _ignored_args_tuple() -> tuple[str, ...]:
             if ignore is None:
                 return ()
             if isinstance(ignore, str):
