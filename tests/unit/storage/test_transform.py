@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import patch
 from dataclasses import replace
-from fleche.storage import Memory, Sql, PickleFile, CloudpickleFile, BagOfHoldingH5File, CallStorageAdapter
+from fleche.storage import Memory, Sql, PickleFile, BagOfHoldingH5File, CallStorageAdapter
 from fleche.call import Call
 from fleche.digest import Digest
 
@@ -10,9 +10,9 @@ def storage(request, tmp_path):
     if request.param == "memory":
         return CallStorageAdapter(Memory({}))
     elif request.param == "cloudpickle":
-        return CallStorageAdapter(CloudpickleFile(tmp_path / "cloudpickle"))
+        return CallStorageAdapter(PickleFile.from_cloudpickle(tmp_path / "cloudpickle"))
     elif request.param == "pickle":
-        return CallStorageAdapter(PickleFile(tmp_path / "pickle"))
+        return CallStorageAdapter(PickleFile.from_pickle(tmp_path / "pickle"))
     elif request.param == "h5":
         return CallStorageAdapter(BagOfHoldingH5File(tmp_path / "h5"))
     elif request.param == "sql":

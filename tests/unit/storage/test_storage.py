@@ -5,7 +5,7 @@ import numpy as np
 import tempfile
 from pathlib import Path
 
-from fleche.storage import SaveError, CloudpickleFile, PickleFile, Memory, BagOfHoldingH5File
+from fleche.storage import SaveError, PickleFile, Memory, BagOfHoldingH5File
 from fleche.storage.sql import Sql
 from fleche.call import Call
 from fleche.digest import digest, Digest
@@ -20,8 +20,8 @@ temp_bag = tempfile.TemporaryDirectory()
 secret_key = [b"test_secret_key_32_bytes_long!!!!"]
 storages = [
     Memory({}),
-    CloudpickleFile(temp.name, secret_key=secret_key),
-    PickleFile(temp_pickle.name, secret_key=secret_key),
+    PickleFile.from_cloudpickle(temp.name, secret_key=secret_key),
+    PickleFile.from_pickle(temp_pickle.name, secret_key=secret_key),
     BagOfHoldingH5File(temp_bag.name)
 ]
 
@@ -91,8 +91,8 @@ temp_calls_sql = tempfile.TemporaryDirectory()
 
 call_storages = [
     Memory({}),
-    CloudpickleFile(temp_calls_root.name, secret_key=secret_key),
-    PickleFile(temp_calls_pickle.name, secret_key=secret_key),
+    PickleFile.from_cloudpickle(temp_calls_root.name, secret_key=secret_key),
+    PickleFile.from_pickle(temp_calls_pickle.name, secret_key=secret_key),
     BagOfHoldingH5File(temp_calls_h5.name),
     Sql(Path(temp_calls_sql.name) / "calls.db"),
 ]

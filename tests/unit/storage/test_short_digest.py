@@ -1,15 +1,17 @@
 import pytest
-from fleche.storage import Memory, CloudpickleFile, BagOfHoldingH5File, AmbiguousDigestError
+from fleche.storage import Memory, PickleFile, BagOfHoldingH5File, AmbiguousDigestError
 from fleche.digest import DIGEST_LENGTH
+
 
 @pytest.fixture(params=["memory", "cloudpickle", "h5"])
 def storage(request, tmp_path):
     if request.param == "memory":
         return Memory(storage={})
     elif request.param == "cloudpickle":
-        return CloudpickleFile(root=tmp_path)
+        return PickleFile.from_cloudpickle(root=tmp_path)
     elif request.param == "h5":
         return BagOfHoldingH5File(root=tmp_path)
+
 
 def test_short_digest_expansion(storage):
     # Create two unique values
@@ -32,6 +34,7 @@ def test_short_digest_expansion(storage):
     else:
         pytest.fail("Could not find a unique prefix for k1")
 
+
 def test_ambiguous_digest(storage):
     k1 = "a" * 64
     k2 = "a" * 10 + "b" + "a" * 53
@@ -47,6 +50,7 @@ def test_ambiguous_digest(storage):
     with pytest.raises(AmbiguousDigestError):
         storage.load("aaaa")
 
+
 def test_too_short_digest(storage):
     k1 = storage.save("value1")
 
@@ -57,12 +61,14 @@ def test_too_short_digest(storage):
     with pytest.raises(KeyError):
         storage.load(k1[:3])
 
+
 def test_missing_digest(storage):
     storage.save("value1")
 
     # Prefix that doesn't exist
     with pytest.raises(KeyError):
         storage.expand("ffff")
+
 
 def test_full_digest_still_works(storage):
     v1 = "value1"

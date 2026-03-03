@@ -11,10 +11,10 @@ def test_cloudpickle_missing():
     # Force reload without dependency
     with patch.dict(sys.modules, {"cloudpickle": None}):
         importlib.reload(fleche.storage.pickle_file)
-        from fleche.storage.pickle_file import CloudpickleFile
+        from fleche.storage.pickle_file import PickleFile
 
         with pytest.raises(ImportError, match="CloudpickleFile requires"):
-            CloudpickleFile("dummy")
+            PickleFile.from_cloudpickle("dummy")
 
 
 def test_bagofholding_missing():
