@@ -16,6 +16,7 @@ logger = logging.getLogger("fleche.cache")
 
 class Rejected(Exception):
     """Cache refused to cache the call for some reason or other."""
+
     pass
 
 
@@ -28,23 +29,16 @@ DigestedDict = storage.base.DigestedDict
 class BaseCache(ABC):
 
     @abstractmethod
-    def save(self, call: Call) -> str:
-        ...
+    def save(self, call: Call) -> str: ...
 
     @abstractmethod
-    def load(self, key: str, lazy: bool = False) -> Call | LazyCall:
-        ...
+    def load(self, key: str, lazy: bool = False) -> Call | LazyCall: ...
 
     @abstractmethod
-    def load_value(self, key: str) -> Any:
-        ...
+    def load_value(self, key: str) -> Any: ...
 
-    def contains(self, key: str) -> bool:
-        try:
-            self.load(key, lazy=True)
-            return True
-        except KeyError:
-            return False
+    @abstractmethod
+    def contains(self, key: str) -> bool: ...
 
     # def transfer(self, other: 'Cache'):
     #     # TODO: when migrating results up, we will need to think about what happens to conflicting metadata
@@ -56,7 +50,7 @@ class BaseCache(ABC):
     #     for key in self.storage.list():
     #         other.save(key, *self.load(key))
 
-    def push(self, cache: 'BaseCache') -> 'CacheStack':
+    def push(self, cache: "BaseCache") -> "CacheStack":
         return CacheStack((cache, self))
 
     @abstractmethod
@@ -100,14 +94,19 @@ class BaseCache(ABC):
         """
         # Query all calls using a wildcard template; rely on concrete caches to
         # handle any necessary decoding (e.g., Cache decodes values on query()).
-        tpl = Call(name=None, arguments=None, metadata=None, module=None, version=None, result=None)
+        tpl = Call(
+            name=None,
+            arguments=None,
+            metadata=None,
+            module=None,
+            version=None,
+            result=None,
+        )
 
         rows: dict[str, dict[str, Any]] = {}
         # Use lazy=False to ensure we have actual values for the table
         for c in self.query(tpl, lazy=True):
-            row = {
-                    prop: getattr(c, prop) for prop in ("name", "module", "metadata")
-            }
+            row = {prop: getattr(c, prop) for prop in ("name", "module", "metadata")}
             md = row.pop("metadata", {}) or {}
             # Flatten each metadata name's dict into the row
             for data in md.values():
@@ -177,15 +176,20 @@ class Cache(BaseCache):
                 metadata=call.metadata,
                 module=call.module,
                 version=call.version,
-                code_digest=call.code_digest
+                code_digest=call.code_digest,
             )
-        call.arguments = {k: self._handle_args_load(v) for k, v in call.arguments.items()}
+        call.arguments = {
+            k: self._handle_args_load(v) for k, v in call.arguments.items()
+        }
         call.result = self.load_value(call.result)
         return call
 
     def load(self, key: str, lazy: bool = False) -> Call | LazyCall:
         call = self.calls.load(key)
         return self._decode_call(call, lazy=lazy)
+
+    def contains(self, key: str) -> bool:
+        return self.calls.contains(key)
 
     def shrink(self, key: Digest | str) -> Digest:
         return self.calls.shrink(key)
@@ -206,6 +210,7 @@ class Cache(BaseCache):
             Call | LazyCall: Matching calls with arguments and result decoded from digests
             where possible.
         """
+
         # Delegate to underlying call storage, but first expand possible value digests and decode any digested
         # arguments/results before yielding to the caller (same semantics as load()).
         def maybe_expand(value):
@@ -213,19 +218,23 @@ class Cache(BaseCache):
                 return self.values.expand(value)
             else:
                 return value
+
         call = replace(
-                call,
-                arguments={
-                    k: maybe_expand(v)
-                           for k, v in call.arguments.items()
-                } if call.arguments is not None else {},
-                result=maybe_expand(call.result),
+            call,
+            arguments=(
+                {k: maybe_expand(v) for k, v in call.arguments.items()}
+                if call.arguments is not None
+                else {}
+            ),
+            result=maybe_expand(call.result),
         )
         for c in self.calls.query(call):
             try:
                 yield self._decode_call(c, lazy=lazy)
             except Exception as err:
-                logger.error(f"Failed to load matching call {c.to_lookup_key()}! Indicates corrupt cache.")
+                logger.error(
+                    f"Failed to load matching call {c.to_lookup_key()}! Indicates corrupt cache."
+                )
 
     def redigest(self) -> None:
         """Ensures consistent cache keys in case digest function changed.
@@ -242,6 +251,7 @@ class Cache(BaseCache):
 @dataclass(frozen=True)
 class ReadOnlyCache(BaseCache):
     """A cache that can only be read from."""
+
     cache: BaseCache
 
     def save(self, call: Call):
@@ -255,6 +265,9 @@ class ReadOnlyCache(BaseCache):
 
     def load_value(self, key):
         return self.cache.load_value(key)
+
+    def contains(self, key: str) -> bool:
+        return self.cache.contains(key)
 
     def query(self, call: Call, lazy: bool = False) -> Iterable[Call | LazyCall]:
         """Forward queries to the wrapped cache.
@@ -276,6 +289,7 @@ class CacheStack(BaseCache):
 
     Saving will always hit the lowest level, while loading will traverse up.
     """
+
     stack: tuple[Cache, ...]
 
     def save(self, call: Call):
@@ -298,6 +312,9 @@ class CacheStack(BaseCache):
                 continue
         else:
             raise KeyError(key)
+
+    def contains(self, key: str) -> bool:
+        return any(cache.contains(key) for cache in self.stack)
 
     def push(self, cache: BaseCache) -> Self:
         return CacheStack((cache, *self.stack))

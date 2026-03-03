@@ -96,11 +96,27 @@ class Storage(StorageBase):
     @abstractmethod
     def _load(self, key: Digest) -> Any: ...
 
+    def contains(self, key: Digest | str) -> bool:
+        if len(key) < DIGEST_LENGTH:
+            try:
+                key = self.expand(key)
+            except KeyError:
+                return False
+        else:
+            key = Digest(key)
+        return self._contains(key)
+
+    def _contains(self, key: Digest) -> bool:
+        try:
+            self._load(key)
+            return True
+        except KeyError:
+            return False
+
 
 class Digested(ABC):
     @abstractmethod
-    def underlying(self):
-        ...
+    def underlying(self): ...
 
     # mess with our hash to ensure that we are referentially transparent with respect to the underlying list.
     # For the replacement of the 'real' list with the 'digested' list to be invisible to caches, they must hash to the
@@ -155,6 +171,9 @@ class DestructuringStorage(Storage):
             case _:
                 return value
 
+    def _contains(self, key: Digest) -> bool:
+        return self.storage.contains(key)
+
     def _evict(self, key: Digest) -> None:
         self.storage.evict(key)
 
@@ -182,6 +201,23 @@ class CallStorage(StorageBase):
 
     @abstractmethod
     def _load(self, key: Digest) -> Call: ...
+
+    def contains(self, key: Digest | str) -> bool:
+        if len(key) < DIGEST_LENGTH:
+            try:
+                key = self.expand(key)
+            except KeyError:
+                return False
+        else:
+            key = Digest(key)
+        return self._contains(key)
+
+    def _contains(self, key: Digest) -> bool:
+        try:
+            self._load(key)
+            return True
+        except KeyError:
+            return False
 
     def transform(self, func: Callable[[Call], Call] | None = None) -> None:
         """
@@ -217,17 +253,25 @@ class CallStorage(StorageBase):
         Returns:
             Iterable[Call]: an iterable over all matching call objects
         """
+
         def none_or_equal(a, b):
             return a is None or digest(a) == digest(b)
+
         def fits(call: Call) -> bool:
             return (
-                    none_or_equal(template.name, call.name)
+                none_or_equal(template.name, call.name)
                 and none_or_equal(template.module, call.module)
                 and none_or_equal(template.version, call.version)
                 and none_or_equal(template.result, call.result)
-                and (template.arguments is None \
-                        or all(none_or_equal(v, call.arguments[k]) for k, v in template.arguments.items()))
+                and (
+                    template.arguments is None
+                    or all(
+                        none_or_equal(v, call.arguments[k])
+                        for k, v in template.arguments.items()
+                    )
+                )
             )
+
         for key in self.list():
             call = self.load(key)
             if fits(call):
@@ -237,6 +281,7 @@ class CallStorage(StorageBase):
 @dataclass(frozen=True, slots=True)
 class CallStorageAdapter(CallStorage):
     """Implement a CallStorage from a generic Storage."""
+
     storage: Storage
 
     def _save(self, call: Call) -> Digest:
@@ -244,6 +289,9 @@ class CallStorageAdapter(CallStorage):
 
     def _load(self, key: Digest) -> Call:
         return self.storage.load(key)
+
+    def _contains(self, key: Digest) -> bool:
+        return self.storage.contains(key)
 
     def _evict(self, key: Digest) -> None:
         self.storage.evict(key)

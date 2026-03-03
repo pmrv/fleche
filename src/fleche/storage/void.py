@@ -19,6 +19,9 @@ class Void(Storage):
     def _load(self, key: Digest) -> Any:
         raise KeyError(key)
 
+    def _contains(self, key: Digest) -> bool:
+        return False
+
     def list(self) -> Iterable[Digest]:
         return ()
 

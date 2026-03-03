@@ -5,12 +5,17 @@ import numpy as np
 import tempfile
 from pathlib import Path
 
-from fleche.storage import SaveError, CloudpickleFile, PickleFile, Memory, BagOfHoldingH5File
+from fleche.storage import (
+    SaveError,
+    CloudpickleFile,
+    PickleFile,
+    Memory,
+    BagOfHoldingH5File,
+)
 from fleche.storage.sql import Sql
 from fleche.call import Call
 from fleche.digest import digest, Digest
 from fleche.storage.base import DigestedIterable
-
 
 temp = tempfile.TemporaryDirectory()
 temp_pickle = tempfile.TemporaryDirectory()
@@ -22,7 +27,7 @@ storages = [
     Memory({}),
     CloudpickleFile(temp.name, secret_key=secret_key),
     PickleFile(temp_pickle.name, secret_key=secret_key),
-    BagOfHoldingH5File(temp_bag.name)
+    BagOfHoldingH5File(temp_bag.name),
 ]
 
 st_data = st.one_of(
@@ -37,13 +42,35 @@ st_data = st.one_of(
     st.builds(np.array, st.lists(st.integers())),
 )
 
+
+@pytest.mark.parametrize("storage", storages)
+def test_storage_contains(storage):
+    # Test for non-existent key
+    assert not storage.contains(
+        "nonexistentkeythatislongenough00000000000000000000000000000000"
+    )
+
+    value = 42
+    try:
+        key = storage.save(value)
+    except SaveError:
+        return
+
+    # Test for existing key
+    assert storage.contains(key)
+
+    # Test eviction
+    storage.evict(key)
+    assert not storage.contains(key)
+
+
 @pytest.mark.parametrize("storage", storages)
 @given(st_data)
 def test_storage(storage, value):
     try:
         key = storage.save(value)
     except SaveError:
-        return # not everyone can save everyone and that's ok, too
+        return  # not everyone can save everyone and that's ok, too
     loaded_value = storage.load(key)
     if isinstance(value, np.ndarray):
         np.testing.assert_array_equal(loaded_value, value)
@@ -59,7 +86,7 @@ def test_storage_given_key(storage, value):
     try:
         key = storage.save(value, key=given_key)
     except SaveError:
-        return # not everyone can save everyone and that's ok, too
+        return  # not everyone can save everyone and that's ok, too
     assert key == given_key, "When forcing a key, storage must return the same key"
 
     loaded_value = storage.load(given_key)
@@ -70,10 +97,13 @@ def test_storage_given_key(storage, value):
 
 
 @pytest.mark.parametrize("storage", storages)
-@pytest.mark.parametrize("value", [
-    DigestedIterable([Digest("asdf"), Digest("foobar")]),
-    DigestedIterable((Digest("asdf"), Digest("foobar"))),
-])
+@pytest.mark.parametrize(
+    "value",
+    [
+        DigestedIterable([Digest("asdf"), Digest("foobar")]),
+        DigestedIterable((Digest("asdf"), Digest("foobar"))),
+    ],
+)
 def test_digested(storage, value):
     loaded_value = storage.load(storage.save(value))
     assert loaded_value == value, "digested value not available under given key"
@@ -108,6 +138,34 @@ st_call_arguments = st.dictionaries(
 
 
 @pytest.mark.parametrize("call_storage", call_storages)
+def test_callstorages_contains(call_storage):
+    # Test for non-existent key
+    assert not call_storage.contains(
+        "nonexistentkeythatislongenough00000000000000000000000000000000"
+    )
+
+    call = Call(
+        name="test_contains",
+        arguments={},
+        metadata={},
+        module=None,
+        version=None,
+        result=None,
+    )
+    try:
+        key = call_storage.save(call)
+    except SaveError:
+        return
+
+    # Test for existing key
+    assert call_storage.contains(key)
+
+    # Test eviction
+    call_storage.evict(key)
+    assert not call_storage.contains(key)
+
+
+@pytest.mark.parametrize("call_storage", call_storages)
 @given(
     name=st_call_name,
     arguments=st_call_arguments,
@@ -115,8 +173,17 @@ st_call_arguments = st.dictionaries(
     version=st.one_of(st.none(), st.integers(min_value=0, max_value=100)),
     result=st.one_of(st.none(), st_hex),
 )
-def test_callstorages_random_calls_roundtrip(call_storage, name, arguments, module, version, result):
-    call = Call(name=name, arguments=arguments, metadata={}, module=module, version=version, result=result)
+def test_callstorages_random_calls_roundtrip(
+    call_storage, name, arguments, module, version, result
+):
+    call = Call(
+        name=name,
+        arguments=arguments,
+        metadata={},
+        module=module,
+        version=version,
+        result=result,
+    )
     try:
         key = call_storage.save(call)
     except SaveError:
@@ -134,8 +201,17 @@ def test_callstorages_random_calls_roundtrip(call_storage, name, arguments, modu
     version=st.one_of(st.none(), st.integers(min_value=0, max_value=100)),
     result=st.one_of(st.none(), st_hex),
 )
-def test_callstorages_short_prefix_load(call_storage, name, arguments, module, version, result):
-    call = Call(name=name, arguments=arguments, metadata={}, module=module, version=version, result=result)
+def test_callstorages_short_prefix_load(
+    call_storage, name, arguments, module, version, result
+):
+    call = Call(
+        name=name,
+        arguments=arguments,
+        metadata={},
+        module=module,
+        version=version,
+        result=result,
+    )
     try:
         key = call_storage.save(call)
     except SaveError:
@@ -147,7 +223,14 @@ def test_callstorages_short_prefix_load(call_storage, name, arguments, module, v
 
 @pytest.mark.parametrize("call_storage", call_storages)
 def test_callstorages_evict(call_storage):
-    call = Call(name="evict_me", arguments={"a": "a" * 64}, metadata={}, module=None, version=None, result=None)
+    call = Call(
+        name="evict_me",
+        arguments={"a": "a" * 64},
+        metadata={},
+        module=None,
+        version=None,
+        result=None,
+    )
     try:
         key = call_storage.save(call)
     except SaveError:
@@ -177,15 +260,29 @@ def test_sql_metadata_roundtrip_and_query(tmp_path):
     store = Sql(str(tmp_path / "calls.db"))
 
     # Create two calls with metadata
-    c1 = Call(name="f1", arguments={"a": "a" * 64}, metadata={
-        "runtime": {"walltime": 1.23, "timestart": 0.1, "timestop": 1.33},
-        "tags": {"project": "alpha", "phase": "train"},
-    }, module=None, version=None, result=None)
+    c1 = Call(
+        name="f1",
+        arguments={"a": "a" * 64},
+        metadata={
+            "runtime": {"walltime": 1.23, "timestart": 0.1, "timestop": 1.33},
+            "tags": {"project": "alpha", "phase": "train"},
+        },
+        module=None,
+        version=None,
+        result=None,
+    )
 
-    c2 = Call(name="f2", arguments={"b": "b" * 64}, metadata={
-        "runtime": {"walltime": 2.0},
-        "tags": {"project": "beta", "phase": "eval"},
-    }, module=None, version=None, result=None)
+    c2 = Call(
+        name="f2",
+        arguments={"b": "b" * 64},
+        metadata={
+            "runtime": {"walltime": 2.0},
+            "tags": {"project": "beta", "phase": "eval"},
+        },
+        module=None,
+        version=None,
+        result=None,
+    )
 
     k1 = store.save(c1)
     k2 = store.save(c2)
@@ -196,11 +293,25 @@ def test_sql_metadata_roundtrip_and_query(tmp_path):
     assert lc2.metadata == c2.metadata
 
     # Query by metadata name and key using query(template)
-    t1 = Call(name=None, arguments=None, metadata={"tags": {"project": "alpha"}}, module=None, version=None, result=None)
+    t1 = Call(
+        name=None,
+        arguments=None,
+        metadata={"tags": {"project": "alpha"}},
+        module=None,
+        version=None,
+        result=None,
+    )
     names_alpha = {c.name for c in store.query(t1)}
     assert names_alpha == {"f1"}
 
     # Query across all names (e.g., by walltime value) using query(template)
-    t2 = Call(name=None, arguments=None, metadata={"runtime": {"walltime": 2.0}}, module=None, version=None, result=None)
+    t2 = Call(
+        name=None,
+        arguments=None,
+        metadata={"runtime": {"walltime": 2.0}},
+        module=None,
+        version=None,
+        result=None,
+    )
     names_walltime_2 = {c.name for c in store.query(t2)}
     assert names_walltime_2 == {"f2"}

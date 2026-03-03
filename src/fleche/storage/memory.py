@@ -23,6 +23,9 @@ class Memory(Storage):
     def _load(self, key: Digest) -> Any:
         return deepcopy(self.storage[key])
 
+    def _contains(self, key: Digest) -> bool:
+        return key in self.storage
+
     def list(self) -> Iterable[Digest]:
         return tuple(self.storage.keys())
 
