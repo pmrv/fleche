@@ -9,7 +9,7 @@ import gc
 from pathlib import Path
 from typing import Any
 
-from fleche.storage import Memory, PickleFile, CloudpickleFile, Sql, BagOfHoldingH5File
+from fleche.storage import Memory, PickleFile, Sql, BagOfHoldingH5File
 from fleche.digest import digest
 from fleche.call import Call
 import numpy as np
@@ -131,8 +131,12 @@ def main():
 
     factories = {
         "Memory": lambda path: Memory({}),
-        "PickleFile": lambda path: PickleFile(path),
-        "CloudpickleFile": lambda path: CloudpickleFile(path),
+        "PickleFile": lambda path: PickleFile.with_pickle(root=path),
+        "PickleFile_Signed": lambda path: PickleFile.with_pickle(root=path, secret_key=[b"test_key"]),
+        "CloudpickleFile": lambda path: PickleFile.with_cloudpickle(root=path),
+        "CloudpickleFile_Signed": lambda path: PickleFile.with_cloudpickle(root=path, secret_key=[b"test_key"]),
+        "DillFile": lambda path: PickleFile.with_dill(root=path),
+        "DillFile_Signed": lambda path: PickleFile.with_dill(root=path, secret_key=[b"test_key"]),
         # Sql is a CallStorage, skipped for general values
         "BagOfHoldingH5File": lambda path: BagOfHoldingH5File(path) # removed project arg
     }

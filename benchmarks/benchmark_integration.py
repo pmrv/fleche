@@ -105,7 +105,7 @@ def main():
         configs = [
             ("Memory", Cache(Memory({}), Memory({}))),
             ("Memory+Sqlite(:memory:)", Cache(Memory({}), Sql())),
-            ("Pickle+Sql", Cache(PickleFile(os.path.join(tmp_dir, "pickle")), Sql(f"sqlite:///{tmp_dir}/db.sqlite"))),
+            ("Pickle+Sql", Cache(PickleFile.with_pickle(root=os.path.join(tmp_dir, "pickle")), Sql(f"sqlite:///{tmp_dir}/db.sqlite"))),
             ("H5+Sql", Cache(BagOfHoldingH5File(os.path.join(tmp_dir, "h5")), Sql(f"sqlite:///{tmp_dir}/db_h5.sqlite")))
         ]
 
