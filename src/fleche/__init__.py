@@ -1,4 +1,5 @@
 """lru_cache on 'roids."""
+
 import os
 import logging
 from dataclasses import replace
@@ -26,19 +27,20 @@ def D(d: str) -> Digest:
     to their cached values.
     """
     return Digest(d)
+
+
 from .metadata import MetaData, Tags
 from .caches import BaseCache, Cache, Rejected
 from .config import load_cache_config, load_default_metadata
 
 _T = TypeVar("_T")
 
-_CACHE: ContextVar[Cache] = ContextVar(
-    'fleche.CACHE',
-    default=load_cache_config()
-)
+_CACHE: ContextVar[Cache] = ContextVar("fleche.CACHE", default=load_cache_config())
 
 
-def cache(new_cache: Optional[Union[Cache, str]] = None, stack=False) -> Union[Cache, AbstractContextManager[None]]:
+def cache(
+    new_cache: Optional[Union[Cache, str]] = None, stack=False
+) -> Union[Cache, AbstractContextManager[None]]:
     """
     Manages the active cache for Fleche. If `new_cache` is provided, it returns a context manager
     that sets the cache for the duration of the context. If `new_cache` is None, it returns
@@ -71,13 +73,12 @@ def cache(new_cache: Optional[Union[Cache, str]] = None, stack=False) -> Union[C
             yield
         finally:
             _CACHE.reset(token)
+
     return cache_manager()
 
 
 _METADATA: ContextVar[tuple[MetaData]] = ContextVar(
-    "fleche.METADATA",
-    # default=(Runtime(), Digest(), CallInfo())
-    default=load_default_metadata()
+    "fleche.METADATA", default=load_default_metadata()
 )
 
 
@@ -116,8 +117,8 @@ def _get_working_directory_root() -> Path:
     """
     Determines the root directory for fleche working directories, following the XDG spec.
     """
-    xdg_cache_home = os.environ.get('XDG_CACHE_HOME') or (Path.home() / '.cache')
-    root = Path(xdg_cache_home) / 'fleche' / 'cwd'
+    xdg_cache_home = os.environ.get("XDG_CACHE_HOME") or (Path.home() / ".cache")
+    root = Path(xdg_cache_home) / "fleche" / "cwd"
     root.mkdir(parents=True, exist_ok=True)
     return root
 
@@ -181,7 +182,9 @@ def fleche(
         def _digest_func(*args, **kwargs):
             return get_call(*args, **kwargs).to_lookup_key()
 
-        def _query_func(*args, metadata={}, lazy: bool = False, **kwargs) -> Iterable[Call]:
+        def _query_func(
+            *args, metadata={}, lazy: bool = False, **kwargs
+        ) -> Iterable[Call]:
             """Return matching results from current cache.
 
             See :class:`CallStorage.query' for details, except that calls returned from here will have their arguments
@@ -198,11 +201,14 @@ def fleche(
             """
             call = get_call(*args, partial=True, **kwargs)
             if "metadata" in call.arguments:
-                logger.warning("Function argument 'metadata' shadowed by query argument")
+                logger.warning(
+                    "Function argument 'metadata' shadowed by query argument"
+                )
             if "lazy" in call.arguments:
                 logger.warning("Function argument 'lazy' shadowed by query argument")
             call.metadata = metadata
             return _CACHE.get().query(call, lazy=lazy)
+
         _query_doc = _query_func.__doc__
         _query_func = wraps(func)(_query_func)
 
@@ -217,7 +223,12 @@ def fleche(
         for name, helper, doc_prefix, ret in [
             ("call", get_call, "Get the Call object for", Call),
             ("digest", _digest_func, "Get the cache key for", Digest),
-            ("query", _query_func, "Return matching results from current cache for", Iterable[Call]),
+            (
+                "query",
+                _query_func,
+                "Return matching results from current cache for",
+                Iterable[Call],
+            ),
             ("load", _load_func, "Load result from cache for", None),
             ("contains", _contains_func, "Check if result is in cache for", bool),
         ]:
@@ -264,15 +275,23 @@ def fleche(
                 for m in active_meta:
                     metadata[m.name] |= m.pre(replace(call, metadata={}))
 
-                expanded_args = tuple(cache.load_value(arg) if isinstance(arg, Digest) else arg for arg in args)
-                expanded_kwargs = {k: (cache.load_value(v) if isinstance(v, Digest) else v) for k, v in kwargs.items()}
+                expanded_args = tuple(
+                    cache.load_value(arg) if isinstance(arg, Digest) else arg
+                    for arg in args
+                )
+                expanded_kwargs = {
+                    k: (cache.load_value(v) if isinstance(v, Digest) else v)
+                    for k, v in kwargs.items()
+                }
 
                 call.result: _T = func(*expanded_args, **expanded_kwargs)
                 if call.result is None:
                     logger.warning("Function returned None, not caching")
                     return None
                 for m in active_meta:
-                    metadata[m.name] |= m.post(metadata[m.name], replace(call, metadata={}))
+                    metadata[m.name] |= m.post(
+                        metadata[m.name], replace(call, metadata={})
+                    )
                 try:
                     call.metadata = metadata
                     logger.debug("Saving result for %s with key %s", func.__name__, key)
