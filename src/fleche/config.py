@@ -95,7 +95,13 @@ def _get_storage(config: dict[str, Any]) -> storage.Storage:
         case "FileLinkingStorage":
             config["store"] = _get_storage(config.pop("store"))
             return storage.FileLinkingStorage(**config)
-        case "CloudpickleFile" | "PickleFile" | "BagOfHoldingH5File" | "Sql":
+        case "PickleFile":
+            return storage.PickleFile.with_pickle(**config)
+        case "CloudpickleFile":
+            return storage.PickleFile.with_cloudpickle(**config)
+        case "DillFile":
+            return storage.PickleFile.with_dill(**config)
+        case "BagOfHoldingH5File" | "Sql":
             return getattr(storage, storage_type)(**config)
         case _:
             raise ValueError(f"Unknown storage type: {storage_type}")
@@ -133,7 +139,9 @@ def load_cache_config(name: str | None = None) -> Cache:
     path = _get_config_path()
     if path is None or not path.exists():
         if name is not None:
-            logger.warning("No config file found. Using default memory cache for '%s'.", name)
+            logger.warning(
+                "No config file found. Using default memory cache for '%s'.", name
+            )
         else:
             logger.warning("No config file found. Using default memory cache.")
         return Cache(storage.Memory({}), storage.Memory({}))

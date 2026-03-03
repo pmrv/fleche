@@ -143,9 +143,9 @@ def test_load_cache_config_specific(monkeypatch, config_file):
 
     assert isinstance(cache_obj, Cache)
     values_storage = _get_values_storage(cache_obj)
-    assert isinstance(values_storage, storage.CloudpickleFile)
+    assert isinstance(values_storage, storage.PickleFile)
     assert values_storage.root == Path(".fleche/values").absolute()
-    assert isinstance(cache_obj.calls.storage, storage.CloudpickleFile)
+    assert isinstance(cache_obj.calls.storage, storage.PickleFile)
     assert cache_obj.calls.storage.root == Path(".fleche/calls").absolute()
 
 

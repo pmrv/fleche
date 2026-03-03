@@ -6,11 +6,11 @@ from fleche import fleche, cache
 from fleche.digest import digest
 from fleche.caches import Cache, ReadOnlyCache, CacheStack
 from fleche.call import Call
-from fleche.storage import CloudpickleFile, Memory
+from fleche.storage import Memory, PickleFile
 from fleche.storage.sql import Sql
 
 temp = tempfile.TemporaryDirectory()
-storages = [Memory({}), CloudpickleFile(temp.name)]
+storages = [Memory({}), PickleFile.with_cloudpickle(temp.name)]
 
 
 @fleche
@@ -23,13 +23,10 @@ def slow_function_impl(x):
 def fib_impl(n):
     if n < 2:
         return n
-    return fib_impl(n-1) + fib_impl(n-2)
+    return fib_impl(n - 1) + fib_impl(n - 2)
 
 
-functions_to_test = [
-    (slow_function_impl, 2),
-    (fib_impl, 15)
-]
+functions_to_test = [(slow_function_impl, 2), (fib_impl, 15)]
 
 
 @pytest.mark.parametrize("storage", storages)
@@ -140,8 +137,8 @@ def test_fleche_cache_stack_context_manager():
 @pytest.mark.parametrize(
     "backend",
     [
-        "memory_memory",   # values=Memory, calls=Memory
-        "memory_sql",      # values=Memory, calls=Sql (in-memory SQLite)
+        "memory_memory",  # values=Memory, calls=Memory
+        "memory_sql",  # values=Memory, calls=Sql (in-memory SQLite)
     ],
 )
 def test_cache_hit_returns_materialized_value(backend):

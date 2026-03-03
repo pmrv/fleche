@@ -9,7 +9,7 @@ from fleche.digest import digest
 
 def test_load_waits_for_lock():
     with tempfile.TemporaryDirectory() as tmpdir:
-        storage = PickleFile(tmpdir)
+        storage = PickleFile.with_pickle(tmpdir)
         key = digest("test")
         data = "content"
         storage.save(data, key=key)
@@ -33,7 +33,7 @@ def test_load_waits_for_lock():
 
 def test_load_timeouts_and_reads_anyway(caplog):
     with tempfile.TemporaryDirectory() as tmpdir:
-        storage = PickleFile(tmpdir, lock_timeout=0.1)
+        storage = PickleFile.with_pickle(tmpdir, lock_timeout=0.1)
         key = digest("test")
         data = "content"
         storage.save(data, key=key)
@@ -51,7 +51,7 @@ def test_load_timeouts_and_reads_anyway(caplog):
 
 def test_load_fails_after_timeout_raises_keyerror(caplog):
     with tempfile.TemporaryDirectory() as tmpdir:
-        storage = PickleFile(tmpdir, lock_timeout=0.1)
+        storage = PickleFile.with_pickle(tmpdir, lock_timeout=0.1)
         key = digest("test")
         # Do NOT save data, so load will fail
 
@@ -65,7 +65,7 @@ def test_load_fails_after_timeout_raises_keyerror(caplog):
 
 def test_save_creates_and_removes_lock(monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
-        storage = PickleFile(tmpdir)
+        storage = PickleFile.with_pickle(tmpdir)
         key = digest("test")
         lock_path = storage._path(f"{key}.lock")
         data_path = storage._path(key)
@@ -87,7 +87,7 @@ def test_save_creates_and_removes_lock(monkeypatch):
 
 def test_list_excludes_locks():
     with tempfile.TemporaryDirectory() as tmpdir:
-        storage = PickleFile(tmpdir)
+        storage = PickleFile.with_pickle(tmpdir)
         key = digest("test")
         storage.save("data", key=key)
 
@@ -102,7 +102,7 @@ def test_list_excludes_locks():
 
 def test_evict_removes_lock():
     with tempfile.TemporaryDirectory() as tmpdir:
-        storage = PickleFile(tmpdir)
+        storage = PickleFile.with_pickle(tmpdir)
         key = digest("test")
         storage.save("data", key=key)
 

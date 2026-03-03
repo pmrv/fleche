@@ -1,7 +1,7 @@
 Security
 ========
 
-``fleche`` provides a built-in cryptographic security layer for filesystem-based storage backends (``PickleFile`` and ``CloudpickleFile``) to protect against insecure deserialization vulnerabilities. This prevents arbitrary code execution if an attacker manages to tamper with or replace the cache files.
+``fleche`` provides a built-in cryptographic security layer for filesystem-based storage backends (``PickleFile``, ``CloudpickleFile``, and ``DillFile``) to protect against insecure deserialization vulnerabilities. This prevents arbitrary code execution if an attacker manages to tamper with or replace the cache files.
 
 Enabling Security
 -----------------
