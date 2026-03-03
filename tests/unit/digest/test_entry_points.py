@@ -1,7 +1,16 @@
 
 import pytest
 from unittest.mock import MagicMock, patch
-from fleche.digest import digest, Unhashable, Hook, _HOOKS, load_entry_points
+from fleche.digest import digest, Unhashable, Hook, _HOOKS, _EP_HOOKS, load_entry_points, add_hook, get_hooks
+
+@pytest.fixture(autouse=True)
+def clean_hooks():
+    """Fixture to ensure hooks are cleaned before and after each test."""
+    _HOOKS.clear()
+    _EP_HOOKS.clear()
+    yield
+    _HOOKS.clear()
+    _EP_HOOKS.clear()
 
 class CustomType:
     def __init__(self, value):
@@ -15,9 +24,6 @@ def test_entry_point_discovery():
     Test that entry points are automatically discovered and loaded when an
     Unhashable error occurs.
     """
-    # Reset hooks for testing
-    _HOOKS.clear()
-
     obj = CustomType("test")
 
     # Initially it should fail
@@ -42,7 +48,6 @@ def test_entry_point_list_discovery():
     """
     Test that entry points returning a list of Hook objects are correctly handled.
     """
-    _HOOKS.clear()
     obj = CustomType("test")
 
     mock_ep = MagicMock()
@@ -58,9 +63,6 @@ def test_add_hook_priority():
     Test that hooks manually added via add_hook take precedence over entry points,
     and that an INFO message is logged when an entry point is overridden.
     """
-    _HOOKS.clear()
-    from fleche.digest import add_hook
-
     def manual_digest(obj):
         return f"manual:{obj.value}"
 
@@ -87,8 +89,6 @@ def test_multiple_entry_points():
     Test that when multiple entry points provide different hooks for the same type,
     the first one is used.
     """
-    _HOOKS.clear()
-
     mock_ep1 = MagicMock()
     mock_ep1.name = "ep1"
     mock_ep1.load.return_value = Hook(CustomType, custom_digest)
@@ -107,3 +107,48 @@ def test_multiple_entry_points():
         load_entry_points()
 
         assert digest(CustomType(4)) == custom_digest(CustomType(4))
+
+def test_add_hook_with_hook_instance():
+    """Test adding a Hook instance appends it to _HOOKS."""
+    def dummy_digest(x):
+        return "dummy"
+
+    hook = Hook(int, dummy_digest)
+    add_hook(hook)
+
+    assert len(_HOOKS) == 1
+    assert _HOOKS[0] is hook
+
+def test_add_hook_with_tuple():
+    """Test adding a tuple automatically converts it to a Hook instance."""
+    def dummy_digest(x):
+        return "dummy"
+
+    hook_tuple = (str, dummy_digest)
+    add_hook(hook_tuple)
+
+    assert len(_HOOKS) == 1
+    assert isinstance(_HOOKS[0], Hook)
+    assert _HOOKS[0].type is str
+    assert _HOOKS[0].digest is dummy_digest
+
+def test_get_hooks():
+    """Test get_hooks combines _HOOKS and _EP_HOOKS."""
+    def dummy_digest1(x):
+        return "dummy1"
+
+    def dummy_digest2(x):
+        return "dummy2"
+
+    hook1 = Hook(int, dummy_digest1)
+    hook2 = Hook(str, dummy_digest2)
+
+    _HOOKS.append(hook1)
+    _EP_HOOKS.append(hook2)
+
+    hooks = get_hooks()
+
+    assert len(hooks) == 2
+    assert hooks[0] is hook1
+    assert hooks[1] is hook2
+    assert hooks == _HOOKS + _EP_HOOKS
