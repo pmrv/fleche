@@ -15,8 +15,7 @@ from .base import (
 from .memory import Memory
 from .void import Void
 from .file import FileStorage
-from .cloudpickle_file import CloudpickleFile
-from .pickle_file import PickleFile
+from .pickle_file import PickleFile, CloudpickleFile
 from .bagofholding_file import BagOfHoldingH5File
 from .sql import Sql
 
