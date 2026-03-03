@@ -8,7 +8,7 @@ def storage(request, tmp_path):
     if request.param == "memory":
         return Memory(storage={})
     elif request.param == "cloudpickle":
-        return PickleFile.from_cloudpickle(root=tmp_path)
+        return PickleFile.with_cloudpickle(root=tmp_path)
     elif request.param == "h5":
         return BagOfHoldingH5File(root=tmp_path)
 

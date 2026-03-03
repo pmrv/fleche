@@ -10,9 +10,9 @@ def storage(request, tmp_path):
     if request.param == "memory":
         return CallStorageAdapter(Memory({}))
     elif request.param == "cloudpickle":
-        return CallStorageAdapter(PickleFile.from_cloudpickle(tmp_path / "cloudpickle"))
+        return CallStorageAdapter(PickleFile.with_cloudpickle(tmp_path / "cloudpickle"))
     elif request.param == "pickle":
-        return CallStorageAdapter(PickleFile.from_pickle(tmp_path / "pickle"))
+        return CallStorageAdapter(PickleFile.with_pickle(tmp_path / "pickle"))
     elif request.param == "h5":
         return CallStorageAdapter(BagOfHoldingH5File(tmp_path / "h5"))
     elif request.param == "sql":

@@ -14,7 +14,7 @@ def test_cloudpickle_missing():
         from fleche.storage.pickle_file import PickleFile
 
         with pytest.raises(ImportError, match="CloudpickleFile requires"):
-            PickleFile.from_cloudpickle("dummy")
+            PickleFile.with_cloudpickle("dummy")
 
 
 def test_bagofholding_missing():

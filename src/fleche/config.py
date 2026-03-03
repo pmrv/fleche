@@ -96,9 +96,9 @@ def _get_storage(config: dict[str, Any]) -> storage.Storage:
             config["store"] = _get_storage(config.pop("store"))
             return storage.FileLinkingStorage(**config)
         case "PickleFile":
-            return storage.PickleFile.from_pickle(**config)
+            return storage.PickleFile.with_pickle(**config)
         case "CloudpickleFile":
-            return storage.PickleFile.from_cloudpickle(**config)
+            return storage.PickleFile.with_cloudpickle(**config)
         case "BagOfHoldingH5File" | "Sql":
             return getattr(storage, storage_type)(**config)
         case _:

@@ -10,7 +10,7 @@ from fleche.storage import Memory, PickleFile
 from fleche.storage.sql import Sql
 
 temp = tempfile.TemporaryDirectory()
-storages = [Memory({}), PickleFile.from_cloudpickle(temp.name)]
+storages = [Memory({}), PickleFile.with_cloudpickle(temp.name)]
 
 
 @fleche

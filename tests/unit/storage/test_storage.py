@@ -20,8 +20,8 @@ temp_bag = tempfile.TemporaryDirectory()
 secret_key = [b"test_secret_key_32_bytes_long!!!!"]
 storages = [
     Memory({}),
-    PickleFile.from_cloudpickle(temp.name, secret_key=secret_key),
-    PickleFile.from_pickle(temp_pickle.name, secret_key=secret_key),
+    PickleFile.with_cloudpickle(temp.name, secret_key=secret_key),
+    PickleFile.with_pickle(temp_pickle.name, secret_key=secret_key),
     BagOfHoldingH5File(temp_bag.name)
 ]
 
@@ -91,8 +91,8 @@ temp_calls_sql = tempfile.TemporaryDirectory()
 
 call_storages = [
     Memory({}),
-    PickleFile.from_cloudpickle(temp_calls_root.name, secret_key=secret_key),
-    PickleFile.from_pickle(temp_calls_pickle.name, secret_key=secret_key),
+    PickleFile.with_cloudpickle(temp_calls_root.name, secret_key=secret_key),
+    PickleFile.with_pickle(temp_calls_pickle.name, secret_key=secret_key),
     BagOfHoldingH5File(temp_calls_h5.name),
     Sql(Path(temp_calls_sql.name) / "calls.db"),
 ]

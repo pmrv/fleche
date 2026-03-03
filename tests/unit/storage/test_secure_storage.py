@@ -5,13 +5,10 @@ from fleche.storage.pickle_file import PickleFile
 from fleche.digest import digest
 
 
-@pytest.mark.parametrize(
-    "storage_cls", [PickleFile.from_pickle, PickleFile.from_cloudpickle]
-)
-def test_secure_storage_tampering(tmp_path, storage_cls):
+def test_secure_storage_tampering(tmp_path):
     """Test that tampering with the file content raises KeyError."""
     key = b"A" * 32
-    storage = storage_cls(root=tmp_path, secret_key=[key])
+    storage = PickleFile.with_pickle(root=tmp_path, secret_key=[key])
 
     value = {"a": 1}
     digest_key = storage.save(value)
@@ -28,35 +25,29 @@ def test_secure_storage_tampering(tmp_path, storage_cls):
         storage.load(digest_key)
 
 
-@pytest.mark.parametrize(
-    "storage_cls", [PickleFile.from_pickle, PickleFile.from_cloudpickle]
-)
-def test_secure_storage_unsigned_data_fails_when_auth_enabled(tmp_path, storage_cls):
+def test_secure_storage_unsigned_data_fails_when_auth_enabled(tmp_path):
     """Test that unsigned data fails to load when an authenticated storage reads it."""
     # First, write unsigned data (no secret key)
-    storage_noauth = storage_cls(root=tmp_path, secret_key=[])
+    storage_noauth = PickleFile.with_pickle(root=tmp_path, secret_key=[])
     value = "test"
     digest_key = storage_noauth.save(value)
 
     # Now try to read it with an authenticated storage
     key = b"B" * 32
-    storage_auth = storage_cls(root=tmp_path, secret_key=[key])
+    storage_auth = PickleFile.with_pickle(root=tmp_path, secret_key=[key])
 
     # Should fail to load because security is enabled but no signature exists
     with pytest.raises(KeyError, match="Value present but failed signature check."):
         storage_auth.load(digest_key)
 
 
-@pytest.mark.parametrize(
-    "storage_cls", [PickleFile.from_pickle, PickleFile.from_cloudpickle]
-)
-def test_secure_storage_wrong_key(tmp_path, storage_cls):
+def test_secure_storage_wrong_key(tmp_path):
     """Test that data signed with a different key cannot be loaded."""
     key1 = b"1" * 32
     key2 = b"2" * 32
 
-    storage1 = storage_cls(root=tmp_path, secret_key=[key1])
-    storage2 = storage_cls(root=tmp_path, secret_key=[key2])
+    storage1 = PickleFile.with_pickle(root=tmp_path, secret_key=[key1])
+    storage2 = PickleFile.with_pickle(root=tmp_path, secret_key=[key2])
 
     value = "secret"
     digest_key = storage1.save(value)
@@ -66,13 +57,10 @@ def test_secure_storage_wrong_key(tmp_path, storage_cls):
         storage2.load(digest_key)
 
 
-@pytest.mark.parametrize(
-    "storage_cls", [PickleFile.from_pickle, PickleFile.from_cloudpickle]
-)
-def test_secure_storage_roundtrip(tmp_path, storage_cls):
+def test_secure_storage_roundtrip(tmp_path):
     """Test normal save/load operation."""
     key = b"C" * 32
-    storage = storage_cls(root=tmp_path, secret_key=[key])
+    storage = PickleFile.with_pickle(root=tmp_path, secret_key=[key])
 
     value = [1, 2, 3]
     digest_key = storage.save(value)
@@ -81,12 +69,9 @@ def test_secure_storage_roundtrip(tmp_path, storage_cls):
     assert loaded == value
 
 
-@pytest.mark.parametrize(
-    "storage_cls", [PickleFile.from_pickle, PickleFile.from_cloudpickle]
-)
-def test_storage_noop_no_key(tmp_path, storage_cls):
+def test_storage_noop_no_key(tmp_path):
     """Test that storage works as normal (unsigned) when no key is provided."""
-    storage = storage_cls(root=tmp_path, secret_key=[])
+    storage = PickleFile.with_pickle(root=tmp_path, secret_key=[])
 
     value = "insecure data"
     digest_key = storage.save(value)
@@ -100,14 +85,11 @@ def test_storage_noop_no_key(tmp_path, storage_cls):
     assert loaded == value
 
 
-@pytest.mark.parametrize(
-    "storage_cls", [PickleFile.from_pickle, PickleFile.from_cloudpickle]
-)
-def test_unauthenticating_storage_can_read_authenticated_data(tmp_path, storage_cls):
+def test_unauthenticating_storage_can_read_authenticated_data(tmp_path):
     """Test that a storage without a secret key can successfully load data written by an authenticating storage."""
     key = b"D" * 32
-    storage_auth = storage_cls(root=tmp_path, secret_key=[key])
-    storage_noauth = storage_cls(root=tmp_path, secret_key=[])
+    storage_auth = PickleFile.with_pickle(root=tmp_path, secret_key=[key])
+    storage_noauth = PickleFile.with_pickle(root=tmp_path, secret_key=[])
 
     value = {"secure": "data", "id": 12345}
     digest_key = storage_auth.save(value)
@@ -116,18 +98,15 @@ def test_unauthenticating_storage_can_read_authenticated_data(tmp_path, storage_
     assert loaded == value
 
 
-@pytest.mark.parametrize(
-    "storage_cls", [PickleFile.from_pickle, PickleFile.from_cloudpickle]
-)
-def test_secure_storage_multiple_keys(tmp_path, storage_cls):
+def test_secure_storage_multiple_keys(tmp_path):
     """Test that storage can verify using a list of keys."""
     key1 = b"1" * 32
     key2 = b"2" * 32
     key3 = b"3" * 32
 
-    storage_auth1 = storage_cls(root=tmp_path, secret_key=[key1])
-    storage_auth2 = storage_cls(root=tmp_path, secret_key=[key2])
-    storage_multi = storage_cls(
+    storage_auth1 = PickleFile.with_pickle(root=tmp_path, secret_key=[key1])
+    storage_auth2 = PickleFile.with_pickle(root=tmp_path, secret_key=[key2])
+    storage_multi = PickleFile.with_pickle(
         root=tmp_path, secret_key=[key2, key3, key1]
     )  # Multi-key reader
 

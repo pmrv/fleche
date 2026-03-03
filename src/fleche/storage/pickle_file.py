@@ -36,13 +36,13 @@ class PickleFile(FileStorage):
             self.secret_key = get_secret_key()
 
     @classmethod
-    def from_pickle(cls, *args, **kwargs):
+    def with_pickle(cls, *args, **kwargs):
         """Construct a PickleFile using the standard pickle module."""
         return cls(*args, serializer=pickle, **kwargs)
 
     @classmethod
     @cloudpickle_alarm
-    def from_cloudpickle(cls, *args, **kwargs):
+    def with_cloudpickle(cls, *args, **kwargs):
         """Construct a PickleFile using the cloudpickle module."""
         return cls(*args, serializer=cloudpickle, **kwargs)
 
