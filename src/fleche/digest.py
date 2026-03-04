@@ -43,9 +43,9 @@ def get_hooks():
     return _HOOKS + _EP_HOOKS
 
 
-def add_hook(hook: Hook | tuple[str, Callable[[T], str]]):
+def add_hook(hook: Hook | tuple[str, Callable[[Any], str]]):
     if isinstance(hook, tuple):
-        hook = Hook(*hook)
+        hook = Hook(*hook)  # type: ignore
     _HOOKS.append(hook)
 
 

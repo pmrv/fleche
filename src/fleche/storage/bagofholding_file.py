@@ -25,7 +25,7 @@ class BagOfHoldingH5File(FileStorage):
         if hasattr(super(), "__post_init__"):
             super().__post_init__()
 
-    def _save(self, value: Any, key: Digest) -> str:
+    def _save(self, value: Any, key: Digest) -> Digest:
         try:
             H5Bag.save(value, self._path(key))
         except (ValueError, TypeError):  # h5py choked on something, pass it along

@@ -63,13 +63,13 @@ def load_default_metadata():
     """
     path = _get_config_path()
     if path is None or not path.exists():
-        return (metadata.Runtime(),)
+        return (metadata.Runtime(),)  # type: ignore
 
     with open(path, "rb") as f:
         config = tomllib.load(f)
 
     if "default" not in config or "metadata" not in config["default"]:
-        return (metadata.Runtime(),)
+        return (metadata.Runtime(),)  # type: ignore
 
     meta_names = config["default"]["metadata"]
 
@@ -78,7 +78,7 @@ def load_default_metadata():
         if name == "Tags":
             raise ValueError("Tags metadata cannot be configured from the config file.")
         elif name == "Runtime":
-            meta_objects.append(metadata.Runtime())
+            meta_objects.append(metadata.Runtime())  # type: ignore
         else:
             raise ValueError(f"Unknown metadata type in config: {name}")
 
@@ -94,7 +94,7 @@ def _get_storage(config: dict[str, Any]) -> storage.Storage:
             return storage.Void()
         case "FileLinkingStorage":
             config["store"] = _get_storage(config.pop("store"))
-            return storage.FileLinkingStorage(**config)
+            return storage.FileLinkingStorage(**config)  # type: ignore
         case "CloudpickleFile" | "PickleFile" | "BagOfHoldingH5File" | "Sql":
             return getattr(storage, storage_type)(**config)
         case _:

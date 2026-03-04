@@ -185,11 +185,11 @@ class Sql(CallStorage):
                 .all()
             )
             call = Call(
-                name=call_model.name,
+                name=call_model.name,  # type: ignore
                 arguments=arguments,
-                metadata={row.name: (row.data or {}) for row in meta_rows},
-                module=call_model.module,
-                version=call_model.version,
+                metadata={row.name: (row.data or {}) for row in meta_rows},  # type: ignore
+                module=call_model.module,  # type: ignore
+                version=call_model.version,  # type: ignore
                 result=(
                     Digest(call_model.result) if call_model.result is not None else None
                 ),

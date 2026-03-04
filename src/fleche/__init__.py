@@ -35,7 +35,7 @@ from .config import load_cache_config, load_default_metadata
 
 _T = TypeVar("_T")
 
-_CACHE: ContextVar[Cache] = ContextVar("fleche.CACHE", default=load_cache_config())
+_CACHE: ContextVar[Union["Cache", "Any"]] = ContextVar("fleche.CACHE", default=load_cache_config())
 
 
 def cache(
@@ -88,7 +88,7 @@ def metadata(*new_metadata: MetaData, stack=False):
     if stack:
         new_metadata = _METADATA.get() + new_metadata
 
-    token = _METADATA.set(new_metadata)
+    token = _METADATA.set(new_metadata)  # type: ignore
     try:
         yield
     finally:
@@ -127,7 +127,7 @@ def fleche(
     _func=None,
     *,
     version: int | None = None,
-    meta: tuple[MetaData] = (),
+    meta: tuple[MetaData, ...] = (),
     hash_version: bool = True,
     hash_module: bool = True,
     hash_code: bool = False,
@@ -151,7 +151,7 @@ def fleche(
         The actual decorator that wraps the function.
         """
         if version is not None:
-            func.__version__ = version
+            func.__version__ = version  # type: ignore
 
         def _ignored_args_tuple() -> tuple[str, ...]:
             if ignore is None:
@@ -207,10 +207,10 @@ def fleche(
             if "lazy" in call.arguments:
                 logger.warning("Function argument 'lazy' shadowed by query argument")
             call.metadata = metadata
-            return _CACHE.get().query(call, lazy=lazy)
+            return _CACHE.get().query(call, lazy=lazy)  # type: ignore
 
         _query_doc = _query_func.__doc__
-        _query_func = wraps(func)(_query_func)
+        _query_func = wraps(func)(_query_func)  # type: ignore
 
         @wraps(func)
         def _load_func(*args, **kwargs):
@@ -264,10 +264,10 @@ def fleche(
 
             try:
                 result = cache.load(key).result
-                logger.debug("Cache hit for %s with key %s", func.__name__, key)
+                logger.debug("Cache hit for %s with key %s", getattr(func, "__name__", "unknown"), key)
                 return result
             except KeyError:
-                logger.debug("Cache miss for %s with key %s", func.__name__, key)
+                logger.debug("Cache miss for %s with key %s", getattr(func, "__name__", "unknown"), key)
 
             def _run_and_cache():
                 active_meta = _METADATA.get() + tuple(meta)
@@ -294,7 +294,7 @@ def fleche(
                     )
                 try:
                     call.metadata = metadata
-                    logger.debug("Saving result for %s with key %s", func.__name__, key)
+                    logger.debug("Saving result for %s with key %s", getattr(func, "__name__", "unknown"), key)
                     cache.save(call)
                 except Rejected as e:
                     logger.warning("Cache rejected save: %s", e.args)
@@ -310,11 +310,11 @@ def fleche(
             else:
                 return _run_and_cache()
 
-        wrapper.call = get_call
-        wrapper.digest = _digest_func
-        wrapper.query = _query_func
-        wrapper.load = _load_func
-        wrapper.contains = _contains_func
+        wrapper.call = get_call  # type: ignore
+        wrapper.digest = _digest_func  # type: ignore
+        wrapper.query = _query_func  # type: ignore
+        wrapper.load = _load_func  # type: ignore
+        wrapper.contains = _contains_func  # type: ignore
         return wrapper
 
     if callable(_func):

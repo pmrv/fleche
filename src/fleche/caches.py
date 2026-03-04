@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import logging
 from dataclasses import dataclass, asdict, replace
 from copy import copy
-from typing import Self, Iterable, Any
+from typing import Self, Iterable, Any, Union
 
 import pandas as pd
 
@@ -28,7 +28,7 @@ DigestedDict = storage.base.DigestedDict
 class BaseCache(ABC):
 
     @abstractmethod
-    def save(self, call: Call) -> str:
+    def save(self, call: Union["Call", "LazyCall"]) -> str:  # type: ignore
         ...
 
     @abstractmethod
@@ -57,7 +57,7 @@ class BaseCache(ABC):
     #         other.save(key, *self.load(key))
 
     def push(self, cache: 'BaseCache') -> 'CacheStack':
-        return CacheStack((cache, self))
+        return CacheStack((cache, self))  # type: ignore
 
     @abstractmethod
     def shrink(self, key: Digest | str) -> Digest:
@@ -100,7 +100,7 @@ class BaseCache(ABC):
         """
         # Query all calls using a wildcard template; rely on concrete caches to
         # handle any necessary decoding (e.g., Cache decodes values on query()).
-        tpl = Call(name=None, arguments=None, metadata=None, module=None, version=None, result=None)
+        tpl = Call(name=None, arguments=None, metadata=None, module=None, version=None, result=None)  # type: ignore
 
         rows: dict[str, dict[str, Any]] = {}
         # Use lazy=False to ensure we have actual values for the table
@@ -155,7 +155,7 @@ class Cache(BaseCache):
             # if value is not in storage, leave the digest in place
             return key
 
-    def save(self, call: Call) -> str:
+    def save(self, call: Union["Call", "LazyCall"]) -> str:  # type: ignore
         call = copy(call)
         try:
             call.result = self.values.save(call.result)
@@ -221,7 +221,7 @@ class Cache(BaseCache):
                 } if call.arguments is not None else {},
                 result=maybe_expand(call.result),
         )
-        for c in self.calls.query(call):
+        for c in self.calls.query(call):  # type: ignore
             try:
                 yield self._decode_call(c, lazy=lazy)
             except Exception as err:
@@ -299,11 +299,11 @@ class CacheStack(BaseCache):
         else:
             raise KeyError(key)
 
-    def push(self, cache: BaseCache) -> Self:
-        return CacheStack((cache, *self.stack))
+    def push(self, cache: "BaseCache") -> "CacheStack":
+        return CacheStack((cache, *self.stack))  # type: ignore
 
     def shrink(self, key: Digest | str) -> Digest:
-        return sorted([c.shrink(key) for c in self.stack], key=len)[-1]
+        return sorted([c.shrink(key) for c in self.stack], key=len)[-1]  # type: ignore
 
     def query(self, call: Call, lazy: bool = False) -> Iterable[Call | LazyCall]:
         """Aggregate query results across the stack, avoiding duplicates.

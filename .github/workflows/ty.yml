@@ -12,6 +12,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
-        run: pip install -e .[tests]
+        run: pip install -e .[tests,docs,cloudpickle,sqlalchemy,bagofholding] ty
       - name: Run ty
-        run: pipx run ty check --exclude tests --ignore all
+        run: ty check src
