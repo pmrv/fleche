@@ -280,7 +280,7 @@ class CacheStack(BaseCache):
 
     Saving will always hit the lowest level, while loading will traverse up.
     """
-    stack: tuple[Cache, ...]
+    stack: tuple[BaseCache, ...]
 
     def save(self, call: Union["Call", "LazyCall"]) -> str:
         return self.stack[0].save(call)
@@ -303,8 +303,8 @@ class CacheStack(BaseCache):
         else:
             raise KeyError(key)
 
-    def push(self, cache: "BaseCache") -> "CacheStack":
-        return CacheStack((cache, *self.stack))  # type: ignore
+    def push(self, cache: BaseCache) -> "CacheStack":
+        return CacheStack((cache, *self.stack))
 
     def shrink(self, key: Digest | str) -> Digest:
         return sorted([c.shrink(key) for c in self.stack], key=len)[-1]  # type: ignore
