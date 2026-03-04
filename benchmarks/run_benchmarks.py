@@ -168,18 +168,7 @@ def main():
 
             return "\n".join(table)
 
-        print()
-        for parent_title, info in parent_categories.items():
-            sub_df = info["data"]
-            if sub_df.empty:
-                continue
-
-            index_col = info["index"]
-
-            print(f"<details>")
-            print(f"<summary><b>{parent_title}</b></summary>\n")
-            print('<div style="overflow-x: auto;">\n')
-
+        def render_table(sub_df, index_col, parent_title):
             # For Digest benchmarks, we might just want a simple table without pivoting since 'benchmark' is just 'digest'
             if parent_title == "Digest Benchmarks":
                 pivoted = sub_df.set_index(index_col)[["time"]]
@@ -196,9 +185,7 @@ def main():
                 pivoted = pivoted.drop(columns=["sum_time"])
 
             if pivoted.empty:
-                print("</div>")
-                print("</details>\n")
-                continue
+                return
 
             # Format the dataframe
             formatted = pd.DataFrame(index=pivoted.index)
@@ -231,6 +218,41 @@ def main():
             except ImportError:
                 print(to_markdown_table(formatted))
             print("\n")
+
+        print()
+        for parent_title, info in parent_categories.items():
+            sub_df = info["data"]
+            if sub_df.empty:
+                continue
+
+            index_col = info["index"]
+
+            print(f"<details>")
+            print(f"<summary><b>{parent_title}</b></summary>\n")
+            print('<div style="overflow-x: auto;">\n')
+
+            if parent_title == "Value Storage Benchmarks":
+                # Split storage column by '/'
+                sub_df = sub_df.copy()
+                sub_df[["storage_backend", "workload"]] = sub_df["storage"].str.split(
+                    "/", n=1, expand=True
+                )
+
+                workloads = sub_df["workload"].unique()
+                for workload in workloads:
+                    if pd.isna(workload):
+                        continue
+
+                    print(f"<h4>Workload: {workload}</h4>\n")
+                    workload_df = sub_df[sub_df["workload"] == workload].copy()
+                    workload_df["storage"] = workload_df["storage_backend"]
+                    render_table(workload_df, index_col, parent_title)
+            elif parent_title == "Call Storage Benchmarks":
+                sub_df = sub_df.copy()
+                sub_df["storage"] = sub_df["storage"].str.replace("/calls", "")
+                render_table(sub_df, index_col, parent_title)
+            else:
+                render_table(sub_df, index_col, parent_title)
 
             print("</div>")
             print("</details>\n")
