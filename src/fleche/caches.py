@@ -28,7 +28,7 @@ DigestedDict = storage.base.DigestedDict
 class BaseCache(ABC):
 
     @abstractmethod
-    def save(self, call: Union["Call", "LazyCall"]) -> str:  # type: ignore
+    def save(self, call: Union["Call", "LazyCall"]) -> str:
         ...
 
     @abstractmethod
@@ -155,17 +155,17 @@ class Cache(BaseCache):
             # if value is not in storage, leave the digest in place
             return key
 
-    def save(self, call: Union["Call", "LazyCall"]) -> str:  # type: ignore
+    def save(self, call: Union["Call", "LazyCall"]) -> str:
         call = copy(call)
         try:
-            call.result = self.values.save(call.result)
-            call.arguments = {
+            call.result = self.values.save(call.result)  # type: ignore
+            call.arguments = {  # type: ignore
                 k: self._handle_args_save(v) for k, v in call.arguments.items()
             }
         except storage.SaveError as e:
             raise Rejected(e)
 
-        return self.calls.save(call)
+        return self.calls.save(call)  # type: ignore
 
     def _decode_call(self, call: Call, lazy: bool = False) -> Call | LazyCall:
         if lazy:
@@ -244,7 +244,7 @@ class ReadOnlyCache(BaseCache):
     """A cache that can only be read from."""
     cache: BaseCache
 
-    def save(self, call: Call):
+    def save(self, call: Union["Call", "LazyCall"]) -> str:
         raise Rejected(self, call)
 
     def load(self, key, lazy: bool = False):
@@ -278,8 +278,8 @@ class CacheStack(BaseCache):
     """
     stack: tuple[Cache, ...]
 
-    def save(self, call: Call):
-        self.stack[0].save(call)
+    def save(self, call: Union["Call", "LazyCall"]) -> str:
+        return self.stack[0].save(call)
 
     def load(self, key, lazy: bool = False):
         for cache in self.stack:
