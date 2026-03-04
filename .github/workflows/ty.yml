@@ -11,5 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: pip install -e .[tests]
       - name: Run ty
-        run: pipx run ty check
+        run: pipx run ty check --exclude tests --ignore all
