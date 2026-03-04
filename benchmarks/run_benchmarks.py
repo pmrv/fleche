@@ -122,7 +122,7 @@ def main():
             return colors.get(backend, "⚪️")
 
         # Split out call storage (which only uses "/calls") from value storage
-        is_call_storage = df['storage'].str.endswith('/calls', na=False)
+        is_call_storage = df["storage"].str.endswith("/calls", na=False)
 
         # Group categories using raw dataframe
         parent_categories = {
