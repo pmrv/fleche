@@ -28,7 +28,7 @@ DigestedDict = storage.base.DigestedDict
 class BaseCache(ABC):
 
     @abstractmethod
-    def save(self, call: Union["Call", "LazyCall"]) -> str:
+    def save(self, call: Call | LazyCall) -> str:
         ...
 
     @abstractmethod
@@ -57,7 +57,7 @@ class BaseCache(ABC):
     #         other.save(key, *self.load(key))
 
     def push(self, cache: 'BaseCache') -> 'CacheStack':
-        return CacheStack((cache, self))  # type: ignore
+        return CacheStack((cache, self))
 
     @abstractmethod
     def shrink(self, key: Digest | str) -> Digest:
@@ -100,7 +100,7 @@ class BaseCache(ABC):
         """
         # Query all calls using a wildcard template; rely on concrete caches to
         # handle any necessary decoding (e.g., Cache decodes values on query()).
-        tpl = Call(name=None, arguments=None, metadata=None, module=None, version=None, result=None)  # type: ignore
+        tpl = Call(name=None, arguments=None, metadata=None, module=None, version=None, result=None)
 
         rows: dict[str, dict[str, Any]] = {}
         # Use lazy=False to ensure we have actual values for the table
@@ -159,17 +159,17 @@ class Cache(BaseCache):
             # if value is not in storage, leave the digest in place
             return key
 
-    def save(self, call: Union["Call", "LazyCall"]) -> str:
+    def save(self, call: Call | LazyCall) -> str:
         call = copy(call)
         try:
-            call.result = self.values.save(call.result)  # type: ignore
-            call.arguments = {  # type: ignore
+            call.result = self.values.save(call.result)
+            call.arguments = {
                 k: self._handle_args_save(v) for k, v in call.arguments.items()
             }
         except storage.SaveError as e:
             raise Rejected(e)
 
-        return self.calls.save(call)  # type: ignore
+        return self.calls.save(call)
 
     def _decode_call(self, call: Call, lazy: bool = False) -> Call | LazyCall:
         if lazy:
@@ -225,7 +225,7 @@ class Cache(BaseCache):
                 } if call.arguments is not None else {},
                 result=maybe_expand(call.result),
         )
-        for c in self.calls.query(call):  # type: ignore
+        for c in self.calls.query(call):
             try:
                 yield self._decode_call(c, lazy=lazy)
             except Exception as err:
@@ -248,7 +248,7 @@ class ReadOnlyCache(BaseCache):
     """A cache that can only be read from."""
     cache: BaseCache
 
-    def save(self, call: Union["Call", "LazyCall"]) -> str:
+    def save(self, call: Call | LazyCall):
         raise Rejected(self, call)
 
     def load(self, key, lazy: bool = False):
@@ -282,8 +282,8 @@ class CacheStack(BaseCache):
     """
     stack: tuple[BaseCache, ...]
 
-    def save(self, call: Union["Call", "LazyCall"]) -> str:
-        return self.stack[0].save(call)
+    def save(self, call: Call | LazyCall):
+        self.stack[0].save(call)
 
     def load(self, key, lazy: bool = False):
         for cache in self.stack:
@@ -307,7 +307,7 @@ class CacheStack(BaseCache):
         return CacheStack((cache, *self.stack))
 
     def shrink(self, key: Digest | str) -> Digest:
-        return sorted([c.shrink(key) for c in self.stack], key=len)[-1]  # type: ignore
+        return sorted([c.shrink(key) for c in self.stack], key=len)[-1]
 
     def query(self, call: Call, lazy: bool = False) -> Iterable[Call | LazyCall]:
         """Aggregate query results across the stack, avoiding duplicates.

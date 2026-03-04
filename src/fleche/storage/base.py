@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from typing import Iterable, Any, Callable, Self
 
 from ..digest import digest, Digest, DIGEST_LENGTH
-from ..call import Call
+from ..call import Call, LazyCall
 
 logger = logging.getLogger("fleche.storage")
 
@@ -165,12 +165,12 @@ class DestructuringStorage(Storage):
 class CallStorage(StorageBase):
     """Special storage for saving :class:`Call` instances."""
 
-    def save(self, call: Call) -> Digest:
+    def save(self, call: Call | LazyCall) -> Digest:
         logger.debug("Saving call %s", call.to_lookup_key())
         return self._save(call)
 
     @abstractmethod
-    def _save(self, call: Call) -> Digest: ...
+    def _save(self, call: Call | LazyCall) -> Digest: ...
 
     def load(self, key: str) -> Call:
         if len(key) < DIGEST_LENGTH:
@@ -239,7 +239,7 @@ class CallStorageAdapter(CallStorage):
     """Implement a CallStorage from a generic Storage."""
     storage: Storage
 
-    def _save(self, call: Call) -> Digest:
+    def _save(self, call: Call | LazyCall) -> Digest:
         return self.storage.save(call, call.to_lookup_key())
 
     def _load(self, key: Digest) -> Call:
