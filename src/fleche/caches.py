@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import logging
 from dataclasses import dataclass, replace
+from dataclasses import dataclass, replace, field, InitVar
 from copy import copy
 from typing import Self, Iterable, Any, Callable
 
@@ -137,11 +138,15 @@ class BaseCache(ABC):
 @dataclass
 class Cache(BaseCache):
     values: storage.Storage
-    calls: storage.CallStorage | storage.Storage
+    calls: storage.CallStorage = field(init=False)
 
-    def __post_init__(self):
-        if isinstance(self.calls, storage.Storage):
-            self.calls = storage.CallStorageAdapter(self.calls)
+    _calls: InitVar[storage.CallStorage | storage.Storage]
+
+    def __post_init__(self, _calls):
+        if isinstance(_calls, storage.Storage):
+            self.calls = storage.CallStorageAdapter(_calls)
+        else:
+            self.calls = _calls
 
         if not isinstance(self.values, storage.DestructuringStorage):
             self.values = storage.DestructuringStorage(self.values)

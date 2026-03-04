@@ -110,7 +110,7 @@ def _get_storage(config: dict[str, Any]) -> storage.Storage:
 def _create_cache(cache_config: dict[str, Any]) -> Cache:
     values = _get_storage(cache_config["values"])
     calls = _get_storage(cache_config["calls"])
-    return Cache(values=values, calls=calls)
+    return Cache(values=values, _calls=calls)
 
 
 def load_cache_config(name: str | None = None) -> Cache:

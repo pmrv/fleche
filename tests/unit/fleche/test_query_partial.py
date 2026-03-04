@@ -8,7 +8,7 @@ from fleche.storage import Memory
 
 @fixture
 def test_cache():
-    return Cache(values=Memory({}), calls=Memory({}))
+    return Cache(values=Memory({}), _calls=Memory({}))
 
 
 def test_query_lazy(test_cache):
