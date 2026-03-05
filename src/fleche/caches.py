@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import logging
 from dataclasses import dataclass, asdict, replace
 from copy import copy
-from typing import Self, Iterable, Any
+from typing import Self, Iterable, Any, Callable
 
 import pandas as pd
 
@@ -117,6 +117,22 @@ class BaseCache(ABC):
 
         return pd.DataFrame.from_dict(rows, orient="index")
 
+    def filter(self, predicate: Callable[[Call | LazyCall], bool] | Call) -> 'FilteredCache':
+        """Create a read-only view of this cache that only exposes calls matching the predicate.
+
+        Args:
+            predicate: A function that takes a Call or LazyCall and returns True
+                if it should be included in the new cache, or a Call object to
+                use as a template.
+
+        Returns:
+            FilteredCache: A read-only view of the cache.
+        """
+        if isinstance(predicate, Call):
+            predicate = predicate.matches
+
+        return FilteredCache(self, predicate)
+
 
 @dataclass
 class Cache(BaseCache):
@@ -179,6 +195,7 @@ class Cache(BaseCache):
                 version=call.version,
                 code_digest=call.code_digest
             )
+
         call.arguments = {k: self._handle_args_load(v) for k, v in call.arguments.items()}
         call.result = self.load_value(call.result)
         return call
@@ -267,6 +284,25 @@ class ReadOnlyCache(BaseCache):
             Call | LazyCall: Results yielded by the wrapped cache's ``query`` method.
         """
         return self.cache.query(call, lazy=lazy)
+
+
+@dataclass(frozen=True)
+class FilteredCache(ReadOnlyCache):
+    """A read-only view of a cache that only exposes calls matching a predicate."""
+    predicate: Callable[[Call | LazyCall], bool]
+
+    def load(self, key, lazy: bool = False):
+        call = self.cache.load(key, lazy=True)
+        if self.predicate(call):
+            if not lazy:
+                return call.fetch()
+            return call
+        raise KeyError(key)
+
+    def query(self, call: Call, lazy: bool = False) -> Iterable[Call | LazyCall]:
+        for c in self.cache.query(call, lazy=lazy):
+            if self.predicate(c):
+                yield c
 
 
 @dataclass(frozen=True)
