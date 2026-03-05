@@ -295,7 +295,7 @@ class FilteredCache(ReadOnlyCache):
         call = self.cache.load(key, lazy=True)
         if self.predicate(call):
             if not lazy:
-                return call.reify()
+                return call.fetch()
             return call
         raise KeyError(key)
 

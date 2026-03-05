@@ -1,43 +1,81 @@
 import pytest
-import random
+from hypothesis import given, strategies as st
 from fleche.call import Call
 from fleche.caches import Cache
 from fleche.storage import Memory, Sql
-from fleche.digest import digest
 
-def test_sql_query_matches_call_matches():
+@given(
+    st.lists(
+        st.fixed_dictionaries({
+            "name": st.sampled_from(["foo", "bar", "baz"]),
+            "module": st.one_of(st.none(), st.sampled_from(["mod1", "mod2"])),
+            "version": st.one_of(st.none(), st.integers(1, 2)),
+            "result": st.integers(100, 110),
+            "x": st.integers(0, 5),
+            "y": st.sampled_from(["a", "b"]),
+        }),
+        min_size=5,
+        max_size=10,
+        unique_by=lambda d: (d["name"], d["module"], d["version"], d["x"], d["y"])
+    ),
+    st.fixed_dictionaries({
+        "name": st.one_of(st.none(), st.sampled_from(["foo", "bar", "baz"])),
+        "module": st.one_of(st.none(), st.sampled_from(["mod1", "mod2"])),
+        "version": st.one_of(st.none(), st.integers(1, 2)),
+        "result": st.one_of(st.none(), st.integers(100, 110)),
+        "x": st.one_of(st.none(), st.integers(0, 5)),
+        "y": st.one_of(st.none(), st.sampled_from(["a", "b"])),
+    })
+)
+def test_sql_query_matches_call_matches(call_data, template_data):
     """Verify that Sql storage query results are consistent with Call.matches()."""
-    # Use Memory as a baseline value storage for both
     values = Memory({})
     sql_calls = Sql() # in-memory sqlite
     cache = Cache(values, sql_calls)
 
-    # Populate cache with varied calls
-    names = ["foo", "bar", "baz"]
-    modules = ["mod1", "mod2", None]
-    versions = [1, 2, None]
-
-    for i in range(20):
+    # Populate cache
+    for d in call_data:
         c = Call(
-            name=random.choice(names),
-            arguments={"x": random.randint(0, 5), "y": random.choice(["a", "b"])},
-            metadata={"tags": {"id": i, "even": i % 2 == 0}},
-            module=random.choice(modules),
-            version=random.choice(versions),
-            result=random.randint(100, 200)
+            name=d["name"],
+            arguments={"x": d["x"], "y": d["y"]},
+            module=d["module"],
+            version=d["version"],
+            result=d["result"]
         )
         cache.save(c)
 
-    # Test various templates
-    templates = [
-        Call(name="foo", arguments=None),
-        Call(name=None, arguments={"x": 1}),
-        Call(name="bar", arguments={"y": "a"}),
-        Call(name=None, arguments=None, metadata={"tags": {"even": True}}),
-        Call(name="baz", module="mod1", version=1, arguments=None),
-        Call(name=None, result=None, arguments=None) # match all
-    ]
+    # Build template
+    template_args = {}
+    if template_data["x"] is not None:
+        template_args["x"] = template_data["x"]
+    if template_data["y"] is not None:
+        template_args["y"] = template_data["y"]
 
-    for template in templates:
-        for c in cache.query(template):
-            assert template.matches(c)
+    template = Call(
+        name=template_data["name"],
+        arguments=template_args if template_args else None,
+        module=template_data["module"],
+        version=template_data["version"],
+        result=template_data["result"]
+    )
+
+    # Check consistency
+    for c in cache.query(template):
+        assert template.matches(c)
+
+    # Also verify that we didn't miss any that SHOULD match
+    # (since query is supposed to return ALL matching calls)
+    all_calls = []
+    for d in call_data:
+        all_calls.append(Call(
+            name=d["name"],
+            arguments={"x": d["x"], "y": d["y"]},
+            module=d["module"],
+            version=d["version"],
+            result=d["result"]
+        ))
+
+    query_keys = {c.to_lookup_key() for c in cache.query(template)}
+    expected_keys = {c.to_lookup_key() for c in all_calls if template.matches(c)}
+
+    assert query_keys == expected_keys

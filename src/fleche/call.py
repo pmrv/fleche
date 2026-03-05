@@ -147,7 +147,7 @@ class LazyCall:
         )
         return c.to_lookup_key()
 
-    def reify(self) -> Call:
+    def fetch(self) -> Call:
         """Reconstruct a full Call object by loading all values from the cache."""
         return Call(
             name=self.name,

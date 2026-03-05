@@ -4,8 +4,8 @@ from fleche.caches import Cache
 from fleche.storage import Memory
 from fleche.digest import digest
 
-def test_lazy_call_reify():
-    """Verify that LazyCall.reify() reconstructs a full Call object."""
+def test_lazy_call_fetch():
+    """Verify that LazyCall.fetch() reconstructs a full Call object."""
     values_storage = Memory({})
     calls_storage = Memory({})
     cache = Cache(values_storage, calls_storage)
@@ -14,7 +14,7 @@ def test_lazy_call_reify():
     key = cache.save(original)
 
     lazy = cache.load(key, lazy=True)
-    full_call = lazy.reify()
+    full_call = lazy.fetch()
 
     assert isinstance(full_call, Call)
     assert full_call.name == "test_func"
