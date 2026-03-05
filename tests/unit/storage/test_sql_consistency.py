@@ -33,7 +33,8 @@ def test_sql_query_matches_call_matches(call_data, template_data):
     sql_calls = Sql() # in-memory sqlite
     cache = Cache(values, sql_calls)
 
-    # Populate cache
+    # Populate cache and pre-calculate lookup keys
+    calls_with_keys = []
     for d in call_data:
         c = Call(
             name=d["name"],
@@ -43,6 +44,7 @@ def test_sql_query_matches_call_matches(call_data, template_data):
             result=d["result"]
         )
         cache.save(c)
+        calls_with_keys.append((c, c.to_lookup_key()))
 
     # Build template
     template_args = {}
@@ -60,22 +62,10 @@ def test_sql_query_matches_call_matches(call_data, template_data):
     )
 
     # Check consistency
+    query_keys = {c.to_lookup_key() for c in cache.query(template)}
     for c in cache.query(template):
         assert template.matches(c)
 
-    # Also verify that we didn't miss any that SHOULD match
-    # (since query is supposed to return ALL matching calls)
-    all_calls = []
-    for d in call_data:
-        all_calls.append(Call(
-            name=d["name"],
-            arguments={"x": d["x"], "y": d["y"]},
-            module=d["module"],
-            version=d["version"],
-            result=d["result"]
-        ))
-
-    query_keys = {c.to_lookup_key() for c in cache.query(template)}
-    expected_keys = {c.to_lookup_key() for c in all_calls if template.matches(c)}
-
+    # Verify we didn't miss any
+    expected_keys = {key for c, key in calls_with_keys if template.matches(c)}
     assert query_keys == expected_keys
