@@ -54,7 +54,7 @@ def test_storage_contains(storage):
     try:
         key = storage.save(value)
     except SaveError:
-        return
+        pytest.skip("Storage backend cannot save this value type")
 
     # Test for existing key
     assert storage.contains(key)
@@ -70,7 +70,7 @@ def test_storage(storage, value):
     try:
         key = storage.save(value)
     except SaveError:
-        return  # not everyone can save everyone and that's ok, too
+        pytest.skip("Storage backend cannot save this value type")
     loaded_value = storage.load(key)
     if isinstance(value, np.ndarray):
         np.testing.assert_array_equal(loaded_value, value)
@@ -86,7 +86,7 @@ def test_storage_given_key(storage, value):
     try:
         key = storage.save(value, key=given_key)
     except SaveError:
-        return  # not everyone can save everyone and that's ok, too
+        pytest.skip("Storage backend cannot save this value type")
     assert key == given_key, "When forcing a key, storage must return the same key"
 
     loaded_value = storage.load(given_key)
@@ -152,10 +152,7 @@ def test_callstorages_contains(call_storage):
         version=None,
         result=None,
     )
-    try:
-        key = call_storage.save(call)
-    except SaveError:
-        return
+    key = call_storage.save(call)
 
     # Test for existing key
     assert call_storage.contains(key)
@@ -184,11 +181,7 @@ def test_callstorages_random_calls_roundtrip(
         version=version,
         result=result,
     )
-    try:
-        key = call_storage.save(call)
-    except SaveError:
-        # Some backends may not support serializing arbitrary dataclasses; skip in that case
-        return
+    key = call_storage.save(call)
     loaded = call_storage.load(key)
     assert loaded == call
 
@@ -212,10 +205,7 @@ def test_callstorages_short_prefix_load(
         version=version,
         result=result,
     )
-    try:
-        key = call_storage.save(call)
-    except SaveError:
-        return
+    key = call_storage.save(call)
     short = key[:8]
     loaded = call_storage.load(short)
     assert loaded == call
@@ -231,10 +221,7 @@ def test_callstorages_evict(call_storage):
         version=None,
         result=None,
     )
-    try:
-        key = call_storage.save(call)
-    except SaveError:
-        return
+    key = call_storage.save(call)
     assert key in set(call_storage.list())
 
     # Test short-hand eviction

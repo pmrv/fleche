@@ -72,6 +72,23 @@ class StorageBase(ABC):
             f"Digest {key} cannot be shrunk without becoming ambigious!"
         )
 
+    def contains(self, key: Digest | str) -> bool:
+        if len(key) < DIGEST_LENGTH:
+            try:
+                key = self.expand(key)
+            except KeyError:
+                return False
+        else:
+            key = Digest(key)
+        return self._contains(key)
+
+    def _contains(self, key: Digest) -> bool:
+        try:
+            self._load(key)
+            return True
+        except KeyError:
+            return False
+
 
 class Storage(StorageBase):
     """Abstract base class for defining storage mechanisms."""
@@ -95,23 +112,6 @@ class Storage(StorageBase):
 
     @abstractmethod
     def _load(self, key: Digest) -> Any: ...
-
-    def contains(self, key: Digest | str) -> bool:
-        if len(key) < DIGEST_LENGTH:
-            try:
-                key = self.expand(key)
-            except KeyError:
-                return False
-        else:
-            key = Digest(key)
-        return self._contains(key)
-
-    def _contains(self, key: Digest) -> bool:
-        try:
-            self._load(key)
-            return True
-        except KeyError:
-            return False
 
 
 class Digested(ABC):
@@ -201,23 +201,6 @@ class CallStorage(StorageBase):
 
     @abstractmethod
     def _load(self, key: Digest) -> Call: ...
-
-    def contains(self, key: Digest | str) -> bool:
-        if len(key) < DIGEST_LENGTH:
-            try:
-                key = self.expand(key)
-            except KeyError:
-                return False
-        else:
-            key = Digest(key)
-        return self._contains(key)
-
-    def _contains(self, key: Digest) -> bool:
-        try:
-            self._load(key)
-            return True
-        except KeyError:
-            return False
 
     def transform(self, func: Callable[[Call], Call] | None = None) -> None:
         """

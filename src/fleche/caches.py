@@ -37,8 +37,12 @@ class BaseCache(ABC):
     @abstractmethod
     def load_value(self, key: str) -> Any: ...
 
-    @abstractmethod
-    def contains(self, key: str) -> bool: ...
+    def contains(self, key: str) -> bool:
+        try:
+            self.load(key, lazy=True)
+            return True
+        except KeyError:
+            return False
 
     # def transfer(self, other: 'Cache'):
     #     # TODO: when migrating results up, we will need to think about what happens to conflicting metadata
