@@ -141,37 +141,68 @@ def main():
             }
             return colors.get(backend, "⚪️")
 
-        # Split out call storage (which only uses "/calls") from value storage
-        is_call_storage = df["storage"].str.endswith("/calls", na=False)
+        rows = []
+        for _, row in df.iterrows():
+            b = row["benchmark"]
+            n = row.get("name", "")
+            if pd.isna(n):
+                n = ""
+            s = row.get("storage", "")
+            if pd.isna(s):
+                s = ""
+            time_val = row["time"]
 
-        # Group categories using raw dataframe
-        parent_categories = {
-            "Digest Benchmarks": {
-                "data": df[df["benchmark"] == "digest"],
-                "index": "name",
-            },
-            "Value Storage Benchmarks": {
-                "data": df[
-                    df["benchmark"].str.startswith("storage_") & ~is_call_storage
-                ],
-                "index": "storage",
-            },
-            "Call Storage Benchmarks": {
-                "data": df[
-                    df["benchmark"].str.startswith("storage_") & is_call_storage
-                ],
-                "index": "storage",
-            },
-            "Integration Benchmarks": {
-                "data": df[df["benchmark"].str.startswith("integration_")],
-                "index": "name",
-            },
-        }
+            if b == "digest":
+                topic = "Digest"
+                config = ""
+                workload = n
+                function = "digest"
+            elif b.startswith("storage_"):
+                function = b.replace("storage_", "")
+                if s.endswith("/calls"):
+                    topic = "Call Storage"
+                    parts = s.split("/")
+                    config = parts[0]
+                    workload = parts[1] if len(parts) > 1 else ""
+                else:
+                    topic = "Value Storage"
+                    parts = s.split("/")
+                    config = parts[0]
+                    workload = parts[1] if len(parts) > 1 else ""
+            elif b.startswith("integration_"):
+                topic = "Integration"
+                function = b.replace("integration_", "")
+                parts = str(n).split("/")
+                config = parts[0]
+                workload = parts[1] if len(parts) > 1 else ""
+            else:
+                topic = "Other"
+                config = ""
+                workload = ""
+                function = b
 
-        def to_markdown_table(df):
+            # Apply formatting and color mapping
+            colored_config = (
+                f"{get_storage_color(config)} {config}" if config else config
+            )
+            formatted_time = format_time(time_val)
+
+            rows.append(
+                {
+                    "topic": topic,
+                    "configuration": colored_config,
+                    "workload": workload,
+                    "function": function,
+                    "time": formatted_time,
+                }
+            )
+
+        parsed_df = pd.DataFrame(rows)
+
+        def to_markdown_table(df_to_render):
             # Fallback markdown table generator if tabulate is not installed
-            headers = df.columns.tolist()
-            rows = df.values.tolist()
+            headers = df_to_render.columns.tolist()
+            rows = df_to_render.values.tolist()
 
             header_row = "| " + " | ".join(str(h) for h in headers) + " |"
             separator_row = "| " + " | ".join("---" for _ in headers) + " |"
@@ -184,119 +215,12 @@ def main():
 
             return "\n".join(table)
 
-        def render_table(sub_df, index_col, parent_title):
-            # For Digest benchmarks, we might just want a simple table without pivoting since 'benchmark' is just 'digest'
-            if parent_title == "Digest Benchmarks":
-                pivoted = sub_df.set_index(index_col)[["time"]]
-                pivoted.columns = ["digest"]
-                # Sort by time
-                pivoted = pivoted.sort_values(by="digest", ascending=False)
-            else:
-                pivoted = sub_df.pivot(
-                    index=index_col, columns="benchmark", values="time"
-                )
-                # Sort rows by sum
-                pivoted["sum_time"] = pivoted.sum(axis=1)
-                pivoted = pivoted.sort_values(by="sum_time", ascending=False)
-                pivoted = pivoted.drop(columns=["sum_time"])
-
-            if pivoted.empty:
-                return
-
-            # Format the dataframe
-            formatted = pd.DataFrame(index=pivoted.index)
-
-            # Keep track of color for the index if it has storage info
-            formatted[index_col] = pivoted.index
-            if index_col == "storage" or (
-                index_col == "name" and parent_title == "Integration Benchmarks"
-            ):
-                formatted[index_col] = [
-                    f"{get_storage_color(s)} {s}" if pd.notna(s) and s != "" else s
-                    for s in formatted[index_col]
-                ]
-
-            for col in pivoted.columns:
-                min_val = pivoted[col].min()
-                max_val = pivoted[col].max()
-
-                formatted[col] = [
-                    (
-                        add_color_to_cell(format_time(val), val, min_val, max_val)
-                        if pd.notna(val)
-                        else ""
-                    )
-                    for val in pivoted[col]
-                ]
-
-            # Remove prefixes from metric columns for cleaner tables
-            new_columns = {}
-            for col in formatted.columns:
-                if col == index_col:
-                    continue
-                new_col = col.replace("storage_", "").replace("integration_", "")
-                new_columns[col] = new_col
-            formatted = formatted.rename(columns=new_columns)
-
-            try:
-                print(formatted.to_markdown(index=False))
-            except ImportError:
-                print(to_markdown_table(formatted))
-            print("\n")
-
         print()
-        for parent_title, info in parent_categories.items():
-            sub_df = info["data"]
-            if sub_df.empty:
-                continue
-
-            index_col = info["index"]
-
-            print(f"<details>")
-            print(f"<summary><b>{parent_title}</b></summary>\n")
-            print('<div style="overflow-x: auto;">\n')
-
-            if parent_title == "Value Storage Benchmarks":
-                # Split storage column by '/'
-                sub_df = sub_df.copy()
-                sub_df[["storage_backend", "workload"]] = sub_df["storage"].str.split(
-                    "/", n=1, expand=True
-                )
-
-                workloads = sub_df["workload"].unique()
-                for workload in workloads:
-                    if pd.isna(workload):
-                        continue
-
-                    print(f"<h4>Workload: {workload}</h4>\n")
-                    workload_df = sub_df[sub_df["workload"] == workload].copy()
-                    workload_df["storage"] = workload_df["storage_backend"]
-                    render_table(workload_df, index_col, parent_title)
-            elif parent_title == "Integration Benchmarks":
-                # Split name column by '/'
-                sub_df = sub_df.copy()
-                sub_df[["storage_backend", "workload"]] = sub_df["name"].str.split(
-                    "/", n=1, expand=True
-                )
-
-                workloads = sub_df["workload"].unique()
-                for workload in workloads:
-                    if pd.isna(workload):
-                        continue
-
-                    print(f"<h4>Workload: {workload}</h4>\n")
-                    workload_df = sub_df[sub_df["workload"] == workload].copy()
-                    workload_df["name"] = workload_df["storage_backend"]
-                    render_table(workload_df, index_col, parent_title)
-            elif parent_title == "Call Storage Benchmarks":
-                sub_df = sub_df.copy()
-                sub_df["storage"] = sub_df["storage"].str.replace("/calls", "")
-                render_table(sub_df, index_col, parent_title)
-            else:
-                render_table(sub_df, index_col, parent_title)
-
-            print("</div>")
-            print("</details>\n")
+        try:
+            print(parsed_df.to_markdown(index=False))
+        except ImportError:
+            print(to_markdown_table(parsed_df))
+        print("\n")
 
         # Also save to CSV
         output_csv = os.path.join(benchmark_dir, "results.csv")
