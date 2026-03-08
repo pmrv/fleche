@@ -233,3 +233,19 @@ def test_merkle_tree_property_fixed(value, partially_digested_value):
         value,
         partially_digested_value,
     )
+
+@given(st.dictionaries(st.text(string.ascii_letters, min_size=1).filter(lambda x: not keyword.iskeyword(x)), st.integers()))
+def test_dataclasses_with_different_names_have_different_digests(fields_dict):
+    """Test that two dataclasses with different names but identical fields do not hash to the same value."""
+    if not fields_dict:
+        return
+
+    fields_list = [(k, type(v)) for k, v in fields_dict.items()]
+
+    A = make_dataclass('ClassA', fields_list, frozen=True)
+    B = make_dataclass('ClassB', fields_list, frozen=True)
+
+    a = A(**fields_dict)
+    b = B(**fields_dict)
+
+    assert digest(a) != digest(b)
