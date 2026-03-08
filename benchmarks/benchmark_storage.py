@@ -1,12 +1,9 @@
 import time
 import sys
-import os
 import json
 import shutil
 import tempfile
 import gc
-from pathlib import Path
-from typing import Any
 
 from fleche.storage import Memory, PickleFile, Sql, BagOfHoldingH5File
 from fleche.digest import digest
@@ -45,7 +42,7 @@ def benchmark_storage_ops(storage_name, storage_factory, values_to_store):
         for val, key in valid_items:
             timer = timeit.Timer(partial(storage.save, val, key))
             # Use smaller number for storage since it's much slower than digest
-            number = 50
+            number = 10
             times = timer.repeat(repeat=3, number=number)
             save_times.extend([t / number for t in times])
 
@@ -67,20 +64,25 @@ def benchmark_storage_ops(storage_name, storage_factory, values_to_store):
                 # This ensures we can benchmark the 'contains' equivalent until all storages explicitly support it.
                 check_func = getattr(storage, "contains", None)
                 if check_func is None:
+
                     def _contains(k):
                         try:
                             storage.load(k)
                             return True
                         except KeyError:
                             return False
+
                     check_func = _contains
 
                 timer = timeit.Timer(partial(check_func, key))
-                number = 50
+                number = 10
                 times = timer.repeat(repeat=3, number=number)
                 contains_hit_times.extend([t / number for t in times])
             except Exception as e:
-                print(f"Error checking contains (hit) in {storage_name}: {e}", file=sys.stderr)
+                print(
+                    f"Error checking contains (hit) in {storage_name}: {e}",
+                    file=sys.stderr,
+                )
                 continue
 
         if contains_hit_times:
@@ -102,20 +104,25 @@ def benchmark_storage_ops(storage_name, storage_factory, values_to_store):
                 # This ensures we can benchmark the 'contains' equivalent until all storages explicitly support it.
                 check_func = getattr(storage, "contains", None)
                 if check_func is None:
+
                     def _contains(k):
                         try:
                             storage.load(k)
                             return True
                         except KeyError:
                             return False
+
                     check_func = _contains
 
                 timer = timeit.Timer(partial(check_func, key))
-                number = 50
+                number = 10
                 times = timer.repeat(repeat=3, number=number)
                 contains_miss_times.extend([t / number for t in times])
             except Exception as e:
-                print(f"Error checking contains (miss) in {storage_name}: {e}", file=sys.stderr)
+                print(
+                    f"Error checking contains (miss) in {storage_name}: {e}",
+                    file=sys.stderr,
+                )
                 continue
 
         if contains_miss_times:
@@ -133,7 +140,7 @@ def benchmark_storage_ops(storage_name, storage_factory, values_to_store):
         for _, key in valid_items:
             try:
                 timer = timeit.Timer(partial(storage.load, key))
-                number = 50
+                number = 10
                 times = timer.repeat(repeat=3, number=number)
                 load_times.extend([t / number for t in times])
             except Exception as e:
@@ -188,13 +195,13 @@ def main():
     print("Running Storage Benchmarks...", file=sys.stderr)
 
     # Test Data
-    small_data = [f"value_{i}" for i in range(500)]
+    small_data = [f"value_{i}" for i in range(200)]
 
     # Generate some complex nested structures
     from utils import st_nested_values
 
     try:
-        nested_data = [st_nested_values.example() for _ in range(250)]
+        nested_data = [st_nested_values.example() for _ in range(100)]
     except Exception as e:
         print(f"Failed to generate nested data: {e}", file=sys.stderr)
         nested_data = [{"a": 1, "b": [2, 3], "c": {"d": "test"}}] * 50
@@ -202,17 +209,23 @@ def main():
     workloads = [("small_strings", small_data), ("nested_structures", nested_data)]
 
     if np:
-        large_data = [np.random.rand(100, 100) for _ in range(100)]  # 20 large arrays
+        large_data = [np.random.rand(100, 100) for _ in range(20)]  # 20 large arrays
         workloads.append(("numpy_arrays", large_data))
 
     factories = {
         "Memory": lambda path: Memory({}),
         "PickleFile": lambda path: PickleFile.with_pickle(root=path),
-        "PickleFile_Signed": lambda path: PickleFile.with_pickle(root=path, secret_key=[b"test_key"]),
+        "PickleFile_Signed": lambda path: PickleFile.with_pickle(
+            root=path, secret_key=[b"test_key"]
+        ),
         "CloudpickleFile": lambda path: PickleFile.with_cloudpickle(root=path),
-        "CloudpickleFile_Signed": lambda path: PickleFile.with_cloudpickle(root=path, secret_key=[b"test_key"]),
+        "CloudpickleFile_Signed": lambda path: PickleFile.with_cloudpickle(
+            root=path, secret_key=[b"test_key"]
+        ),
         "DillFile": lambda path: PickleFile.with_dill(root=path),
-        "DillFile_Signed": lambda path: PickleFile.with_dill(root=path, secret_key=[b"test_key"]),
+        "DillFile_Signed": lambda path: PickleFile.with_dill(
+            root=path, secret_key=[b"test_key"]
+        ),
         # Sql is a CallStorage, skipped for general values
         "BagOfHoldingH5File": lambda path: BagOfHoldingH5File(
             root=path
@@ -255,7 +268,7 @@ def main():
                 keys = []
                 for c in calls_data:
                     timer = timeit.Timer(partial(storage.save, c))
-                    number = 50
+                    number = 10
                     times = timer.repeat(repeat=3, number=number)
                     save_times.extend([t / number for t in times])
                     keys.append(c.to_lookup_key())  # Call keys are their lookup key
@@ -276,20 +289,25 @@ def main():
                         # This ensures we can benchmark the 'contains' equivalent until all storages explicitly support it.
                         check_func = getattr(storage, "contains", None)
                         if check_func is None:
+
                             def _contains(k):
                                 try:
                                     storage.load(k)
                                     return True
                                 except KeyError:
                                     return False
+
                             check_func = _contains
 
                         timer = timeit.Timer(partial(check_func, key))
-                        number = 50
+                        number = 10
                         times = timer.repeat(repeat=3, number=number)
                         contains_hit_times.extend([t / number for t in times])
                     except Exception as e:
-                        print(f"Error checking contains (hit) in {storage_label}: {e}", file=sys.stderr)
+                        print(
+                            f"Error checking contains (hit) in {storage_label}: {e}",
+                            file=sys.stderr,
+                        )
                         continue
 
                 if contains_hit_times:
@@ -304,7 +322,12 @@ def main():
 
                 contains_miss_times = []
                 missing_calls_keys = [
-                    Call(name="func", arguments={"a": f"__missing_{i}__"}, module="mod", version=1).to_lookup_key()
+                    Call(
+                        name="func",
+                        arguments={"a": f"__missing_{i}__"},
+                        module="mod",
+                        version=1,
+                    ).to_lookup_key()
                     for i in range(len(keys))
                 ]
                 for key in missing_calls_keys:
@@ -313,20 +336,25 @@ def main():
                         # This ensures we can benchmark the 'contains' equivalent until all storages explicitly support it.
                         check_func = getattr(storage, "contains", None)
                         if check_func is None:
+
                             def _contains(k):
                                 try:
                                     storage.load(k)
                                     return True
                                 except KeyError:
                                     return False
+
                             check_func = _contains
 
                         timer = timeit.Timer(partial(check_func, key))
-                        number = 50
+                        number = 10
                         times = timer.repeat(repeat=3, number=number)
                         contains_miss_times.extend([t / number for t in times])
                     except Exception as e:
-                        print(f"Error checking contains (miss) in {storage_label}: {e}", file=sys.stderr)
+                        print(
+                            f"Error checking contains (miss) in {storage_label}: {e}",
+                            file=sys.stderr,
+                        )
                         continue
 
                 if contains_miss_times:
@@ -342,7 +370,7 @@ def main():
                 load_times = []
                 for key in keys:
                     timer = timeit.Timer(partial(storage.load, key))
-                    number = 50
+                    number = 10
                     times = timer.repeat(repeat=3, number=number)
                     load_times.extend([t / number for t in times])
 
