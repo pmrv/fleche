@@ -272,6 +272,22 @@ def main():
                     workload_df = sub_df[sub_df["workload"] == workload].copy()
                     workload_df["storage"] = workload_df["storage_backend"]
                     render_table(workload_df, index_col, parent_title)
+            elif parent_title == "Integration Benchmarks":
+                # Split name column by '/'
+                sub_df = sub_df.copy()
+                sub_df[["storage_backend", "workload"]] = sub_df["name"].str.split(
+                    "/", n=1, expand=True
+                )
+
+                workloads = sub_df["workload"].unique()
+                for workload in workloads:
+                    if pd.isna(workload):
+                        continue
+
+                    print(f"<h4>Workload: {workload}</h4>\n")
+                    workload_df = sub_df[sub_df["workload"] == workload].copy()
+                    workload_df["name"] = workload_df["storage_backend"]
+                    render_table(workload_df, index_col, parent_title)
             elif parent_title == "Call Storage Benchmarks":
                 sub_df = sub_df.copy()
                 sub_df["storage"] = sub_df["storage"].str.replace("/calls", "")
