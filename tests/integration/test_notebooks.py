@@ -21,5 +21,5 @@ def test_notebook(notebook):
         "--stdout",
     ]
     # We want to capture stderr to see the error if it fails
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    assert result.returncode == 0, f"Notebook {notebook} failed:\n{result.stderr}"
+    result = subprocess.run(cmd, stderr=subprocess.STDOUT, text=True)
+    assert result.returncode == 0, f"Notebook {notebook} failed:\n{result.stdout}"

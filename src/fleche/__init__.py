@@ -5,16 +5,18 @@ import logging
 from dataclasses import replace
 import tempfile
 import contextlib
-from contextlib import contextmanager, AbstractContextManager
-from contextvars import ContextVar
 from collections import defaultdict
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, Optional, TypeVar, Union
+from typing import Any, Callable, Dict, Iterable, Optional, TypeVar
 
 from . import digest
+from . import state
 from .digest import Digest
 from .call import Call
+from .metadata import MetaData
+from .caches import Cache, Rejected
+
 
 logger = logging.getLogger("fleche")
 
@@ -29,88 +31,7 @@ def D(d: str) -> Digest:
     return Digest(d)
 
 
-from .metadata import MetaData, Tags
-from .caches import BaseCache, Cache, Rejected
-from .config import load_cache_config, load_default_metadata
-
 _T = TypeVar("_T")
-
-_CACHE: ContextVar[Cache] = ContextVar("fleche.CACHE", default=load_cache_config())
-
-
-def cache(
-    new_cache: Optional[Union[Cache, str]] = None, stack=False
-) -> Union[Cache, AbstractContextManager[None]]:
-    """
-    Manages the active cache for Fleche. If `new_cache` is provided, it returns a context manager
-    that sets the cache for the duration of the context. If `new_cache` is None, it returns
-    the currently active cache.
-
-    Args:
-        new_cache (Optional[Cache]): An optional Cache object to set as the active cache.
-        stack (bool, default False): if True, construct a CacheStack, with new_cache at the bottom
-
-    Returns:
-        Union[Cache, Callable[..., Any]]: The current Cache object if `new_cache` is None,
-                                       otherwise a context manager to set a new cache.
-    """
-    if new_cache is None:
-        return _CACHE.get()
-
-    if isinstance(new_cache, str):
-        new_cache = load_cache_config(new_cache)
-    if not isinstance(new_cache, BaseCache):
-        raise ValueError(new_cache)
-
-    @contextmanager
-    def cache_manager():
-        if stack:
-            cache = _CACHE.get().push(new_cache)
-        else:
-            cache = new_cache
-        token = _CACHE.set(cache)
-        try:
-            yield
-        finally:
-            _CACHE.reset(token)
-
-    return cache_manager()
-
-
-_METADATA: ContextVar[tuple[MetaData]] = ContextVar(
-    "fleche.METADATA", default=load_default_metadata()
-)
-
-
-@contextmanager
-def metadata(*new_metadata: MetaData, stack=False):
-    new_metadata = tuple(new_metadata)
-    if stack:
-        new_metadata = _METADATA.get() + new_metadata
-
-    token = _METADATA.set(new_metadata)
-    try:
-        yield
-    finally:
-        _METADATA.reset(token)
-
-
-def tags(**kwargs):
-    """A context manager to add arbitrary tags to results.
-
-    Args:
-        **kwargs: The tags to add to the results.
-    """
-    return metadata(Tags(kwargs), stack=True)
-
-
-def project(name):
-    """A context manager to tag results with a project name.
-
-    Args:
-        name (str): The name of the project.
-    """
-    return tags(project=name)
 
 
 def _get_working_directory_root() -> Path:
@@ -207,18 +128,18 @@ def fleche(
             if "lazy" in call.arguments:
                 logger.warning("Function argument 'lazy' shadowed by query argument")
             call.metadata = metadata
-            return _CACHE.get().query(call, lazy=lazy)
+            return state._CACHE.get().query(call, lazy=lazy)
 
         _query_doc = _query_func.__doc__
         _query_func = wraps(func)(_query_func)
 
         @wraps(func)
         def _load_func(*args, **kwargs):
-            return _CACHE.get().load(_digest_func(*args, **kwargs)).result
+            return state._CACHE.get().load(_digest_func(*args, **kwargs)).result
 
         @wraps(func)
         def _contains_func(*args, **kwargs):
-            return _CACHE.get().contains(_digest_func(*args, **kwargs))
+            return state._CACHE.get().contains(_digest_func(*args, **kwargs))
 
         for name, helper, doc_prefix, ret in [
             ("call", get_call, "Get the Call object for", Call),
@@ -254,7 +175,7 @@ def fleche(
             if any(r not in kwargs for r in required_args):
                 logger.warning("Missing required argument: %s", required_args)
                 return func(*args, **kwargs)
-            cache: Cache = _CACHE.get()
+            cache: Cache = state._CACHE.get()
             try:
                 call = get_call(*args, **kwargs)
                 key = call.to_lookup_key()
@@ -270,7 +191,7 @@ def fleche(
                 logger.debug("Cache miss for %s with key %s", func.__name__, key)
 
             def _run_and_cache():
-                active_meta = _METADATA.get() + tuple(meta)
+                active_meta = state._METADATA.get() + tuple(meta)
                 metadata: Dict[str, Any] = defaultdict(dict)
                 for m in active_meta:
                     metadata[m.name] |= m.pre(replace(call, metadata={}))
@@ -321,3 +242,21 @@ def fleche(
         return decorator(_func)
     else:
         return decorator
+
+
+# API
+
+from .state import (
+        cache,
+        metadata,
+        tags,
+        project,
+)
+
+
+__all__ = [
+        cache,
+        metadata,
+        tags,
+        project,
+]
