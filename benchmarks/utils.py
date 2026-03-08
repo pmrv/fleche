@@ -1,7 +1,7 @@
 from hypothesis import strategies as st
 import string
 import keyword
-from dataclasses import make_dataclass, fields, is_dataclass
+from dataclasses import make_dataclass
 from fleche.call import Call
 
 try:
