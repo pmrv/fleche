@@ -1,7 +1,8 @@
 
 from unittest.mock import Mock, MagicMock
 
-from fleche import fleche, Cache, _CACHE, cache
+from fleche import fleche, Cache
+from fleche.state import _CACHE, cache
 from fleche.storage import Memory
 
 

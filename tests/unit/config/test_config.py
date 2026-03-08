@@ -4,7 +4,8 @@ import textwrap
 import pytest
 from dataclasses import dataclass
 
-from fleche import load_cache_config, storage, cache
+from fleche import storage, cache
+from fleche.config import load_cache_config
 from fleche.caches import Cache, BaseCache
 from fleche.metadata import Runtime
 
@@ -208,11 +209,11 @@ def test_load_default_metadata(monkeypatch, config_file):
     monkeypatch.setenv("XDG_CONFIG_HOME", config_file)
 
     import importlib
-    import fleche
+    import fleche.state
 
-    importlib.reload(fleche)
+    importlib.reload(fleche.state)
 
-    meta = fleche._METADATA.get()
+    meta = fleche.state._METADATA.get()
     assert len(meta) == 1
     assert isinstance(meta[0], Runtime)
 
@@ -221,12 +222,13 @@ def test_load_default_cache(monkeypatch, config_file):
     monkeypatch.setenv("XDG_CONFIG_HOME", config_file)
 
     import importlib
-    import fleche
+    import fleche.state
 
-    importlib.reload(fleche)
+    importlib.reload(fleche.state)
 
-    cache_obj = fleche._CACHE.get()
+    cache_obj = fleche.state._CACHE.get()
     assert isinstance(cache_obj, BaseCache)
+    assert isinstance(cache_obj, Cache)
     if hasattr(cache_obj, "values"):
         assert isinstance(_get_values_storage(cache_obj), storage.Memory)
         assert isinstance(cache_obj.calls.storage, storage.Memory)
@@ -239,10 +241,10 @@ def test_tags_disallowed(monkeypatch, config_file_with_tags):
     monkeypatch.setenv("XDG_CONFIG_HOME", config_file_with_tags)
 
     import importlib
-    import fleche
+    import fleche.state
 
     with pytest.raises(ValueError):
-        importlib.reload(fleche)
+        importlib.reload(fleche.state)
 
 def test_load_cache_config_memory_special_case(monkeypatch, config_file):
     monkeypatch.setenv("XDG_CONFIG_HOME", config_file)
