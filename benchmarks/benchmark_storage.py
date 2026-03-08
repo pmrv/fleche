@@ -63,12 +63,21 @@ def benchmark_storage_ops(storage_name, storage_factory, values_to_store):
         contains_times = []
         for _, key in valid_items:
             try:
-                timer = timeit.Timer(partial(storage.contains, key))
+                # Fallback to load if contains is not implemented, just to benchmark the existence check equivalent
+                check_func = getattr(storage, "contains", None)
+                if check_func is None:
+                    def _contains(k):
+                        try:
+                            storage.load(k)
+                            return True
+                        except KeyError:
+                            return False
+                    check_func = _contains
+
+                timer = timeit.Timer(partial(check_func, key))
                 number = 10
                 times = timer.repeat(repeat=3, number=number)
                 contains_times.extend([t / number for t in times])
-            except AttributeError:
-                pass
             except Exception as e:
                 print(f"Error checking contains in {storage_name}: {e}", file=sys.stderr)
                 continue
@@ -227,12 +236,20 @@ def main():
                 contains_times = []
                 for key in keys:
                     try:
-                        timer = timeit.Timer(partial(storage.contains, key))
+                        check_func = getattr(storage, "contains", None)
+                        if check_func is None:
+                            def _contains(k):
+                                try:
+                                    storage.load(k)
+                                    return True
+                                except KeyError:
+                                    return False
+                            check_func = _contains
+
+                        timer = timeit.Timer(partial(check_func, key))
                         number = 10
                         times = timer.repeat(repeat=3, number=number)
                         contains_times.extend([t / number for t in times])
-                    except AttributeError:
-                        pass
                     except Exception as e:
                         print(f"Error checking contains in {storage_label}: {e}", file=sys.stderr)
                         continue
