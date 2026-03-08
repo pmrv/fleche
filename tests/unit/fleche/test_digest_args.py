@@ -1,5 +1,6 @@
 import pytest
-from fleche import fleche, cache, Cache, D
+from fleche import fleche, cache, D
+from fleche.caches import Cache
 from fleche.digest import Digest
 from fleche.storage import Memory
 from unittest.mock import Mock

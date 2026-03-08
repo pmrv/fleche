@@ -55,7 +55,7 @@ _METADATA: ContextVar[tuple[MetaData]] = ContextVar(
 
 
 @contextmanager
-def metadata(*new_metadata: MetaData, stack=False):
+def meta(*new_metadata: MetaData, stack=False):
     new_metadata = tuple(new_metadata)
     if stack:
         new_metadata = _METADATA.get() + new_metadata
@@ -73,7 +73,7 @@ def tags(**kwargs):
     Args:
         **kwargs: The tags to add to the results.
     """
-    return metadata(Tags(kwargs), stack=True)
+    return meta(Tags(kwargs), stack=True)
 
 
 def project(name):

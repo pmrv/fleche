@@ -8,6 +8,7 @@ NOTEBOOKS = [
     n.name for n in NOTEBOOKS_DIR.glob("*.ipynb")
 ]
 
+
 @pytest.mark.parametrize("notebook", NOTEBOOKS)
 def test_notebook(notebook):
     notebook_path = NOTEBOOKS_DIR / notebook

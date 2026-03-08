@@ -1,5 +1,6 @@
 
-from fleche import fleche, Cache, cache
+from fleche import fleche, cache
+from fleche.caches import Cache
 from fleche.storage import Memory
 from fleche.call import Call
 import pytest
