@@ -59,6 +59,28 @@ def benchmark_storage_ops(storage_name, storage_factory, values_to_store):
                 }
             )
 
+        # Benchmark Contains
+        contains_times = []
+        for _, key in valid_items:
+            try:
+                timer = timeit.Timer(partial(storage.contains, key))
+                number = 10
+                times = timer.repeat(repeat=3, number=number)
+                contains_times.extend([t / number for t in times])
+            except Exception as e:
+                print(f"Error checking contains in {storage_name}: {e}", file=sys.stderr)
+                continue
+
+        if contains_times:
+            results.append(
+                {
+                    "benchmark": "storage_contains",
+                    "storage": storage_name,
+                    "iterations": len(contains_times),
+                    "time": min(contains_times),
+                }
+            )
+
         # Benchmark Load
         load_times = []
         for _, key in valid_items:
@@ -197,6 +219,22 @@ def main():
                         "storage": storage_label,
                         "iterations": len(calls_data) * 30,
                         "time": min(save_times),
+                    }
+                )
+
+                contains_times = []
+                for key in keys:
+                    timer = timeit.Timer(partial(storage.contains, key))
+                    number = 10
+                    times = timer.repeat(repeat=3, number=number)
+                    contains_times.extend([t / number for t in times])
+
+                sql_results.append(
+                    {
+                        "benchmark": "storage_contains",
+                        "storage": storage_label,
+                        "iterations": len(keys) * 30,
+                        "time": min(contains_times),
                     }
                 )
 
