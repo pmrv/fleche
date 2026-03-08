@@ -45,7 +45,7 @@ def benchmark_storage_ops(storage_name, storage_factory, values_to_store):
         for val, key in valid_items:
             timer = timeit.Timer(partial(storage.save, val, key))
             # Use smaller number for storage since it's much slower than digest
-            number = 10
+            number = 50
             times = timer.repeat(repeat=3, number=number)
             save_times.extend([t / number for t in times])
 
@@ -76,7 +76,7 @@ def benchmark_storage_ops(storage_name, storage_factory, values_to_store):
                     check_func = _contains
 
                 timer = timeit.Timer(partial(check_func, key))
-                number = 10
+                number = 50
                 times = timer.repeat(repeat=3, number=number)
                 contains_hit_times.extend([t / number for t in times])
             except Exception as e:
@@ -111,7 +111,7 @@ def benchmark_storage_ops(storage_name, storage_factory, values_to_store):
                     check_func = _contains
 
                 timer = timeit.Timer(partial(check_func, key))
-                number = 10
+                number = 50
                 times = timer.repeat(repeat=3, number=number)
                 contains_miss_times.extend([t / number for t in times])
             except Exception as e:
@@ -133,7 +133,7 @@ def benchmark_storage_ops(storage_name, storage_factory, values_to_store):
         for _, key in valid_items:
             try:
                 timer = timeit.Timer(partial(storage.load, key))
-                number = 10
+                number = 50
                 times = timer.repeat(repeat=3, number=number)
                 load_times.extend([t / number for t in times])
             except Exception as e:
@@ -188,13 +188,13 @@ def main():
     print("Running Storage Benchmarks...", file=sys.stderr)
 
     # Test Data
-    small_data = [f"value_{i}" for i in range(100)]
+    small_data = [f"value_{i}" for i in range(500)]
 
     # Generate some complex nested structures
     from utils import st_nested_values
 
     try:
-        nested_data = [st_nested_values.example() for _ in range(50)]
+        nested_data = [st_nested_values.example() for _ in range(250)]
     except Exception as e:
         print(f"Failed to generate nested data: {e}", file=sys.stderr)
         nested_data = [{"a": 1, "b": [2, 3], "c": {"d": "test"}}] * 50
@@ -202,7 +202,7 @@ def main():
     workloads = [("small_strings", small_data), ("nested_structures", nested_data)]
 
     if np:
-        large_data = [np.random.rand(100, 100) for _ in range(20)]  # 20 large arrays
+        large_data = [np.random.rand(100, 100) for _ in range(100)]  # 20 large arrays
         workloads.append(("numpy_arrays", large_data))
 
     factories = {
@@ -255,7 +255,7 @@ def main():
                 keys = []
                 for c in calls_data:
                     timer = timeit.Timer(partial(storage.save, c))
-                    number = 10
+                    number = 50
                     times = timer.repeat(repeat=3, number=number)
                     save_times.extend([t / number for t in times])
                     keys.append(c.to_lookup_key())  # Call keys are their lookup key
@@ -285,7 +285,7 @@ def main():
                             check_func = _contains
 
                         timer = timeit.Timer(partial(check_func, key))
-                        number = 10
+                        number = 50
                         times = timer.repeat(repeat=3, number=number)
                         contains_hit_times.extend([t / number for t in times])
                     except Exception as e:
@@ -322,7 +322,7 @@ def main():
                             check_func = _contains
 
                         timer = timeit.Timer(partial(check_func, key))
-                        number = 10
+                        number = 50
                         times = timer.repeat(repeat=3, number=number)
                         contains_miss_times.extend([t / number for t in times])
                     except Exception as e:
@@ -342,7 +342,7 @@ def main():
                 load_times = []
                 for key in keys:
                     timer = timeit.Timer(partial(storage.load, key))
-                    number = 10
+                    number = 50
                     times = timer.repeat(repeat=3, number=number)
                     load_times.extend([t / number for t in times])
 

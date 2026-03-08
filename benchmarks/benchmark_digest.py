@@ -38,7 +38,7 @@ def benchmark(name, strategy):
     repeats = 3
     # Cap number to avoid overly long runs for expensive operations
     if number > 1000:
-        number = 1000
+        number = 5000
     times = timer.repeat(repeat=repeats, number=number)
 
     # Calculate time per call
