@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import logging
 import os
 import socket
@@ -41,10 +39,7 @@ def file_read_lock(
     if lock_path.exists():
         start_time = time.perf_counter()
         wait_time = wait_start
-        while (
-            lock_path.exists()
-            and (time.perf_counter() - start_time) < timeout
-        ):
+        while lock_path.exists() and (time.perf_counter() - start_time) < timeout:
             time.sleep(wait_time)
             wait_time *= 2
 
@@ -79,6 +74,7 @@ class FileStorage(Storage):
 
     Stores objects on the filesystem.
     """
+
     root: Path
     lock_timeout: float = 1.0
     lock_wait_start: float = 0.001
