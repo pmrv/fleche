@@ -22,7 +22,6 @@ with ImportAlarm(
         select,
         and_,
     )
-    from sqlalchemy.engine import Engine
     from sqlalchemy import event
     from sqlalchemy.orm import declarative_base, sessionmaker, relationship, Session, aliased
     from sqlalchemy.types import JSON
