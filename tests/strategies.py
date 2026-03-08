@@ -19,7 +19,7 @@ def dataclasses(draw, field_types, frozen=None):
             max_size=5,
         )
     )
-    clsname = draw(st.text(string.ascii_letters, min_size=3, max_size=3))
+    clsname = draw(st.text(string.ascii_letters, min_size=64, max_size=64))
     cls = make_dataclass(
         clsname, [(k, type(v)) for k, v in fields.items()], frozen=frozen
     )
