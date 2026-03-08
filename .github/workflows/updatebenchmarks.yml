@@ -33,7 +33,7 @@ jobs:
         git config --global user.name "github-actions[bot]"
         git add benchmarks/results.csv
         if ! git diff --cached --quiet; then
-          git commit -m "docs: update benchmarks"
+          git commit -m "update benchmark results"
         fi
     - name: push
       uses: ad-m/github-push-action@master
