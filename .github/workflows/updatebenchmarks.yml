@@ -1,0 +1,43 @@
+name: update benchmarks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+jobs:
+  build:
+    if: contains(github.event.pull_request.labels.*.name, 'updatebenchmarks')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        ref: ${{ github.head_ref }}
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+        cache: pip
+    - name: Setup
+      shell: bash -l {0}
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .[tests]
+    - name: Run benchmarks
+      shell: bash -l {0}
+      run: |
+        python benchmarks/run_benchmarks.py
+    - name: commit
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git add benchmarks/results.csv
+        if ! git diff --cached --quiet; then
+          git commit -m "docs: update benchmarks"
+        fi
+    - name: push
+      uses: ad-m/github-push-action@master
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        branch: ${{ github.head_ref }}
