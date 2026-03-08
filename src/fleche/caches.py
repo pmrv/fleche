@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 import logging
-from dataclasses import dataclass, asdict, replace
+from dataclasses import dataclass, replace
 from copy import copy
 from typing import Self, Iterable, Any, Callable
 
