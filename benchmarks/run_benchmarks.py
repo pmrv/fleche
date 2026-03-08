@@ -2,6 +2,7 @@ import subprocess
 import json
 import sys
 import os
+import math
 from typing import List, Dict
 
 try:
@@ -30,15 +31,25 @@ def run_script(script_path: str) -> List[Dict]:
         return []
 
 
+def round_to_2_sig_figs(x):
+    try:
+        x = float(x)
+        if x == 0 or not math.isfinite(x):
+            return x
+        return round(x, 2 - int(math.floor(math.log10(abs(x)))) - 1)
+    except (ValueError, TypeError):
+        return x
+
+
 def format_time(seconds: float) -> str:
     if seconds < 1e-6:
-        return f"{seconds * 1e9: 5.1f} ns"
+        return f"{seconds * 1e9:g} ns"
     elif seconds < 1e-3:
-        return f"{seconds * 1e6: 5.1f} µs"
+        return f"{seconds * 1e6:g} µs"
     elif seconds < 1:
-        return f"{seconds * 1e3: 5.1f} ms"
+        return f"{seconds * 1e3:g} ms"
     else:
-        return f"{seconds:03.5f} s"
+        return f"{seconds:g} s"
 
 
 def main():
@@ -58,6 +69,11 @@ def main():
     if not all_results:
         print("No results collected.")
         return
+
+    # Round all time results
+    for res in all_results:
+        if "time" in res:
+            res["time"] = round_to_2_sig_figs(res["time"])
 
     if pd:
         # Process results into a DataFrame for display
