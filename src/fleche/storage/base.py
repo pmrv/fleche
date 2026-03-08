@@ -3,7 +3,7 @@ import logging
 from dataclasses import dataclass
 
 from abc import ABC, abstractmethod
-from typing import Iterable, Any, Callable, Self
+from typing import Iterable, Any, Callable
 
 from ..digest import digest, Digest, DIGEST_LENGTH
 from ..call import Call
@@ -99,8 +99,7 @@ class Storage(StorageBase):
 
 class Digested(ABC):
     @abstractmethod
-    def underlying(self):
-        ...
+    def underlying(self): ...
 
     # mess with our hash to ensure that we are referentially transparent with respect to the underlying list.
     # For the replacement of the 'real' list with the 'digested' list to be invisible to caches, they must hash to the
@@ -217,17 +216,25 @@ class CallStorage(StorageBase):
         Returns:
             Iterable[Call]: an iterable over all matching call objects
         """
+
         def none_or_equal(a, b):
             return a is None or digest(a) == digest(b)
+
         def fits(call: Call) -> bool:
             return (
-                    none_or_equal(template.name, call.name)
+                none_or_equal(template.name, call.name)
                 and none_or_equal(template.module, call.module)
                 and none_or_equal(template.version, call.version)
                 and none_or_equal(template.result, call.result)
-                and (template.arguments is None \
-                        or all(none_or_equal(v, call.arguments[k]) for k, v in template.arguments.items()))
+                and (
+                    template.arguments is None
+                    or all(
+                        none_or_equal(v, call.arguments[k])
+                        for k, v in template.arguments.items()
+                    )
+                )
             )
+
         for key in self.list():
             call = self.load(key)
             if fits(call):
@@ -237,6 +244,7 @@ class CallStorage(StorageBase):
 @dataclass(frozen=True, slots=True)
 class CallStorageAdapter(CallStorage):
     """Implement a CallStorage from a generic Storage."""
+
     storage: Storage
 
     def _save(self, call: Call) -> Digest:
