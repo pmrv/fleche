@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Any, Generator
 
-from .base import CallStorage, Storage, DIGEST_LENGTH
+from .base import Storage, DIGEST_LENGTH
 from ..digest import Digest, digest
 
 logger = logging.getLogger("fleche.storage")
@@ -41,10 +41,7 @@ def file_read_lock(
     if lock_path.exists():
         start_time = time.perf_counter()
         wait_time = wait_start
-        while (
-            lock_path.exists()
-            and (time.perf_counter() - start_time) < timeout
-        ):
+        while lock_path.exists() and (time.perf_counter() - start_time) < timeout:
             time.sleep(wait_time)
             wait_time *= 2
 
@@ -79,6 +76,7 @@ class FileStorage(Storage):
 
     Stores objects on the filesystem.
     """
+
     root: Path
     lock_timeout: float = 1.0
     lock_wait_start: float = 0.001
