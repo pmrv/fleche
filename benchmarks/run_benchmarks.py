@@ -80,18 +80,15 @@ def main():
         df = pd.DataFrame(all_results)
 
         # Select and reorder columns
-        display_cols = ["benchmark", "name", "storage", "iterations", "time"]
+        display_cols = ["topic", "configuration", "workload", "function", "time"]
         # 'storage' column might not exist in all results
         if "storage" not in df.columns:
             df["storage"] = ""
         else:
             df["storage"] = df["storage"].fillna("")
 
-        final_df = df[[c for c in display_cols if c in df.columns]]
-
-        # Sort the dataframe by time before grouping to preserve order (descending: largest value on top)
+        # Sort the dataframe by time before processing to preserve order (descending: largest value on top)
         df = df.sort_values(by="time", ascending=False)
-        final_df = df[[c for c in display_cols if c in df.columns]]
 
         def add_color_to_cell(
             val_str: str, raw_val: float, min_val: float, max_val: float
@@ -224,7 +221,13 @@ def main():
 
         # Also save to CSV
         output_csv = os.path.join(benchmark_dir, "results.csv")
-        final_df.to_csv(output_csv, index=False)
+        # Ensure we only save the columns requested. Strip color emojis from configuration
+        clean_df = parsed_df.copy()
+        clean_df["configuration"] = clean_df["configuration"].str.replace(
+            r"^[^\w\s]+\s+", "", regex=True
+        )
+
+        clean_df.to_csv(output_csv, index=False)
         print(f"Results saved to {output_csv}", file=sys.stderr)
     else:
         # Fallback if pandas is not available

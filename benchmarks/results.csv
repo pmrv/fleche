@@ -1,180 +1,180 @@
-benchmark,name,storage,iterations,time
-digest,"List (integers, len>100)",,15,0.041
-integration_miss,H5+Sql/compute_heavy,,20,0.0059
-integration_miss,H5+Sql/lightweight,,20,0.0056
-integration_hit,H5+Sql/compute_heavy,,20,0.005
-integration_hit,H5+Sql/data_heavy,,20,0.005
-integration_miss,H5+Sql/data_heavy,,20,0.005
-integration_hit,H5+Sql/lightweight,,20,0.0049
-digest,"Numpy (integers, len>100)",,150,0.0042
-integration_miss,Pickle+Sql/compute_heavy,,20,0.0035
-storage_save,,SqlFile/calls,1500,0.0035
-integration_miss,Pickle+Sql/lightweight,,20,0.0033
-digest,Nested (Random Hypothesis),,300,0.003
-storage_save,,SqlMemory/calls,1500,0.0023
-storage_evict,,SqlFile/calls,50,0.0021
-digest,Dict (small),,300,0.002
-storage_save,,BagOfHoldingH5File/numpy_arrays,600,0.002
-storage_load,,BagOfHoldingH5File/small_strings,300,0.0019
-storage_contains_hit,,BagOfHoldingH5File/small_strings,300,0.0019
-storage_contains_hit,,BagOfHoldingH5File/numpy_arrays,60,0.0019
-storage_load,,BagOfHoldingH5File/numpy_arrays,60,0.0019
-integration_miss,Memory+Sqlite(:memory:)/compute_heavy,,20,0.0017
-integration_miss,Memory+Sqlite(:memory:)/lightweight,,20,0.0016
-storage_save,,BagOfHoldingH5File/small_strings,3000,0.0014
-storage_save,,BagOfHoldingH5File/nested_structures,1500,0.0013
-storage_contains_hit,,BagOfHoldingH5File/nested_structures,60,0.0013
-storage_load,,BagOfHoldingH5File/nested_structures,60,0.0013
-integration_hit,Pickle+Sql/compute_heavy,,20,0.0012
-integration_miss,Pickle+Sql/data_heavy,,20,0.0012
-integration_hit,Pickle+Sql/data_heavy,,20,0.0012
-integration_hit,Pickle+Sql/lightweight,,20,0.0012
-integration_contains_hit,H5+Sql/data_heavy,,20,0.001
-integration_contains_hit,H5+Sql/compute_heavy,,20,0.001
-integration_contains_hit,Pickle+Sql/lightweight,,20,0.001
-integration_contains_hit,Pickle+Sql/compute_heavy,,20,0.001
-storage_evict,,SqlMemory/calls,50,0.001
-digest,"Numpy (integers, len<100)",,600,0.001
-integration_contains_hit,H5+Sql/lightweight,,20,0.001
-integration_contains_hit,Pickle+Sql/data_heavy,,20,0.00099
-integration_hit,Memory+Sqlite(:memory:)/lightweight,,20,0.00095
-integration_contains_hit,Memory+Sqlite(:memory:)/compute_heavy,,20,0.00095
-integration_hit,Memory+Sqlite(:memory:)/compute_heavy,,20,0.00095
-integration_hit,Memory+Sqlite(:memory:)/data_heavy,,20,0.00095
-integration_contains_hit,Memory+Sqlite(:memory:)/lightweight,,20,0.00092
-integration_contains_hit,Memory+Sqlite(:memory:)/data_heavy,,20,0.00092
-integration_miss,Memory+Sqlite(:memory:)/data_heavy,,20,0.00092
-digest,"List (integers, len<100)",,1500,0.00086
-storage_contains_hit,,SqlFile/calls,150,0.00077
-storage_load,,SqlFile/calls,1500,0.00077
-storage_load,,SqlMemory/calls,1500,0.0007
-storage_contains_hit,,SqlMemory/calls,150,0.0007
-storage_save,,DillFile_Signed/numpy_arrays,600,0.00054
-storage_save,,DillFile/numpy_arrays,600,0.00047
-integration_contains_miss,H5+Sql/compute_heavy,,20,0.00047
-integration_contains_miss,H5+Sql/data_heavy,,20,0.00046
-integration_contains_miss,H5+Sql/lightweight,,20,0.00045
-integration_contains_miss,Pickle+Sql/compute_heavy,,20,0.00045
-integration_contains_miss,Pickle+Sql/lightweight,,20,0.00044
-integration_contains_miss,Pickle+Sql/data_heavy,,20,0.00044
-storage_save,,CloudpickleFile_Signed/numpy_arrays,600,0.00043
-integration_contains_miss,Memory+Sqlite(:memory:)/compute_heavy,,20,0.00043
-integration_contains_miss,Memory+Sqlite(:memory:)/lightweight,,20,0.00042
-integration_contains_miss,Memory+Sqlite(:memory:)/data_heavy,,20,0.00042
-integration_miss,Memory/compute_heavy,,20,0.00042
-storage_save,,CloudpickleFile/numpy_arrays,600,0.00038
-storage_save,,PickleFile_Signed/numpy_arrays,600,0.00038
-storage_save,,PickleFile/numpy_arrays,600,0.00035
-digest,Float,,3000,0.00034
-integration_miss,Memory/lightweight,,20,0.00033
-digest,String (len>100),,3000,0.00026
-storage_contains_miss,,SqlFile/calls,150,0.00026
-storage_save,,DillFile/nested_structures,1500,0.00025
-storage_save,,CloudpickleFile_Signed/small_strings,3000,0.00025
-storage_save,,DillFile/small_strings,3000,0.00024
-storage_save,,DillFile_Signed/small_strings,3000,0.00024
-storage_save,,CloudpickleFile/small_strings,3000,0.00024
-storage_save,,DillFile_Signed/nested_structures,1500,0.00024
-storage_contains_miss,,SqlMemory/calls,150,0.00024
-storage_save,,CloudpickleFile_Signed/nested_structures,1500,0.00023
-storage_save,,PickleFile_Signed/small_strings,3000,0.00023
-storage_save,,CloudpickleFile/nested_structures,1500,0.00023
-digest,None,,3000,0.00021
-storage_save,,PickleFile/small_strings,3000,0.00021
-integration_hit,Memory/data_heavy,,20,0.00019
-digest,Integer,,3000,0.00019
-integration_contains_hit,Memory/compute_heavy,,20,0.00018
-integration_contains_hit,Memory/data_heavy,,20,0.00018
-integration_hit,Memory/compute_heavy,,20,0.00018
-integration_hit,Memory/lightweight,,20,0.00018
-digest,String (len<100),,3000,0.00018
-storage_contains_hit,,DillFile_Signed/numpy_arrays,60,0.00017
-integration_contains_hit,Memory/lightweight,,20,0.00017
-storage_contains_hit,,PickleFile_Signed/numpy_arrays,60,0.00016
-storage_contains_hit,,CloudpickleFile_Signed/numpy_arrays,60,0.00016
-storage_load,,DillFile_Signed/numpy_arrays,60,0.00016
-storage_load,,CloudpickleFile_Signed/numpy_arrays,60,0.00016
-storage_load,,PickleFile_Signed/numpy_arrays,60,0.00016
-storage_contains_miss,,BagOfHoldingH5File/numpy_arrays,60,0.00015
-integration_miss,Memory/data_heavy,,20,0.00015
-storage_contains_miss,,BagOfHoldingH5File/nested_structures,150,0.00014
-integration_contains_miss,Memory/data_heavy,,20,0.00014
-integration_contains_miss,Memory/compute_heavy,,20,0.00014
-storage_contains_miss,,BagOfHoldingH5File/small_strings,300,0.00014
-integration_contains_miss,Memory/lightweight,,20,0.00013
-storage_contains_hit,,DillFile/numpy_arrays,60,0.0001
-storage_load,,DillFile/numpy_arrays,60,0.0001
-storage_contains_hit,,CloudpickleFile/numpy_arrays,60,9.2e-05
-storage_load,,CloudpickleFile/numpy_arrays,60,9.1e-05
-storage_contains_hit,,PickleFile/numpy_arrays,60,9e-05
-storage_load,,PickleFile/numpy_arrays,60,9e-05
-storage_load,,DillFile_Signed/nested_structures,150,8.1e-05
-storage_contains_hit,,DillFile_Signed/nested_structures,150,8.1e-05
-storage_contains_hit,,DillFile_Signed/small_strings,300,7.9e-05
-storage_load,,DillFile_Signed/small_strings,300,7.9e-05
-storage_evict,,CloudpickleFile/numpy_arrays,20,7.7e-05
-storage_evict,,CloudpickleFile_Signed/numpy_arrays,20,7.7e-05
-storage_evict,,PickleFile_Signed/numpy_arrays,20,7.7e-05
-storage_evict,,PickleFile/numpy_arrays,20,7.5e-05
-storage_evict,,DillFile_Signed/numpy_arrays,20,7.5e-05
-storage_evict,,DillFile/numpy_arrays,20,7.4e-05
-storage_contains_hit,,CloudpickleFile_Signed/nested_structures,150,7.4e-05
-storage_evict,,BagOfHoldingH5File/numpy_arrays,20,7.4e-05
-storage_contains_hit,,PickleFile_Signed/small_strings,300,7.3e-05
-storage_load,,CloudpickleFile_Signed/nested_structures,150,7.2e-05
-storage_load,,CloudpickleFile_Signed/small_strings,300,7.2e-05
-storage_load,,PickleFile_Signed/small_strings,300,7.2e-05
-storage_contains_hit,,CloudpickleFile_Signed/small_strings,300,7.2e-05
-storage_contains_hit,,DillFile/nested_structures,150,7e-05
-storage_load,,DillFile/nested_structures,150,7e-05
-storage_load,,DillFile/small_strings,300,6.9e-05
-storage_contains_hit,,DillFile/small_strings,300,6.9e-05
-storage_load,,CloudpickleFile/nested_structures,150,6.4e-05
-storage_contains_hit,,CloudpickleFile/nested_structures,150,6.4e-05
-storage_contains_hit,,CloudpickleFile/small_strings,300,6.3e-05
-storage_load,,PickleFile/small_strings,300,6.3e-05
-storage_contains_hit,,PickleFile/small_strings,300,6.3e-05
-storage_load,,CloudpickleFile/small_strings,300,6.3e-05
-storage_evict,,PickleFile_Signed/small_strings,100,6.2e-05
-storage_evict,,PickleFile/small_strings,100,6.2e-05
-storage_evict,,CloudpickleFile_Signed/small_strings,100,6.2e-05
-storage_evict,,CloudpickleFile/small_strings,100,6.1e-05
-storage_evict,,DillFile_Signed/small_strings,100,6.1e-05
-storage_evict,,DillFile/small_strings,100,6.1e-05
-storage_evict,,BagOfHoldingH5File/small_strings,100,5.8e-05
-storage_contains_miss,,PickleFile_Signed/numpy_arrays,60,4.7e-05
-storage_contains_miss,,PickleFile_Signed/small_strings,300,4.6e-05
-storage_contains_miss,,PickleFile/small_strings,300,4.6e-05
-storage_contains_miss,,CloudpickleFile_Signed/small_strings,300,4.6e-05
-storage_contains_miss,,CloudpickleFile_Signed/nested_structures,150,4.6e-05
-storage_contains_miss,,DillFile/nested_structures,150,4.6e-05
-storage_contains_miss,,DillFile_Signed/nested_structures,150,4.6e-05
-storage_contains_miss,,DillFile_Signed/numpy_arrays,60,4.6e-05
-storage_contains_miss,,CloudpickleFile/numpy_arrays,60,4.6e-05
-storage_contains_miss,,DillFile/numpy_arrays,60,4.6e-05
-storage_contains_miss,,CloudpickleFile_Signed/numpy_arrays,60,4.6e-05
-storage_contains_miss,,CloudpickleFile/small_strings,300,4.6e-05
-storage_contains_miss,,PickleFile/numpy_arrays,60,4.6e-05
-storage_contains_miss,,CloudpickleFile/nested_structures,150,4.5e-05
-storage_contains_miss,,DillFile/small_strings,300,4.5e-05
-storage_contains_miss,,DillFile_Signed/small_strings,300,4.5e-05
-storage_evict,,DillFile/nested_structures,50,3.5e-05
-storage_evict,,DillFile_Signed/nested_structures,50,3.5e-05
-storage_evict,,CloudpickleFile/nested_structures,50,3.5e-05
-storage_evict,,BagOfHoldingH5File/nested_structures,50,3.5e-05
-storage_evict,,CloudpickleFile_Signed/nested_structures,50,3.4e-05
-storage_load,,Memory/numpy_arrays,60,4.1e-06
-storage_contains_hit,,Memory/numpy_arrays,60,4.1e-06
-storage_save,,Memory/numpy_arrays,600,3.9e-06
-storage_contains_miss,,Memory/small_strings,300,1.1e-06
-storage_contains_miss,,Memory/nested_structures,150,1.1e-06
-storage_contains_miss,,Memory/numpy_arrays,60,1.1e-06
-storage_contains_hit,,Memory/nested_structures,150,9e-07
-storage_load,,Memory/nested_structures,150,8.8e-07
-storage_contains_hit,,Memory/small_strings,300,8.8e-07
-storage_load,,Memory/small_strings,300,8.7e-07
-storage_save,,Memory/nested_structures,1500,6.5e-07
-storage_evict,,Memory/numpy_arrays,20,5.8e-07
-storage_save,,Memory/small_strings,3000,5.8e-07
-storage_evict,,Memory/nested_structures,50,4.4e-07
-storage_evict,,Memory/small_strings,100,4.2e-07
+topic,configuration,workload,function,time
+Digest,,"List (integers, len>100)",digest,61 ms
+Digest,,"Numpy (integers, len>100)",digest,13 ms
+Integration,H5+Sql,compute_heavy,miss,8.8 ms
+Integration,H5+Sql,lightweight,miss,7.8 ms
+Integration,H5+Sql,data_heavy,miss,6.6 ms
+Integration,H5+Sql,compute_heavy,hit,6.5 ms
+Digest,,Nested (Random Hypothesis),digest,6.5 ms
+Integration,H5+Sql,data_heavy,hit,6.4 ms
+Integration,H5+Sql,lightweight,hit,6.2 ms
+Call Storage,SqlFile,calls,save,5.6 ms
+Integration,Pickle+Sql,compute_heavy,miss,5.2 ms
+Digest,,Dict (small),digest,4.9 ms
+Integration,Pickle+Sql,lightweight,miss,4.8 ms
+Call Storage,SqlFile,calls,evict,3.7 ms
+Call Storage,SqlMemory,calls,save,3.4 ms
+Value Storage,BagOfHoldingH5File,numpy_arrays,load,2.8 ms
+Integration,Memory+Sqlite(:memory:),compute_heavy,miss,2.6 ms
+Value Storage,BagOfHoldingH5File,numpy_arrays,contains_hit,2.6 ms
+Value Storage,BagOfHoldingH5File,numpy_arrays,save,2.5 ms
+Integration,Memory+Sqlite(:memory:),lightweight,miss,2.4 ms
+Value Storage,BagOfHoldingH5File,small_strings,load,2.4 ms
+Value Storage,BagOfHoldingH5File,small_strings,contains_hit,2.4 ms
+Digest,,"List (integers, len<100)",digest,2 ms
+Integration,Pickle+Sql,compute_heavy,hit,1.9 ms
+Digest,,"Numpy (integers, len<100)",digest,1.8 ms
+Value Storage,BagOfHoldingH5File,nested_structures,contains_hit,1.8 ms
+Integration,Pickle+Sql,data_heavy,hit,1.8 ms
+Value Storage,BagOfHoldingH5File,nested_structures,load,1.8 ms
+Value Storage,BagOfHoldingH5File,small_strings,save,1.7 ms
+Integration,Pickle+Sql,data_heavy,miss,1.7 ms
+Integration,Pickle+Sql,lightweight,hit,1.7 ms
+Integration,H5+Sql,data_heavy,contains_hit,1.6 ms
+Value Storage,BagOfHoldingH5File,nested_structures,save,1.6 ms
+Integration,Pickle+Sql,compute_heavy,contains_hit,1.5 ms
+Integration,H5+Sql,compute_heavy,contains_hit,1.5 ms
+Integration,Memory+Sqlite(:memory:),lightweight,contains_hit,1.4 ms
+Integration,Memory+Sqlite(:memory:),lightweight,hit,1.4 ms
+Integration,Memory+Sqlite(:memory:),data_heavy,contains_hit,1.4 ms
+Integration,Pickle+Sql,lightweight,contains_hit,1.4 ms
+Integration,H5+Sql,lightweight,contains_hit,1.4 ms
+Call Storage,SqlMemory,calls,evict,1.4 ms
+Integration,Memory+Sqlite(:memory:),compute_heavy,hit,1.4 ms
+Integration,Memory+Sqlite(:memory:),compute_heavy,contains_hit,1.4 ms
+Integration,Memory+Sqlite(:memory:),data_heavy,hit,1.4 ms
+Integration,Pickle+Sql,data_heavy,contains_hit,1.4 ms
+Integration,Memory+Sqlite(:memory:),data_heavy,miss,1.3 ms
+Call Storage,SqlFile,calls,contains_hit,1.2 ms
+Call Storage,SqlFile,calls,load,1.2 ms
+Call Storage,SqlMemory,calls,load,1.1 ms
+Call Storage,SqlMemory,calls,contains_hit,1.1 ms
+Value Storage,DillFile_Signed,numpy_arrays,save,930 µs
+Integration,H5+Sql,data_heavy,contains_miss,800 µs
+Value Storage,CloudpickleFile_Signed,numpy_arrays,save,740 µs
+Value Storage,DillFile,numpy_arrays,save,720 µs
+Value Storage,PickleFile_Signed,numpy_arrays,save,690 µs
+Integration,H5+Sql,compute_heavy,contains_miss,680 µs
+Integration,Pickle+Sql,compute_heavy,contains_miss,670 µs
+Integration,Pickle+Sql,lightweight,contains_miss,670 µs
+Integration,Pickle+Sql,data_heavy,contains_miss,670 µs
+Integration,H5+Sql,lightweight,contains_miss,660 µs
+Integration,Memory+Sqlite(:memory:),compute_heavy,contains_miss,640 µs
+Integration,Memory+Sqlite(:memory:),lightweight,contains_miss,630 µs
+Integration,Memory+Sqlite(:memory:),data_heavy,contains_miss,630 µs
+Value Storage,PickleFile,numpy_arrays,save,570 µs
+Digest,,String (len>100),digest,540 µs
+Integration,Memory,compute_heavy,miss,530 µs
+Digest,,Float,digest,520 µs
+Value Storage,CloudpickleFile,numpy_arrays,save,500 µs
+Call Storage,SqlFile,calls,contains_miss,500 µs
+Value Storage,DillFile_Signed,small_strings,save,500 µs
+Value Storage,DillFile_Signed,nested_structures,save,490 µs
+Value Storage,DillFile,small_strings,save,490 µs
+Value Storage,DillFile,nested_structures,save,470 µs
+Integration,Memory,lightweight,miss,470 µs
+Value Storage,CloudpickleFile,nested_structures,save,450 µs
+Value Storage,CloudpickleFile_Signed,nested_structures,save,440 µs
+Call Storage,SqlMemory,calls,contains_miss,410 µs
+Value Storage,DillFile_Signed,numpy_arrays,load,370 µs
+Value Storage,DillFile_Signed,numpy_arrays,contains_hit,370 µs
+Value Storage,CloudpickleFile_Signed,numpy_arrays,load,370 µs
+Value Storage,CloudpickleFile_Signed,numpy_arrays,contains_hit,350 µs
+Value Storage,PickleFile_Signed,numpy_arrays,contains_hit,350 µs
+Value Storage,PickleFile_Signed,numpy_arrays,load,340 µs
+Value Storage,CloudpickleFile_Signed,small_strings,save,330 µs
+Value Storage,PickleFile_Signed,small_strings,save,330 µs
+Digest,,None,digest,320 µs
+Value Storage,CloudpickleFile,small_strings,save,310 µs
+Digest,,Integer,digest,310 µs
+Value Storage,PickleFile,small_strings,save,310 µs
+Digest,,String (len<100),digest,260 µs
+Integration,Memory,lightweight,contains_hit,250 µs
+Integration,Memory,data_heavy,hit,250 µs
+Integration,Memory,lightweight,hit,250 µs
+Integration,Memory,compute_heavy,contains_hit,240 µs
+Integration,Memory,compute_heavy,hit,240 µs
+Integration,Memory,data_heavy,contains_hit,230 µs
+Integration,Memory,lightweight,contains_miss,190 µs
+Integration,Memory,compute_heavy,contains_miss,190 µs
+Value Storage,BagOfHoldingH5File,nested_structures,contains_miss,180 µs
+Integration,Memory,data_heavy,contains_miss,180 µs
+Value Storage,BagOfHoldingH5File,numpy_arrays,contains_miss,180 µs
+Value Storage,BagOfHoldingH5File,small_strings,contains_miss,180 µs
+Integration,Memory,data_heavy,miss,130 µs
+Value Storage,DillFile,numpy_arrays,contains_hit,120 µs
+Value Storage,DillFile,numpy_arrays,load,120 µs
+Value Storage,PickleFile,numpy_arrays,load,110 µs
+Value Storage,PickleFile,numpy_arrays,contains_hit,110 µs
+Value Storage,CloudpickleFile,numpy_arrays,contains_hit,110 µs
+Value Storage,DillFile_Signed,small_strings,contains_hit,110 µs
+Value Storage,CloudpickleFile,numpy_arrays,load,110 µs
+Value Storage,DillFile_Signed,nested_structures,load,100 µs
+Value Storage,DillFile_Signed,small_strings,load,100 µs
+Value Storage,DillFile_Signed,nested_structures,contains_hit,100 µs
+Value Storage,PickleFile,numpy_arrays,evict,100 µs
+Value Storage,PickleFile_Signed,small_strings,load,100 µs
+Value Storage,CloudpickleFile_Signed,small_strings,load,99 µs
+Value Storage,PickleFile_Signed,small_strings,contains_hit,99 µs
+Value Storage,PickleFile,small_strings,contains_hit,96 µs
+Value Storage,DillFile,small_strings,contains_hit,96 µs
+Value Storage,CloudpickleFile_Signed,small_strings,contains_hit,95 µs
+Value Storage,PickleFile,small_strings,load,93 µs
+Value Storage,DillFile,small_strings,load,92 µs
+Value Storage,CloudpickleFile_Signed,nested_structures,contains_hit,91 µs
+Value Storage,BagOfHoldingH5File,numpy_arrays,evict,91 µs
+Value Storage,CloudpickleFile_Signed,nested_structures,load,90 µs
+Value Storage,CloudpickleFile_Signed,numpy_arrays,evict,88 µs
+Value Storage,DillFile,nested_structures,load,86 µs
+Value Storage,DillFile,nested_structures,contains_hit,86 µs
+Value Storage,CloudpickleFile,small_strings,contains_hit,83 µs
+Value Storage,CloudpickleFile,nested_structures,contains_hit,82 µs
+Value Storage,CloudpickleFile,numpy_arrays,evict,82 µs
+Value Storage,PickleFile_Signed,numpy_arrays,evict,81 µs
+Value Storage,CloudpickleFile,nested_structures,load,81 µs
+Value Storage,PickleFile,small_strings,evict,80 µs
+Value Storage,DillFile_Signed,numpy_arrays,evict,80 µs
+Value Storage,CloudpickleFile,small_strings,load,78 µs
+Value Storage,PickleFile_Signed,small_strings,evict,78 µs
+Value Storage,DillFile,numpy_arrays,evict,78 µs
+Value Storage,DillFile,small_strings,evict,78 µs
+Value Storage,CloudpickleFile,small_strings,evict,74 µs
+Value Storage,DillFile_Signed,small_strings,evict,74 µs
+Value Storage,CloudpickleFile_Signed,small_strings,evict,72 µs
+Value Storage,PickleFile,small_strings,contains_miss,71 µs
+Value Storage,PickleFile_Signed,small_strings,contains_miss,68 µs
+Value Storage,BagOfHoldingH5File,small_strings,evict,66 µs
+Value Storage,DillFile_Signed,small_strings,contains_miss,66 µs
+Value Storage,CloudpickleFile_Signed,small_strings,contains_miss,64 µs
+Value Storage,CloudpickleFile,small_strings,contains_miss,64 µs
+Value Storage,CloudpickleFile,numpy_arrays,contains_miss,64 µs
+Value Storage,DillFile,small_strings,contains_miss,63 µs
+Value Storage,CloudpickleFile_Signed,numpy_arrays,contains_miss,62 µs
+Value Storage,CloudpickleFile_Signed,nested_structures,contains_miss,61 µs
+Value Storage,CloudpickleFile,nested_structures,contains_miss,61 µs
+Value Storage,PickleFile_Signed,numpy_arrays,contains_miss,61 µs
+Value Storage,DillFile,numpy_arrays,contains_miss,61 µs
+Value Storage,DillFile_Signed,nested_structures,contains_miss,60 µs
+Value Storage,DillFile_Signed,numpy_arrays,contains_miss,60 µs
+Value Storage,DillFile,nested_structures,contains_miss,60 µs
+Value Storage,PickleFile,numpy_arrays,contains_miss,59 µs
+Value Storage,BagOfHoldingH5File,nested_structures,evict,52 µs
+Value Storage,CloudpickleFile_Signed,nested_structures,evict,51 µs
+Value Storage,CloudpickleFile,nested_structures,evict,48 µs
+Value Storage,DillFile_Signed,nested_structures,evict,47 µs
+Value Storage,DillFile,nested_structures,evict,47 µs
+Value Storage,Memory,numpy_arrays,load,6.5 µs
+Value Storage,Memory,numpy_arrays,contains_hit,6.5 µs
+Value Storage,Memory,numpy_arrays,save,6 µs
+Value Storage,Memory,small_strings,contains_miss,1.5 µs
+Value Storage,Memory,nested_structures,contains_miss,1.4 µs
+Value Storage,Memory,numpy_arrays,contains_miss,1.4 µs
+Value Storage,Memory,nested_structures,load,1.2 µs
+Value Storage,Memory,nested_structures,contains_hit,1.1 µs
+Value Storage,Memory,small_strings,load,1.1 µs
+Value Storage,Memory,small_strings,contains_hit,1.1 µs
+Value Storage,Memory,numpy_arrays,evict,990 ns
+Value Storage,Memory,nested_structures,save,790 ns
+Value Storage,Memory,nested_structures,evict,780 ns
+Value Storage,Memory,small_strings,save,740 ns
+Value Storage,Memory,small_strings,evict,610 ns
