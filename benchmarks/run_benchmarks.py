@@ -213,6 +213,15 @@ def main():
                     for val in pivoted[col]
                 ]
 
+            # Remove prefixes from metric columns for cleaner tables
+            new_columns = {}
+            for col in formatted.columns:
+                if col == index_col:
+                    continue
+                new_col = col.replace("storage_", "").replace("integration_", "")
+                new_columns[col] = new_col
+            formatted = formatted.rename(columns=new_columns)
+
             try:
                 print(formatted.to_markdown(index=False))
             except ImportError:
