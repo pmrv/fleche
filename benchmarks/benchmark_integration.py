@@ -78,8 +78,32 @@ def benchmark_integration(name, cache_obj, func, args, iterations=10):
         }
     )
 
-    # 2. Contains (Cache Check)
-    contains_times = []
+    # 2. Contains (Cache Check - Miss)
+    contains_miss_times = []
+    for i in range(iterations):
+        arg = args[i] if isinstance(args, list) else i
+        if isinstance(arg, int):
+            arg = arg + iterations * 1000  # Ensure it's a miss
+        else:
+            arg = str(arg) + "__missing"  # Ensure it's a miss
+        # Use .contains method exposed by @fleche to get the key and pass to contains
+        start = time.perf_counter()
+        with cache(cache_obj):
+            func.contains(arg)
+        end = time.perf_counter()
+        contains_miss_times.append(end - start)
+
+    results.append(
+        {
+            "benchmark": "integration_contains_miss",
+            "name": name,
+            "iterations": iterations,
+            "time": min(contains_miss_times),
+        }
+    )
+
+    # 3. Contains (Cache Check - Hit)
+    contains_hit_times = []
     for i in range(iterations):
         arg = args[i] if isinstance(args, list) else i
         # Use .contains method exposed by @fleche to get the key and pass to contains
@@ -87,18 +111,18 @@ def benchmark_integration(name, cache_obj, func, args, iterations=10):
         with cache(cache_obj):
             func.contains(arg)
         end = time.perf_counter()
-        contains_times.append(end - start)
+        contains_hit_times.append(end - start)
 
     results.append(
         {
-            "benchmark": "integration_contains",
+            "benchmark": "integration_contains_hit",
             "name": name,
             "iterations": iterations,
-            "time": min(contains_times),
+            "time": min(contains_hit_times),
         }
     )
 
-    # 3. Second Call (Hit)
+    # 4. Second Call (Hit)
     hit_times = []
     # Reuse the same args from above, they are now in cache
     for i in range(iterations):

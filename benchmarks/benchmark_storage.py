@@ -59,11 +59,12 @@ def benchmark_storage_ops(storage_name, storage_factory, values_to_store):
                 }
             )
 
-        # Benchmark Contains
-        contains_times = []
+        # Benchmark Contains (Hit)
+        contains_hit_times = []
         for _, key in valid_items:
             try:
-                # Fallback to load if contains is not implemented, just to benchmark the existence check equivalent
+                # Temporary stop-gap: in-place _contains implementation using try/except KeyError on load
+                # This ensures we can benchmark the 'contains' equivalent until all storages explicitly support it.
                 check_func = getattr(storage, "contains", None)
                 if check_func is None:
                     def _contains(k):
@@ -77,18 +78,53 @@ def benchmark_storage_ops(storage_name, storage_factory, values_to_store):
                 timer = timeit.Timer(partial(check_func, key))
                 number = 10
                 times = timer.repeat(repeat=3, number=number)
-                contains_times.extend([t / number for t in times])
+                contains_hit_times.extend([t / number for t in times])
             except Exception as e:
-                print(f"Error checking contains in {storage_name}: {e}", file=sys.stderr)
+                print(f"Error checking contains (hit) in {storage_name}: {e}", file=sys.stderr)
                 continue
 
-        if contains_times:
+        if contains_hit_times:
             results.append(
                 {
-                    "benchmark": "storage_contains",
+                    "benchmark": "storage_contains_hit",
                     "storage": storage_name,
-                    "iterations": len(contains_times),
-                    "time": min(contains_times),
+                    "iterations": len(contains_hit_times),
+                    "time": min(contains_hit_times),
+                }
+            )
+
+        # Benchmark Contains (Miss)
+        contains_miss_times = []
+        missing_keys = [digest(f"__missing_key_{i}__") for i in range(len(valid_items))]
+        for key in missing_keys:
+            try:
+                # Temporary stop-gap: in-place _contains implementation using try/except KeyError on load
+                # This ensures we can benchmark the 'contains' equivalent until all storages explicitly support it.
+                check_func = getattr(storage, "contains", None)
+                if check_func is None:
+                    def _contains(k):
+                        try:
+                            storage.load(k)
+                            return True
+                        except KeyError:
+                            return False
+                    check_func = _contains
+
+                timer = timeit.Timer(partial(check_func, key))
+                number = 10
+                times = timer.repeat(repeat=3, number=number)
+                contains_miss_times.extend([t / number for t in times])
+            except Exception as e:
+                print(f"Error checking contains (miss) in {storage_name}: {e}", file=sys.stderr)
+                continue
+
+        if contains_miss_times:
+            results.append(
+                {
+                    "benchmark": "storage_contains_miss",
+                    "storage": storage_name,
+                    "iterations": len(contains_miss_times),
+                    "time": min(contains_miss_times),
                 }
             )
 
@@ -233,9 +269,11 @@ def main():
                     }
                 )
 
-                contains_times = []
+                contains_hit_times = []
                 for key in keys:
                     try:
+                        # Temporary stop-gap: in-place _contains implementation using try/except KeyError on load
+                        # This ensures we can benchmark the 'contains' equivalent until all storages explicitly support it.
                         check_func = getattr(storage, "contains", None)
                         if check_func is None:
                             def _contains(k):
@@ -249,18 +287,55 @@ def main():
                         timer = timeit.Timer(partial(check_func, key))
                         number = 10
                         times = timer.repeat(repeat=3, number=number)
-                        contains_times.extend([t / number for t in times])
+                        contains_hit_times.extend([t / number for t in times])
                     except Exception as e:
-                        print(f"Error checking contains in {storage_label}: {e}", file=sys.stderr)
+                        print(f"Error checking contains (hit) in {storage_label}: {e}", file=sys.stderr)
                         continue
 
-                if contains_times:
+                if contains_hit_times:
                     sql_results.append(
                         {
-                            "benchmark": "storage_contains",
+                            "benchmark": "storage_contains_hit",
                             "storage": storage_label,
-                            "iterations": len(contains_times),
-                            "time": min(contains_times),
+                            "iterations": len(contains_hit_times),
+                            "time": min(contains_hit_times),
+                        }
+                    )
+
+                contains_miss_times = []
+                missing_calls_keys = [
+                    Call(name="func", arguments={"a": f"__missing_{i}__"}, module="mod", version=1).to_lookup_key()
+                    for i in range(len(keys))
+                ]
+                for key in missing_calls_keys:
+                    try:
+                        # Temporary stop-gap: in-place _contains implementation using try/except KeyError on load
+                        # This ensures we can benchmark the 'contains' equivalent until all storages explicitly support it.
+                        check_func = getattr(storage, "contains", None)
+                        if check_func is None:
+                            def _contains(k):
+                                try:
+                                    storage.load(k)
+                                    return True
+                                except KeyError:
+                                    return False
+                            check_func = _contains
+
+                        timer = timeit.Timer(partial(check_func, key))
+                        number = 10
+                        times = timer.repeat(repeat=3, number=number)
+                        contains_miss_times.extend([t / number for t in times])
+                    except Exception as e:
+                        print(f"Error checking contains (miss) in {storage_label}: {e}", file=sys.stderr)
+                        continue
+
+                if contains_miss_times:
+                    sql_results.append(
+                        {
+                            "benchmark": "storage_contains_miss",
+                            "storage": storage_label,
+                            "iterations": len(contains_miss_times),
+                            "time": min(contains_miss_times),
                         }
                     )
 
