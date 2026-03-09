@@ -77,8 +77,6 @@ def main():
     # Process results into a DataFrame for display
     df = pd.DataFrame(all_results)
 
-    # Select and reorder columns
-    # display_cols = ["topic", "configuration", "workload", "function", "time"]
     # 'storage' column might not exist in all results
     if "storage" not in df.columns:
         df["storage"] = ""
@@ -194,8 +192,9 @@ def main():
     parsed_df = pd.DataFrame(rows)
 
     print()
-    for topic, group in parsed_df.groupby("topic"):
-        print(f"<details><summary>{topic}</summary>\n")
+    for (topic, wkl), group in parsed_df.groupby(["topic", "workload"]):
+        summary_title = f"{topic} ({wkl})" if wkl else topic
+        print(f"<details><summary>{summary_title}</summary>\n")
 
         # Pivot on function
         pivot_df = group.pivot(
@@ -203,7 +202,7 @@ def main():
         ).reset_index()
 
         # Drop completely empty columns
-        for col in ["configuration", "workload"]:
+        for col in ["configuration"]:
             if pivot_df[col].astype(str).str.strip().eq("").all():
                 pivot_df = pivot_df.drop(columns=[col])
 
