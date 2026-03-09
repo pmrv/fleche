@@ -13,6 +13,7 @@ except ImportError:
 
 def run_script(script_path: str) -> List[Dict]:
     print(f"Running {script_path}...", file=sys.stderr)
+    result = None
     try:
         # Run the script and capture stdout
         result = subprocess.run(
@@ -27,7 +28,8 @@ def run_script(script_path: str) -> List[Dict]:
     except json.JSONDecodeError as e:
         print(f"Error decoding JSON from {script_path}: {e}", file=sys.stderr)
         print("Output was:", file=sys.stderr)
-        print(result.stdout, file=sys.stderr)
+        if result is not None:
+            print(result.stdout, file=sys.stderr)
         return []
 
 
@@ -61,15 +63,6 @@ def main():
     ]
 
     all_results = []
-
-    old_df = None
-    if pd:
-        old_results_path = os.path.join(benchmark_dir, "results.csv")
-        if os.path.exists(old_results_path):
-            try:
-                old_df = pd.read_csv(old_results_path)
-            except Exception as e:
-                print(f"Failed to read existing results.csv: {e}", file=sys.stderr)
 
     for script in scripts:
         results = run_script(os.path.join(benchmark_dir, script))
@@ -222,135 +215,11 @@ def main():
             return "\n".join(table)
 
         print()
-
-        # Compare with old_df to find significant changes
-        if old_df is not None and not old_df.empty:
-            try:
-                # In parsed_df and the updated old_df format, the columns have changed.
-                # old_df represents a previous run, but if the CSV was already overwritten with the new format,
-                # it uses the new columns. To match safely between current parsed_df and old_df:
-                merge_cols = ["topic", "configuration", "workload", "function"]
-                for col in merge_cols:
-                    if col in parsed_df.columns:
-                        parsed_df[col] = parsed_df[col].fillna("").astype(str)
-                    if col in old_df.columns:
-                        old_df[col] = old_df[col].fillna("").astype(str)
-
-                compare_df = pd.merge(
-                    parsed_df, old_df, on=merge_cols, suffixes=("_new", "_old")
-                )
-
-                # We need to process the formatted time strings back into floats for comparison.
-                def extract_time(t_str):
-                    if pd.isna(t_str):
-                        return 0.0
-                    t_str = str(t_str)
-                    try:
-                        val = float(t_str.split()[0])
-                        if " ns" in t_str:
-                            return val * 1e-9
-                        if " µs" in t_str:
-                            return val * 1e-6
-                        if " ms" in t_str:
-                            return val * 1e-3
-                        if " s" in t_str:
-                            return val
-                        return val
-                    except (ValueError, IndexError):
-                        return 0.0
-
-                compare_df["time_old"] = compare_df["time_old"].apply(extract_time)
-                compare_df["time_new"] = compare_df["time_new"].apply(extract_time)
-                # Filter out those where old time is 0 to avoid division by zero
-                compare_df = compare_df[compare_df["time_old"] > 0].copy()
-                compare_df["% Change"] = (
-                    (compare_df["time_new"] - compare_df["time_old"])
-                    / compare_df["time_old"]
-                ) * 100
-
-                significant_changes = compare_df[
-                    compare_df["% Change"].abs() > 5.0
-                ].copy()
-
-                if not significant_changes.empty:
-                    significant_changes = significant_changes.sort_values(
-                        by="% Change", key=abs, ascending=False
-                    )
-
-                    def format_change(val):
-                        sign = "+" if val > 0 else ""
-                        color = (
-                            "🔴" if val > 0 else "🟢"
-                        )  # red for slower, green for faster
-                        return f"{color} {sign}{val:.1f}%"
-
-                    significant_changes["% Change"] = significant_changes[
-                        "% Change"
-                    ].apply(format_change)
-                    significant_changes["Old Time"] = significant_changes[
-                        "time_old"
-                    ].apply(format_time)
-                    significant_changes["New Time"] = significant_changes[
-                        "time_new"
-                    ].apply(format_time)
-
-                    display_cols = [
-                        "topic",
-                        "configuration",
-                        "workload",
-                        "function",
-                        "Old Time",
-                        "New Time",
-                        "% Change",
-                    ]
-                    display_changes = significant_changes[
-                        [c for c in display_cols if c in significant_changes.columns]
-                    ]
-
-                    print("<details open>")
-                    print("<summary><b>Significant Changes (>5%)</b></summary>\n")
-                    print('<div style="overflow-x: auto;">\n')
-                    try:
-                        print(display_changes.to_markdown(index=False))
-                    except ImportError:
-                        print(to_markdown_table(display_changes))
-                    print("\n</div>")
-                    print("</details>\n")
-            except Exception as e:
-                print(f"Error computing significant changes: {e}", file=sys.stderr)
-
-        topics = parsed_df["topic"].unique()
-        for topic in topics:
-            if pd.isna(topic) or topic == "":
-                continue
-
-            print("<details>")
-            print(f"<summary><b>{topic} Benchmarks</b></summary>\n")
-            print('<div style="overflow-x: auto;">\n')
-
-            topic_df = parsed_df[parsed_df["topic"] == topic].copy()
-            workloads = topic_df["workload"].unique()
-
-            for workload in workloads:
-                if pd.isna(workload):
-                    continue
-
-                if workload != "":
-                    print(f"<h4>Workload: {workload}</h4>\n")
-
-                workload_df = topic_df[topic_df["workload"] == workload].copy()
-
-                # We can drop topic and workload columns since they are in the headers
-                display_df = workload_df.drop(columns=["topic", "workload"])
-
-                try:
-                    print(display_df.to_markdown(index=False))
-                except ImportError:
-                    print(to_markdown_table(display_df))
-                print("\n")
-
-            print("</div>")
-            print("</details>\n")
+        try:
+            print(parsed_df.to_markdown(index=False))
+        except ImportError:
+            print(to_markdown_table(parsed_df))
+        print("\n")
 
         # Also save to CSV
         output_csv = os.path.join(benchmark_dir, "results.csv")
