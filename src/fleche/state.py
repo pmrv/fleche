@@ -48,7 +48,7 @@ def cache(
     return cache_manager()
 
 
-_METADATA: ContextVar[tuple[MetaData]] = ContextVar(
+_METADATA: ContextVar[tuple[MetaData, ...]] = ContextVar(
     "fleche.METADATA", default=load_default_metadata()
 )
 
