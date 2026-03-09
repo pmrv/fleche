@@ -2,8 +2,11 @@ import time
 import sys
 import os
 import json
+import statistics
 import shutil
 import tempfile
+import gc
+from typing import Any
 import numpy as np
 
 from fleche import fleche, cache
@@ -47,7 +50,7 @@ def benchmark_integration(name, cache_obj, func, args, iterations=10):
     # We will subtract the average base execution time from the miss times
     # to isolate the framework overhead (fleche logic + storage save).
     # Since hit times don't execute the function, they don't need this adjustment.
-    _avg_base_time = min(base_times)
+    avg_base_time = min(base_times)
 
     # 1. First Call (Miss)
     miss_overhead_times = []
