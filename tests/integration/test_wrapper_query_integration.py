@@ -22,7 +22,7 @@ def test_wrapper_query_integration(tmp_path):
     # Build a cache with distinct value storage and call storage
     from fleche.caches import Cache
     from fleche.storage import Memory
-    test_cache = Cache(values=Memory({}), calls=store)
+    test_cache = Cache(values=Memory({}), _calls=store)
 
     @fleche
     def add(a, b):
@@ -76,7 +76,7 @@ def test_query_by_result_integration(tmp_path):
     from fleche.storage import Memory
     from fleche.call import Call
 
-    test_cache = Cache(values=Memory({}), calls=store)
+    test_cache = Cache(values=Memory({}), _calls=store)
 
     @fleche
     def add(a, b):

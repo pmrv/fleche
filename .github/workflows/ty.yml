@@ -1,0 +1,24 @@
+name: ty
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  ty:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Setup
+        shell: bash -l {0}
+        run: |
+          pip install -e .[tests] ty
+      - name: Run ty
+        run: ty check src/

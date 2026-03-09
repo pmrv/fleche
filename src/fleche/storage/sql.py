@@ -23,18 +23,18 @@ with ImportAlarm(
         and_,
     )
     from sqlalchemy import event
-    from sqlalchemy.orm import declarative_base, sessionmaker, relationship, Session, aliased
+    from sqlalchemy.orm import declarative_base, sessionmaker, relationship, aliased, Mapped, mapped_column
     from sqlalchemy.types import JSON
 
     Base = declarative_base()
 
     class CallModel(Base):
         __tablename__ = "calls"
-        key = Column(String(DIGEST_LENGTH), primary_key=True)
-        name = Column(String, nullable=False)
-        module = Column(String, nullable=True)
-        version = Column(Integer, nullable=True)
-        result = Column(String(DIGEST_LENGTH), nullable=True)
+        key = mapped_column(String(DIGEST_LENGTH), primary_key=True)
+        name: Mapped[str] = mapped_column(String, nullable=False)
+        module: Mapped[str] = mapped_column(String, nullable=True)
+        version: Mapped[int] = mapped_column(Integer, nullable=True)
+        result: Mapped[str] = mapped_column(String(DIGEST_LENGTH), nullable=True)
 
         arguments = relationship(
             "ArgumentModel",
@@ -45,15 +45,15 @@ with ImportAlarm(
 
     class ArgumentModel(Base):
         __tablename__ = "arguments"
-        id = Column(Integer, primary_key=True, autoincrement=True)
-        call_key = Column(
+        id = mapped_column(Integer, primary_key=True, autoincrement=True)
+        call_key = mapped_column(
             String(DIGEST_LENGTH),
             ForeignKey("calls.key", ondelete="CASCADE"),
             nullable=False,
         )
-        position = Column(Integer, nullable=False)
-        name = Column(String, nullable=False)
-        value = Column(String(DIGEST_LENGTH), nullable=False)
+        position = mapped_column(Integer, nullable=False)
+        name = mapped_column(String, nullable=False)
+        value = mapped_column(String(DIGEST_LENGTH), nullable=False)
 
         __table_args__ = (
             UniqueConstraint("call_key", "name", name="uq_arguments_call_name"),
@@ -63,15 +63,15 @@ with ImportAlarm(
 
     class MetaModel(Base):
         __tablename__ = "metadata"
-        id = Column(Integer, primary_key=True, autoincrement=True)
-        call_key = Column(
+        id = mapped_column(Integer, primary_key=True, autoincrement=True)
+        call_key = mapped_column(
             String(DIGEST_LENGTH),
             ForeignKey("calls.key", ondelete="CASCADE"),
             nullable=False,
             index=True,
         )
-        name = Column(String, nullable=False, index=True)
-        data = Column(JSON, nullable=False)
+        name: Mapped[str] = mapped_column(String, nullable=False, index=True)
+        data: Mapped[dict] = mapped_column(JSON, nullable=False)
 
         __table_args__ = (
             UniqueConstraint("call_key", "name", name="uq_metadata_call_name"),

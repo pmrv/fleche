@@ -172,3 +172,13 @@ class LazyCall:
             result=self._result
         )
         return digest.digest(c)
+
+
+AnyCall = Call | LazyCall
+
+
+__all__ = [
+        "Call",
+        "LazyCall",
+        "AnyCall"
+]

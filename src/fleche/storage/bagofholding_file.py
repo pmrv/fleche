@@ -2,13 +2,13 @@ from dataclasses import dataclass
 from typing import Any
 import logging
 
-logger = logging.getLogger("fleche.storage.bagofholding_file")
-
 from .file import FileStorage
 from .base import SaveError
 from ..digest import Digest
 
 from pyiron_snippets.import_alarm import ImportAlarm
+
+logger = logging.getLogger("fleche.storage.bagofholding_file")
 
 with ImportAlarm(
     "BagOfHoldingH5File requires 'bagofholding' to be installed. "
@@ -26,7 +26,7 @@ class BagOfHoldingH5File(FileStorage):
         if hasattr(super(), "__post_init__"):
             super().__post_init__()
 
-    def _save(self, value: Any, key: Digest) -> str:
+    def _save(self, value: Any, key: Digest) -> Digest:
         try:
             H5Bag.save(value, self._path(key))
         except (ValueError, TypeError):  # h5py choked on something, pass it along
