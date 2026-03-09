@@ -62,6 +62,15 @@ def main():
 
     all_results = []
 
+    old_df = None
+    if pd:
+        old_results_path = os.path.join(benchmark_dir, "results.csv")
+        if os.path.exists(old_results_path):
+            try:
+                old_df = pd.read_csv(old_results_path)
+            except Exception as e:
+                print(f"Failed to read existing results.csv: {e}", file=sys.stderr)
+
     for script in scripts:
         results = run_script(os.path.join(benchmark_dir, script))
         all_results.extend(results)
@@ -213,11 +222,130 @@ def main():
             return "\n".join(table)
 
         print()
-        try:
-            print(parsed_df.to_markdown(index=False))
-        except ImportError:
-            print(to_markdown_table(parsed_df))
-        print("\n")
+
+        # Compare with old_df to find significant changes
+        if old_df is not None and not old_df.empty:
+            try:
+                # Ensure merge columns are strings to match safely
+                merge_cols = ["benchmark", "name", "storage"]
+                for col in merge_cols:
+                    if col in final_df.columns:
+                        final_df[col] = final_df[col].fillna("").astype(str)
+                    if col in old_df.columns:
+                        old_df[col] = old_df[col].fillna("").astype(str)
+
+                compare_df = pd.merge(
+                    final_df, old_df, on=merge_cols, suffixes=("_new", "_old")
+                )
+                # Filter out those where old time is 0 to avoid division by zero
+                compare_df = compare_df[compare_df["time_old"] > 0].copy()
+                compare_df["% Change"] = (
+                    (compare_df["time_new"] - compare_df["time_old"])
+                    / compare_df["time_old"]
+                ) * 100
+
+                significant_changes = compare_df[
+                    compare_df["% Change"].abs() > 5.0
+                ].copy()
+
+                if not significant_changes.empty:
+                    significant_changes = significant_changes.sort_values(
+                        by="% Change", key=abs, ascending=False
+                    )
+
+                    def format_change(val):
+                        sign = "+" if val > 0 else ""
+                        color = (
+                            "🔴" if val > 0 else "🟢"
+                        )  # red for slower, green for faster
+                        return f"{color} {sign}{val:.1f}%"
+
+                    significant_changes["% Change"] = significant_changes[
+                        "% Change"
+                    ].apply(format_change)
+                    significant_changes["Old Time"] = significant_changes[
+                        "time_old"
+                    ].apply(format_time)
+                    significant_changes["New Time"] = significant_changes[
+                        "time_new"
+                    ].apply(format_time)
+
+                    display_cols = [
+                        "benchmark",
+                        "name",
+                        "storage",
+                        "Old Time",
+                        "New Time",
+                        "% Change",
+                    ]
+                    display_changes = significant_changes[
+                        [c for c in display_cols if c in significant_changes.columns]
+                    ]
+
+                    print("<details open>")
+                    print("<summary><b>Significant Changes (>5%)</b></summary>\n")
+                    print('<div style="overflow-x: auto;">\n')
+                    try:
+                        print(display_changes.to_markdown(index=False))
+                    except ImportError:
+                        print(to_markdown_table(display_changes))
+                    print("\n</div>")
+                    print("</details>\n")
+            except Exception as e:
+                print(f"Error computing significant changes: {e}", file=sys.stderr)
+
+        for parent_title, info in parent_categories.items():
+            sub_df = info["data"]
+            if sub_df.empty:
+                continue
+
+            index_col = info["index"]
+
+            print("<details>")
+            print(f"<summary><b>{parent_title}</b></summary>\n")
+            print('<div style="overflow-x: auto;">\n')
+
+            if parent_title == "Value Storage Benchmarks":
+                # Split storage column by '/'
+                sub_df = sub_df.copy()
+                sub_df[["storage_backend", "workload"]] = sub_df["storage"].str.split(
+                    "/", n=1, expand=True
+                )
+
+                workloads = sub_df["workload"].unique()
+                for workload in workloads:
+                    if pd.isna(workload):
+                        continue
+
+                    print(f"<h4>Workload: {workload}</h4>\n")
+                    workload_df = sub_df[sub_df["workload"] == workload].copy()
+                    workload_df["storage"] = workload_df["storage_backend"]
+                    render_table(workload_df, index_col, parent_title)
+            elif parent_title == "Integration Benchmarks":
+                # Split name column by '/'
+                sub_df = sub_df.copy()
+                sub_df[["storage_backend", "workload"]] = sub_df["name"].str.split(
+                    "/", n=1, expand=True
+                )
+
+                workloads = sub_df["workload"].unique()
+                for workload in workloads:
+                    if pd.isna(workload):
+                        continue
+
+                    print(f"<h4>Workload: {workload}</h4>\n")
+                    workload_df = sub_df[sub_df["workload"] == workload].copy()
+                    workload_df["name"] = workload_df["storage_backend"]
+                    render_table(workload_df, index_col, parent_title)
+            elif parent_title == "Call Storage Benchmarks":
+                sub_df = sub_df.copy()
+                sub_df["storage"] = sub_df["storage"].str.replace("/calls", "")
+                render_table(sub_df, index_col, parent_title)
+            else:
+                render_table(sub_df, index_col, parent_title)
+
+            print("</div>")
+            print("</details>\n")
 
         # Also save to CSV
         output_csv = os.path.join(benchmark_dir, "results.csv")
