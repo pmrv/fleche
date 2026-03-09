@@ -6,7 +6,7 @@ import struct
 import types
 import importlib.metadata
 from collections.abc import Iterable
-from typing import Any, TypeVar, Callable
+from typing import Any, TypeVar, Callable, Type
 import math
 
 import numpy as np
@@ -43,10 +43,14 @@ def get_hooks():
     return _HOOKS + _EP_HOOKS
 
 
-def add_hook(hook: Hook | tuple[str, Callable[[T], str]]):
+def add_hook(hook: Hook | tuple[Type[T], Callable[[T], str]]):
     if isinstance(hook, tuple):
-        hook = Hook(*hook)
-    _HOOKS.append(hook)
+        hook = Hook(*hook)  # ty: ignore
+        _HOOKS.append(hook)
+    elif isinstance(hook, Hook):
+        _HOOKS.append(hook)
+    else:
+        raise ValueError("Must be a Hook instance or (type, digest function) tuple!")
 
 
 def load_entry_points():
