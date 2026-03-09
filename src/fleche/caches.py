@@ -1,9 +1,8 @@
 from abc import ABC, abstractmethod
 import logging
-from dataclasses import dataclass, replace
 from dataclasses import dataclass, replace, field, InitVar
 from copy import copy
-from typing import Self, Iterable, Any, Callable
+from typing import Iterable, Any, Callable, overload
 
 import pandas as pd
 
@@ -30,6 +29,14 @@ class BaseCache(ABC):
 
     @abstractmethod
     def save(self, call: Call) -> str:
+        ...
+
+    @overload
+    def load(self, key: str, lazy: bool = False) -> Call:
+        ...
+
+    @overload
+    def load(self, key: str, lazy: bool = True) -> LazyCall:
         ...
 
     @abstractmethod
@@ -101,7 +108,8 @@ class BaseCache(ABC):
         """
         # Query all calls using a wildcard template; rely on concrete caches to
         # handle any necessary decoding (e.g., Cache decodes values on query()).
-        tpl = Call(name=None, arguments=None, metadata=None, module=None, version=None, result=None)
+        # FIXME: We'll want a specific query call type at some point
+        tpl = Call(name=None, arguments=None, metadata=None, module=None, version=None, result=None)  # ty: ignore
 
         rows: dict[str, dict[str, Any]] = {}
         # Use lazy=False to ensure we have actual values for the table
@@ -188,6 +196,12 @@ class Cache(BaseCache):
 
         return self.calls.save(call)
 
+    @overload
+    def _decode_call(self, call: Call, lazy: bool = False) -> Call: ...
+
+    @overload
+    def _decode_call(self, call: Call, lazy: bool = True) -> LazyCall: ...
+
     def _decode_call(self, call: Call, lazy: bool = False) -> Call | LazyCall:
         if lazy:
             return LazyCall(
@@ -204,6 +218,12 @@ class Cache(BaseCache):
         call.arguments = {k: self._handle_args_load(v) for k, v in call.arguments.items()}
         call.result = self.load_value(call.result)
         return call
+
+    @overload
+    def load(self, key: str, lazy: bool = False) -> Call: ...
+
+    @overload
+    def load(self, key: str, lazy: bool = True) -> LazyCall: ...
 
     def load(self, key: str, lazy: bool = False) -> Call | LazyCall:
         call = self.calls.load(key)
@@ -297,7 +317,7 @@ class FilteredCache(ReadOnlyCache):
     predicate: Callable[[Call | LazyCall], bool]
 
     def load(self, key, lazy: bool = False):
-        call = self.cache.load(key, lazy=True)
+        call: LazyCall = self.cache.load(key, lazy=True)  # ty: ignore bug or I'm really tired
         if self.predicate(call):
             if not lazy:
                 return call.fetch()
@@ -310,7 +330,7 @@ class FilteredCache(ReadOnlyCache):
                 yield c
 
 
-@dataclass(frozen=True)
+@dataclass(frozen = True)
 class CacheStack(BaseCache):
     """
     Represents a combination of caches.
