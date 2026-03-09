@@ -92,9 +92,6 @@ def _get_storage(config: dict[str, Any]) -> storage.Storage:
             return storage.Memory({})
         case "Void":
             return storage.Void()
-        case "FileLinkingStorage":
-            config["store"] = _get_storage(config.pop("store"))
-            return storage.FileLinkingStorage(**config)
         case "PickleFile":
             return storage.PickleFile.with_pickle(**config)
         case "CloudpickleFile":
