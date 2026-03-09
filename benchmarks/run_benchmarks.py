@@ -77,8 +77,6 @@ def main():
     # Process results into a DataFrame for display
     df = pd.DataFrame(all_results)
 
-    # Select and reorder columns
-    display_cols = ["topic", "configuration", "workload", "function", "time"]
     # 'storage' column might not exist in all results
     if "storage" not in df.columns:
         df["storage"] = ""
@@ -177,9 +175,7 @@ def main():
             function = b
 
         # Apply formatting and color mapping
-        colored_config = (
-            f"{get_storage_color(config)} {config}" if config else config
-        )
+        colored_config = f"{get_storage_color(config)} {config}" if config else config
         formatted_time = format_time(time_val)
 
         rows.append(
@@ -196,12 +192,40 @@ def main():
     parsed_df = pd.DataFrame(rows)
 
     print()
-    print(
-        parsed_df.drop(columns=["time"])
-        .rename(columns={"time_formatted": "time"})
-        .to_markdown(index=False)
-    )
-    print("\n")
+    for (topic, wkl), group in parsed_df.groupby(["topic", "workload"]):
+        summary_title = f"{topic} ({wkl})" if wkl else topic
+        print(f"<details><summary>{summary_title}</summary>\n")
+
+        # Pivot on function
+        pivot_df = group.pivot(
+            index=["configuration", "workload"], columns="function", values="time"
+        ).reset_index()
+
+        # Drop completely empty columns
+        for col in ["configuration"]:
+            if pivot_df[col].astype(str).str.strip().eq("").all():
+                pivot_df = pivot_df.drop(columns=[col])
+
+        # Apply coloring
+        for col in pivot_df.columns:
+            if col in ["configuration", "workload"]:
+                continue
+
+            min_val = pivot_df[col].min()
+            max_val = pivot_df[col].max()
+
+            def format_and_color(val, min_v, max_v):
+                if pd.isna(val):
+                    return ""
+                val_str = format_time(val)
+                return add_color_to_cell(val_str, val, min_v, max_v)
+
+            pivot_df[col] = pivot_df[col].apply(
+                lambda x: format_and_color(x, min_val, max_val)
+            )
+
+        print(pivot_df.to_markdown(index=False))
+        print("\n</details>\n")
 
     # Also save to CSV
     output_csv = os.path.join(benchmark_dir, "results.csv")
