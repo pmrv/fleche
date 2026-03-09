@@ -55,4 +55,5 @@ tests = [
     "bagofholding == 0.1.9",
     "nbconvert",
     "ipykernel",
+    "tabulate",
 ]

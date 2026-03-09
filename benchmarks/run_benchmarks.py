@@ -5,10 +5,7 @@ import os
 import math
 from typing import List, Dict
 
-try:
-    import pandas as pd
-except ImportError:
-    pd = None
+import pandas as pd
 
 
 def run_script(script_path: str) -> List[Dict]:
@@ -77,166 +74,140 @@ def main():
         if "time" in res:
             res["time"] = round_to_2_sig_figs(res["time"])
 
-    if pd:
-        # Process results into a DataFrame for display
-        df = pd.DataFrame(all_results)
+    # Process results into a DataFrame for display
+    df = pd.DataFrame(all_results)
 
-        # Select and reorder columns
-        display_cols = ["topic", "configuration", "workload", "function", "time"]
-        # 'storage' column might not exist in all results
-        if "storage" not in df.columns:
-            df["storage"] = ""
+    # Select and reorder columns
+    display_cols = ["topic", "configuration", "workload", "function", "time"]
+    # 'storage' column might not exist in all results
+    if "storage" not in df.columns:
+        df["storage"] = ""
+    else:
+        df["storage"] = df["storage"].fillna("")
+
+    # Sort the dataframe by time before processing to preserve order (descending: largest value on top)
+    df = df.sort_values(by="time", ascending=False)
+
+    def add_color_to_cell(
+        val_str: str, raw_val: float, min_val: float, max_val: float
+    ) -> str:
+        # Using 🟢, 🟡, 🔴 emojis as a fallback gradient is safer for Github markdown.
+
+        if max_val == min_val:
+            ratio = 0
         else:
-            df["storage"] = df["storage"].fillna("")
+            ratio = (raw_val - min_val) / (max_val - min_val)
 
-        # Sort the dataframe by time before processing to preserve order (descending: largest value on top)
-        df = df.sort_values(by="time", ascending=False)
+        if ratio < 0.33:
+            emoji = "🟩"
+        elif ratio < 0.66:
+            emoji = "🟨"
+        elif ratio < 0.9:
+            emoji = "🟧"
+        else:
+            emoji = "🟥"
 
-        def add_color_to_cell(
-            val_str: str, raw_val: float, min_val: float, max_val: float
-        ) -> str:
-            # Using 🟢, 🟡, 🔴 emojis as a fallback gradient is safer for Github markdown.
+        return f"{emoji} {val_str}"
 
-            if max_val == min_val:
-                ratio = 0
-            else:
-                ratio = (raw_val - min_val) / (max_val - min_val)
+    # Color mapping for storage backends
+    def get_storage_color(storage_name):
+        if pd.isna(storage_name) or storage_name == "":
+            return ""
+        backend = (
+            str(storage_name).split("/")[0]
+            if "/" in str(storage_name)
+            else str(storage_name)
+        )
+        colors = {
+            "Memory": "🟣",
+            "Memory+Sqlite(:memory:)": "🟤",
+            "PickleFile": "🟢",
+            "PickleFile_Signed": "🟢",
+            "CloudpickleFile": "🔵",
+            "CloudpickleFile_Signed": "🔵",
+            "DillFile": "🟡",
+            "DillFile_Signed": "🟡",
+            "BagOfHoldingH5File": "🟠",
+            "Sql": "🔴",
+            "SqlFile": "🔴",
+            "SqlMemory": "🔴",
+            "Pickle+Sql": "🟢",
+            "H5+Sql": "🟠",
+        }
+        return colors.get(backend, "⚪️")
 
-            if ratio < 0.33:
-                emoji = "🟩"
-            elif ratio < 0.66:
-                emoji = "🟨"
-            elif ratio < 0.9:
-                emoji = "🟧"
-            else:
-                emoji = "🟥"
+    rows = []
+    for _, row in df.iterrows():
+        b = row["benchmark"]
+        n = row.get("name", "")
+        if pd.isna(n):
+            n = ""
+        s = row.get("storage", "")
+        if pd.isna(s):
+            s = ""
+        time_val = row["time"]
 
-            return f"{emoji} {val_str}"
-
-        # Color mapping for storage backends
-        def get_storage_color(storage_name):
-            if pd.isna(storage_name) or storage_name == "":
-                return ""
-            backend = (
-                str(storage_name).split("/")[0]
-                if "/" in str(storage_name)
-                else str(storage_name)
-            )
-            colors = {
-                "Memory": "🟣",
-                "Memory+Sqlite(:memory:)": "🟤",
-                "PickleFile": "🟢",
-                "PickleFile_Signed": "🟢",
-                "CloudpickleFile": "🔵",
-                "CloudpickleFile_Signed": "🔵",
-                "DillFile": "🟡",
-                "DillFile_Signed": "🟡",
-                "BagOfHoldingH5File": "🟠",
-                "Sql": "🔴",
-                "SqlFile": "🔴",
-                "SqlMemory": "🔴",
-                "Pickle+Sql": "🟢",
-                "H5+Sql": "🟠",
-            }
-            return colors.get(backend, "⚪️")
-
-        rows = []
-        for _, row in df.iterrows():
-            b = row["benchmark"]
-            n = row.get("name", "")
-            if pd.isna(n):
-                n = ""
-            s = row.get("storage", "")
-            if pd.isna(s):
-                s = ""
-            time_val = row["time"]
-
-            if b == "digest":
-                topic = "Digest"
-                config = ""
-                workload = n
-                function = "digest"
-            elif b.startswith("storage_"):
-                function = b.replace("storage_", "")
-                if s.endswith("/calls"):
-                    topic = "Call Storage"
-                    parts = s.split("/")
-                    config = parts[0]
-                    workload = parts[1] if len(parts) > 1 else ""
-                else:
-                    topic = "Value Storage"
-                    parts = s.split("/")
-                    config = parts[0]
-                    workload = parts[1] if len(parts) > 1 else ""
-            elif b.startswith("integration_"):
-                topic = "Integration"
-                function = b.replace("integration_", "")
-                parts = str(n).split("/")
+        if b == "digest":
+            topic = "Digest"
+            config = ""
+            workload = n
+            function = "digest"
+        elif b.startswith("storage_"):
+            function = b.replace("storage_", "")
+            if s.endswith("/calls"):
+                topic = "Call Storage"
+                parts = s.split("/")
                 config = parts[0]
                 workload = parts[1] if len(parts) > 1 else ""
             else:
-                topic = "Other"
-                config = ""
-                workload = ""
-                function = b
+                topic = "Value Storage"
+                parts = s.split("/")
+                config = parts[0]
+                workload = parts[1] if len(parts) > 1 else ""
+        elif b.startswith("integration_"):
+            topic = "Integration"
+            function = b.replace("integration_", "")
+            parts = str(n).split("/")
+            config = parts[0]
+            workload = parts[1] if len(parts) > 1 else ""
+        else:
+            topic = "Other"
+            config = ""
+            workload = ""
+            function = b
 
-            # Apply formatting and color mapping
-            colored_config = (
-                f"{get_storage_color(config)} {config}" if config else config
-            )
-            formatted_time = format_time(time_val)
+        # Apply formatting and color mapping
+        colored_config = (
+            f"{get_storage_color(config)} {config}" if config else config
+        )
+        formatted_time = format_time(time_val)
 
-            rows.append(
-                {
-                    "topic": topic,
-                    "configuration": colored_config,
-                    "workload": workload,
-                    "function": function,
-                    "time": formatted_time,
-                }
-            )
-
-        parsed_df = pd.DataFrame(rows)
-
-        def to_markdown_table(df_to_render):
-            # Fallback markdown table generator if tabulate is not installed
-            headers = df_to_render.columns.tolist()
-            rows = df_to_render.values.tolist()
-
-            header_row = "| " + " | ".join(str(h) for h in headers) + " |"
-            separator_row = "| " + " | ".join("---" for _ in headers) + " |"
-
-            table = [header_row, separator_row]
-            for row in rows:
-                table.append(
-                    "| " + " | ".join(str(r) if pd.notna(r) else "" for r in row) + " |"
-                )
-
-            return "\n".join(table)
-
-        print()
-        try:
-            print(parsed_df.to_markdown(index=False))
-        except ImportError:
-            print(to_markdown_table(parsed_df))
-        print("\n")
-
-        # Also save to CSV
-        output_csv = os.path.join(benchmark_dir, "results.csv")
-        # Ensure we only save the columns requested. Strip color emojis from configuration
-        clean_df = parsed_df.copy()
-        clean_df["configuration"] = clean_df["configuration"].str.replace(
-            r"^[^\w\s]+\s+", "", regex=True
+        rows.append(
+            {
+                "topic": topic,
+                "configuration": colored_config,
+                "workload": workload,
+                "function": function,
+                "time": formatted_time,
+            }
         )
 
-        clean_df.to_csv(output_csv, index=False)
-        print(f"Results saved to {output_csv}", file=sys.stderr)
-    else:
-        # Fallback if pandas is not available
-        print("\nBenchmark Results (Pandas not available for pretty printing):\n")
-        print("```json")
-        print(json.dumps(all_results, indent=2))
-        print("```")
+    parsed_df = pd.DataFrame(rows)
+
+    print()
+    print(parsed_df.to_markdown(index=False))
+    print("\n")
+
+    # Also save to CSV
+    output_csv = os.path.join(benchmark_dir, "results.csv")
+    # Ensure we only save the columns requested. Strip color emojis from configuration
+    clean_df = parsed_df.copy()
+    clean_df["configuration"] = clean_df["configuration"].str.replace(
+        r"^[^\w\s]+\s+", "", regex=True
+    )
+
+    clean_df.to_csv(output_csv, index=False)
+    print(f"Results saved to {output_csv}", file=sys.stderr)
 
 
 if __name__ == "__main__":
