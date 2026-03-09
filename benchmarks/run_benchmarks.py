@@ -83,14 +83,9 @@ def main():
     else:
         df["storage"] = df["storage"].fillna("")
 
-    # Sort the dataframe by time before processing to preserve order (descending: largest value on top)
-    df = df.sort_values(by="time", ascending=False)
-
     def add_color_to_cell(
         val_str: str, raw_val: float, min_val: float, max_val: float
     ) -> str:
-        # Using 🟢, 🟡, 🔴 emojis as a fallback gradient is safer for Github markdown.
-
         if max_val == min_val:
             ratio = 0
         else:
@@ -107,7 +102,6 @@ def main():
 
         return f"{emoji} {val_str}"
 
-    # Color mapping for storage backends
     def get_storage_color(storage_name):
         if pd.isna(storage_name) or storage_name == "":
             return ""
@@ -176,7 +170,6 @@ def main():
 
         # Apply formatting and color mapping
         colored_config = f"{get_storage_color(config)} {config}" if config else config
-        formatted_time = format_time(time_val)
 
         rows.append(
             {
@@ -185,57 +178,57 @@ def main():
                 "workload": workload,
                 "function": function,
                 "time": time_val,
-                "time_formatted": formatted_time,
             }
         )
 
     parsed_df = pd.DataFrame(rows)
 
     print()
-    for (topic, wkl), group in parsed_df.groupby(["topic", "workload"]):
-        summary_title = f"{topic} ({wkl})" if wkl else topic
-        print(f"<details><summary>{summary_title}</summary>\n")
+
+    def to_pretty_markdown(df, index: str):
+        """Turn raw timing table into something that can be shown in markdown prettily."""
+
+        min_val = df["time"].min()
+        max_val = df["time"].max()
+
+        def format_and_color(val, min_v, max_v):
+            if pd.isna(val):
+                return ""
+            val_str = format_time(val)
+            return add_color_to_cell(val_str, val, min_v, max_v)
+
+        df.sort_values("time", inplace=True, ascending=False)
+        df["time"] = df["time"].apply(
+            lambda x: format_and_color(x, min_val, max_val)
+        )
 
         # Pivot on function
-        pivot_df = group.pivot(
-            index=["configuration", "workload"], columns="function", values="time"
+        df = df.pivot(
+            index=index, columns="function", values="time"
         ).reset_index()
 
-        # Drop completely empty columns
-        for col in ["configuration"]:
-            if pivot_df[col].astype(str).str.strip().eq("").all():
-                pivot_df = pivot_df.drop(columns=[col])
+        return df.to_markdown(index=False)
 
-        # Apply coloring
-        for col in pivot_df.columns:
-            if col in ["configuration", "workload"]:
-                continue
+    for topic, topic_df in parsed_df.groupby("topic"):
+        print(f"<details><summary>{topic}</summary>\n")
 
-            min_val = pivot_df[col].min()
-            max_val = pivot_df[col].max()
+        if topic == "Digest":
+            print(to_pretty_markdown(topic_df.drop("configuration", axis="columns"), index="workload"))
+        else:
+            for workload, workload_df in topic_df.groupby("workload"):
+                print(f"## {workload}")
+                print(to_pretty_markdown(workload_df, index="configuration"))
 
-            def format_and_color(val, min_v, max_v):
-                if pd.isna(val):
-                    return ""
-                val_str = format_time(val)
-                return add_color_to_cell(val_str, val, min_v, max_v)
-
-            pivot_df[col] = pivot_df[col].apply(
-                lambda x: format_and_color(x, min_val, max_val)
-            )
-
-        print(pivot_df.to_markdown(index=False))
         print("\n</details>\n")
 
     # Also save to CSV
     output_csv = os.path.join(benchmark_dir, "results.csv")
     # Ensure we only save the columns requested. Strip color emojis from configuration
-    clean_df = parsed_df.copy().drop(columns=["time_formatted"])
-    clean_df["configuration"] = clean_df["configuration"].str.replace(
+    parsed_df["configuration"] = parsed_df["configuration"].str.replace(
         r"^[^\w\s]+\s+", "", regex=True
     )
 
-    clean_df.to_csv(output_csv, index=False)
+    parsed_df.to_csv(output_csv, index=False)
     print(f"Results saved to {output_csv}", file=sys.stderr)
 
 
