@@ -226,17 +226,41 @@ def main():
         # Compare with old_df to find significant changes
         if old_df is not None and not old_df.empty:
             try:
-                # Ensure merge columns are strings to match safely
-                merge_cols = ["benchmark", "name", "storage"]
+                # In parsed_df and the updated old_df format, the columns have changed.
+                # old_df represents a previous run, but if the CSV was already overwritten with the new format,
+                # it uses the new columns. To match safely between current parsed_df and old_df:
+                merge_cols = ["topic", "configuration", "workload", "function"]
                 for col in merge_cols:
-                    if col in final_df.columns:
-                        final_df[col] = final_df[col].fillna("").astype(str)
+                    if col in parsed_df.columns:
+                        parsed_df[col] = parsed_df[col].fillna("").astype(str)
                     if col in old_df.columns:
                         old_df[col] = old_df[col].fillna("").astype(str)
 
                 compare_df = pd.merge(
-                    final_df, old_df, on=merge_cols, suffixes=("_new", "_old")
+                    parsed_df, old_df, on=merge_cols, suffixes=("_new", "_old")
                 )
+
+                # We need to process the formatted time strings back into floats for comparison.
+                def extract_time(t_str):
+                    if pd.isna(t_str):
+                        return 0.0
+                    t_str = str(t_str)
+                    try:
+                        val = float(t_str.split()[0])
+                        if " ns" in t_str:
+                            return val * 1e-9
+                        if " µs" in t_str:
+                            return val * 1e-6
+                        if " ms" in t_str:
+                            return val * 1e-3
+                        if " s" in t_str:
+                            return val
+                        return val
+                    except (ValueError, IndexError):
+                        return 0.0
+
+                compare_df["time_old"] = compare_df["time_old"].apply(extract_time)
+                compare_df["time_new"] = compare_df["time_new"].apply(extract_time)
                 # Filter out those where old time is 0 to avoid division by zero
                 compare_df = compare_df[compare_df["time_old"] > 0].copy()
                 compare_df["% Change"] = (
@@ -271,9 +295,10 @@ def main():
                     ].apply(format_time)
 
                     display_cols = [
-                        "benchmark",
-                        "name",
-                        "storage",
+                        "topic",
+                        "configuration",
+                        "workload",
+                        "function",
                         "Old Time",
                         "New Time",
                         "% Change",
@@ -294,55 +319,35 @@ def main():
             except Exception as e:
                 print(f"Error computing significant changes: {e}", file=sys.stderr)
 
-        for parent_title, info in parent_categories.items():
-            sub_df = info["data"]
-            if sub_df.empty:
+        topics = parsed_df["topic"].unique()
+        for topic in topics:
+            if pd.isna(topic) or topic == "":
                 continue
 
-            index_col = info["index"]
-
             print("<details>")
-            print(f"<summary><b>{parent_title}</b></summary>\n")
+            print(f"<summary><b>{topic} Benchmarks</b></summary>\n")
             print('<div style="overflow-x: auto;">\n')
 
-            if parent_title == "Value Storage Benchmarks":
-                # Split storage column by '/'
-                sub_df = sub_df.copy()
-                sub_df[["storage_backend", "workload"]] = sub_df["storage"].str.split(
-                    "/", n=1, expand=True
-                )
+            topic_df = parsed_df[parsed_df["topic"] == topic].copy()
+            workloads = topic_df["workload"].unique()
 
-                workloads = sub_df["workload"].unique()
-                for workload in workloads:
-                    if pd.isna(workload):
-                        continue
+            for workload in workloads:
+                if pd.isna(workload):
+                    continue
 
+                if workload != "":
                     print(f"<h4>Workload: {workload}</h4>\n")
-                    workload_df = sub_df[sub_df["workload"] == workload].copy()
-                    workload_df["storage"] = workload_df["storage_backend"]
-                    render_table(workload_df, index_col, parent_title)
-            elif parent_title == "Integration Benchmarks":
-                # Split name column by '/'
-                sub_df = sub_df.copy()
-                sub_df[["storage_backend", "workload"]] = sub_df["name"].str.split(
-                    "/", n=1, expand=True
-                )
 
-                workloads = sub_df["workload"].unique()
-                for workload in workloads:
-                    if pd.isna(workload):
-                        continue
+                workload_df = topic_df[topic_df["workload"] == workload].copy()
 
-                    print(f"<h4>Workload: {workload}</h4>\n")
-                    workload_df = sub_df[sub_df["workload"] == workload].copy()
-                    workload_df["name"] = workload_df["storage_backend"]
-                    render_table(workload_df, index_col, parent_title)
-            elif parent_title == "Call Storage Benchmarks":
-                sub_df = sub_df.copy()
-                sub_df["storage"] = sub_df["storage"].str.replace("/calls", "")
-                render_table(sub_df, index_col, parent_title)
-            else:
-                render_table(sub_df, index_col, parent_title)
+                # We can drop topic and workload columns since they are in the headers
+                display_df = workload_df.drop(columns=["topic", "workload"])
+
+                try:
+                    print(display_df.to_markdown(index=False))
+                except ImportError:
+                    print(to_markdown_table(display_df))
+                print("\n")
 
             print("</div>")
             print("</details>\n")
