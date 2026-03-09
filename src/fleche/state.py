@@ -6,7 +6,6 @@ from .caches import BaseCache, Cache
 from .config import load_cache_config, load_default_metadata
 from .metadata import MetaData, Tags
 
-
 _CACHE: ContextVar[BaseCache] = ContextVar("fleche.CACHE", default=load_cache_config())
 
 

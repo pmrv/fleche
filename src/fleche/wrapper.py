@@ -15,6 +15,7 @@ from .caches import Rejected
 
 
 import logging
+
 # make messages from decorator below appear as if from the main module
 logger = logging.getLogger("fleche")
 
