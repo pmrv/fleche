@@ -6,7 +6,7 @@ import struct
 import types
 import importlib.metadata
 from collections.abc import Iterable
-from typing import Any, TypeVar, Callable, Type
+from typing import Any, TypeVar, Callable, Type, Generic
 import math
 
 import numpy as np
@@ -30,9 +30,9 @@ T = TypeVar("T")
 
 
 @dataclasses.dataclass
-class Hook:
+class Hook(Generic[T]):
     type: T
-    digest: Callable[[T], str]
+    digest: Callable[[T], str | Digest]
 
 
 _HOOKS = []
