@@ -188,20 +188,25 @@ def main():
                 "configuration": colored_config,
                 "workload": workload,
                 "function": function,
-                "time": formatted_time,
+                "time": time_val,
+                "time_formatted": formatted_time,
             }
         )
 
     parsed_df = pd.DataFrame(rows)
 
     print()
-    print(parsed_df.to_markdown(index=False))
+    print(
+        parsed_df.drop(columns=["time"])
+        .rename(columns={"time_formatted": "time"})
+        .to_markdown(index=False)
+    )
     print("\n")
 
     # Also save to CSV
     output_csv = os.path.join(benchmark_dir, "results.csv")
     # Ensure we only save the columns requested. Strip color emojis from configuration
-    clean_df = parsed_df.copy()
+    clean_df = parsed_df.copy().drop(columns=["time_formatted"])
     clean_df["configuration"] = clean_df["configuration"].str.replace(
         r"^[^\w\s]+\s+", "", regex=True
     )
