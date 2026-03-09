@@ -10,8 +10,8 @@ from collections import defaultdict
 from . import digest
 from . import state
 import fleche.metadata as metadata
-from .call import Call
-from .caches import Rejected
+from .call import Call, AnyCall
+from .caches import Rejected, BaseCache
 
 
 import logging
@@ -32,12 +32,11 @@ def _get_working_directory_root() -> Path:
 
 _T = TypeVar("_T")
 
-
 def fleche(
     _func=None,
     *,
     version: int | None = None,
-    meta: tuple[metadata.MetaData] = (),
+    meta: tuple[metadata.MetaData, ...] = (),
     hash_version: bool = True,
     hash_module: bool = True,
     hash_code: bool = False,
@@ -49,7 +48,7 @@ def fleche(
     Cache decorator for functions.
 
     The decorated function is enhanced with helper methods:
-    - .call(*args, **kwargs): Get the Call object.
+    - .call(*args, **kwargs): Get the :clas:`.Call` object.
     - .digest(*args, **kwargs): Get the cache key.
     - .load(*args, **kwargs): Load result from cache.
     - .contains(*args, **kwargs): Check if result is in cache.
@@ -61,7 +60,7 @@ def fleche(
         The actual decorator that wraps the function.
         """
         if version is not None:
-            func.__version__ = version
+            func.__version__ = version  # ty: ignore
 
         def _ignored_args_tuple() -> tuple[str, ...]:
             if ignore is None:
@@ -94,7 +93,7 @@ def fleche(
 
         def _query_func(
             *args, metadata={}, lazy: bool = False, **kwargs
-        ) -> Iterable[Call]:
+        ) -> Iterable[AnyCall]:
             """Return matching results from current cache.
 
             See :class:`CallStorage.query' for details, except that calls returned from here will have their arguments
@@ -120,7 +119,7 @@ def fleche(
             return state._CACHE.get().query(call, lazy=lazy)
 
         _query_doc = _query_func.__doc__
-        _query_func = wraps(func)(_query_func)
+        _query_func = wraps(func)(_query_func)  # ty: ignore
 
         @wraps(func)
         def _load_func(*args, **kwargs):
@@ -164,7 +163,7 @@ def fleche(
             if any(r not in kwargs for r in required_args):
                 logger.warning("Missing required argument: %s", required_args)
                 return func(*args, **kwargs)
-            cache: Cache = state._CACHE.get()
+            cache: BaseCache = state._CACHE.get()
             try:
                 call = get_call(*args, **kwargs)
                 key = call.to_lookup_key()
@@ -174,10 +173,10 @@ def fleche(
 
             try:
                 result = cache.load(key).result
-                logger.debug("Cache hit for %s with key %s", func.__name__, key)
+                logger.debug("Cache hit for %s with key %s", call.name, key)
                 return result
             except KeyError:
-                logger.debug("Cache miss for %s with key %s", func.__name__, key)
+                logger.debug("Cache miss for %s with key %s", call.name, key)
 
             def _run_and_cache():
                 active_meta = state._METADATA.get() + tuple(meta)
@@ -204,7 +203,7 @@ def fleche(
                     )
                 try:
                     call.metadata = metadata
-                    logger.debug("Saving result for %s with key %s", func.__name__, key)
+                    logger.debug("Saving result for %s with key %s", call.name, key)
                     cache.save(call)
                 except Rejected as e:
                     logger.warning("Cache rejected save: %s", e.args)
@@ -220,11 +219,11 @@ def fleche(
             else:
                 return _run_and_cache()
 
-        wrapper.call = get_call
-        wrapper.digest = _digest_func
-        wrapper.query = _query_func
-        wrapper.load = _load_func
-        wrapper.contains = _contains_func
+        wrapper.call = get_call             # ty: ignore
+        wrapper.digest = _digest_func       # ty: ignore
+        wrapper.query = _query_func         # ty: ignore
+        wrapper.load = _load_func           # ty: ignore
+        wrapper.contains = _contains_func   # ty: ignore
         return wrapper
 
     if callable(_func):
