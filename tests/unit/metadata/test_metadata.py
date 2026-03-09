@@ -2,7 +2,7 @@ import time
 
 import pytest
 
-from fleche import fleche, cache, tags, project, metadata
+from fleche import fleche, cache, tags, project, meta
 from fleche.caches import Cache
 from fleche.metadata import MetaData, Call
 from fleche.storage import Memory
@@ -65,7 +65,7 @@ def test_metadata_context_manager(cache_it: Cache):
         return a + b
 
     with cache(cache_it):
-        with metadata(MyMetadata()):
+        with meta(MyMetadata()):
             my_function(1, 2)
         key = my_function.digest(1, 2)
         call = cache().calls.load(key)
@@ -93,8 +93,8 @@ def test_metadata_context_manager_stacking(cache_it: Cache):
         return a + b
 
     with cache(cache_it):
-        with metadata(MyMetadata1()):
-            with metadata(MyMetadata2(), stack=True):
+        with meta(MyMetadata1()):
+            with meta(MyMetadata2(), stack=True):
                 my_function(1, 2)
         key = my_function.digest(1, 2)
         call = cache().calls.load(key)
@@ -153,7 +153,7 @@ def test_fleche_decorator_and_context_manager(cache_it: Cache):
         return a + b
 
     with cache(cache_it):
-        with metadata(MyMetadata2()):
+        with meta(MyMetadata2()):
             my_function(1, 2)
         key = my_function.digest(1, 2)
         call = cache().calls.load(key)

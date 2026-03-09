@@ -5,7 +5,6 @@ from tests.strategies import st_nested_values
 import numpy as np
 from dataclasses import dataclass, make_dataclass, is_dataclass, fields
 import math
-import hashlib
 import string
 import keyword
 

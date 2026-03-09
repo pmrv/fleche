@@ -1,7 +1,8 @@
 import inspect
 from typing import Iterable
-from fleche import fleche, Call, Digest
-from fleche.digest import Digest as DigestType
+from fleche import fleche
+from fleche.call import Call
+from fleche.digest import Digest
 
 def test_wrapper_metadata():
     @fleche

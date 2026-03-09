@@ -6,7 +6,6 @@ from .caches import BaseCache, Cache
 from .config import load_cache_config, load_default_metadata
 from .metadata import MetaData, Tags
 
-
 _CACHE: ContextVar[BaseCache] = ContextVar("fleche.CACHE", default=load_cache_config())
 
 
@@ -55,7 +54,7 @@ _METADATA: ContextVar[tuple[MetaData]] = ContextVar(
 
 
 @contextmanager
-def metadata(*new_metadata: MetaData, stack=False):
+def meta(*new_metadata: MetaData, stack=False):
     new_metadata = tuple(new_metadata)
     if stack:
         new_metadata = _METADATA.get() + new_metadata
@@ -73,7 +72,7 @@ def tags(**kwargs):
     Args:
         **kwargs: The tags to add to the results.
     """
-    return metadata(Tags(kwargs), stack=True)
+    return meta(Tags(kwargs), stack=True)
 
 
 def project(name):

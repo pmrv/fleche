@@ -3,17 +3,18 @@ import os
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from fleche import fleche, cache, Cache, storage
+from fleche import fleche, cache
+from fleche.caches import Cache
 from fleche.storage import SaveError
+from fleche.wrapper import _get_working_directory_root
+import fleche.storage as storage
 
 def test_get_working_directory_root_default():
-    from fleche import _get_working_directory_root
     with patch.dict(os.environ, {}, clear=True):
         expected = Path.home() / '.cache' / 'fleche' / 'cwd'
         assert _get_working_directory_root() == expected
 
 def test_get_working_directory_root_xdg():
-    from fleche import _get_working_directory_root
     with patch.dict(os.environ, {'XDG_CACHE_HOME': '/tmp/mycache'}):
         expected = Path('/tmp/mycache') / 'fleche' / 'cwd'
         assert _get_working_directory_root() == expected
