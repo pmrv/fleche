@@ -1,7 +1,16 @@
-
 import pytest
 from unittest.mock import MagicMock, patch
-from fleche.digest import digest, Unhashable, Hook, _HOOKS, _EP_HOOKS, load_entry_points, add_hook, get_hooks
+from fleche.digest import (
+    digest,
+    Unhashable,
+    Hook,
+    _HOOKS,
+    _EP_HOOKS,
+    load_entry_points,
+    add_hook,
+    get_hooks,
+)
+
 
 @pytest.fixture(autouse=True)
 def clean_hooks():
@@ -12,12 +21,15 @@ def clean_hooks():
     _HOOKS.clear()
     _EP_HOOKS.clear()
 
+
 class CustomType:
     def __init__(self, value):
         self.value = value
 
+
 def custom_digest(obj):
     return f"custom:{obj.value}"
+
 
 def test_entry_point_discovery():
     """
@@ -44,6 +56,7 @@ def test_entry_point_discovery():
         assert result == "custom:test"
         mock_entry_points.assert_called_with(group="fleche", name="digest")
 
+
 def test_entry_point_list_discovery():
     """
     Test that entry points returning a list of Hook objects are correctly handled.
@@ -58,11 +71,13 @@ def test_entry_point_list_discovery():
         result = digest(obj)
         assert result == "custom:test"
 
+
 def test_add_hook_priority():
     """
     Test that hooks manually added via add_hook take precedence over entry points,
     and that an INFO message is logged when an entry point is overridden.
     """
+
     def manual_digest(obj):
         return f"manual:{obj.value}"
 
@@ -108,8 +123,10 @@ def test_multiple_entry_points():
 
         assert digest(CustomType(4)) == custom_digest(CustomType(4))
 
+
 def test_add_hook_with_hook_instance():
     """Test adding a Hook instance appends it to _HOOKS."""
+
     def dummy_digest(x):
         return "dummy"
 
@@ -119,8 +136,10 @@ def test_add_hook_with_hook_instance():
     assert len(_HOOKS) == 1
     assert _HOOKS[0] is hook
 
+
 def test_add_hook_with_tuple():
     """Test adding a tuple automatically converts it to a Hook instance."""
+
     def dummy_digest(x):
         return "dummy"
 
@@ -132,8 +151,10 @@ def test_add_hook_with_tuple():
     assert _HOOKS[0].type is str
     assert _HOOKS[0].digest is dummy_digest
 
+
 def test_get_hooks():
     """Test get_hooks combines _HOOKS and _EP_HOOKS."""
+
     def dummy_digest1(x):
         return "dummy1"
 

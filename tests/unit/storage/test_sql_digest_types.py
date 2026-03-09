@@ -59,7 +59,14 @@ def test_sql_find_by_metadata_returns_digests(tmp_path):
     k1_loaded = lc1.to_lookup_key()
     k2_loaded = lc2.to_lookup_key()
 
-    tpl = Call(name=None, arguments=None, metadata={"tags": {"project": "alpha"}}, module=None, version=None, result=None)
+    tpl = Call(
+        name=None,
+        arguments=None,
+        metadata={"tags": {"project": "alpha"}},
+        module=None,
+        version=None,
+        result=None,
+    )
     got = {c.to_lookup_key() for c in store.query(tpl)}
     assert k1_loaded in got and k2_loaded not in got
 

@@ -2,6 +2,7 @@ import pytest
 from fleche.storage import Memory, DestructuringStorage
 from fleche.digest import digest
 
+
 def test_destructuring_storage_recursive_list():
     mem = Memory(storage={})
     ds = DestructuringStorage(mem)
@@ -23,6 +24,7 @@ def test_destructuring_storage_recursive_list():
     assert isinstance(loaded[1], list)
     assert isinstance(loaded[2], dict)
 
+
 def test_destructuring_storage_recursive_dict():
     mem = Memory(storage={})
     ds = DestructuringStorage(mem)
@@ -35,6 +37,7 @@ def test_destructuring_storage_recursive_dict():
     assert isinstance(loaded["k1"], list)
     assert isinstance(loaded["k2"], dict)
 
+
 def test_destructuring_storage_tuple():
     mem = Memory(storage={})
     ds = DestructuringStorage(mem)
@@ -46,6 +49,7 @@ def test_destructuring_storage_tuple():
     assert loaded == data
     assert isinstance(loaded, tuple)
     assert isinstance(loaded[2], tuple)
+
 
 def test_destructuring_storage_evict():
     mem = Memory(storage={})

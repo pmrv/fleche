@@ -3,6 +3,7 @@ from fleche.call import Call
 from fleche.caches import Cache
 from fleche.storage import Memory
 
+
 def test_call_matches():
     """Verify that Call.matches() correctly handles wildcards and values."""
     c1 = Call(name="f", arguments={"x": 1}, result=10)
@@ -19,6 +20,7 @@ def test_call_matches():
     assert not Call(name="f", arguments={"x": 2}).matches(c1)
     assert not Call(name="f", arguments={"y": 1}).matches(c1)
     assert not Call(name="f", arguments={"x": 1}, result=20).matches(c1)
+
 
 def test_call_matches_lazy():
     """Verify that Call.matches() correctly handles LazyCall objects."""

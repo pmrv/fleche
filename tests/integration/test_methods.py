@@ -6,6 +6,7 @@ import pytest
 from fleche import fleche
 from fleche.digest import Digest
 
+
 class DigestibleClass:
     def __init__(self, val):
         self.val = val
@@ -19,6 +20,7 @@ class DigestibleClass:
     def method(self, x):
         return self.mock(x)
 
+
 @dataclass
 class DigestibleDataclass:
     val: int
@@ -27,7 +29,9 @@ class DigestibleDataclass:
     def method(self, x):
         return digestible_dataclass_mock(self.val, x)
 
+
 digestible_dataclass_mock = Mock()
+
 
 def test_method_on_same_instance():
     # Use a unique value to avoid interference with other tests using the default cache
@@ -40,6 +44,7 @@ def test_method_on_same_instance():
     assert obj.method(5) == 105
     assert obj.mock.call_count == 1
 
+
 def test_method_on_different_instances_same_digest():
     obj1 = DigestibleClass(101)
     assert obj1.method(5) == 106
@@ -49,6 +54,7 @@ def test_method_on_different_instances_same_digest():
     # Same digest as obj1, should hit the cache even if different instance
     assert obj2.method(5) == 106
     assert obj2.mock.call_count == 0
+
 
 def test_method_on_mutated_instance():
     obj = DigestibleClass(102)
@@ -60,6 +66,7 @@ def test_method_on_mutated_instance():
     # Should be a miss because the 'self' argument has a different digest
     assert obj.method(5) == 207
     assert obj.mock.call_count == 2
+
 
 def test_method_on_dataclass():
     digestible_dataclass_mock.reset_mock()

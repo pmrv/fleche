@@ -1,4 +1,3 @@
-
 import os
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -9,15 +8,18 @@ from fleche.storage import SaveError
 from fleche.wrapper import _get_working_directory_root
 import fleche.storage as storage
 
+
 def test_get_working_directory_root_default():
     with patch.dict(os.environ, {}, clear=True):
-        expected = Path.home() / '.cache' / 'fleche' / 'cwd'
+        expected = Path.home() / ".cache" / "fleche" / "cwd"
         assert _get_working_directory_root() == expected
 
+
 def test_get_working_directory_root_xdg():
-    with patch.dict(os.environ, {'XDG_CACHE_HOME': '/tmp/mycache'}):
-        expected = Path('/tmp/mycache') / 'fleche' / 'cwd'
+    with patch.dict(os.environ, {"XDG_CACHE_HOME": "/tmp/mycache"}):
+        expected = Path("/tmp/mycache") / "fleche" / "cwd"
         assert _get_working_directory_root() == expected
+
 
 def test_fleche_changes_and_restores_cwd():
     original_cwd = os.getcwd()
@@ -32,6 +34,7 @@ def test_fleche_changes_and_restores_cwd():
         assert "cwd" in cwd
         assert os.getcwd() == original_cwd
 
+
 def test_fleche_no_isolate_no_cwd_change():
     original_cwd = os.getcwd()
 
@@ -42,6 +45,7 @@ def test_fleche_no_isolate_no_cwd_change():
     with cache(Cache(storage.Memory({}), storage.Memory({}))):
         cwd = get_cwd()
         assert cwd == original_cwd
+
 
 def test_fleche_cleans_up_workdir_on_success():
     workdir_capture = []
@@ -57,6 +61,7 @@ def test_fleche_cleans_up_workdir_on_success():
         workdir = workdir_capture[0]
         assert not os.path.exists(workdir)
 
+
 def test_fleche_cleans_up_workdir_on_none_result():
     workdir_capture = []
 
@@ -70,6 +75,7 @@ def test_fleche_cleans_up_workdir_on_none_result():
         my_func()
         workdir = workdir_capture[0]
         assert not os.path.exists(workdir)
+
 
 def test_fleche_cleans_up_on_save_error():
     workdir_capture = []
@@ -89,6 +95,7 @@ def test_fleche_cleans_up_on_save_error():
         # (or when the context manager exits)
         assert not os.path.exists(workdir)
 
+
 def test_distinct_workdirs_for_different_calls():
     workdirs = []
 
@@ -101,6 +108,7 @@ def test_distinct_workdirs_for_different_calls():
         func(1)
         func(2)
         assert workdirs[0] != workdirs[1]
+
 
 def test_distinct_workdirs_for_same_call():
     workdirs = []

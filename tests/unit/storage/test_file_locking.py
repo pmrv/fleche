@@ -7,6 +7,7 @@ import pytest
 from fleche.storage import PickleFile
 from fleche.digest import digest
 
+
 def test_load_waits_for_lock():
     with tempfile.TemporaryDirectory() as tmpdir:
         storage = PickleFile.with_pickle(tmpdir)
@@ -31,6 +32,7 @@ def test_load_waits_for_lock():
         assert (end - start) >= 0.2
         print(f"Waited for {(end - start):.3f}s")
 
+
 def test_load_timeouts_and_reads_anyway(caplog):
     with tempfile.TemporaryDirectory() as tmpdir:
         storage = PickleFile.with_pickle(tmpdir, lock_timeout=0.1)
@@ -49,6 +51,7 @@ def test_load_timeouts_and_reads_anyway(caplog):
         assert (end - start) >= 0.1
         assert "trying to read anyway" in caplog.text
 
+
 def test_load_fails_after_timeout_raises_keyerror(caplog):
     with tempfile.TemporaryDirectory() as tmpdir:
         storage = PickleFile.with_pickle(tmpdir, lock_timeout=0.1)
@@ -63,6 +66,7 @@ def test_load_fails_after_timeout_raises_keyerror(caplog):
 
         assert "Failed to read" in caplog.text
 
+
 def test_save_creates_and_removes_lock(monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
         storage = PickleFile.with_pickle(tmpdir)
@@ -71,6 +75,7 @@ def test_save_creates_and_removes_lock(monkeypatch):
         data_path = storage._path(key)
 
         write_called = False
+
         def mocked_write_bytes(self, data):
             nonlocal write_called
             if self == data_path:
@@ -84,6 +89,7 @@ def test_save_creates_and_removes_lock(monkeypatch):
         storage.save("data", key=key)
         assert write_called
         assert not lock_path.exists()
+
 
 def test_list_excludes_locks():
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -99,6 +105,7 @@ def test_list_excludes_locks():
         assert len(keys) == 1
         for k in keys:
             assert not k.endswith(".lock")
+
 
 def test_evict_removes_lock():
     with tempfile.TemporaryDirectory() as tmpdir:

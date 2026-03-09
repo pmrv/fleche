@@ -2,6 +2,7 @@ from hypothesis import strategies as st
 from dataclasses import make_dataclass
 import string
 import keyword
+import numpy as np
 from fleche.call import Call
 
 
@@ -72,4 +73,32 @@ st_nested_values = st.recursive(
         dataclasses(children),
     ),
     max_leaves=10,
+)
+
+st_data = st.one_of(
+    st.integers(),
+    st.floats(allow_nan=False),
+    st.text(),
+    st.binary(),
+    st.booleans(),
+    st.lists(st.integers()),
+    st.tuples(st.integers(), st.text()),
+    st.dictionaries(st.text(), st.integers()),
+    st.builds(np.array, st.lists(st.integers())),
+)
+
+st_hex = st.text(min_size=64, max_size=64, alphabet="0123456789abcdef")
+
+st_digested_calls = st.builds(
+    Call,
+    name=st.text(min_size=1, max_size=10),
+    arguments=st.dictionaries(
+        st.text(string.ascii_letters + string.digits + "_", min_size=1, max_size=5),
+        st_hex,
+        max_size=6,
+    ),
+    metadata=st.builds(dict),
+    module=st.one_of(st.none(), st.text(min_size=1, max_size=10)),
+    version=st.one_of(st.none(), st.integers(min_value=0, max_value=100)),
+    result=st.one_of(st.none(), st_hex),
 )

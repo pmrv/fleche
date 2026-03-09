@@ -14,7 +14,7 @@ class Input:
 def test_dataclass_input():
     mock = Mock()
     mock.return_value = 42
-    mock.__name__ = 'func'
+    mock.__name__ = "func"
     func = fleche(mock)
 
     func(Input(1, 1.0))
@@ -26,7 +26,7 @@ def test_dataclass_input():
 def test_dict_input():
     mock = Mock()
     mock.return_value = 42
-    mock.__name__ = 'func'
+    mock.__name__ = "func"
     func = fleche(mock)
 
     func(asdict(Input(1, 1.0)))

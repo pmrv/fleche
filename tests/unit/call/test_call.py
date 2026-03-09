@@ -1,6 +1,7 @@
 from fleche.call import Call
 import pytest
 
+
 def test_code_digest_is_hashed_in_lookup_key():
     """
     Verify that two Call objects which differ ONLY by their code_digest
@@ -11,6 +12,7 @@ def test_code_digest_is_hashed_in_lookup_key():
 
     assert call_a.to_lookup_key() != call_b.to_lookup_key()
 
+
 def test_code_digest_none_vs_string():
     """
     Verify that a Call with no code_digest differs from one with a code_digest.
@@ -20,11 +22,13 @@ def test_code_digest_none_vs_string():
 
     assert call_none.to_lookup_key() != call_str.to_lookup_key()
 
+
 def test_from_call_populates_code_digest():
     """
     Verify that Call.from_call correctly populates the code_digest field
     from the function's __code__ object.
     """
+
     def my_func(x):
         return x + 1
 
@@ -35,11 +39,13 @@ def test_from_call_populates_code_digest():
     # Basic sanity check that it looks like a hex digest
     assert len(call.code_digest) > 0
 
+
 def test_different_function_implementations_have_different_digests():
     """
     Verify that two functions with the same name but different bytecode
     result in Call objects with different code_digests and lookup keys.
     """
+
     def func_v1(x):
         return x + 1
 
@@ -63,11 +69,13 @@ def test_different_function_implementations_have_different_digests():
     assert call_v1.code_digest != call_v2.code_digest
     assert call_v1.to_lookup_key() != call_v2.to_lookup_key()
 
+
 def test_same_function_implementation_has_same_digest():
     """
     Verify that two functions with identical implementation (and metadata)
     result in the same code_digest.
     """
+
     # Define two identical functions in different scopes/names to start
     def func_a(x):
         return x * x

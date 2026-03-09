@@ -11,14 +11,22 @@ def _flip_last_nibble(hexstr: str) -> str:
     last = hexstr[-1]
     # simple alternating map to keep it deterministic
     table = {
-        "0": "1", "1": "0",
-        "2": "3", "3": "2",
-        "4": "5", "5": "4",
-        "6": "7", "7": "6",
-        "8": "9", "9": "8",
-        "a": "b", "b": "a",
-        "c": "d", "d": "c",
-        "e": "f", "f": "e",
+        "0": "1",
+        "1": "0",
+        "2": "3",
+        "3": "2",
+        "4": "5",
+        "5": "4",
+        "6": "7",
+        "7": "6",
+        "8": "9",
+        "9": "8",
+        "a": "b",
+        "b": "a",
+        "c": "d",
+        "d": "c",
+        "e": "f",
+        "f": "e",
     }
     return hexstr[:-1] + table[last]
 
@@ -103,6 +111,7 @@ def test_redigest_updates_call_keys_on_call_hash_change(monkeypatch):
 
     # Single-site patch: only Calls change
     import fleche.digest as fd
+
     patched = make_patched_digest(fd.digest, mode="calls_change")
     monkeypatch.setattr(fd, "digest", patched, raising=True)
 

@@ -35,7 +35,9 @@ def test_digest_ignores_ignored_argument_all_supported_binding_forms():
     k_kw_kw_2 = f.digest(a=999, b=2)
 
     # All should be equal because 'a' is ignored
-    assert k_pos_pos_1 == k_pos_pos_2 == k_pos_kw_1 == k_pos_kw_2 == k_kw_kw_1 == k_kw_kw_2
+    assert (
+        k_pos_pos_1 == k_pos_pos_2 == k_pos_kw_1 == k_pos_kw_2 == k_kw_kw_1 == k_kw_kw_2
+    )
 
 
 def test_non_ignored_argument_changes_digest():

@@ -2,7 +2,6 @@ import pytest
 import string
 from hypothesis import given, strategies as st
 import numpy as np
-import tempfile
 from pathlib import Path
 
 from fleche.storage import SaveError, PickleFile, Memory, BagOfHoldingH5File
@@ -11,72 +10,52 @@ from fleche.call import Call
 from fleche.digest import digest, Digest
 from fleche.storage.base import DigestedIterable
 
+from tests.strategies import st_data, st_digested_calls
+from tests.fixtures import value_storages, call_storages
 
-temp = tempfile.TemporaryDirectory()
-temp_pickle = tempfile.TemporaryDirectory()
-temp_bag = tempfile.TemporaryDirectory()
 
-# Use fixed secret keys for tests
-secret_key = [b"test_secret_key_32_bytes_long!!!!"]
-storages = [
-    Memory({}),
-    PickleFile.with_cloudpickle(temp.name, secret_key=secret_key),
-    PickleFile.with_dill(temp.name, secret_key=secret_key),
-    PickleFile.with_pickle(temp_pickle.name, secret_key=secret_key),
-    BagOfHoldingH5File(temp_bag.name)
-]
-
-st_data = st.one_of(
-    st.integers(),
-    st.floats(allow_nan=False),
-    st.text(),
-    st.binary(),
-    st.booleans(),
-    st.lists(st.integers()),
-    st.tuples(st.integers(), st.text()),
-    st.dictionaries(st.text(), st.integers()),
-    st.builds(np.array, st.lists(st.integers())),
-)
-
-@pytest.mark.parametrize("storage", storages)
+@pytest.mark.parametrize("value_storage", value_storages)
 @given(st_data)
-def test_storage(storage, value):
+def test_storage(value_storage, value):
     try:
-        key = storage.save(value)
+        key = value_storage.save(value)
     except SaveError:
-        return # not everyone can save everyone and that's ok, too
-    loaded_value = storage.load(key)
+        return  # not everyone can save everyone and that's ok, too
+    loaded_value = value_storage.load(key)
     if isinstance(value, np.ndarray):
         np.testing.assert_array_equal(loaded_value, value)
     else:
         assert loaded_value == value
 
 
-@pytest.mark.parametrize("storage", storages)
+@pytest.mark.parametrize("value_storage", value_storages)
 @given(st_data)
-def test_storage_given_key(storage, value):
+def test_storage_given_key(value_storage, value):
     # make up a unique key by hashing hash
     given_key = digest(str(digest(value)))
     try:
-        key = storage.save(value, key=given_key)
+        key = value_storage.save(value, key=given_key)
     except SaveError:
-        return # not everyone can save everyone and that's ok, too
+        return  # not everyone can save everyone and that's ok, too
     assert key == given_key, "When forcing a key, storage must return the same key"
 
-    loaded_value = storage.load(given_key)
+    loaded_value = value_storage.load(given_key)
     if isinstance(value, np.ndarray):
         np.testing.assert_array_equal(loaded_value, value)
     else:
         assert loaded_value == value, "value not available under given key"
 
 
-@pytest.mark.parametrize("storage", storages)
-@pytest.mark.parametrize("value", [
-    DigestedIterable([Digest("asdf"), Digest("foobar")]),
-    DigestedIterable((Digest("asdf"), Digest("foobar"))),
-])
-def test_digested(storage, value):
-    loaded_value = storage.load(storage.save(value))
+@pytest.mark.parametrize("value_storage", value_storages)
+@pytest.mark.parametrize(
+    "value",
+    [
+        DigestedIterable([Digest("asdf"), Digest("foobar")]),
+        DigestedIterable((Digest("asdf"), Digest("foobar"))),
+    ],
+)
+def test_digested(value_storage, value):
+    loaded_value = value_storage.load(value_storage.save(value))
     assert loaded_value == value, "digested value not available under given key"
 
 
@@ -84,41 +63,10 @@ def test_digested(storage, value):
 # CallStorage property tests
 # ------------------------
 
-# Dedicated temp roots for call storages
-temp_calls_root = tempfile.TemporaryDirectory()
-temp_calls_pickle = tempfile.TemporaryDirectory()
-temp_calls_h5 = tempfile.TemporaryDirectory()
-temp_calls_sql = tempfile.TemporaryDirectory()
-
-call_storages = [
-    Memory({}),
-    PickleFile.with_cloudpickle(temp_calls_root.name, secret_key=secret_key),
-    PickleFile.with_dill(temp_calls_root.name, secret_key=secret_key),
-    PickleFile.with_pickle(temp_calls_pickle.name, secret_key=secret_key),
-    BagOfHoldingH5File(temp_calls_h5.name),
-    Sql(Path(temp_calls_sql.name) / "calls.db"),
-]
-
-# Strategies for generating Call instances with digest-string args/kwargs/result
-st_call_name = st.text(min_size=1, max_size=10)
-st_hex = st.text(min_size=64, max_size=64, alphabet="0123456789abcdef")
-st_call_arguments = st.dictionaries(
-    st.text(string.ascii_letters + string.digits + "_", min_size=1, max_size=5),
-    st_hex,
-    max_size=6,
-)
-
 
 @pytest.mark.parametrize("call_storage", call_storages)
-@given(
-    name=st_call_name,
-    arguments=st_call_arguments,
-    module=st.one_of(st.none(), st.text(min_size=1, max_size=10)),
-    version=st.one_of(st.none(), st.integers(min_value=0, max_value=100)),
-    result=st.one_of(st.none(), st_hex),
-)
-def test_callstorages_random_calls_roundtrip(call_storage, name, arguments, module, version, result):
-    call = Call(name=name, arguments=arguments, metadata={}, module=module, version=version, result=result)
+@given(call=st_digested_calls)
+def test_callstorages_random_calls_roundtrip(call_storage, call):
     try:
         key = call_storage.save(call)
     except SaveError:
@@ -129,15 +77,8 @@ def test_callstorages_random_calls_roundtrip(call_storage, name, arguments, modu
 
 
 @pytest.mark.parametrize("call_storage", call_storages)
-@given(
-    name=st_call_name,
-    arguments=st_call_arguments,
-    module=st.one_of(st.none(), st.text(min_size=1, max_size=10)),
-    version=st.one_of(st.none(), st.integers(min_value=0, max_value=100)),
-    result=st.one_of(st.none(), st_hex),
-)
-def test_callstorages_short_prefix_load(call_storage, name, arguments, module, version, result):
-    call = Call(name=name, arguments=arguments, metadata={}, module=module, version=version, result=result)
+@given(call=st_digested_calls)
+def test_callstorages_short_prefix_load(call_storage, call):
     try:
         key = call_storage.save(call)
     except SaveError:
@@ -149,7 +90,14 @@ def test_callstorages_short_prefix_load(call_storage, name, arguments, module, v
 
 @pytest.mark.parametrize("call_storage", call_storages)
 def test_callstorages_evict(call_storage):
-    call = Call(name="evict_me", arguments={"a": "a" * 64}, metadata={}, module=None, version=None, result=None)
+    call = Call(
+        name="evict_me",
+        arguments={"a": "a" * 64},
+        metadata={},
+        module=None,
+        version=None,
+        result=None,
+    )
     try:
         key = call_storage.save(call)
     except SaveError:
@@ -179,15 +127,29 @@ def test_sql_metadata_roundtrip_and_query(tmp_path):
     store = Sql(str(tmp_path / "calls.db"))
 
     # Create two calls with metadata
-    c1 = Call(name="f1", arguments={"a": "a" * 64}, metadata={
-        "runtime": {"walltime": 1.23, "timestart": 0.1, "timestop": 1.33},
-        "tags": {"project": "alpha", "phase": "train"},
-    }, module=None, version=None, result=None)
+    c1 = Call(
+        name="f1",
+        arguments={"a": "a" * 64},
+        metadata={
+            "runtime": {"walltime": 1.23, "timestart": 0.1, "timestop": 1.33},
+            "tags": {"project": "alpha", "phase": "train"},
+        },
+        module=None,
+        version=None,
+        result=None,
+    )
 
-    c2 = Call(name="f2", arguments={"b": "b" * 64}, metadata={
-        "runtime": {"walltime": 2.0},
-        "tags": {"project": "beta", "phase": "eval"},
-    }, module=None, version=None, result=None)
+    c2 = Call(
+        name="f2",
+        arguments={"b": "b" * 64},
+        metadata={
+            "runtime": {"walltime": 2.0},
+            "tags": {"project": "beta", "phase": "eval"},
+        },
+        module=None,
+        version=None,
+        result=None,
+    )
 
     k1 = store.save(c1)
     k2 = store.save(c2)
@@ -198,11 +160,25 @@ def test_sql_metadata_roundtrip_and_query(tmp_path):
     assert lc2.metadata == c2.metadata
 
     # Query by metadata name and key using query(template)
-    t1 = Call(name=None, arguments=None, metadata={"tags": {"project": "alpha"}}, module=None, version=None, result=None)
+    t1 = Call(
+        name=None,
+        arguments=None,
+        metadata={"tags": {"project": "alpha"}},
+        module=None,
+        version=None,
+        result=None,
+    )
     names_alpha = {c.name for c in store.query(t1)}
     assert names_alpha == {"f1"}
 
     # Query across all names (e.g., by walltime value) using query(template)
-    t2 = Call(name=None, arguments=None, metadata={"runtime": {"walltime": 2.0}}, module=None, version=None, result=None)
+    t2 = Call(
+        name=None,
+        arguments=None,
+        metadata={"runtime": {"walltime": 2.0}},
+        module=None,
+        version=None,
+        result=None,
+    )
     names_walltime_2 = {c.name for c in store.query(t2)}
     assert names_walltime_2 == {"f2"}

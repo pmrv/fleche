@@ -19,6 +19,7 @@ def test_query_lazy(test_cache):
 def test_query_partial_arguments(test_cache):
 
     with cache(test_cache):
+
         @fleche
         def bar(x, y, z=10):
             return x + y + z
@@ -31,6 +32,7 @@ def test_query_partial_arguments(test_cache):
 
 def test_query_partial_arguments(test_cache):
     with cache(test_cache):
+
         @fleche
         def bar(x, y, z=10):
             return x + y + z
@@ -38,7 +40,7 @@ def test_query_partial_arguments(test_cache):
         # Test that .call with partial=True works and applies defaults for missing
         # We need to access the wrapper's get_call which is exposed as .call
         call_obj = bar.call(y=5, partial=True)
-        assert call_obj.arguments == {'x': None, 'y': 5, 'z': 10}
+        assert call_obj.arguments == {"x": None, "y": 5, "z": 10}
 
         # Test that .query uses partial binding
         bar(1, 5, 10)
@@ -63,6 +65,7 @@ def test_query_partial_arguments(test_cache):
         results = list(bar.query(x=1))
         assert len(results) == 2
 
+
 def test_query_preserves_order_with_partial():
     @fleche
     def order_func(a, b, c):
@@ -70,5 +73,5 @@ def test_query_preserves_order_with_partial():
 
     call_obj = order_func.call(c=3, a=1, partial=True)
     # The order of arguments should follow the function signature
-    assert list(call_obj.arguments.keys()) == ['a', 'b', 'c']
-    assert call_obj.arguments == {'a': 1, 'b': None, 'c': 3}
+    assert list(call_obj.arguments.keys()) == ["a", "b", "c"]
+    assert call_obj.arguments == {"a": 1, "b": None, "c": 3}

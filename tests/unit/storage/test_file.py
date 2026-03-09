@@ -1,10 +1,10 @@
-
 import pytest
 from pathlib import Path
 from fleche.storage.file import FileStorage
 from fleche.digest import Digest
 from dataclasses import dataclass
 from typing import Any
+
 
 @dataclass
 class ConcreteFileStorage(FileStorage):
@@ -13,6 +13,7 @@ class ConcreteFileStorage(FileStorage):
 
     def _load(self, key: Digest) -> Any:
         return None
+
 
 def test_file_storage_list_filtering(tmp_path):
     storage = ConcreteFileStorage(root=tmp_path)
