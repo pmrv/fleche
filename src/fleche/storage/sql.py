@@ -34,6 +34,7 @@ with ImportAlarm(
         name: Mapped[str] = mapped_column(String, nullable=False)
         module: Mapped[str] = mapped_column(String, nullable=True)
         version: Mapped[int] = mapped_column(Integer, nullable=True)
+        code_digest: Mapped[str] = mapped_column(String(DIGEST_LENGTH), nullable=True)
         result: Mapped[str] = mapped_column(String(DIGEST_LENGTH), nullable=True)
 
         arguments = relationship(
@@ -142,6 +143,7 @@ class Sql(CallStorage):
                 name=call.name,
                 module=call.module,
                 version=call.version,
+                code_digest=call.code_digest,
                 result=call.result if call.result is None else str(call.result),
             )
             session.add(call_model)
@@ -189,6 +191,7 @@ class Sql(CallStorage):
                 metadata={row.name: (row.data or {}) for row in meta_rows},
                 module=call_model.module,
                 version=call_model.version,
+                code_digest=call_model.code_digest,
                 result=(
                     Digest(call_model.result) if call_model.result is not None else None
                 ),
