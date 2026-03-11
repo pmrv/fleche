@@ -7,7 +7,7 @@ from .state import (
         tags,
         project,
 )
-from .wrapper import fleche
+from .wrapper import fleche, Ignored, Required
 
 
 def D(d: str) -> digest.Digest:
@@ -21,9 +21,11 @@ def D(d: str) -> digest.Digest:
 
 
 __all__ = [
-        fleche,
-        cache,
-        meta,
-        tags,
-        project,
+        "fleche",
+        "cache",
+        "meta",
+        "tags",
+        "project",
+        "Ignored",
+        "Required",
 ]

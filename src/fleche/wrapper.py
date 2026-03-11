@@ -1,7 +1,8 @@
 import os
 from pathlib import Path
 from functools import wraps
-from typing import Any, Callable, Dict, Iterable, TypeVar
+from inspect import signature
+from typing import Any, Callable, Dict, Iterable, TypeVar, Annotated, get_type_hints, get_origin, get_args
 from dataclasses import replace
 import tempfile
 import contextlib
@@ -18,6 +19,93 @@ import logging
 
 # make messages from decorator below appear as if from the main module
 logger = logging.getLogger("fleche")
+
+
+class Ignored:
+    """
+    Type wrapper to mark a function argument as ignored for caching.
+
+    Can be used as a type hint: ``arg: fleche.Ignored`` or ``arg: fleche.Ignored[int]``.
+    """
+
+    def __class_getitem__(cls, item):
+        return Annotated[item, cls]
+
+
+class Required:
+    """
+    Type wrapper to mark a function argument as required for caching.
+
+    Arguments marked as required must be explicitly provided by the caller as keyword
+    arguments (i.e.  not via their default value) for the result to be cached.
+    This is useful for arguments like random seeds or iteration counts, where
+    using the default value might lead to non-deterministic or otherwise
+    undesirable caching behavior.
+
+    This is mainly useful when wrapping third-party functions where you do not control
+    the default arguments.
+
+    Can be used as a type hint: ``arg: fleche.Required`` or ``arg: fleche.Required[int]``.
+    """
+
+    def __class_getitem__(cls, item):
+        return Annotated[item, cls]
+
+
+def process_ignore_required_args(
+        func,
+        ignore: None | str | Iterable[str] = None,
+        require: None | str | Iterable[str] = None,
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Collates arguments that should be ignored/required for caching from explicit arguments and annotations."""
+
+    try:
+        hints = get_type_hints(func, include_extras=True)
+    except (TypeError, NameError):
+        hints = {}
+
+    def is_ignored(hint):
+        if hint is Ignored:
+            return True
+        if get_origin(hint) is Annotated:
+            return Ignored in get_args(hint)
+        return False
+
+    def is_required(hint):
+        if hint is Required:
+            return True
+        if get_origin(hint) is Annotated:
+            return Required in get_args(hint)
+        return False
+
+    type_ignored = [name for name, hint in hints.items() if is_ignored(hint)]
+    type_required = [name for name, hint in hints.items() if is_required(hint)]
+
+    if ignore is None:
+        ignore = ()
+    elif isinstance(ignore, str):
+        ignore = (ignore,)
+    else:
+        ignore = tuple(ignore)
+    ignored_args = ignore + tuple(type_ignored)
+
+    if require is None:
+        require = ()
+    elif isinstance(require, str):
+        require = (require,)
+    else:
+        require = tuple(require)
+    required_args = require + tuple(type_required)
+
+    try:
+        sig = signature(func)
+        for r in required_args:
+            if r in sig.parameters and sig.parameters[r].kind == sig.parameters[r].POSITIONAL_ONLY:
+                logger.warning("Argument '%s' is marked as Required but is positional-only. Required only works for keyword arguments.", r)
+    except (TypeError, ValueError):
+        pass
+
+    return ignored_args, required_args
 
 
 def _get_working_directory_root() -> Path:
@@ -63,12 +151,8 @@ def fleche(
         if version is not None:
             func.__version__ = version  # ty: ignore
 
-        def _ignored_args_tuple() -> tuple[str, ...]:
-            if ignore is None:
-                return ()
-            if isinstance(ignore, str):
-                return (ignore,)
-            return tuple(ignore)
+        ignored_args, required_args = process_ignore_required_args(func, ignore, require)
+        print(ignored_args, required_args)
 
         @wraps(func)
         def get_call(*args, partial=False, **kwargs):
@@ -78,7 +162,7 @@ def fleche(
             # generation, but then we'd also have to save it somehow and that just seems bothersome in particular for
             # Sql Callstorage.  We could add a new table there connecting unique functions and their ignored args, but
             # meh.
-            for ign in _ignored_args_tuple():
+            for ign in ignored_args:
                 del call.arguments[ign]
             if not hash_version:
                 call.version = None
@@ -168,15 +252,13 @@ def fleche(
 
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> _T:
-            if require is None:
-                required_args = ()
-            elif isinstance(require, str):
-                required_args = (require,)
-            else:
-                required_args = require
-            if any(r not in kwargs for r in required_args):
-                logger.warning("Missing required argument: %s", required_args)
+            missing = [r for r in required_args if r not in kwargs]
+            if missing:
+                logger.warning(
+                    "Missing required keyword arguments for caching: %s", missing
+                )
                 return func(*args, **kwargs)
+
             cache: BaseCache = state._CACHE.get()
             try:
                 call = get_call(*args, **kwargs)
@@ -184,6 +266,7 @@ def fleche(
             except digest.Unhashable as e:
                 logger.warning("No hash for argument: %s", e.args[0])
                 return func(*args, **kwargs)
+
 
             try:
                 result = cache.load(key).result
@@ -245,3 +328,10 @@ def fleche(
         return decorator(_func)
     else:
         return decorator
+
+
+__all__ = [
+        "Ignored",
+        "Required",
+        "fleche",
+]
