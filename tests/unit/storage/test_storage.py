@@ -1,6 +1,6 @@
 import pytest
 import string
-from hypothesis import given, strategies as st
+from hypothesis import given, settings, HealthCheck, strategies as st
 import numpy as np
 from pathlib import Path
 
@@ -11,10 +11,9 @@ from fleche.digest import digest, Digest
 from fleche.storage.base import DigestedIterable
 
 from tests.strategies import st_data, st_digested_calls
-from tests.fixtures import value_storages, call_storages
 
 
-@pytest.mark.parametrize("value_storage", value_storages)
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 @given(st_data)
 def test_storage(value_storage, value):
     try:
@@ -28,7 +27,7 @@ def test_storage(value_storage, value):
         assert loaded_value == value
 
 
-@pytest.mark.parametrize("value_storage", value_storages)
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 @given(st_data)
 def test_storage_given_key(value_storage, value):
     # make up a unique key by hashing hash
@@ -46,7 +45,6 @@ def test_storage_given_key(value_storage, value):
         assert loaded_value == value, "value not available under given key"
 
 
-@pytest.mark.parametrize("value_storage", value_storages)
 @pytest.mark.parametrize(
     "value",
     [
@@ -64,7 +62,7 @@ def test_digested(value_storage, value):
 # ------------------------
 
 
-@pytest.mark.parametrize("call_storage", call_storages)
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 @given(call=st_digested_calls)
 def test_callstorages_random_calls_roundtrip(call_storage, call):
     try:
@@ -76,7 +74,7 @@ def test_callstorages_random_calls_roundtrip(call_storage, call):
     assert loaded == call
 
 
-@pytest.mark.parametrize("call_storage", call_storages)
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 @given(call=st_digested_calls)
 def test_callstorages_short_prefix_load(call_storage, call):
     try:
@@ -88,7 +86,6 @@ def test_callstorages_short_prefix_load(call_storage, call):
     assert loaded == call
 
 
-@pytest.mark.parametrize("call_storage", call_storages)
 def test_callstorages_evict(call_storage):
     call = Call(
         name="evict_me",
