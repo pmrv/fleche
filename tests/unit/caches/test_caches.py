@@ -8,6 +8,7 @@ from fleche.caches import ReadOnlyCache, CacheStack, Rejected, Cache
 
 def test_cache_save():
     from fleche.call import Call
+
     values_storage = Mock()
     values_storage.save.return_value = 1
     calls_storage = Mock()
@@ -114,6 +115,7 @@ def test_base_cache_transfer():
 
 def test_readonly_cache_save():
     from fleche.call import Call
+
     c = ReadOnlyCache(Mock())
     call = Call(name="test", arguments={"x": 1}, result="result")
     with pytest.raises(Rejected):
@@ -129,6 +131,7 @@ def test_readonly_cache_load():
 
 def test_cache_stack_save():
     from fleche.call import Call
+
     c1 = Mock()
     c2 = Mock()
     stack = CacheStack((c1, c2))
@@ -140,6 +143,7 @@ def test_cache_stack_save():
 
 def test_cache_stack_load_hit():
     from fleche.call import Call
+
     c1 = Mock()
     c1.load.side_effect = KeyError
     c2 = Mock()
@@ -194,14 +198,22 @@ def test_cache_query_decodes_values_and_args(monkeypatch):
     key = cache.save(original)
 
     # Build a template that matches by name only to retrieve the saved call
-    tpl = Call(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    tpl = Call(
+        name="f", arguments=None, metadata=None, module=None, version=None, result=None
+    )
     got = list(cache.query(tpl))
     assert len(got) == 1, "Wrapper query should return exactly one matching call"
     out = got[0]
 
     # Arguments and result should be decoded back to original Python values
-    assert out.arguments["a"] == [1, 2, 3], "List argument should be decoded by Cache.query"
-    assert out.arguments["b"] == {"k": 10}, "Dict argument should be decoded by Cache.query"
+    assert out.arguments["a"] == [
+        1,
+        2,
+        3,
+    ], "List argument should be decoded by Cache.query"
+    assert out.arguments["b"] == {
+        "k": 10
+    }, "Dict argument should be decoded by Cache.query"
     assert out.result == ("x", 5), "Tuple result should be decoded by Cache.query"
 
 
@@ -219,9 +231,15 @@ def test_cachestack_query_bottom_to_top_and_dedupe():
     bottom = Mock()
     top = Mock()
 
-    A = Call(name="A", arguments={}, metadata={}, module=None, version=None, result=None)
-    B = Call(name="B", arguments={}, metadata={}, module=None, version=None, result=None)
-    C = Call(name="C", arguments={}, metadata={}, module=None, version=None, result=None)
+    A = Call(
+        name="A", arguments={}, metadata={}, module=None, version=None, result=None
+    )
+    B = Call(
+        name="B", arguments={}, metadata={}, module=None, version=None, result=None
+    )
+    C = Call(
+        name="C", arguments={}, metadata={}, module=None, version=None, result=None
+    )
 
     bottom.query.return_value = iter([A, B])
     top.query.return_value = iter([B, C])
@@ -230,11 +248,24 @@ def test_cachestack_query_bottom_to_top_and_dedupe():
 
     # Note: CacheStack is constructed as (bottom, top); bottom-to-top means
     # bottom queried first, then top. Mocks return in their given order.
-    out = list(stack.query(Call(name=None, arguments=None, metadata=None, module=None, version=None, result=None)))
-    names = [c.name for c in out]
-    assert names == ["A", "B", "C"], (
-        "CacheStack.query should traverse bottom->top and deduplicate overlapping results"
+    out = list(
+        stack.query(
+            Call(
+                name=None,
+                arguments=None,
+                metadata=None,
+                module=None,
+                version=None,
+                result=None,
+            )
+        )
     )
+    names = [c.name for c in out]
+    assert names == [
+        "A",
+        "B",
+        "C",
+    ], "CacheStack.query should traverse bottom->top and deduplicate overlapping results"
 
 
 def test_readonlycache_query_forwards_to_wrapped():
@@ -246,16 +277,31 @@ def test_readonlycache_query_forwards_to_wrapped():
     from fleche.call import Call
 
     inner = Mock()
-    call = Call(name="X", arguments={}, metadata={}, module=None, version=None, result=None)
+    call = Call(
+        name="X", arguments={}, metadata={}, module=None, version=None, result=None
+    )
     inner.query.return_value = iter([call])
 
     ro = ReadOnlyCache(inner)
-    out = list(ro.query(Call(name=None, arguments=None, metadata=None, module=None, version=None, result=None)))
+    out = list(
+        ro.query(
+            Call(
+                name=None,
+                arguments=None,
+                metadata=None,
+                module=None,
+                version=None,
+                result=None,
+            )
+        )
+    )
     assert out == [call], "ReadOnlyCache.query must forward results unchanged"
+
 
 def test_cache_load_restores_complex_arguments_and_result():
     from fleche.storage import Memory
     from fleche.call import Call
+
     # Set up in‑memory storages
     values_storage = Memory({})
     calls_storage = Memory({})

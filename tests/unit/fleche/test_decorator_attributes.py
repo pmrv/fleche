@@ -1,13 +1,14 @@
-
 from fleche import fleche, cache
 from fleche.caches import Cache
 from fleche.storage import Memory
 from fleche.call import Call
 import pytest
 
+
 def test_fleche_extra_attributes():
     c = Cache(Memory({}), Memory({}))
     with cache(c):
+
         @fleche(version=1)
         def add(a, b=1):
             return a + b
@@ -34,9 +35,11 @@ def test_fleche_extra_attributes():
         # Test load
         assert add.load(1, b=2) == 3
 
+
 def test_hash_settings():
     c = Cache(Memory({}), Memory({}))
     with cache(c):
+
         @fleche(version=1, hash_version=False)
         def func_no_version(x):
             return x

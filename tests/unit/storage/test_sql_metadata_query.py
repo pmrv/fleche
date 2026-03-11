@@ -53,11 +53,19 @@ def test_find_by_metadata_name_only_returns_all_with_that_name(store):
 
     # Name only: return all keys that have this metadata name
     # Name-only selection using query(): require presence of at least one key from that name
-    tpl = Call(name=None, arguments=None, metadata={"tags": {}}, module=None, version=None, result=None)
-    names = {c.name for c in store.query(tpl)}
-    assert names == {"f1", "f2"}, (
-        "Presence-only metadata filter should include both calls with 'tags'"
+    tpl = Call(
+        name=None,
+        arguments=None,
+        metadata={"tags": {}},
+        module=None,
+        version=None,
+        result=None,
     )
+    names = {c.name for c in store.query(tpl)}
+    assert names == {
+        "f1",
+        "f2",
+    }, "Presence-only metadata filter should include both calls with 'tags'"
 
 
 def test_find_by_metadata_multiple_filters(store):
@@ -71,11 +79,18 @@ def test_find_by_metadata_multiple_filters(store):
     store.save(c2)
 
     # Multiple key filters within same metadata name
-    tpl = Call(name=None, arguments=None, metadata={"tags": {"project": "alpha", "phase": "train"}}, module=None, version=None, result=None)
-    names = {c.name for c in store.query(tpl)}
-    assert names == {"f1"}, (
-        "Both project=alpha and phase=train must be satisfied simultaneously"
+    tpl = Call(
+        name=None,
+        arguments=None,
+        metadata={"tags": {"project": "alpha", "phase": "train"}},
+        module=None,
+        version=None,
+        result=None,
     )
+    names = {c.name for c in store.query(tpl)}
+    assert names == {
+        "f1"
+    }, "Both project=alpha and phase=train must be satisfied simultaneously"
 
 
 def test_find_by_metadata_boolean_and_integer_filters(store):
@@ -89,18 +104,28 @@ def test_find_by_metadata_boolean_and_integer_filters(store):
     store.save(c2)
 
     # Boolean filter
-    tpl1 = Call(name=None, arguments=None, metadata={"flags": {"ok": True}}, module=None, version=None, result=None)
-    ok_true = {c.name for c in store.query(tpl1)}
-    assert ok_true == {"f1"}, (
-        "flags.ok == True should select only f1"
+    tpl1 = Call(
+        name=None,
+        arguments=None,
+        metadata={"flags": {"ok": True}},
+        module=None,
+        version=None,
+        result=None,
     )
+    ok_true = {c.name for c in store.query(tpl1)}
+    assert ok_true == {"f1"}, "flags.ok == True should select only f1"
 
     # Integer filter
-    tpl2 = Call(name=None, arguments=None, metadata={"flags": {"count": 3}}, module=None, version=None, result=None)
-    count_three = {c.name for c in store.query(tpl2)}
-    assert count_three == {"f1"}, (
-        "flags.count == 3 should select only f1"
+    tpl2 = Call(
+        name=None,
+        arguments=None,
+        metadata={"flags": {"count": 3}},
+        module=None,
+        version=None,
+        result=None,
     )
+    count_three = {c.name for c in store.query(tpl2)}
+    assert count_three == {"f1"}, "flags.count == 3 should select only f1"
 
 
 def test_find_by_metadata_across_all_names(store):
@@ -114,11 +139,16 @@ def test_find_by_metadata_across_all_names(store):
     k2 = store.save(c2)
 
     # Without name, search across all metadata names (e.g., walltime under runtime)
-    tpl = Call(name=None, arguments=None, metadata={"runtime": {"walltime": 2.0}}, module=None, version=None, result=None)
-    names = {c.name for c in store.query(tpl)}
-    assert names == {"f2"}, (
-        "runtime.walltime == 2.0 should select only f2"
+    tpl = Call(
+        name=None,
+        arguments=None,
+        metadata={"runtime": {"walltime": 2.0}},
+        module=None,
+        version=None,
+        result=None,
     )
+    names = {c.name for c in store.query(tpl)}
+    assert names == {"f2"}, "runtime.walltime == 2.0 should select only f2"
 
 
 def test_find_by_metadata_fallback_for_unsupported_types(store):
@@ -133,11 +163,18 @@ def test_find_by_metadata_fallback_for_unsupported_types(store):
 
     # Lists are not in the supported (str, bool, int, float); this should use the
     # client-side fallback path but still return a correct set.
-    tpl = Call(name=None, arguments=None, metadata={"complex": {"listy": [1, 2]}}, module=None, version=None, result=None)
-    names = {c.name for c in store.query(tpl)}
-    assert names == {"f1"}, (
-        "List-valued filter should be handled client-side and still match f1"
+    tpl = Call(
+        name=None,
+        arguments=None,
+        metadata={"complex": {"listy": [1, 2]}},
+        module=None,
+        version=None,
+        result=None,
     )
+    names = {c.name for c in store.query(tpl)}
+    assert names == {
+        "f1"
+    }, "List-valued filter should be handled client-side and still match f1"
 
 
 def test_find_by_metadata_no_matches_returns_empty(store):
@@ -150,8 +187,15 @@ def test_find_by_metadata_no_matches_returns_empty(store):
     store.save(c1)
     store.save(c2)
 
-    tpl = Call(name=None, arguments=None, metadata={"tags": {"project": "gamma"}}, module=None, version=None, result=None)
-    names = {c.name for c in store.query(tpl)}
-    assert names == set(), (
-        "No call has tags.project == 'gamma'; result set must be empty"
+    tpl = Call(
+        name=None,
+        arguments=None,
+        metadata={"tags": {"project": "gamma"}},
+        module=None,
+        version=None,
+        result=None,
     )
+    names = {c.name for c in store.query(tpl)}
+    assert (
+        names == set()
+    ), "No call has tags.project == 'gamma'; result set must be empty"

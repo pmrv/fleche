@@ -1,4 +1,3 @@
-
 from unittest.mock import Mock, MagicMock
 
 from fleche import fleche
@@ -47,7 +46,7 @@ def test_fleche_with_meta():
 
 def test_fleche_retrieves_from_cache():
     mock_function = Mock(return_value=42)
-    mock_function.__name__ = 'mock_function'
+    mock_function.__name__ = "mock_function"
 
     @fleche
     def my_func(x):
@@ -68,7 +67,7 @@ def test_fleche_retrieves_from_cache():
 
 def test_fleche_with_version_argument():
     mock_function = Mock(return_value=42)
-    mock_function.__name__ = 'mock_function'
+    mock_function.__name__ = "mock_function"
 
     @fleche(version=1)
     def my_func(x):
@@ -106,7 +105,7 @@ def test_fleche_with_version_argument():
 
 def test_fleche_with_version():
     mock_function = Mock(return_value=42)
-    mock_function.__name__ = 'mock_function'
+    mock_function.__name__ = "mock_function"
 
     with cache(Cache(Memory({}), Memory({}))):
         mock_function.__version__ = 1

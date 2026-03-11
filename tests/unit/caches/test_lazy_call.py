@@ -6,6 +6,7 @@ from fleche import cache as cache_context
 from fleche.storage import Memory
 from fleche.digest import Digest, digest
 
+
 def test_lazy_call_load():
     """Verify that LazyCall defers loading of arguments and results until they are accessed."""
     values_storage = Memory({})
@@ -49,6 +50,7 @@ def test_lazy_call_load():
     assert cache.load_value.call_count == load_value_count_before + 1
     cache.load_value.assert_called_with(digest(3))
 
+
 def test_lazy_call_to_lookup_key():
     """Verify that LazyCall produces the same lookup key as the original Call."""
     values_storage = Memory({})
@@ -60,6 +62,7 @@ def test_lazy_call_to_lookup_key():
 
     lazy = cache.load(key, lazy=True)
     assert lazy.to_lookup_key() == key
+
 
 def test_lazy_call_digest():
     """Verify that LazyCall has the same digest as the equivalent Call object."""
@@ -86,6 +89,7 @@ def test_lazy_call_digest():
     # Case 2: LazyArguments digest should match dict digest
     assert digest(lazy.arguments) == digest(original.arguments)
 
+
 def test_cache_query_lazy():
     """Verify that Cache.query(lazy=True) yields LazyCall instances."""
     values_storage = Memory({})
@@ -95,7 +99,9 @@ def test_cache_query_lazy():
     cache.save(Call(name="f", arguments={"x": 1}, result=10))
     cache.save(Call(name="f", arguments={"x": 2}, result=20))
 
-    tpl = Call(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    tpl = Call(
+        name="f", arguments=None, metadata=None, module=None, version=None, result=None
+    )
 
     # Query with lazy=True
     results = list(cache.query(tpl, lazy=True))
@@ -104,12 +110,15 @@ def test_cache_query_lazy():
         assert isinstance(r, LazyCall)
         assert r.name == "f"
 
+
 def test_lazy_call_frozen():
     """Verify that LazyCall is immutable."""
     from dataclasses import FrozenInstanceError
+
     lazy = LazyCall(name="f", _arguments={}, _result=None, _cache=None)
     with pytest.raises(FrozenInstanceError):
         lazy.name = "g"
+
 
 def test_lazy_arguments_mapping():
     """Verify that LazyArguments implements the Mapping interface correctly."""
@@ -125,6 +134,7 @@ def test_lazy_arguments_mapping():
     assert "a" in args
     assert "c" not in args
     assert list(args.items()) == [("a", "loaded_dig_a"), ("b", "loaded_dig_b")]
+
 
 def test_lazy_call_maintains_cache_reference():
     """Verify that a LazyCall retains its original cache even if the active context changes.

@@ -4,6 +4,7 @@ from fleche import fleche
 from fleche.call import Call
 from fleche.digest import Digest
 
+
 def test_wrapper_metadata():
     @fleche
     def my_func(a: int, b: str = "default") -> float:
@@ -46,7 +47,10 @@ def test_wrapper_metadata():
 
     # Test .query
     assert my_func.query.__name__ == "query"
-    assert "Return matching results from current cache for my_func" in my_func.query.__doc__
+    assert (
+        "Return matching results from current cache for my_func"
+        in my_func.query.__doc__
+    )
     assert "Return matching results from current cache." in my_func.query.__doc__
     sig = inspect.signature(my_func.query)
     # Sig is from my_func due to @wraps(func)

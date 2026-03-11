@@ -4,6 +4,7 @@ from hypothesis import given, strategies as st
 from hypothesis.extra import numpy as hnp
 from fleche.digest import digest
 
+
 @given(st.data())
 def test_numpy_array_hashes_distinctly(data):
     # Generate two arrays
@@ -29,19 +30,20 @@ def test_numpy_array_hashes_distinctly(data):
         # If they are same in all three, they MUST hash the same
         assert digest(arr1) == digest(arr2)
 
+
 def test_numpy_explicit_cases():
     # Explicitly test the cases that were failing
 
     # Same content, different dtype
-    a = np.array([0], dtype='int32')
-    b = np.array([0], dtype='float32')
+    a = np.array([0], dtype="int32")
+    b = np.array([0], dtype="float32")
     assert a.tobytes() == b.tobytes()
     assert a.dtype != b.dtype
     assert digest(a) != digest(b)
 
     # Same content, different shape
-    c = np.array([1, 2, 3, 4], dtype='int64')
-    d = np.array([[1, 2], [3, 4]], dtype='int64')
+    c = np.array([1, 2, 3, 4], dtype="int64")
+    d = np.array([[1, 2], [3, 4]], dtype="int64")
     assert c.tobytes() == d.tobytes()
     assert c.shape != d.shape
     assert digest(c) != digest(d)

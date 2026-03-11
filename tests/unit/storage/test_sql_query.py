@@ -85,11 +85,13 @@ def test_sql_query_all_returns_all(store):
     k2 = store.save(c2)
     k3 = store.save(c3)
 
-    tpl = Call(name=None, arguments=None, metadata=None, module=None, version=None, result=None)
-    got = list(store.query(tpl))
-    assert keys(got) == slow_query_keys(store, tpl), (
-        "Wildcard query should return all calls; SQL and baseline sets must match"
+    tpl = Call(
+        name=None, arguments=None, metadata=None, module=None, version=None, result=None
     )
+    got = list(store.query(tpl))
+    assert keys(got) == slow_query_keys(
+        store, tpl
+    ), "Wildcard query should return all calls; SQL and baseline sets must match"
 
 
 def test_sql_query_by_name(store):
@@ -103,11 +105,13 @@ def test_sql_query_by_name(store):
     k2 = store.save(c2)
     store.save(c3)
 
-    tpl = Call(name="f1", arguments=None, metadata=None, module=None, version=None, result=None)
-    got = list(store.query(tpl))
-    assert keys(got) == slow_query_keys(store, tpl), (
-        "Filtering by name must match baseline-selected keys"
+    tpl = Call(
+        name="f1", arguments=None, metadata=None, module=None, version=None, result=None
     )
+    got = list(store.query(tpl))
+    assert keys(got) == slow_query_keys(
+        store, tpl
+    ), "Filtering by name must match baseline-selected keys"
 
 
 def test_sql_query_by_name_and_version(store):
@@ -120,11 +124,13 @@ def test_sql_query_by_name_and_version(store):
     store.save(c2)
     store.save(c3)
 
-    tpl = Call(name="f1", arguments=None, metadata=None, module=None, version=1, result=None)
-    got = list(store.query(tpl))
-    assert keys(got) == slow_query_keys(store, tpl), (
-        "Filtering by name+version must match baseline-selected keys"
+    tpl = Call(
+        name="f1", arguments=None, metadata=None, module=None, version=1, result=None
     )
+    got = list(store.query(tpl))
+    assert keys(got) == slow_query_keys(
+        store, tpl
+    ), "Filtering by name+version must match baseline-selected keys"
 
 
 def test_sql_query_by_argument_digest_string(store):
@@ -139,11 +145,18 @@ def test_sql_query_by_argument_digest_string(store):
     store.save(c3)
 
     # Filter by a single argument using its digest string value
-    tpl = Call(name=None, arguments={"a": "a" * 64}, metadata=None, module=None, version=None, result=None)
-    got = list(store.query(tpl))
-    assert keys(got) == slow_query_keys(store, tpl), (
-        "Argument filter by digest string must match baseline-selected keys"
+    tpl = Call(
+        name=None,
+        arguments={"a": "a" * 64},
+        metadata=None,
+        module=None,
+        version=None,
+        result=None,
     )
+    got = list(store.query(tpl))
+    assert keys(got) == slow_query_keys(
+        store, tpl
+    ), "Argument filter by digest string must match baseline-selected keys"
 
 
 def test_sql_query_by_argument_digest_object(store):
@@ -158,11 +171,18 @@ def test_sql_query_by_argument_digest_object(store):
     store.save(c3)
 
     # Same filter but with Digest object
-    tpl = Call(name=None, arguments={"b": Digest("b" * 64)}, metadata=None, module=None, version=None, result=None)
-    got = list(store.query(tpl))
-    assert keys(got) == slow_query_keys(store, tpl), (
-        "Argument filter by Digest object must match baseline-selected keys"
+    tpl = Call(
+        name=None,
+        arguments={"b": Digest("b" * 64)},
+        metadata=None,
+        module=None,
+        version=None,
+        result=None,
     )
+    got = list(store.query(tpl))
+    assert keys(got) == slow_query_keys(
+        store, tpl
+    ), "Argument filter by Digest object must match baseline-selected keys"
 
 
 def test_sql_query_argument_wildcard_none(store):
@@ -178,18 +198,32 @@ def test_sql_query_argument_wildcard_none(store):
     store.save(c3)
 
     # None in arguments acts as wildcard but requires presence of the key
-    tpl = Call(name="f1", arguments={"b": None}, metadata=None, module=None, version=None, result=None)
-    got = list(store.query(tpl))
-    assert keys(got) == slow_query_keys(store, tpl), (
-        "Wildcard None for existing arg key must match baseline"
+    tpl = Call(
+        name="f1",
+        arguments={"b": None},
+        metadata=None,
+        module=None,
+        version=None,
+        result=None,
     )
+    got = list(store.query(tpl))
+    assert keys(got) == slow_query_keys(
+        store, tpl
+    ), "Wildcard None for existing arg key must match baseline"
 
     # Key not present shouldn't match
-    tpl2 = Call(name=None, arguments={"not_there": None}, metadata=None, module=None, version=None, result=None)
-    got2 = list(store.query(tpl2))
-    assert keys(got2) == slow_query_keys(store, tpl2), (
-        "Wildcard None for a missing arg key must match empty baseline selection"
+    tpl2 = Call(
+        name=None,
+        arguments={"not_there": None},
+        metadata=None,
+        module=None,
+        version=None,
+        result=None,
     )
+    got2 = list(store.query(tpl2))
+    assert keys(got2) == slow_query_keys(
+        store, tpl2
+    ), "Wildcard None for a missing arg key must match empty baseline selection"
 
 
 def test_sql_query_by_result(store):
@@ -202,8 +236,15 @@ def test_sql_query_by_result(store):
     store.save(c2)
     store.save(c3)
 
-    tpl = Call(name=None, arguments=None, metadata=None, module=None, version=None, result=Digest("r" * 64))
-    got = list(store.query(tpl))
-    assert keys(got) == slow_query_keys(store, tpl), (
-        "Result filter must match baseline-selected keys by digest"
+    tpl = Call(
+        name=None,
+        arguments=None,
+        metadata=None,
+        module=None,
+        version=None,
+        result=Digest("r" * 64),
     )
+    got = list(store.query(tpl))
+    assert keys(got) == slow_query_keys(
+        store, tpl
+    ), "Result filter must match baseline-selected keys by digest"
