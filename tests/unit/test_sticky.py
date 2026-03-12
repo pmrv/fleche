@@ -8,21 +8,22 @@ from fleche.metadata import MetaData, Call
 @pytest.fixture(autouse=True)
 def reset_state():
     import fleche.state as state
-    cache_token = state._CACHE.set(state.load_cache_config())
-    meta_token = state._METADATA.set(state.load_default_metadata())
+    # Since Jules refactored them to use internal _var, we can't easily reset from outside
+    # but the test_sticky should be fine if it uses .stick() and .pluck() correctly.
+    # Actually, we can use the .set() method on the objects themselves if we want a clean slate.
+    state.cache.set(state.load_cache_config())
+    state.meta.set(state.load_default_metadata())
     yield
-    state._CACHE.reset(cache_token)
-    state._METADATA.reset(meta_token)
 
 def test_cache_stick_pluck():
     c1 = Cache(Memory({}), Memory({}))
     original_cache = cache()
 
-    ctx = cache(c1)
-    ctx.stick()
+    token = cache(c1)
+    token.stick()
     assert cache() is c1
 
-    ctx.pluck()
+    token.pluck()
     assert cache() is original_cache
 
 def test_cache_stack_stick():
@@ -137,3 +138,30 @@ def test_dynamic_stacking_decorator():
         call = c.calls.load(func.digest(2))
         assert "outer" not in call.metadata["tags"]
         assert call.metadata["tags"]["inner"] == "value"
+
+def test_cache_reset_method():
+    c1 = Cache(Memory({}), Memory({}))
+    original_cache = cache()
+
+    token = cache(c1).stick()
+    assert cache() is c1
+
+    cache.reset(token)
+    assert cache() is original_cache
+
+def test_meta_reset_method():
+    original_meta = meta()
+
+    class Dummy(MetaData):
+        name = "dummy"
+        keys = {}
+
+        def pre(self, call: Call):
+            return {}
+
+    m = Dummy()
+    token = meta(m).stick()
+    assert m in meta.get()
+
+    meta.reset(token)
+    assert meta() == original_meta
