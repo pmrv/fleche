@@ -248,3 +248,27 @@ def test_sql_query_by_result(store):
     assert keys(got) == slow_query_keys(
         store, tpl
     ), "Result filter must match baseline-selected keys by digest"
+
+
+def test_sql_call_digest_persistence(store):
+    """A call saved to SQL must retain the same digest before and after loading.
+
+    Regression test: ensures code_digest and other key-relevant fields are
+    persisted and correctly re-loaded so that to_lookup_key() remains stable.
+    """
+    original = Call(
+        name="test_func",
+        arguments={"a": digest(1)},
+        metadata={"m": {"k": "v"}},
+        module="mod",
+        version=42,
+        code_digest="some_code_digest",
+        result=digest(3)
+    )
+
+    key = store.save(original)
+    loaded = store.load(key)
+
+    assert loaded.code_digest == "some_code_digest"
+    assert loaded.to_lookup_key() == original.to_lookup_key()
+    assert loaded == original
