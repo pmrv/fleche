@@ -7,11 +7,6 @@ from fleche.metadata import MetaData, Call
 
 @pytest.fixture(autouse=True)
 def reset_state():
-    # ContextVars are local to the thread/task, but for tests we might want to ensure a clean start
-    # Actually ContextVars in same thread persist across tests if not careful.
-    # However, pytest usually runs tests in a way that might share the same thread.
-    # Let's manually reset to defaults if possible, but state.py doesn't expose the tokens.
-    # A better way is to use a fixture that saves the current state and restores it.
     import fleche.state as state
     cache_token = state._CACHE.set(state.load_cache_config())
     meta_token = state._METADATA.set(state.load_default_metadata())
@@ -19,27 +14,34 @@ def reset_state():
     state._CACHE.reset(cache_token)
     state._METADATA.reset(meta_token)
 
-def test_cache_sticky():
+def test_cache_stick_pluck():
     c1 = Cache(Memory({}), Memory({}))
-    returned = cache(c1, sticky=True)
-    assert returned is c1
+    original_cache = cache()
+
+    ctx = cache(c1)
+    ctx.stick()
     assert cache() is c1
 
-def test_cache_sticky_stack():
+    ctx.pluck()
+    assert cache() is original_cache
+
+def test_cache_stack_stick():
     c_base = cache()
     c1 = Cache(Memory({}), Memory({}))
-    cache(c1, sticky=True, stack=True)
-    assert isinstance(cache(), CacheStack)
-    assert cache().stack[0] is c1
-    assert cache().stack[1] is c_base
+    cache(c1, stack=True).stick()
 
-def test_tags_sticky():
+    current = cache()
+    assert isinstance(current, CacheStack)
+    assert current.stack[0] is c1
+    assert current.stack[1] is c_base
+
+def test_tags_stick():
     @fleche
     def func(x): return x
 
     c = Cache(Memory({}), Memory({}))
     with cache(c):
-        tags(sticky=True, version="1.2.3")
+        tags(version="1.2.3").stick()
         func(1)
         call = c.calls.load(func.digest(1))
         assert call.metadata["tags"]["version"] == "1.2.3"
@@ -48,25 +50,25 @@ def test_tags_sticky():
         call = c.calls.load(func.digest(2))
         assert call.metadata["tags"]["version"] == "1.2.3"
 
-def test_project_sticky():
+def test_project_stick():
     @fleche
     def func(x): return x
 
     c = Cache(Memory({}), Memory({}))
     with cache(c):
-        project("my_project", sticky=True)
+        project("my_project").stick()
         func(1)
         call = c.calls.load(func.digest(1))
         assert call.metadata["tags"]["project"] == "my_project"
 
-def test_meta_sticky_custom():
+def test_meta_stick_custom():
     class MyMeta(MetaData):
         name = "custom"
         keys = {"val": int}
         def pre(self, call: Call): return {"val": 42}
 
     m = MyMeta()
-    meta(m, sticky=True)
+    meta(m).stick()
 
     @fleche
     def func(x): return x
@@ -77,12 +79,12 @@ def test_meta_sticky_custom():
         call = c.calls.load(func.digest(1))
         assert call.metadata["custom"]["val"] == 42
 
-def test_sticky_interaction_with_context_manager():
+def test_interaction_with_context_manager():
     @fleche
     def func(x): return x
     c = Cache(Memory({}), Memory({}))
 
-    tags(sticky=True, global_tag="active")
+    tags(global_tag="active").stick()
 
     with cache(c):
         with tags(local_tag="present"):
@@ -95,3 +97,43 @@ def test_sticky_interaction_with_context_manager():
         call = c.calls.load(func.digest(2))
         assert call.metadata["tags"]["global_tag"] == "active"
         assert "local_tag" not in call.metadata["tags"]
+
+def test_decorator_usage():
+    @fleche
+    def func(x): return x
+    c = Cache(Memory({}), Memory({}))
+
+    @tags(dec_tag="decorated")
+    def run_decorated():
+        with cache(c):
+            func(1)
+            call = c.calls.load(func.digest(1))
+            assert call.metadata["tags"]["dec_tag"] == "decorated"
+
+    run_decorated()
+
+    with cache(c):
+        func(2)
+        call = c.calls.load(func.digest(2))
+        assert "dec_tag" not in call.metadata.get("tags", {})
+
+def test_dynamic_stacking_decorator():
+    @fleche
+    def func(x): return x
+    c = Cache(Memory({}), Memory({}))
+
+    @tags(inner="value")
+    def my_decorated_func(val):
+        func(val)
+
+    with cache(c):
+        with tags(outer="context"):
+            my_decorated_func(1)
+            call = c.calls.load(func.digest(1))
+            assert call.metadata["tags"]["outer"] == "context"
+            assert call.metadata["tags"]["inner"] == "value"
+
+        my_decorated_func(2)
+        call = c.calls.load(func.digest(2))
+        assert "outer" not in call.metadata["tags"]
+        assert call.metadata["tags"]["inner"] == "value"
