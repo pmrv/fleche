@@ -10,7 +10,7 @@ _CACHE: ContextVar[BaseCache] = ContextVar("fleche.CACHE", default=load_cache_co
 
 _T = TypeVar("_T")
 
-class StickyContext(Generic[_T], ContextDecorator, AbstractContextManager):
+class StickyContext(ContextDecorator, AbstractContextManager, Generic[_T]):
     def __init__(
         self,
         var: ContextVar[_T],
