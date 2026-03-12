@@ -1,6 +1,6 @@
 from contextlib import AbstractContextManager, ContextDecorator
 from contextvars import ContextVar, Token
-from typing import Union, Any, TypeVar, Generic, Callable, overload
+from typing import Union, Any, TypeVar, Generic, Callable, overload, cast
 
 from .caches import BaseCache, Cache
 from .config import load_cache_config, load_default_metadata
@@ -31,7 +31,9 @@ class ManagedToken(ContextDecorator, AbstractContextManager, Generic[_T]):
         self.var = var
         self.value = value
         self.resolver = resolver
-        self._tokens: ContextVar[list[Token[_T]]] = ContextVar("ManagedToken._tokens")
+        self._tokens: ContextVar[tuple[Token[_T], ...]] = ContextVar(
+            f"ManagedToken._tokens.{id(self)}", default=()
+        )
 
     def stick(self) -> Token[_T]:
         """Permanently set the context variable to the target value."""
@@ -39,24 +41,17 @@ class ManagedToken(ContextDecorator, AbstractContextManager, Generic[_T]):
         if self.resolver:
             val_to_set = self.resolver(self.var.get(), self.value)
 
-        try:
-            tokens = self._tokens.get()
-        except LookupError:
-            tokens = []
-            self._tokens.set(tokens)
         token = self.var.set(val_to_set)
-        tokens.append(token)
+        self._tokens.set(self._tokens.get() + (token,))
         return token
 
     def pluck(self):
         """Restore the context variable to its previous state."""
-        try:
-            tokens = self._tokens.get()
-        except LookupError:
-            raise RuntimeError("Context not active")
+        tokens = self._tokens.get()
         if not tokens:
             raise RuntimeError("Context not active")
-        self.var.reset(tokens.pop())
+        self.var.reset(tokens[-1])
+        self._tokens.set(tokens[:-1])
 
     def __enter__(self):
         self.stick()
@@ -67,7 +62,7 @@ class ManagedToken(ContextDecorator, AbstractContextManager, Generic[_T]):
 
 
 class CacheVar:
-    """Subclass-like wrapper for ContextVar[BaseCache] with enhanced callable interface."""
+    """Wrapper for ContextVar[BaseCache] with enhanced callable interface."""
 
     def __init__(self, var: ContextVar[BaseCache]):
         self._var = var
@@ -125,7 +120,7 @@ class CacheVar:
 
 
 class MetaVar:
-    """Subclass-like wrapper for ContextVar[tuple[MetaData, ...]] with enhanced callable interface."""
+    """Wrapper for ContextVar[tuple[MetaData, ...]] with enhanced callable interface."""
 
     def __init__(self, var: ContextVar[tuple[MetaData, ...]]):
         self._var = var
@@ -149,7 +144,9 @@ class MetaVar:
     def __call__(self, stack=False) -> tuple[MetaData, ...]: ...
 
     @overload
-    def __call__(self, *new_metadata: MetaData, stack=False) -> ManagedToken[tuple[MetaData, ...]]: ...
+    def __call__(
+        self, *new_metadata: MetaData, stack=False
+    ) -> ManagedToken[tuple[MetaData, ...]]: ...
 
     def __call__(
         self, *new_metadata: MetaData, stack=False
@@ -179,7 +176,7 @@ def tags(**kwargs) -> ManagedToken[tuple[MetaData, ...]]:
     Args:
         **kwargs: The tags to add to the results.
     """
-    return meta(Tags(kwargs), stack=True)
+    return cast(ManagedToken[tuple[MetaData, ...]], meta(Tags(kwargs), stack=True))
 
 
 def project(name) -> ManagedToken[tuple[MetaData, ...]]:
