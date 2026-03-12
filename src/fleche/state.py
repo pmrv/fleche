@@ -1,10 +1,15 @@
 from contextlib import AbstractContextManager, ContextDecorator
 from contextvars import ContextVar, Token
-from typing import Union, Any, TypeVar, Generic, Callable
+from typing import Union, Any, TypeVar, Generic, Callable, overload
 
 from .caches import BaseCache, Cache
 from .config import load_cache_config, load_default_metadata
 from .metadata import MetaData, Tags
+
+_CACHE: ContextVar[BaseCache] = ContextVar("fleche.CACHE", default=load_cache_config())
+_METADATA: ContextVar[tuple[MetaData, ...]] = ContextVar(
+    "fleche.METADATA", default=load_default_metadata()
+)
 
 _T = TypeVar("_T")
 
@@ -26,9 +31,7 @@ class ManagedToken(ContextDecorator, AbstractContextManager, Generic[_T]):
         self.var = var
         self.value = value
         self.resolver = resolver
-        self._tokens: ContextVar[list[Token[_T]]] = ContextVar(
-            f"ManagedToken.{id(self)}"
-        )
+        self._tokens: ContextVar[list[Token[_T]]] = ContextVar("ManagedToken._tokens")
 
     def stick(self) -> Token[_T]:
         """Permanently set the context variable to the target value."""
@@ -80,6 +83,14 @@ class CacheVar:
             token.pluck()
         else:
             self._var.reset(token)
+
+    @overload
+    def __call__(self, new_cache: None = None, stack=False) -> BaseCache: ...
+
+    @overload
+    def __call__(
+        self, new_cache: Union[Cache, str], stack=False
+    ) -> ManagedToken[BaseCache]: ...
 
     def __call__(
         self, new_cache: Union[Cache, str, None] = None, stack=False
@@ -134,6 +145,12 @@ class MetaVar:
         else:
             self._var.reset(token)
 
+    @overload
+    def __call__(self, stack=False) -> tuple[MetaData, ...]: ...
+
+    @overload
+    def __call__(self, *new_metadata: MetaData, stack=False) -> ManagedToken[tuple[MetaData, ...]]: ...
+
     def __call__(
         self, *new_metadata: MetaData, stack=False
     ) -> Union[tuple[MetaData, ...], ManagedToken[tuple[MetaData, ...]]]:
@@ -151,11 +168,6 @@ class MetaVar:
 
         return ManagedToken(self._var, resolved_meta, resolver)
 
-
-_CACHE: ContextVar[BaseCache] = ContextVar("fleche.CACHE", default=load_cache_config())
-_METADATA: ContextVar[tuple[MetaData, ...]] = ContextVar(
-    "fleche.METADATA", default=load_default_metadata()
-)
 
 cache = CacheVar(_CACHE)
 meta = MetaVar(_METADATA)
