@@ -1,0 +1,21 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.13, pytest-9.0.2, pluggy-1.6.0 -- /home/jules/.pyenv/versions/3.12.13/bin/python3.12
+cachedir: .pytest_cache
+hypothesis profile 'default'
+rootdir: /app
+configfile: pyproject.toml
+plugins: hypothesis-6.151.9
+collecting ... collected 10 items
+
+tests/unit/test_sticky.py::test_cache_stick_pluck PASSED                 [ 10%]
+tests/unit/test_sticky.py::test_cache_stack_stick PASSED                 [ 20%]
+tests/unit/test_sticky.py::test_tags_stick PASSED                        [ 30%]
+tests/unit/test_sticky.py::test_project_stick PASSED                     [ 40%]
+tests/unit/test_sticky.py::test_meta_stick_custom PASSED                 [ 50%]
+tests/unit/test_sticky.py::test_interaction_with_context_manager PASSED  [ 60%]
+tests/unit/test_sticky.py::test_decorator_usage PASSED                   [ 70%]
+tests/unit/test_sticky.py::test_dynamic_stacking_decorator PASSED        [ 80%]
+tests/unit/test_sticky.py::test_cache_reset_method PASSED                [ 90%]
+tests/unit/test_sticky.py::test_meta_reset_method PASSED                 [100%]
+
+============================== 10 passed in 0.37s ==============================

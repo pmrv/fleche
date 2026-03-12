@@ -8,12 +8,11 @@ from fleche.metadata import MetaData, Call
 @pytest.fixture(autouse=True)
 def reset_state():
     import fleche.state as state
-    # Since Jules refactored them to use internal _var, we can't easily reset from outside
-    # but the test_sticky should be fine if it uses .stick() and .pluck() correctly.
-    # Actually, we can use the .set() method on the objects themselves if we want a clean slate.
-    state.cache.set(state.load_cache_config())
-    state.meta.set(state.load_default_metadata())
+    cache_token = state.cache.set(state.load_cache_config())
+    meta_token = state.meta.set(state.load_default_metadata())
     yield
+    state.cache.reset(cache_token)
+    state.meta.reset(meta_token)
 
 def test_cache_stick_pluck():
     c1 = Cache(Memory({}), Memory({}))

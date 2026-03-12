@@ -1,18 +1,21 @@
 from unittest.mock import Mock, MagicMock
+import pytest
 
 from fleche import fleche
 from fleche.caches import Cache
-from fleche.state import _CACHE, cache
+from fleche import cache
 from fleche.storage import Memory
 
-
-def setup_function():
+@pytest.fixture(autouse=True)
+def setup_cache():
     values_storage = Mock()
     values_storage.save.return_value = "digest_value"
     calls_storage = Mock()
     calls_storage.load.side_effect = KeyError
     c = Cache(values_storage, calls_storage)
-    _CACHE.set(c)
+    token = cache.set(c)
+    yield
+    cache.reset(token)
 
 
 def test_fleche_no_args():

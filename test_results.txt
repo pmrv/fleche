@@ -1,0 +1,12 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.13, pytest-9.0.2, pluggy-1.6.0
+rootdir: /app
+configfile: pyproject.toml
+plugins: hypothesis-6.151.9
+collected 24 items
+
+tests/unit/metadata/test_metadata.py .......                             [ 29%]
+tests/unit/fleche/test_fleche.py .......                                 [ 58%]
+tests/unit/test_sticky.py ..........                                     [100%]
+
+============================== 24 passed in 0.85s ==============================

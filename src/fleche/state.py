@@ -6,6 +6,7 @@ from .caches import BaseCache, Cache
 from .config import load_cache_config, load_default_metadata
 from .metadata import MetaData, Tags
 
+# Define internal context variables at the top to ensure they are available for all classes
 _CACHE: ContextVar[BaseCache] = ContextVar("fleche.CACHE", default=load_cache_config())
 _METADATA: ContextVar[tuple[MetaData, ...]] = ContextVar(
     "fleche.METADATA", default=load_default_metadata()
@@ -31,6 +32,7 @@ class ManagedToken(ContextDecorator, AbstractContextManager, Generic[_T]):
         self.var = var
         self.value = value
         self.resolver = resolver
+        # Unique ContextVar per instance ensures thread-safety and avoids cross-instance interference
         self._tokens: ContextVar[tuple[Token[_T], ...]] = ContextVar(
             f"ManagedToken._tokens.{id(self)}", default=()
         )
@@ -42,6 +44,7 @@ class ManagedToken(ContextDecorator, AbstractContextManager, Generic[_T]):
             val_to_set = self.resolver(self.var.get(), self.value)
 
         token = self.var.set(val_to_set)
+        # Store the token in a thread-local/task-local stack
         self._tokens.set(self._tokens.get() + (token,))
         return token
 
@@ -80,15 +83,15 @@ class CacheVar:
             self._var.reset(token)
 
     @overload
-    def __call__(self, new_cache: None = None, stack=False) -> BaseCache: ...
+    def __call__(self, new_cache: None = None, stack: bool = False) -> BaseCache: ...
 
     @overload
     def __call__(
-        self, new_cache: Union[Cache, str], stack=False
+        self, new_cache: Union[Cache, str], stack: bool = False
     ) -> ManagedToken[BaseCache]: ...
 
     def __call__(
-        self, new_cache: Union[Cache, str, None] = None, stack=False
+        self, new_cache: Union[Cache, str, None] = None, stack: bool = False
     ) -> Union[BaseCache, ManagedToken[BaseCache]]:
         """Manages the active cache for Fleche.
 
@@ -141,15 +144,15 @@ class MetaVar:
             self._var.reset(token)
 
     @overload
-    def __call__(self, stack=False) -> tuple[MetaData, ...]: ...
+    def __call__(self, stack: bool = False) -> tuple[MetaData, ...]: ...
 
     @overload
     def __call__(
-        self, *new_metadata: MetaData, stack=False
+        self, *new_metadata: MetaData, stack: bool = False
     ) -> ManagedToken[tuple[MetaData, ...]]: ...
 
     def __call__(
-        self, *new_metadata: MetaData, stack=False
+        self, *new_metadata: MetaData, stack: bool = False
     ) -> Union[tuple[MetaData, ...], ManagedToken[tuple[MetaData, ...]]]:
         """A context manager to add metadata to results.
 

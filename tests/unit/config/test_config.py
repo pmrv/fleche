@@ -205,46 +205,28 @@ def test_nested_storage(monkeypatch, config_file):
     assert isinstance(values_storage.inner, storage.Memory)
 
 
-def test_load_default_metadata(monkeypatch, config_file):
+def test_load_default_metadata_func(monkeypatch, config_file):
     monkeypatch.setenv("XDG_CONFIG_HOME", config_file)
-
-    import importlib
-    import fleche.state
-
-    importlib.reload(fleche.state)
-
-    meta = fleche.state._METADATA.get()
-    assert len(meta) == 1
-    assert isinstance(meta[0], Runtime)
+    from fleche.config import load_default_metadata
+    meta_obj = load_default_metadata()
+    assert len(meta_obj) == 1
+    assert isinstance(meta_obj[0], Runtime)
 
 
-def test_load_default_cache(monkeypatch, config_file):
+def test_load_cache_config_func(monkeypatch, config_file):
     monkeypatch.setenv("XDG_CONFIG_HOME", config_file)
-
-    import importlib
-    import fleche.state
-
-    importlib.reload(fleche.state)
-
-    cache_obj = fleche.state._CACHE.get()
-    assert isinstance(cache_obj, BaseCache)
+    from fleche.config import load_cache_config
+    cache_obj = load_cache_config()
     assert isinstance(cache_obj, Cache)
-    if hasattr(cache_obj, "values"):
-        assert isinstance(_get_values_storage(cache_obj), storage.Memory)
-        assert isinstance(cache_obj.calls.storage, storage.Memory)
-    else:
-        assert isinstance(_get_values_storage(cache_obj.cache), storage.Memory)
-        assert isinstance(cache_obj.cache.calls.storage, storage.Memory)
+    assert isinstance(_get_values_storage(cache_obj), storage.Memory)
+    assert isinstance(cache_obj.calls.storage, storage.Memory)
 
 
-def test_tags_disallowed(monkeypatch, config_file_with_tags):
+def test_tags_disallowed_func(monkeypatch, config_file_with_tags):
     monkeypatch.setenv("XDG_CONFIG_HOME", config_file_with_tags)
-
-    import importlib
-    import fleche.state
-
-    with pytest.raises(ValueError):
-        importlib.reload(fleche.state)
+    from fleche.config import load_default_metadata
+    with pytest.raises(ValueError, match="Tags metadata cannot be configured"):
+        load_default_metadata()
 
 
 def test_load_cache_config_memory_special_case(monkeypatch, config_file):

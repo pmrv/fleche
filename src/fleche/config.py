@@ -124,14 +124,16 @@ def load_cache_config(name: str | None = None) -> Cache:
         return _live_caches[name]
 
     if name == "memory":
-        cache = Cache(storage.Memory({}), storage.Memory({}))
-        _live_caches[name] = cache
-        return cache
+        new_cache = Cache(storage.Memory({}), storage.Memory({}))
+        if name is not None:
+            _live_caches[name] = new_cache
+        return new_cache
 
     if name == "void":
-        cache = Cache(storage.Void(), storage.Void())
-        _live_caches[name] = cache
-        return cache
+        new_cache = Cache(storage.Void(), storage.Void())
+        if name is not None:
+            _live_caches[name] = new_cache
+        return new_cache
 
     path = _get_config_path()
     if path is None or not path.exists():
@@ -141,7 +143,11 @@ def load_cache_config(name: str | None = None) -> Cache:
             )
         else:
             logger.warning("No config file found. Using default memory cache.")
-        return Cache(storage.Memory({}), storage.Memory({}))
+
+        new_cache = Cache(storage.Memory({}), storage.Memory({}))
+        if name is not None:
+            _live_caches[name] = new_cache
+        return new_cache
 
     with open(path, "rb") as f:
         config = tomllib.load(f)

@@ -116,18 +116,18 @@ def fleche(
             if "lazy" in call.arguments:
                 logger.warning("Function argument 'lazy' shadowed by query argument")
             call.metadata = metadata
-            return state._CACHE.get().query(call, lazy=lazy)
+            return state.cache.get().query(call, lazy=lazy)
 
         _query_doc = _query_func.__doc__
         _query_func = wraps(func)(_query_func)  # ty: ignore
 
         @wraps(func)
         def _load_func(*args, **kwargs):
-            return state._CACHE.get().load(_digest_func(*args, **kwargs)).result
+            return state.cache.get().load(_digest_func(*args, **kwargs)).result
 
         @wraps(func)
         def _contains_func(*args, **kwargs):
-            return state._CACHE.get().contains(_digest_func(*args, **kwargs))
+            return state.cache.get().contains(_digest_func(*args, **kwargs))
 
         for name, helper, doc_prefix, ret in [
             ("call", get_call, "Get the Call object for", Call),
@@ -163,7 +163,7 @@ def fleche(
             if any(r not in kwargs for r in required_args):
                 logger.warning("Missing required argument: %s", required_args)
                 return func(*args, **kwargs)
-            cache: BaseCache = state._CACHE.get()
+            cache: BaseCache = state.cache.get()
             try:
                 call = get_call(*args, **kwargs)
                 key = call.to_lookup_key()
@@ -179,7 +179,7 @@ def fleche(
                 logger.debug("Cache miss for %s with key %s", call.name, key)
 
             def _run_and_cache():
-                active_meta = state._METADATA.get() + tuple(meta)
+                active_meta = state.meta.get() + tuple(meta)
                 metadata: Dict[str, Any] = defaultdict(dict)
                 for m in active_meta:
                     metadata[m.name] |= m.pre(replace(call, metadata={}))
