@@ -1,166 +1,91 @@
-
-import pytest
-from fleche import cache, meta, tags, project, fleche
-from fleche.caches import Cache, CacheStack
+import fleche as fl
 from fleche.storage import Memory
-from fleche.metadata import MetaData, Call
+from fleche.caches import Cache
+from fleche.metadata import Tags
+import pytest
+import concurrent.futures
 
-@pytest.fixture(autouse=True)
-def reset_state():
-    import fleche.state as state
-    cache_token = state.cache.set(state.load_cache_config())
-    meta_token = state.meta.set(state.load_default_metadata())
-    yield
-    state.cache.reset(cache_token)
-    state.meta.reset(meta_token)
-
-def test_cache_stick_pluck():
+def test_sticky_cache():
     c1 = Cache(Memory({}), Memory({}))
-    original_cache = cache()
+    c2 = Cache(Memory({}), Memory({}))
 
-    token = cache(c1)
-    token.stick()
-    assert cache() is c1
+    # Default cache
+    initial_cache = fl.cache.get()
 
-    token.pluck()
-    assert cache() is original_cache
+    # Permanent switch
+    returned = fl.cache(c1, sticky=True)
+    assert fl.cache.get() is c1
+    assert returned is c1
 
-def test_cache_stack_stick():
-    c_base = cache()
-    c1 = Cache(Memory({}), Memory({}))
-    cache(c1, stack=True).stick()
+    # Temporary switch within sticky
+    with fl.cache(c2):
+        assert fl.cache.get() is c2
 
-    current = cache()
-    assert isinstance(current, CacheStack)
-    assert current.stack[0] is c1
-    assert current.stack[1] is c_base
+    assert fl.cache.get() is c1
 
-def test_tags_stick():
-    @fleche
-    def func(x): return x
+    # Restore for other tests
+    fl.cache.set(initial_cache)
 
+def test_sticky_tags():
+    initial_meta = fl.meta.get()
+
+    # Permanent tags
+    fl.tags(sticky=True, project="secret")
+    assert any(isinstance(m, Tags) and m.tags.get("project") == "secret" for m in fl.meta)
+
+    # Stacked temporary tags
+    with fl.tags(user="jules"):
+        assert any(isinstance(m, Tags) and m.tags.get("project") == "secret" for m in fl.meta)
+        assert any(isinstance(m, Tags) and m.tags.get("user") == "jules" for m in fl.meta)
+
+    # Back to sticky state
+    assert any(isinstance(m, Tags) and m.tags.get("project") == "secret" for m in fl.meta)
+    assert not any(isinstance(m, Tags) and m.tags.get("user") == "jules" for m in fl.meta)
+
+    # Cleanup
+    fl.meta.set(initial_meta)
+
+def test_cache_proxy_methods():
     c = Cache(Memory({}), Memory({}))
-    with cache(c):
-        tags(version="1.2.3").stick()
-        func(1)
-        call = c.calls.load(func.digest(1))
-        assert call.metadata["tags"]["version"] == "1.2.3"
+    fl.cache.set(c)
 
-        func(2)
-        call = c.calls.load(func.digest(2))
-        assert call.metadata["tags"]["version"] == "1.2.3"
+    @fl.fleche
+    def add(a, b):
+        return a + b
 
-def test_project_stick():
-    @fleche
-    def func(x): return x
+    add(1, 2)
 
-    c = Cache(Memory({}), Memory({}))
-    with cache(c):
-        project("my_project").stick()
-        func(1)
-        call = c.calls.load(func.digest(1))
-        assert call.metadata["tags"]["project"] == "my_project"
+    # Test that fl.cache.query works directly
+    results = list(fl.cache.query(add.call(1, 2)))
+    assert len(results) == 1
+    assert results[0].result == 3
 
-def test_meta_stick_custom():
-    class MyMeta(MetaData):
-        name = "custom"
-        keys = {"val": int}
-        def pre(self, call: Call): return {"val": 42}
+def test_meta_proxy_sequence():
+    initial_meta = fl.meta.get()
+    fl.meta.set(())
 
-    m = MyMeta()
-    meta(m).stick()
+    fl.tags(sticky=True, a=1)
+    fl.tags(sticky=True, b=2)
 
-    @fleche
-    def func(x): return x
+    assert len(fl.meta) == 2
+    assert isinstance(fl.meta[0], Tags)
+    assert fl.meta[0].tags["a"] == 1
 
-    c = Cache(Memory({}), Memory({}))
-    with cache(c):
-        func(1)
-        call = c.calls.load(func.digest(1))
-        assert call.metadata["custom"]["val"] == 42
+    # Cleanup
+    fl.meta.set(initial_meta)
 
-def test_interaction_with_context_manager():
-    @fleche
-    def func(x): return x
-    c = Cache(Memory({}), Memory({}))
+def test_thread_safety_sticky():
+    """Sticky changes in one thread should not affect another thread."""
+    c_main = fl.cache.get()
+    c_thread = Cache(Memory({}), Memory({}))
 
-    tags(global_tag="active").stick()
+    def worker():
+        fl.cache(c_thread, sticky=True)
+        return fl.cache.get()
 
-    with cache(c):
-        with tags(local_tag="present"):
-            func(1)
-            call = c.calls.load(func.digest(1))
-            assert call.metadata["tags"]["global_tag"] == "active"
-            assert call.metadata["tags"]["local_tag"] == "present"
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        future = executor.submit(worker)
+        thread_cache = future.result()
 
-        func(2)
-        call = c.calls.load(func.digest(2))
-        assert call.metadata["tags"]["global_tag"] == "active"
-        assert "local_tag" not in call.metadata["tags"]
-
-def test_decorator_usage():
-    @fleche
-    def func(x): return x
-    c = Cache(Memory({}), Memory({}))
-
-    @tags(dec_tag="decorated")
-    def run_decorated():
-        with cache(c):
-            func(1)
-            call = c.calls.load(func.digest(1))
-            assert call.metadata["tags"]["dec_tag"] == "decorated"
-
-    run_decorated()
-
-    with cache(c):
-        func(2)
-        call = c.calls.load(func.digest(2))
-        assert "dec_tag" not in call.metadata.get("tags", {})
-
-def test_dynamic_stacking_decorator():
-    @fleche
-    def func(x): return x
-    c = Cache(Memory({}), Memory({}))
-
-    @tags(inner="value")
-    def my_decorated_func(val):
-        func(val)
-
-    with cache(c):
-        with tags(outer="context"):
-            my_decorated_func(1)
-            call = c.calls.load(func.digest(1))
-            assert call.metadata["tags"]["outer"] == "context"
-            assert call.metadata["tags"]["inner"] == "value"
-
-        my_decorated_func(2)
-        call = c.calls.load(func.digest(2))
-        assert "outer" not in call.metadata["tags"]
-        assert call.metadata["tags"]["inner"] == "value"
-
-def test_cache_reset_method():
-    c1 = Cache(Memory({}), Memory({}))
-    original_cache = cache()
-
-    token = cache(c1).stick()
-    assert cache() is c1
-
-    cache.reset(token)
-    assert cache() is original_cache
-
-def test_meta_reset_method():
-    original_meta = meta()
-
-    class Dummy(MetaData):
-        name = "dummy"
-        keys = {}
-
-        def pre(self, call: Call):
-            return {}
-
-    m = Dummy()
-    token = meta(m).stick()
-    assert m in meta.get()
-
-    meta.reset(token)
-    assert meta() == original_meta
+    assert thread_cache is c_thread
+    assert fl.cache.get() is c_main

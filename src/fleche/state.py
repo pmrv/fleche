@@ -1,10 +1,13 @@
 from contextlib import AbstractContextManager, ContextDecorator
 from contextvars import ContextVar, Token
-from typing import Union, Any, TypeVar, Generic, Callable, overload, cast
+from typing import Union, Any, TypeVar, Generic, Callable, overload, cast, Iterable
+import pandas as pd
 
-from .caches import BaseCache, Cache
+from .caches import BaseCache, Cache, CacheStack, FilteredCache
 from .config import load_cache_config, load_default_metadata
 from .metadata import MetaData, Tags
+from .digest import Digest
+from .call import Call, LazyCall
 
 # Define internal context variables at the top to ensure they are available for all classes
 _CACHE: ContextVar[BaseCache] = ContextVar("fleche.CACHE", default=load_cache_config())
@@ -15,57 +18,58 @@ _METADATA: ContextVar[tuple[MetaData, ...]] = ContextVar(
 _T = TypeVar("_T")
 
 
-class ManagedToken(ContextDecorator, AbstractContextManager, Generic[_T]):
-    """A token that manages its own context and can be stuck/plucked.
+class CacheContext(BaseCache, ContextDecorator, AbstractContextManager):
+    """A context manager and decorator for setting the active cache."""
 
-    This class serves as both a context manager and a decorator. It wraps a
-    `ContextVar` and a target value, providing methods to manually activate
-    (`.stick()`) and restore (`.pluck()`) the state.
-    """
-
-    def __init__(
-        self,
-        var: ContextVar[_T],
-        value: _T,
-        resolver: Callable[[_T, _T], _T] | None = None,
-    ):
-        self.var = var
-        self.value = value
-        self.resolver = resolver
-        # Unique ContextVar per instance ensures thread-safety and avoids cross-instance interference
-        self._tokens: ContextVar[tuple[Token[_T], ...]] = ContextVar(
-            f"ManagedToken._tokens.{id(self)}", default=()
-        )
-
-    def stick(self) -> Token[_T]:
-        """Permanently set the context variable to the target value."""
-        val_to_set = self.value
-        if self.resolver:
-            val_to_set = self.resolver(self.var.get(), self.value)
-
-        token = self.var.set(val_to_set)
-        # Store the token in a thread-local/task-local stack
-        self._tokens.set(self._tokens.get() + (token,))
-        return token
-
-    def pluck(self):
-        """Restore the context variable to its previous state."""
-        tokens = self._tokens.get()
-        if not tokens:
-            raise RuntimeError("Context not active")
-        self.var.reset(tokens[-1])
-        self._tokens.set(tokens[:-1])
+    def __init__(self, cache_var: "CacheVar", new_cache: BaseCache, stack: bool = False):
+        self._cache_var = cache_var
+        self._new_cache = new_cache
+        self._stack = stack
+        self._token: Token[BaseCache] | None = None
 
     def __enter__(self):
-        self.stick()
-        return self
+        val_to_set = self._new_cache
+        if self._stack:
+            val_to_set = self._cache_var.get().push(self._new_cache)
+        self._token = self._cache_var.set(val_to_set)
+        return self._new_cache
 
     def __exit__(self, *args):
-        self.pluck()
+        if self._token:
+            self._cache_var.reset(self._token)
+            self._token = None
+
+    # BaseCache proxy methods - they refer to the cache this context *would* set or currently represents
+    def save(self, call: Call) -> str:
+        return self._new_cache.save(call)
+
+    def load(self, key: str, lazy: bool = False) -> Call | LazyCall:
+        return self._new_cache.load(key, lazy=lazy)
+
+    def load_value(self, key: str) -> Any:
+        return self._new_cache.load_value(key)
+
+    def contains(self, key: str) -> bool:
+        return self._new_cache.contains(key)
+
+    def push(self, cache: BaseCache) -> CacheStack:
+        return self._new_cache.push(cache)
+
+    def shrink(self, key: Digest | str) -> Digest:
+        return self._new_cache.shrink(key)
+
+    def query(self, call: Call, lazy: bool = False) -> Iterable[Call | LazyCall]:
+        return self._new_cache.query(call, lazy=lazy)
+
+    def table(self) -> pd.DataFrame:
+        return self._new_cache.table()
+
+    def filter(self, predicate: Callable[[Call | LazyCall], bool] | Call) -> FilteredCache:
+        return self._new_cache.filter(predicate)
 
 
-class CacheVar:
-    """Wrapper for ContextVar[BaseCache] with enhanced callable interface."""
+class CacheVar(BaseCache):
+    """A proxy for the active cache that also manages context switching."""
 
     def __init__(self, var: ContextVar[BaseCache]):
         self._var = var
@@ -76,37 +80,48 @@ class CacheVar:
     def set(self, value: BaseCache) -> Token[BaseCache]:
         return self._var.set(value)
 
-    def reset(self, token: Union[Token[BaseCache], ManagedToken[BaseCache]]):
-        if isinstance(token, ManagedToken):
-            token.pluck()
-        else:
-            self._var.reset(token)
+    def reset(self, token: Token[BaseCache]):
+        self._var.reset(token)
+
+    # BaseCache implementation via delegation to the current context
+    def save(self, call: Call) -> str:
+        return self._var.get().save(call)
+
+    def load(self, key: str, lazy: bool = False) -> Call | LazyCall:
+        return self._var.get().load(key, lazy=lazy)
+
+    def load_value(self, key: str) -> Any:
+        return self._var.get().load_value(key)
+
+    def contains(self, key: str) -> bool:
+        return self._var.get().contains(key)
+
+    def push(self, cache: BaseCache) -> CacheStack:
+        return self._var.get().push(cache)
+
+    def shrink(self, key: Digest | str) -> Digest:
+        return self._var.get().shrink(key)
+
+    def query(self, call: Call, lazy: bool = False) -> Iterable[Call | LazyCall]:
+        return self._var.get().query(call, lazy=lazy)
+
+    def table(self) -> pd.DataFrame:
+        return self._var.get().table()
+
+    def filter(self, predicate: Callable[[Call | LazyCall], bool] | Call) -> FilteredCache:
+        return self._var.get().filter(predicate)
 
     @overload
-    def __call__(self, new_cache: None = None, stack: bool = False) -> BaseCache: ...
+    def __call__(self, new_cache: None = None, stack: bool = False, sticky: bool = False) -> BaseCache: ...
 
     @overload
     def __call__(
-        self, new_cache: Union[Cache, str], stack: bool = False
-    ) -> ManagedToken[BaseCache]: ...
+        self, new_cache: Union[BaseCache, str], stack: bool = False, sticky: bool = False
+    ) -> Union[BaseCache, CacheContext]: ...
 
     def __call__(
-        self, new_cache: Union[Cache, str, None] = None, stack: bool = False
-    ) -> Union[BaseCache, ManagedToken[BaseCache]]:
-        """Manages the active cache for Fleche.
-
-        If `new_cache` is provided, it returns a ManagedToken that can be used
-        as a context manager, decorator, or stuck manually. If `new_cache` is
-        None, it returns the currently active cache.
-
-        Args:
-            new_cache (Optional[Cache]): An optional Cache object to set as the active cache.
-            stack (bool, default False): if True, construct a CacheStack, with new_cache at the bottom
-
-        Returns:
-            Union[:class:`.BaseCache`, ManagedToken]:
-                The current cache object if `new_cache` is `None`, otherwise a context manager to set a new cache.
-        """
+        self, new_cache: Union[BaseCache, str, None] = None, stack: bool = False, sticky: bool = False
+    ) -> Union[BaseCache, CacheContext]:
         if new_cache is None:
             return self.get()
 
@@ -118,12 +133,40 @@ class CacheVar:
         else:
             raise ValueError(new_cache)
 
-        resolver = (lambda current, new: current.push(new)) if stack else None
-        return ManagedToken(self._var, resolved_cache, resolver)
+        if sticky:
+            val_to_set = resolved_cache
+            if stack:
+                val_to_set = self.get().push(resolved_cache)
+            self.set(val_to_set)
+            return val_to_set
+
+        return CacheContext(self, resolved_cache, stack)
+
+
+class MetaContext(ContextDecorator, AbstractContextManager):
+    """A context manager and decorator for adding metadata."""
+
+    def __init__(self, meta_var: "MetaVar", new_metadata: tuple[MetaData, ...], stack: bool = False):
+        self._meta_var = meta_var
+        self._new_metadata = new_metadata
+        self._stack = stack
+        self._token: Token[tuple[MetaData, ...]] | None = None
+
+    def __enter__(self):
+        val_to_set = self._new_metadata
+        if self._stack:
+            val_to_set = self._meta_var.get() + self._new_metadata
+        self._token = self._meta_var.set(val_to_set)
+        return val_to_set
+
+    def __exit__(self, *args):
+        if self._token:
+            self._meta_var.reset(self._token)
+            self._token = None
 
 
 class MetaVar:
-    """Wrapper for ContextVar[tuple[MetaData, ...]] with enhanced callable interface."""
+    """A proxy for the active metadata that also manages context switching."""
 
     def __init__(self, var: ContextVar[tuple[MetaData, ...]]):
         self._var = var
@@ -134,58 +177,64 @@ class MetaVar:
     def set(self, value: tuple[MetaData, ...]) -> Token[tuple[MetaData, ...]]:
         return self._var.set(value)
 
-    def reset(
-        self,
-        token: Union[Token[tuple[MetaData, ...]], ManagedToken[tuple[MetaData, ...]]],
-    ):
-        if isinstance(token, ManagedToken):
-            token.pluck()
-        else:
-            self._var.reset(token)
+    def reset(self, token: Token[tuple[MetaData, ...]]):
+        self._var.reset(token)
+
+    # Sequence-like interface
+    def __iter__(self):
+        return iter(self.get())
+
+    def __len__(self):
+        return len(self.get())
+
+    def __getitem__(self, index):
+        return self.get()[index]
 
     @overload
-    def __call__(self, stack: bool = False) -> tuple[MetaData, ...]: ...
+    def __call__(self, stack: bool = False, sticky: bool = False) -> tuple[MetaData, ...]: ...
 
     @overload
     def __call__(
-        self, *new_metadata: MetaData, stack: bool = False
-    ) -> ManagedToken[tuple[MetaData, ...]]: ...
+        self, *new_metadata: MetaData, stack: bool = False, sticky: bool = False
+    ) -> Union[tuple[MetaData, ...], MetaContext]: ...
 
     def __call__(
-        self, *new_metadata: MetaData, stack: bool = False
-    ) -> Union[tuple[MetaData, ...], ManagedToken[tuple[MetaData, ...]]]:
-        """A context manager to add metadata to results.
-
-        Args:
-            *new_metadata: The metadata to add to the results.
-            stack (bool, default False): if True, append to the existing metadata.
-        """
+        self, *new_metadata: MetaData, stack: bool = False, sticky: bool = False
+    ) -> Union[tuple[MetaData, ...], MetaContext]:
         if not new_metadata:
             return self.get()
 
         resolved_meta = tuple(new_metadata)
-        resolver = (lambda current, new: current + new) if stack else None
 
-        return ManagedToken(self._var, resolved_meta, resolver)
+        if sticky:
+            val_to_set = resolved_meta
+            if stack:
+                val_to_set = self.get() + resolved_meta
+            self.set(val_to_set)
+            return val_to_set
+
+        return MetaContext(self, resolved_meta, stack)
 
 
 cache = CacheVar(_CACHE)
 meta = MetaVar(_METADATA)
 
 
-def tags(**kwargs) -> ManagedToken[tuple[MetaData, ...]]:
+def tags(sticky: bool = False, **kwargs) -> Union[tuple[MetaData, ...], MetaContext]:
     """A context manager to add arbitrary tags to results.
 
     Args:
+        sticky (bool, default False): if True, permanently add the tags.
         **kwargs: The tags to add to the results.
     """
-    return cast(ManagedToken[tuple[MetaData, ...]], meta(Tags(kwargs), stack=True))
+    return meta(Tags(kwargs), stack=True, sticky=sticky)
 
 
-def project(name) -> ManagedToken[tuple[MetaData, ...]]:
+def project(name, sticky: bool = False) -> Union[tuple[MetaData, ...], MetaContext]:
     """A context manager to tag results with a project name.
 
     Args:
         name (str): The name of the project.
+        sticky (bool, default False): if True, permanently add the project tag.
     """
-    return tags(project=name)
+    return tags(sticky=sticky, project=name)
