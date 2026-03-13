@@ -6,15 +6,13 @@ from ..digest import Digest, DIGEST_LENGTH, digest
 
 from pyiron_snippets.import_alarm import ImportAlarm
 
-
 with ImportAlarm(
     "Sql requires 'sqlalchemy' to be installed. "
     "Install it with `pip install fleche[sqlalchemy]`.",
-    raise_exception=True
+    raise_exception=True,
 ) as sqlalchemy_alarm:
     from sqlalchemy import (
         create_engine,
-        Column,
         String,
         Integer,
         ForeignKey,
@@ -23,7 +21,14 @@ with ImportAlarm(
         and_,
     )
     from sqlalchemy import event
-    from sqlalchemy.orm import declarative_base, sessionmaker, relationship, aliased, Mapped, mapped_column
+    from sqlalchemy.orm import (
+        declarative_base,
+        sessionmaker,
+        relationship,
+        aliased,
+        Mapped,
+        mapped_column,
+    )
     from sqlalchemy.types import JSON
 
     Base = declarative_base()
@@ -90,7 +95,7 @@ def _coerce_sqlite_url(path_or_url: str | None) -> str:
         url = f"sqlite:///{abs_path}"
 
     if url.startswith("sqlite:///"):
-        db_path = url[len("sqlite:///"):]
+        db_path = url[len("sqlite:///") :]
         if db_path and db_path != ":memory:":
             Path(db_path).parent.mkdir(parents=True, exist_ok=True)
 
@@ -150,7 +155,9 @@ class Sql(CallStorage):
 
             for i, (k, v) in enumerate(call.arguments.items()):
                 session.add(
-                    ArgumentModel(call_key=str(key), position=i, name=str(k), value=str(v))
+                    ArgumentModel(
+                        call_key=str(key), position=i, name=str(k), value=str(v)
+                    )
                 )
 
             if call.metadata:
@@ -281,6 +288,7 @@ class Sql(CallStorage):
         """
         session = self.Session()
         try:
+
             def normalize_value(v: Any) -> str:
                 """Return the stored form used in SQL for argument/result matching.
 
@@ -335,10 +343,13 @@ class Sql(CallStorage):
                     # Build joins and conditions per metadata name
                     for mname, filters in meta_specs.items():
                         M = aliased(MetaModel)
-                        stmt = stmt.join(M, and_(
-                            M.call_key == CallModel.key,
-                            M.name == mname,
-                        ))
+                        stmt = stmt.join(
+                            M,
+                            and_(
+                                M.call_key == CallModel.key,
+                                M.name == mname,
+                            ),
+                        )
                         for k, v in (filters or {}).items():
                             if isinstance(v, bool):
                                 stmt = stmt.where(M.data[k].as_boolean() == v)
