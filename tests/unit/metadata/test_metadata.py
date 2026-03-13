@@ -184,3 +184,20 @@ def test_tags():
             key2 = my_func.digest(2, 1)
             call2 = cache().calls.load(key2)
             assert call2.metadata.get("tags", {}).get("project") == "example"
+
+
+def test_metadata_default_methods():
+    class MyMetaData(MetaData):
+        @property
+        def keys(self):
+            return {}
+
+        @property
+        def name(self):
+            return "minimal"
+
+    meta = MyMetaData()
+    call = Call(name="test", arguments={})
+
+    assert meta.pre(call) == {}
+    assert meta.post({}, call) == {}
