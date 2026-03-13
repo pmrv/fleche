@@ -1,0 +1,4 @@
+# file: /app/src/fleche/wrapper.py
+# hypothesis_version: 6.151.9
+
+['.cache', 'XDG_CACHE_HOME', '_T', 'call', 'contains', 'cwd', 'digest', 'fleche', 'lazy', 'load', 'metadata', 'query', 'return']

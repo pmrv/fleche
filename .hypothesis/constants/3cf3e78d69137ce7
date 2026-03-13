@@ -1,0 +1,4 @@
+# file: /app/src/fleche/storage/sql.py
+# hypothesis_version: 6.151.9
+
+[':memory:', 'ArgumentModel', 'CASCADE', 'CallModel', 'all, delete-orphan', 'arguments', 'call', 'call_key', 'calls', 'calls.key', 'connect', 'metadata', 'name', 'sqlite:', 'sqlite:///', 'sqlite:///:memory:']

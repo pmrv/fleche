@@ -1,0 +1,4 @@
+# file: /app/src/fleche/call.py
+# hypothesis_version: 6.151.9
+
+['AnyCall', 'Call', 'Call | LazyCall', 'LazyCall', '__code__', '__module__', '__version__']

@@ -1,0 +1,4 @@
+# file: /app/src/fleche/storage/file.py
+# hypothesis_version: 6.151.9
+
+[0.001, 1.0, '.', '.lock', 'fleche.storage', 'unknown']

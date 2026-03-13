@@ -1,0 +1,4 @@
+# file: /app/src/fleche/metadata.py
+# hypothesis_version: 6.151.9
+
+['JSONValue', 'runtime', 'tags', 'timestart', 'timestop', 'walltime']

@@ -1,0 +1,4 @@
+# file: /app/src/fleche/config.py
+# hypothesis_version: 6.151.9
+
+['.fleche.toml', 'BagOfHoldingH5File', 'CloudpickleFile', 'DillFile', 'HOME', 'Memory', 'PickleFile', 'Runtime', 'Sql', 'Tags', 'Void', 'XDG_CONFIG_HOME', 'cache', 'cache.toml', 'calls', 'default', 'fleche', 'fleche.config', 'fleche.toml', 'memory', 'metadata', 'rb', 'type', 'values', 'void', '~']

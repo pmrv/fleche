@@ -1,0 +1,4 @@
+# file: /app/src/fleche/storage/base.py
+# hypothesis_version: 6.151.9
+
+['Saving call %s', 'fleche.storage']

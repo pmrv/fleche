@@ -43,6 +43,12 @@ class CacheContext(BaseCache, ContextDecorator, AbstractContextManager):
     def save(self, call: Call) -> str:
         return self._new_cache.save(call)
 
+    @overload
+    def load(self, key: str, lazy: bool = False) -> Call: ...
+
+    @overload
+    def load(self, key: str, lazy: bool = True) -> LazyCall: ...
+
     def load(self, key: str, lazy: bool = False) -> Call | LazyCall:
         return self._new_cache.load(key, lazy=lazy)
 
@@ -86,6 +92,12 @@ class CacheVar(BaseCache):
     # BaseCache implementation via delegation to the current context
     def save(self, call: Call) -> str:
         return self._var.get().save(call)
+
+    @overload
+    def load(self, key: str, lazy: bool = False) -> Call: ...
+
+    @overload
+    def load(self, key: str, lazy: bool = True) -> LazyCall: ...
 
     def load(self, key: str, lazy: bool = False) -> Call | LazyCall:
         return self._var.get().load(key, lazy=lazy)
