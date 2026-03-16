@@ -92,6 +92,21 @@ def test_cache_context_manager():
     assert cache() is default_cache
 
 
+def test_base_cache_push():
+    values_storage1 = Mock()
+    calls_storage1 = Mock()
+    c1 = Cache(values_storage1, calls_storage1)
+
+    values_storage2 = Mock()
+    calls_storage2 = Mock()
+    c2 = Cache(values_storage2, calls_storage2)
+
+    stack = c1.push(c2)
+
+    assert isinstance(stack, CacheStack)
+    assert stack.stack == (c2, c1)
+
+
 @pytest.mark.xfail
 def test_base_cache_transfer():
     values_storage = Mock()
@@ -127,6 +142,17 @@ def test_readonly_cache_load():
     c = ReadOnlyCache(mock_cache)
     c.load("key")
     mock_cache.load.assert_called_once_with("key", lazy=True)
+
+
+def test_cache_stack_push():
+    c1 = Mock()
+    c2 = Mock()
+    c3 = Mock()
+    stack1 = CacheStack((c1, c2))
+    stack2 = stack1.push(c3)
+
+    assert isinstance(stack2, CacheStack)
+    assert stack2.stack == (c3, c1, c2)
 
 
 def test_cache_stack_save():
