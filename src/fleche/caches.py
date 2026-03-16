@@ -234,6 +234,9 @@ class Cache(BaseCache):
         call = self.calls.load(key)
         return self._decode_call(call, lazy)
 
+    def contains(self, key: str) -> bool:
+        return self.calls.contains(key)
+
     def shrink(self, key: Digest | str) -> Digest:
         return self.calls.shrink(key)
 
@@ -259,6 +262,7 @@ class Cache(BaseCache):
             Call | LazyCall: Matching calls with arguments and result decoded from digests
             where possible.
         """
+
         # Delegate to underlying call storage, but first expand possible value digests and decode any digested
         # arguments/results before yielding to the caller (same semantics as load()).
         def maybe_expand(value):
@@ -297,6 +301,7 @@ class Cache(BaseCache):
 @dataclass(frozen=True)
 class ReadOnlyCache(BaseCache):
     """A cache that can only be read from."""
+
     cache: BaseCache
 
     def save(self, call: Call):
@@ -310,6 +315,9 @@ class ReadOnlyCache(BaseCache):
 
     def load_value(self, key):
         return self.cache.load_value(key)
+
+    def contains(self, key: str) -> bool:
+        return self.cache.contains(key)
 
     @overload
     def query(self, call: Call, lazy: bool = False) -> Iterable[Call]: ...
@@ -362,6 +370,7 @@ class CacheStack(BaseCache):
 
     Saving will always hit the lowest level, while loading will traverse up.
     """
+
     stack: tuple[BaseCache, ...]
 
     def save(self, call: Call):
@@ -385,6 +394,8 @@ class CacheStack(BaseCache):
         else:
             raise KeyError(key)
 
+    def contains(self, key: str) -> bool:
+        return any(cache.contains(key) for cache in self.stack)
 
     def push(self, cache: BaseCache) -> "CacheStack":
         return CacheStack((cache, *self.stack))
