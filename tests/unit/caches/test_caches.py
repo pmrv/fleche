@@ -150,9 +150,10 @@ def test_cache_stack_load_hit():
     call = Call(name="test", arguments={"x": 1}, result="result")
     c2.load.return_value = call
     stack = CacheStack((c1, c2))
-    result = stack.load("key")
-    c1.load.assert_called_once_with("key", lazy=True)
-    c2.load.assert_called_once_with("key", lazy=True)
+    # avoid mocking a lazycall
+    result = stack.load("key", lazy=False)
+    c1.load.assert_called_once_with("key", lazy=False)
+    c2.load.assert_called_once_with("key", lazy=False)
     assert result == call
 
 

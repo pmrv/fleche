@@ -377,9 +377,16 @@ class CacheStack(BaseCache):
         self.stack[0].save(call)
 
     def load(self, key, lazy: bool = True):
-        for cache in self.stack:
+        for i, cache in enumerate(self.stack):
             try:
-                return cache.load(key, lazy=lazy)
+                call = cache.load(key, lazy=lazy)
+                if i > 0:
+                    try:
+                        self.save(call.fetch() if lazy else call)
+                        logger.info("Transferred hit for %s from higher cache to base cache", key)
+                    except Rejected as e:
+                        logger.warning("Failed to transfer hit for %s to base cache: %s", key, e)
+                return call
             except KeyError:
                 continue
         else:
