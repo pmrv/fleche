@@ -1,4 +1,4 @@
-from contextlib import contextmanager, AbstractContextManager
+from contextlib import contextmanager, AbstractContextManager, nullcontext
 from contextvars import ContextVar
 from typing import Union
 
@@ -10,7 +10,7 @@ _CACHE: ContextVar[BaseCache] = ContextVar("fleche.CACHE", default=load_cache_co
 
 
 def cache(
-    new_cache: Union[Cache, str] | None = None, stack=False
+    new_cache: Union[Cache, str] | None = None, stack: bool = False, sticky: bool = False
 ) -> Union[BaseCache, AbstractContextManager[None]]:
     """
     Manages the active cache for Fleche. If `new_cache` is provided, it returns a context manager
@@ -20,9 +20,10 @@ def cache(
     Args:
         new_cache (Optional[Cache]): An optional Cache object to set as the active cache.
         stack (bool, default False): if True, construct a CacheStack, with new_cache at the bottom
+        sticky (bool, default False): if True, permanently set the cache for the current context.
 
     Returns:
-        Union[:class:`.BaseCache`, Callable[..., Any]]:
+        Union[:class:`.BaseCache`, AbstractContextManager[None]]:
             The current cache object if `new_cache` is `None`, otherwise a context manager to set a new cache.
     """
     if new_cache is None:
@@ -33,13 +34,16 @@ def cache(
     if not isinstance(new_cache, BaseCache):
         raise ValueError(new_cache)
 
+    if sticky:
+        if stack:
+            new_cache = _CACHE.get().push(new_cache)
+        _CACHE.set(new_cache)
+        return nullcontext()
+
     @contextmanager
     def cache_manager():
-        if stack:
-            cache = _CACHE.get().push(new_cache)
-        else:
-            cache = new_cache
-        token = _CACHE.set(cache)
+        actual_cache = _CACHE.get().push(new_cache) if stack else new_cache
+        token = _CACHE.set(actual_cache)
         try:
             yield
         finally:
@@ -53,32 +57,49 @@ _METADATA: ContextVar[tuple[MetaData, ...]] = ContextVar(
 )
 
 
-@contextmanager
-def meta(*new_metadata: MetaData, stack=False):
+def meta(*new_metadata: MetaData, stack: bool = False, sticky: bool = False):
+    """
+    Context manager (or sticky setter) for metadata.
+
+    Args:
+        *new_metadata: The metadata to set.
+        stack (bool, default False): if True, append to existing metadata.
+        sticky (bool, default False): if True, permanently set the metadata for the current context.
+    """
     new_metadata = tuple(new_metadata)
-    if stack:
-        new_metadata = _METADATA.get() + new_metadata
+    if sticky:
+        if stack:
+            new_metadata = _METADATA.get() + new_metadata
+        _METADATA.set(new_metadata)
+        return nullcontext()
 
-    token = _METADATA.set(new_metadata)
-    try:
-        yield
-    finally:
-        _METADATA.reset(token)
+    @contextmanager
+    def meta_manager():
+        actual_metadata = _METADATA.get() + new_metadata if stack else new_metadata
+        token = _METADATA.set(actual_metadata)
+        try:
+            yield
+        finally:
+            _METADATA.reset(token)
+
+    return meta_manager()
 
 
-def tags(**kwargs):
+def tags(sticky: bool = False, **kwargs):
     """A context manager to add arbitrary tags to results.
 
     Args:
+        sticky (bool, default False): if True, permanently set the tags for the current context.
         **kwargs: The tags to add to the results.
     """
-    return meta(Tags(kwargs), stack=True)
+    return meta(Tags(kwargs), stack=True, sticky=sticky)
 
 
-def project(name):
+def project(name: str, sticky: bool = False):
     """A context manager to tag results with a project name.
 
     Args:
         name (str): The name of the project.
+        sticky (bool, default False): if True, permanently set the project for the current context.
     """
-    return tags(project=name)
+    return tags(project=name, sticky=sticky)
