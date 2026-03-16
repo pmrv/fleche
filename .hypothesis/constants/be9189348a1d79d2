@@ -1,0 +1,4 @@
+# file: /app/src/fleche/state.py
+# hypothesis_version: 6.151.9
+
+['fleche.CACHE', 'fleche.METADATA']

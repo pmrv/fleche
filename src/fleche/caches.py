@@ -47,6 +47,10 @@ class BaseCache(ABC):
     def load_value(self, key: str) -> Any:
         ...
 
+    @abstractmethod
+    def save_value(self, value: Any, key: Digest | None = None) -> Digest:
+        ...
+
     def contains(self, key: str) -> bool:
         try:
             self.load(key, lazy=True)
@@ -163,6 +167,9 @@ class Cache(BaseCache):
 
         if not isinstance(self.values, storage.DestructuringStorage):
             self.values = storage.DestructuringStorage(self.values)
+
+    def save_value(self, value: Any, key: Digest | None = None) -> Digest:
+        return self.values.save(value, key)
 
     def load_value(self, key):
         if not isinstance(key, Digest):
@@ -316,6 +323,9 @@ class ReadOnlyCache(BaseCache):
     def load_value(self, key):
         return self.cache.load_value(key)
 
+    def save_value(self, value: Any, key: Digest | None = None) -> Digest:
+        raise Rejected(self, value)
+
     def contains(self, key: str) -> bool:
         return self.cache.contains(key)
 
@@ -377,22 +387,36 @@ class CacheStack(BaseCache):
         self.stack[0].save(call)
 
     def load(self, key, lazy: bool = True):
-        for cache in self.stack:
+        for i, cache in enumerate(self.stack):
             try:
-                return cache.load(key, lazy=lazy)
+                call = cache.load(key, lazy=lazy)
+                if i > 0:
+                    to_save = call
+                    if isinstance(to_save, LazyCall):
+                        to_save = to_save.fetch()
+                    self.stack[0].save(to_save)
+                    # re-load from stack[0] to ensure lazy calls are bound to it
+                    return self.stack[0].load(key, lazy=lazy)
+                return call
             except KeyError:
                 continue
         else:
             raise KeyError(key)
 
     def load_value(self, key):
-        for cache in self.stack:
+        for i, cache in enumerate(self.stack):
             try:
-                return cache.load_value(key)
+                value = cache.load_value(key)
+                if i > 0 and isinstance(key, (Digest, str)) and len(key) == 64:
+                    self.stack[0].save_value(value, Digest(key))
+                return value
             except KeyError:
                 continue
         else:
             raise KeyError(key)
+
+    def save_value(self, value: Any, key: Digest | None = None) -> Digest:
+        return self.stack[0].save_value(value, key)
 
     def contains(self, key: str) -> bool:
         return any(cache.contains(key) for cache in self.stack)

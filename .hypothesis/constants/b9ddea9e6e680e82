@@ -1,0 +1,4 @@
+# file: /app/src/fleche/security.py
+# hypothesis_version: 6.151.9
+
+[':', 'FLECHE_SECRET_KEY', 'Invalid signature', 'No STOP opcode found', 'No signature found', 'ascii', 'fleche.security', 'utf-8']

@@ -145,14 +145,16 @@ def test_cache_stack_load_hit():
     from fleche.call import Call
 
     c1 = Mock()
-    c1.load.side_effect = KeyError
+    c1.load.side_effect = [KeyError, Call(name="test", arguments={"x": 1}, result="result")]
     c2 = Mock()
     call = Call(name="test", arguments={"x": 1}, result="result")
     c2.load.return_value = call
     stack = CacheStack((c1, c2))
     result = stack.load("key")
-    c1.load.assert_called_once_with("key", lazy=True)
+    assert c1.load.call_count == 2
+    c1.load.assert_any_call("key", lazy=True)
     c2.load.assert_called_once_with("key", lazy=True)
+    c1.save.assert_called_once_with(call)
     assert result == call
 
 
