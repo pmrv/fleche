@@ -47,6 +47,10 @@ class BaseCache(ABC):
     def load_value(self, key: str) -> Any:
         ...
 
+    @abstractmethod
+    def evict(self, key: str | Digest) -> None:
+        ...
+
     def contains(self, key: str) -> bool:
         try:
             self.load(key, lazy=True)
@@ -234,6 +238,9 @@ class Cache(BaseCache):
         call = self.calls.load(key)
         return self._decode_call(call, lazy)
 
+    def evict(self, key: str | Digest) -> None:
+        self.calls.evict(key)
+
     def contains(self, key: str) -> bool:
         return self.calls.contains(key)
 
@@ -305,13 +312,16 @@ class ReadOnlyCache(BaseCache):
     cache: BaseCache
 
     def save(self, call: Call):
-        raise Rejected(self, call)
+        raise Rejected("Cannot save to a ReadOnlyCache", self, call)
 
     def load(self, key, lazy: bool = True):
         return self.cache.load(key, lazy=lazy)
 
     def shrink(self, key: Digest | str) -> Digest:
         return self.cache.shrink(key)
+
+    def evict(self, key: str | Digest) -> None:
+        raise Rejected("Cannot evict from a ReadOnlyCache", self, key)
 
     def load_value(self, key):
         return self.cache.load_value(key)
@@ -363,7 +373,52 @@ class FilteredCache(ReadOnlyCache):
                 yield c
 
 
-@dataclass(frozen = True)
+@dataclass(frozen=True)
+class RefreshingCache(BaseCache):
+    """A cache that forces re-execution by always missing on load.
+
+    It forwards saves and value loads to an underlying cache, allowing
+    new results to be stored while ensuring that existing ones are
+    ignored for the duration of its use.
+    """
+
+    cache: BaseCache
+
+    def save(self, call: Call) -> str:
+        return self.cache.save(call)
+
+    @overload
+    def load(self, key: str, lazy: bool = False) -> Call: ...
+
+    @overload
+    def load(self, key: str, lazy: bool = True) -> LazyCall: ...
+
+    def load(self, key: str, lazy: bool = True) -> Call | LazyCall:
+        raise KeyError(key)
+
+    def load_value(self, key: str) -> Any:
+        return self.cache.load_value(key)
+
+    def contains(self, key: str) -> bool:
+        return False
+
+    def evict(self, key: str | Digest) -> None:
+        self.cache.evict(key)
+
+    def shrink(self, key: Digest | str) -> Digest:
+        return self.cache.shrink(key)
+
+    @overload
+    def query(self, call: Call, lazy: bool = False) -> Iterable[Call]: ...
+
+    @overload
+    def query(self, call: Call, lazy: bool = True) -> Iterable[LazyCall]: ...
+
+    def query(self, call: Call, lazy: bool = True) -> Iterable[Call | LazyCall]:
+        return self.cache.query(call, lazy=lazy)
+
+
+@dataclass(frozen=True)
 class CacheStack(BaseCache):
     """
     Represents a combination of caches.
@@ -399,6 +454,13 @@ class CacheStack(BaseCache):
 
     def push(self, cache: BaseCache) -> "CacheStack":
         return CacheStack((cache, *self.stack))
+
+    def evict(self, key: str | Digest) -> None:
+        for cache in self.stack:
+            try:
+                cache.evict(key)
+            except (Rejected, KeyError):
+                continue
 
     def shrink(self, key: Digest | str) -> Digest:
         return sorted([c.shrink(key) for c in self.stack], key=len)[-1]  # ty: ignore upstream bug, already filled
