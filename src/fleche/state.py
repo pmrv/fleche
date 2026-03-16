@@ -10,7 +10,9 @@ _CACHE: ContextVar[BaseCache] = ContextVar("fleche.CACHE", default=load_cache_co
 
 
 def cache(
-    new_cache: Union[Cache, str] | None = None, stack: bool = False, sticky: bool = False
+    new_cache: Union[BaseCache, str] | None = None,
+    stack: bool = False,
+    sticky: bool = False,
 ) -> Union[BaseCache, AbstractContextManager[None]]:
     """
     Manages the active cache for Fleche. If `new_cache` is provided, it returns a context manager
@@ -18,7 +20,7 @@ def cache(
     the currently active cache.
 
     Args:
-        new_cache (Optional[Cache]): An optional Cache object to set as the active cache.
+        new_cache (Optional[BaseCache]): An optional Cache object to set as the active cache.
         stack (bool, default False): if True, construct a CacheStack, with new_cache at the bottom
         sticky (bool, default False): if True, permanently set the cache for the current context.
 
@@ -29,21 +31,24 @@ def cache(
     if new_cache is None:
         return _CACHE.get()
 
+    actual_cache: BaseCache
     if isinstance(new_cache, str):
-        new_cache = load_cache_config(new_cache)
-    if not isinstance(new_cache, BaseCache):
+        actual_cache = load_cache_config(new_cache)
+    elif isinstance(new_cache, BaseCache):
+        actual_cache = new_cache
+    else:
         raise ValueError(new_cache)
 
     if sticky:
         if stack:
-            new_cache = _CACHE.get().push(new_cache)
-        _CACHE.set(new_cache)
+            actual_cache = _CACHE.get().push(actual_cache)
+        _CACHE.set(actual_cache)
         return nullcontext()
 
     @contextmanager
     def cache_manager():
-        actual_cache = _CACHE.get().push(new_cache) if stack else new_cache
-        token = _CACHE.set(actual_cache)
+        to_set = _CACHE.get().push(actual_cache) if stack else actual_cache
+        token = _CACHE.set(to_set)
         try:
             yield
         finally:
