@@ -312,7 +312,7 @@ class ReadOnlyCache(BaseCache):
     cache: BaseCache
 
     def save(self, call: Call):
-        raise Rejected("Cannot save to a ReadOnlyCache", self, call)
+        raise Rejected(f"Cannot save {call} to a ReadOnlyCache", self)
 
     def load(self, key, lazy: bool = True):
         return self.cache.load(key, lazy=lazy)
@@ -321,7 +321,7 @@ class ReadOnlyCache(BaseCache):
         return self.cache.shrink(key)
 
     def evict(self, key: str | Digest) -> None:
-        raise Rejected("Cannot evict from a ReadOnlyCache", self, key)
+        raise Rejected(f"Cannot evict {key} from a ReadOnlyCache", self)
 
     def load_value(self, key):
         return self.cache.load_value(key)
