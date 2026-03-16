@@ -187,7 +187,10 @@ class CallStorage(StorageBase):
     """Special storage for saving :class:`Call` instances."""
 
     def save(self, call: Call) -> Digest:
-        logger.debug("Saving call %s", call.to_lookup_key())
+        key = call.to_lookup_key()
+        logger.debug("Saving call %s", key)
+        if self.contains(str(key)):
+            self.evict(str(key))
         return self._save(call)
 
     @abstractmethod

@@ -312,7 +312,7 @@ class ReadOnlyCache(BaseCache):
     cache: BaseCache
 
     def save(self, call: Call):
-        raise Rejected(f"Cannot save {call} to a ReadOnlyCache", self)
+        raise Rejected("Cannot save to a ReadOnlyCache", self, call)
 
     def load(self, key, lazy: bool = True):
         return self.cache.load(key, lazy=lazy)
@@ -321,7 +321,7 @@ class ReadOnlyCache(BaseCache):
         return self.cache.shrink(key)
 
     def evict(self, key: str | Digest) -> None:
-        raise Rejected(f"Cannot evict {key} from a ReadOnlyCache", self)
+        raise Rejected("Cannot evict from a ReadOnlyCache", self, key)
 
     def load_value(self, key):
         return self.cache.load_value(key)
@@ -380,6 +380,9 @@ class RefreshingCache(BaseCache):
     It forwards saves and value loads to an underlying cache, allowing
     new results to be stored while ensuring that existing ones are
     ignored for the duration of its use.
+
+    This is necessary to handle nested fleche calls during a rerun,
+    otherwise forcing them to re-execute would be awkward.
     """
 
     cache: BaseCache

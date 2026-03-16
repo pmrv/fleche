@@ -20,7 +20,7 @@ def test_rerun_basic():
         assert func(1) == 1
         assert mock_func.call_count == 1
 
-        # Rerun: evict and execute
+        # Rerun: re-execute and overwrite
         assert func.rerun(1) == 2
         assert mock_func.call_count == 2
 

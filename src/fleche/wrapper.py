@@ -132,13 +132,8 @@ def fleche(
 
         @wraps(func)
         def _rerun_func(*args, **kwargs):
+            """Evict result and any nested calls and re-execute."""
             cache: BaseCache = state._CACHE.get()
-            try:
-                key = _digest_func(*args, **kwargs)
-                cache.evict(key)
-            except (digest.Unhashable, KeyError, Rejected):
-                pass
-
             with state.cache(RefreshingCache(cache)):
                 return wrapper(*args, **kwargs)
 
