@@ -1,11 +1,11 @@
 from typing import Iterable, Any
 from pathlib import Path
+from dataclasses import dataclass, field
 from .base import CallStorage, AmbiguousDigestError
 from ..call import Call
 from ..digest import Digest, DIGEST_LENGTH, digest
 
 from pyiron_snippets.import_alarm import ImportAlarm
-
 
 with ImportAlarm(
     "Sql requires 'sqlalchemy' to be installed. "
@@ -119,13 +119,20 @@ def _enable_sqlite_foreign_keys(engine) -> None:
             cursor.close()
 
 
+@dataclass
 class Sql(CallStorage):
     """SQLAlchemy-backed CallStorage with JSON metadata and DB-backed expand()."""
 
+    url: str | None = None
+    echo: bool = field(default=False, compare=False)
+
+    engine: Any = field(init=False, repr=False, compare=False)
+    Session: Any = field(init=False, repr=False, compare=False)
+
     @sqlalchemy_alarm
-    def __init__(self, url: str | None = None, echo: bool = False):
-        url = _coerce_sqlite_url(url)
-        self.engine = create_engine(url, echo=echo, future=True)
+    def __post_init__(self) -> None:
+        self.url = _coerce_sqlite_url(self.url)
+        self.engine = create_engine(self.url, echo=self.echo, future=True)
         _enable_sqlite_foreign_keys(self.engine)
         Base.metadata.create_all(self.engine)
         self.Session = sessionmaker(
