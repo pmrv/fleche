@@ -2,7 +2,7 @@ from unittest.mock import Mock, MagicMock
 import pytest
 from fleche import fleche, cache
 from fleche.call import Call
-from fleche.digest import digest, Digest
+from fleche.digest import Digest
 from fleche.caches import ReadOnlyCache, CacheStack, Rejected, Cache
 
 
@@ -46,7 +46,7 @@ def test_cache_load():
         )
     )
     c = Cache(values_storage, calls_storage)
-    c.load("key")
+    c.load("key").fetch()  # ty: ignore
     calls_storage.load.assert_called_once_with("key")
     values_storage.load.assert_any_call(Digest("arg1" + "0" * 60))
     values_storage.load.assert_any_call(Digest("arg2" + "0" * 60))
@@ -126,7 +126,7 @@ def test_readonly_cache_load():
     mock_cache = Mock()
     c = ReadOnlyCache(mock_cache)
     c.load("key")
-    mock_cache.load.assert_called_once_with("key", lazy=False)
+    mock_cache.load.assert_called_once_with("key", lazy=True)
 
 
 def test_cache_stack_save():
@@ -151,8 +151,8 @@ def test_cache_stack_load_hit():
     c2.load.return_value = call
     stack = CacheStack((c1, c2))
     result = stack.load("key")
-    c1.load.assert_called_once_with("key", lazy=False)
-    c2.load.assert_called_once_with("key", lazy=False)
+    c1.load.assert_called_once_with("key", lazy=True)
+    c2.load.assert_called_once_with("key", lazy=True)
     assert result == call
 
 
