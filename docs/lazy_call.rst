@@ -4,6 +4,7 @@ Lazy Loading with LazyCall
 In many caching scenarios, function results or arguments can be large objects (e.g., massive datasets, trained models, or high-resolution images). Loading these objects from the cache every time you inspect a call can be expensive and slow.
 
 To address this, Fleche provides a **lazy loading** mechanism via the ``LazyCall`` class.
+This is turned on by default.
 
 What is LazyCall?
 ----------------
@@ -16,6 +17,7 @@ Using Lazy Loading
 ------------------
 
 You can request lazy loading by passing ``lazy=True`` to the ``load()`` or ``query()`` methods of a cache.
+Using :meth:`.LazyCall.fetch()` you can force the loading of all arguments and the results from cache.
 
 .. code-block:: python
 
@@ -31,6 +33,8 @@ You can request lazy loading by passing ``lazy=True`` to the ``load()`` or ``que
    # Arguments and results are fetched only when accessed
    print(lazy_call.result)  # Triggers a load from value storage
    print(lazy_call.arguments['x'])  # Triggers a load for argument 'x'
+
+   lazy_call.fetch() == call
 
 Parity with Call
 ----------------
