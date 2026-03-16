@@ -22,3 +22,6 @@ class Void(Storage):
 
     def _evict(self, key: Digest) -> None:
         pass
+
+    def _contains(self, key: Digest) -> bool:
+        return False

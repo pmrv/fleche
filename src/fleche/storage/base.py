@@ -72,6 +72,19 @@ class StorageBase(ABC):
             f"Digest {key} cannot be shrunk without becoming ambigious!"
         )
 
+    def contains(self, key: Digest | str) -> bool:
+        if len(key) < DIGEST_LENGTH:
+            try:
+                key = self.expand(key)
+            except KeyError:
+                return False
+        else:
+            key = Digest(key)
+        return self._contains(key)
+
+    @abstractmethod
+    def _contains(self, key: Digest) -> bool: ...
+
 
 class Storage(StorageBase):
     """Abstract base class for defining storage mechanisms."""
@@ -96,6 +109,12 @@ class Storage(StorageBase):
     @abstractmethod
     def _load(self, key: Digest) -> Any: ...
 
+    def _contains(self, key: Digest) -> bool:
+        try:
+            self._load(key)
+            return True
+        except KeyError:
+            return False
 
 class Digested(ABC):
     @abstractmethod
@@ -153,6 +172,9 @@ class DestructuringStorage(Storage):
                 return {self.load(k): self.load(v) for k, v in items.items()}
             case _:
                 return value
+
+    def _contains(self, key: Digest) -> bool:
+        return self.storage.contains(key)
 
     def _evict(self, key: Digest) -> None:
         self.storage.evict(key)
@@ -240,6 +262,13 @@ class CallStorage(StorageBase):
             if fits(call):
                 yield call
 
+    def _contains(self, key: Digest) -> bool:
+        try:
+            self._load(key)
+            return True
+        except KeyError:
+            return False
+
 
 @dataclass(frozen=True, slots=True)
 class CallStorageAdapter(CallStorage):
@@ -252,6 +281,9 @@ class CallStorageAdapter(CallStorage):
 
     def _load(self, key: Digest) -> Call:
         return self.storage.load(key)
+
+    def _contains(self, key: Digest) -> bool:
+        return self.storage.contains(key)
 
     def _evict(self, key: Digest) -> None:
         self.storage.evict(key)

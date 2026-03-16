@@ -6,6 +6,7 @@ from ..digest import Digest, DIGEST_LENGTH, digest
 
 from pyiron_snippets.import_alarm import ImportAlarm
 
+
 with ImportAlarm(
     "Sql requires 'sqlalchemy' to be installed. "
     "Install it with `pip install fleche[sqlalchemy]`.",
@@ -204,6 +205,18 @@ class Sql(CallStorage):
                 ),
             )
             return call
+        finally:
+            session.close()
+
+    def _contains(self, key: Digest) -> bool:
+        session = self.Session()
+        try:
+            return (
+                session.execute(
+                    select(CallModel.key).where(CallModel.key == str(key))
+                ).first()
+                is not None
+            )
         finally:
             session.close()
 

@@ -119,3 +119,6 @@ class FileStorage(Storage):
             lock_path, self.lock_timeout, self.lock_wait_start, str(key)
         ):
             return super().load(key)
+
+    def _contains(self, key: Digest) -> bool:
+        return self._path(key).exists()
