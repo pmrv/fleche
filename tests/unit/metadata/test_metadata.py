@@ -187,6 +187,7 @@ def test_tags():
 
 
 def test_metadata_default_methods():
+    """MetaData should define pre/post method defaults that return empty dictionaries."""
     class MyMetaData(MetaData):
         @property
         def keys(self):
