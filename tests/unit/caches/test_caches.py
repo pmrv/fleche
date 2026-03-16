@@ -92,25 +92,109 @@ def test_cache_context_manager():
     assert cache() is default_cache
 
 
-@pytest.mark.xfail
 def test_base_cache_transfer():
-    values_storage = Mock()
-    calls_storage = Mock()
-    calls_storage.list.return_value = ["key1", "key2"]
-    calls_storage.load.side_effect = ["result1", "result2"]
-    c1 = Cache(values_storage, calls_storage)
+    from fleche.storage.memory import Memory
 
-    other_values_storage = Mock()
-    other_calls_storage = Mock()
-    c2 = Cache(other_values_storage, other_calls_storage)
+    c1 = Cache(values=Memory({}), _calls=Memory({}))
+    c2 = Cache(values=Memory({}), _calls=Memory({}))
+
+    call1 = Call(
+        name="f1",
+        arguments={"a": 1},
+        result=2,
+        module="test",
+        version="1.0",
+        metadata={},
+    )
+    call2 = Call(
+        name="f2",
+        arguments={"b": 3},
+        result=4,
+        module="test",
+        version="1.0",
+        metadata={},
+    )
+
+    c1.save(call1)
+    c1.save(call2)
 
     c1.transfer(c2)
 
-    assert other_calls_storage.save.call_count == 2
-    other_calls_storage.save.assert_any_call("key1", "result1")
-    other_calls_storage.save.assert_any_call("key2", "result2")
+    assert c2.contains(str(call1.to_lookup_key()))
+    assert c2.contains(str(call2.to_lookup_key()))
 
-    # Metadata layer removed; only calls would be transferred (feature xfailed)
+
+def test_base_cache_transfer_overwrite():
+    from fleche.storage.memory import Memory
+
+    c1 = Cache(values=Memory({}), _calls=Memory({}))
+    c2 = Cache(values=Memory({}), _calls=Memory({}))
+
+    call1 = Call(
+        name="f1",
+        arguments={"a": 1},
+        result=2,
+        module="test",
+        version="1.0",
+        metadata={},
+    )
+    # create a conflicting call in c2
+    call1_conflict = Call(
+        name="f1",
+        arguments={"a": 1},
+        result="conflict",
+        module="test",
+        version="1.0",
+        metadata={},
+    )
+
+    # Save original to c1
+    c1.save(call1)
+
+    # Save conflict to c2
+    key = c2.save(call1_conflict)
+
+    # Transfer should overwrite any existing conflicting results by default
+    c1.transfer(c2)
+
+    assert c2.contains(str(call1.to_lookup_key()))
+    # Ensure that it was actually overwritten. The call1 should be the one in the cache.
+    loaded_call = c2.load(str(call1.to_lookup_key()), lazy=False)
+    assert loaded_call.result == 2
+
+
+def test_base_cache_transfer_pop():
+    from fleche.storage.memory import Memory
+
+    c1 = Cache(values=Memory({}), _calls=Memory({}))
+    c2 = Cache(values=Memory({}), _calls=Memory({}))
+
+    call1 = Call(
+        name="f1",
+        arguments={"a": 1},
+        result=2,
+        module="test",
+        version="1.0",
+        metadata={},
+    )
+    call2 = Call(
+        name="f2",
+        arguments={"b": 3},
+        result=4,
+        module="test",
+        version="1.0",
+        metadata={},
+    )
+
+    c1.save(call1)
+    c1.save(call2)
+
+    c1.transfer(c2, pop=True)
+
+    assert c2.contains(str(call1.to_lookup_key()))
+    assert c2.contains(str(call2.to_lookup_key()))
+    assert not c1.contains(str(call1.to_lookup_key()))
+    assert not c1.contains(str(call2.to_lookup_key()))
 
 
 def test_readonly_cache_save():
