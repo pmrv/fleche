@@ -4,7 +4,12 @@ from pathlib import Path
 import subprocess
 
 NOTEBOOKS_DIR = Path(__file__).parents[2] / "notebooks"
-NOTEBOOKS = [n.name for n in NOTEBOOKS_DIR.glob("*.ipynb")]
+NOTEBOOKS = [
+        "GettingStarted.ipynb",
+        "ExtraMethods.ipynb",
+        "StorageBackends.ipynb",
+        "SecureStorage.ipynb"
+]
 
 
 @pytest.mark.parametrize("notebook", NOTEBOOKS)
