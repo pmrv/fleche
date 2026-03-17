@@ -1,4 +1,4 @@
-from contextlib import contextmanager, AbstractContextManager, nullcontext
+from contextlib import contextmanager, AbstractContextManager
 from contextvars import ContextVar
 from typing import Union
 
@@ -10,9 +10,7 @@ _CACHE: ContextVar[BaseCache] = ContextVar("fleche.CACHE", default=load_cache_co
 
 
 def cache(
-    new_cache: Union[BaseCache, str] | None = None,
-    stack: bool = False,
-    sticky: bool = False,
+    new_cache: Union[Cache, str] | None = None, stack=False
 ) -> Union[BaseCache, AbstractContextManager[None]]:
     """
     Manages the active cache for Fleche. If `new_cache` is provided, it returns a context manager
@@ -20,35 +18,28 @@ def cache(
     the currently active cache.
 
     Args:
-        new_cache (Optional[BaseCache]): An optional Cache object to set as the active cache.
+        new_cache (Optional[Cache]): An optional Cache object to set as the active cache.
         stack (bool, default False): if True, construct a CacheStack, with new_cache at the bottom
-        sticky (bool, default False): if True, permanently set the cache for the current context.
 
     Returns:
-        Union[:class:`.BaseCache`, AbstractContextManager[None]]:
+        Union[:class:`.BaseCache`, Callable[..., Any]]:
             The current cache object if `new_cache` is `None`, otherwise a context manager to set a new cache.
     """
     if new_cache is None:
         return _CACHE.get()
 
-    actual_cache: BaseCache
     if isinstance(new_cache, str):
-        actual_cache = load_cache_config(new_cache)
-    elif isinstance(new_cache, BaseCache):
-        actual_cache = new_cache
-    else:
+        new_cache = load_cache_config(new_cache)
+    if not isinstance(new_cache, BaseCache):
         raise ValueError(new_cache)
-
-    if sticky:
-        if stack:
-            actual_cache = _CACHE.get().push(actual_cache)
-        _CACHE.set(actual_cache)
-        return nullcontext()
 
     @contextmanager
     def cache_manager():
-        to_set = _CACHE.get().push(actual_cache) if stack else actual_cache
-        token = _CACHE.set(to_set)
+        if stack:
+            cache = _CACHE.get().push(new_cache)
+        else:
+            cache = new_cache
+        token = _CACHE.set(cache)
         try:
             yield
         finally:
@@ -62,49 +53,32 @@ _METADATA: ContextVar[tuple[MetaData, ...]] = ContextVar(
 )
 
 
-def meta(*new_metadata: MetaData, stack: bool = False, sticky: bool = False):
-    """
-    Context manager (or sticky setter) for metadata.
-
-    Args:
-        *new_metadata: The metadata to set.
-        stack (bool, default False): if True, append to existing metadata.
-        sticky (bool, default False): if True, permanently set the metadata for the current context.
-    """
+@contextmanager
+def meta(*new_metadata: MetaData, stack=False):
     new_metadata = tuple(new_metadata)
-    if sticky:
-        if stack:
-            new_metadata = _METADATA.get() + new_metadata
-        _METADATA.set(new_metadata)
-        return nullcontext()
+    if stack:
+        new_metadata = _METADATA.get() + new_metadata
 
-    @contextmanager
-    def meta_manager():
-        actual_metadata = _METADATA.get() + new_metadata if stack else new_metadata
-        token = _METADATA.set(actual_metadata)
-        try:
-            yield
-        finally:
-            _METADATA.reset(token)
-
-    return meta_manager()
+    token = _METADATA.set(new_metadata)
+    try:
+        yield
+    finally:
+        _METADATA.reset(token)
 
 
-def tags(sticky: bool = False, **kwargs):
+def tags(**kwargs):
     """A context manager to add arbitrary tags to results.
 
     Args:
-        sticky (bool, default False): if True, permanently set the tags for the current context.
         **kwargs: The tags to add to the results.
     """
-    return meta(Tags(kwargs), stack=True, sticky=sticky)
+    return meta(Tags(kwargs), stack=True)
 
 
-def project(name: str, sticky: bool = False):
+def project(name):
     """A context manager to tag results with a project name.
 
     Args:
         name (str): The name of the project.
-        sticky (bool, default False): if True, permanently set the project for the current context.
     """
-    return tags(project=name, sticky=sticky)
+    return tags(project=name)
