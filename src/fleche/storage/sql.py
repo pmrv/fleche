@@ -132,6 +132,7 @@ class Sql(CallStorage):
     @sqlalchemy_alarm
     def __post_init__(self) -> None:
         self.url = _coerce_sqlite_url(self.url)
+        assert self.url is not None
         self.engine = create_engine(self.url, echo=self.echo, future=True)
         _enable_sqlite_foreign_keys(self.engine)
         Base.metadata.create_all(self.engine)
@@ -148,6 +149,7 @@ class Sql(CallStorage):
     def __setstate__(self, state):
         self.__dict__.update(state)
         # Re-initialize unpickleable fields
+        assert self.url is not None
         self.engine = create_engine(self.url, echo=self.echo, future=True)
         _enable_sqlite_foreign_keys(self.engine)
         Base.metadata.create_all(self.engine)
