@@ -313,3 +313,24 @@ def test_cache_load_restores_complex_arguments_and_result():
     loaded = cache.load(key)
     assert loaded.arguments["arg"] == [1, 2, 3]
     assert loaded.result == [4, 5, 6]
+
+def test_cache_stack_push():
+    c1 = Mock()
+    c2 = Mock()
+    stack = CacheStack((c1,))
+
+    new_stack = stack.push(c2)
+
+    assert isinstance(new_stack, CacheStack)
+    assert new_stack.stack == (c2, c1)
+
+def test_cache_push():
+    values = Mock()
+    calls = Mock()
+    c1 = Cache(values, calls)
+    c2 = Cache(values, calls)
+
+    stack = c1.push(c2)
+
+    assert isinstance(stack, CacheStack)
+    assert stack.stack == (c2, c1)
