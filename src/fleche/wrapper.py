@@ -52,7 +52,7 @@ def fleche(
     - .digest(*args, **kwargs): Get the cache key.
     - .load(*args, **kwargs): Load result from cache.
     - .contains(*args, **kwargs): Check if result is in cache.
-    - .rerun(*args, **kwargs): Evict result and any nested calls and re-execute.
+    - .rerun(*args, **kwargs): Forces reevaluation recursively.
     The original function is available via .__wrapped__.
     """
 
