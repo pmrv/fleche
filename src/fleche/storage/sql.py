@@ -1,11 +1,11 @@
 from typing import Iterable, Any
 from pathlib import Path
+from dataclasses import dataclass, field
 from .base import CallStorage, AmbiguousDigestError
 from ..call import Call
 from ..digest import Digest, DIGEST_LENGTH, digest
 
 from pyiron_snippets.import_alarm import ImportAlarm
-
 
 with ImportAlarm(
     "Sql requires 'sqlalchemy' to be installed. "
@@ -119,22 +119,41 @@ def _enable_sqlite_foreign_keys(engine) -> None:
             cursor.close()
 
 
+@dataclass
 class Sql(CallStorage):
     """SQLAlchemy-backed CallStorage with JSON metadata and DB-backed expand()."""
 
+    url: str | None = None
+    echo: bool = field(default=False, compare=False)
+
+    engine: Any = field(init=False, repr=False, compare=False)
+    session: Any = field(init=False, repr=False, compare=False)
+
     @sqlalchemy_alarm
-    def __init__(self, url: str | None = None, echo: bool = False):
-        url = _coerce_sqlite_url(url)
-        self.engine = create_engine(url, echo=echo, future=True)
+    def __post_init__(self) -> None:
+        self.url = _coerce_sqlite_url(self.url)
+        assert self.url is not None
+        self.engine = create_engine(self.url, echo=self.echo, future=True)
         _enable_sqlite_foreign_keys(self.engine)
         Base.metadata.create_all(self.engine)
-        self.Session = sessionmaker(
+        self.session = sessionmaker(
             bind=self.engine, expire_on_commit=False, future=True
         )
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state.pop("engine", None)
+        state.pop("session", None)
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        # Re-initialize unpickleable fields
+        self.__post_init__()
+
     def _save(self, call: Call) -> Digest:
         key = call.to_lookup_key()
-        session = self.Session()
+        session = self.session()
         try:
             existing = session.get(CallModel, str(key))
             if existing is not None:
@@ -178,7 +197,7 @@ class Sql(CallStorage):
             session.close()
 
     def _load(self, key: str) -> Call:
-        session = self.Session()
+        session = self.session()
         try:
             call_model = session.execute(
                 select(CallModel).where(CallModel.key == key)
@@ -209,7 +228,7 @@ class Sql(CallStorage):
             session.close()
 
     def _contains(self, key: Digest) -> bool:
-        session = self.Session()
+        session = self.session()
         try:
             return (
                 session.execute(
@@ -221,7 +240,7 @@ class Sql(CallStorage):
             session.close()
 
     def list(self) -> Iterable[Digest]:
-        session = self.Session()
+        session = self.session()
         try:
             # Return Digest instances for keys
             return [Digest(row[0]) for row in session.execute(select(CallModel.key))]
@@ -235,7 +254,7 @@ class Sql(CallStorage):
             raise KeyError(key)
 
         prefix = str(key)
-        session = self.Session()
+        session = self.session()
         try:
             rows = session.execute(
                 select(CallModel.key)
@@ -263,7 +282,7 @@ class Sql(CallStorage):
         )
 
     def _evict(self, key: str) -> None:
-        session = self.Session()
+        session = self.session()
         try:
             instance = session.get(CallModel, key)
             if instance is None:
@@ -299,7 +318,7 @@ class Sql(CallStorage):
         Yields:
             Call: Matching calls including their decoded metadata.
         """
-        session = self.Session()
+        session = self.session()
         try:
 
             def normalize_value(v: Any) -> str:
