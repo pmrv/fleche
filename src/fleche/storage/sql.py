@@ -127,7 +127,7 @@ class Sql(CallStorage):
     echo: bool = field(default=False, compare=False)
 
     engine: Any = field(init=False, repr=False, compare=False)
-    Session: Any = field(init=False, repr=False, compare=False)
+    session: Any = field(init=False, repr=False, compare=False)
 
     @sqlalchemy_alarm
     def __post_init__(self) -> None:
@@ -135,13 +135,13 @@ class Sql(CallStorage):
         self.engine = create_engine(self.url, echo=self.echo, future=True)
         _enable_sqlite_foreign_keys(self.engine)
         Base.metadata.create_all(self.engine)
-        self.Session = sessionmaker(
+        self.session = sessionmaker(
             bind=self.engine, expire_on_commit=False, future=True
         )
 
     def _save(self, call: Call) -> Digest:
         key = call.to_lookup_key()
-        session = self.Session()
+        session = self.session()
         try:
             existing = session.get(CallModel, str(key))
             if existing is not None:
@@ -185,7 +185,7 @@ class Sql(CallStorage):
             session.close()
 
     def _load(self, key: str) -> Call:
-        session = self.Session()
+        session = self.session()
         try:
             call_model = session.execute(
                 select(CallModel).where(CallModel.key == key)
@@ -216,7 +216,7 @@ class Sql(CallStorage):
             session.close()
 
     def _contains(self, key: Digest) -> bool:
-        session = self.Session()
+        session = self.session()
         try:
             return (
                 session.execute(
@@ -228,7 +228,7 @@ class Sql(CallStorage):
             session.close()
 
     def list(self) -> Iterable[Digest]:
-        session = self.Session()
+        session = self.session()
         try:
             # Return Digest instances for keys
             return [Digest(row[0]) for row in session.execute(select(CallModel.key))]
@@ -242,7 +242,7 @@ class Sql(CallStorage):
             raise KeyError(key)
 
         prefix = str(key)
-        session = self.Session()
+        session = self.session()
         try:
             rows = session.execute(
                 select(CallModel.key)
@@ -270,7 +270,7 @@ class Sql(CallStorage):
         )
 
     def _evict(self, key: str) -> None:
-        session = self.Session()
+        session = self.session()
         try:
             instance = session.get(CallModel, key)
             if instance is None:
@@ -306,7 +306,7 @@ class Sql(CallStorage):
         Yields:
             Call: Matching calls including their decoded metadata.
         """
-        session = self.Session()
+        session = self.session()
         try:
 
             def normalize_value(v: Any) -> str:
