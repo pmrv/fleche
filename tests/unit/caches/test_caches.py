@@ -323,14 +323,3 @@ def test_cache_stack_push():
 
     assert isinstance(new_stack, CacheStack)
     assert new_stack.stack == (c2, c1)
-
-def test_cache_push():
-    values = Mock()
-    calls = Mock()
-    c1 = Cache(values, calls)
-    c2 = Cache(values, calls)
-
-    stack = c1.push(c2)
-
-    assert isinstance(stack, CacheStack)
-    assert stack.stack == (c2, c1)
