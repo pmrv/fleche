@@ -139,6 +139,22 @@ class Sql(CallStorage):
             bind=self.engine, expire_on_commit=False, future=True
         )
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state.pop("engine", None)
+        state.pop("session", None)
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        # Re-initialize unpickleable fields
+        self.engine = create_engine(self.url, echo=self.echo, future=True)
+        _enable_sqlite_foreign_keys(self.engine)
+        Base.metadata.create_all(self.engine)
+        self.session = sessionmaker(
+            bind=self.engine, expire_on_commit=False, future=True
+        )
+
     def _save(self, call: Call) -> Digest:
         key = call.to_lookup_key()
         session = self.session()
