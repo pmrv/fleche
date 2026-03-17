@@ -149,13 +149,7 @@ class Sql(CallStorage):
     def __setstate__(self, state):
         self.__dict__.update(state)
         # Re-initialize unpickleable fields
-        assert self.url is not None
-        self.engine = create_engine(self.url, echo=self.echo, future=True)
-        _enable_sqlite_foreign_keys(self.engine)
-        Base.metadata.create_all(self.engine)
-        self.session = sessionmaker(
-            bind=self.engine, expire_on_commit=False, future=True
-        )
+        self.__post_init__()
 
     def _save(self, call: Call) -> Digest:
         key = call.to_lookup_key()
