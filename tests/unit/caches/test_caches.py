@@ -315,11 +315,16 @@ def test_cache_load_restores_complex_arguments_and_result():
     assert loaded.result == [4, 5, 6]
 
 def test_cache_stack_push():
-    c1 = Mock()
-    c2 = Mock()
-    stack = CacheStack((c1,))
+    values = Mock()
+    calls = Mock()
+    c1 = Cache(values, calls)
+    c2 = Cache(values, calls)
+    c3 = Cache(values, calls)
 
-    new_stack = stack.push(c2)
+    stack1 = c1.push(c2)
+    assert isinstance(stack1, CacheStack)
+    assert stack1.stack == (c2, c1)
 
-    assert isinstance(new_stack, CacheStack)
-    assert new_stack.stack == (c2, c1)
+    stack2 = stack1.push(c3)
+    assert isinstance(stack2, CacheStack)
+    assert stack2.stack == (c3, c2, c1)
