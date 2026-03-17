@@ -16,6 +16,7 @@ logger = logging.getLogger("fleche.digest")
 
 class Unhashable(Exception):
     """Exception raised when an object cannot be digested."""
+
     pass
 
 
@@ -72,10 +73,16 @@ def load_entry_points():
                 if hook.type in seen_types:
                     source = seen_types[hook.type]
                     if source == "add_hook":
-                        logger.info("add_hook for %s overrides entry point %s", hook.type, ep.value)
+                        logger.info(
+                            "add_hook for %s overrides entry point %s",
+                            hook.type,
+                            ep.value,
+                        )
                     else:
                         for h in _EP_HOOKS:
-                            if (h.type is not hook.type) and (h.digest is not hook.digest):
+                            if (h.type is not hook.type) and (
+                                h.digest is not hook.digest
+                            ):
                                 logger.info(
                                     "Digest from %s overrides later entry point %s!",
                                     source,
@@ -131,7 +138,11 @@ def _digest(value: Any) -> Digest:
         case bytes():
             m.update(value)
         case int():
-            m.update(value.to_bytes((value.bit_length() + 8) // 8, byteorder='little', signed=True))
+            m.update(
+                value.to_bytes(
+                    (value.bit_length() + 8) // 8, byteorder="little", signed=True
+                )
+            )
         case Number():
             # lest we have nice things
             if math.isnan(value):
@@ -157,9 +168,11 @@ def _digest(value: Any) -> Digest:
             m.update(b"__None__")
         case dict():
             # Sort by digest of keys to ensure merkle tree property and order stability
-            sorted_items = sorted(value.items(), key=lambda item: digest(item[0]))
-            for k, v in sorted_items:
-                m.update(digest(k).encode())
+            sorted_items = sorted(
+                ((digest(k), k, v) for k, v in value.items()), key=lambda item: item[0]
+            )
+            for k_digest, k, v in sorted_items:
+                m.update(k_digest.encode())
                 m.update(digest(v).encode())
         case np.bool():
             return digest(bool(value))
@@ -191,7 +204,9 @@ def _digest(value: Any) -> Digest:
         case _ if dataclasses.is_dataclass(value):
             # cannot use asdict because it recursively converts values which destroys digests
             # instead (flat-) convert to dictionaries, salt with type name, then fallback to dictionary case.
-            fields = map(lambda f: (f.name, getattr(value, f.name)), dataclasses.fields(value))
+            fields = map(
+                lambda f: (f.name, getattr(value, f.name)), dataclasses.fields(value)
+            )
             m.update(digest(dict(fields)).encode())
         case Iterable():
             for v in value:
