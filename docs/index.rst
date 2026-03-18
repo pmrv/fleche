@@ -13,6 +13,7 @@ Welcome to the **Fleche** library documentation.
 
    installation
    helpers
+   cache_stack
    lazy_call
    digests_as_args
    custom_digests

@@ -89,14 +89,9 @@ def test_different_floats_have_different_hashes(x, y):
     both_nan = math.isnan(x) and math.isnan(y)
     same_sign = math.copysign(1, x) == math.copysign(1, y)
 
-    if both_nan and same_sign:
-        # Both NaN with same sign
-        assert digest(x) == digest(y)
-    elif x == y and same_sign:
-        # Equal values with same sign (handles +0.0 vs -0.0)
+    if (both_nan and same_sign) or x == y:
         assert digest(x) == digest(y)
     else:
-        # Different values or different signs
         assert digest(x) != digest(y)
 
 

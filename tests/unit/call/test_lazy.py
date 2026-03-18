@@ -26,7 +26,6 @@ def test_lazy_call_fetch():
     assert full_call.result == 3
 
 
-@pytest.mark.skip(reason="pre-existing failing test")
 @given(st_nested_values)
 def test_lazy_call_to_lookup_key_consistency(args):
     """
