@@ -4,10 +4,11 @@ import string
 import keyword
 import numpy as np
 from fleche.call import Call
+from fleche import digest
 
 
 @st.composite
-def dataclasses(draw, field_types, frozen=None):
+def dataclasses(draw, field_types, frozen=None, clscache={}):
     if frozen is None:
         frozen = draw(st.booleans())
     fields = draw(
@@ -20,10 +21,13 @@ def dataclasses(draw, field_types, frozen=None):
             max_size=5,
         )
     )
-    clsname = draw(st.text(string.ascii_letters, min_size=64, max_size=64))
-    cls = make_dataclass(
-        clsname, [(k, type(v)) for k, v in fields.items()], frozen=frozen
-    )
+    clsname = 'C' + digest.digest(fields)
+    if clsname not in clscache:
+        cls = clscache[clsname] = make_dataclass(
+            clsname, [(k, type(v)) for k, v in fields.items()], frozen=frozen
+        )
+    else:
+        cls = clscache[clsname]
     return cls(*fields)
 
 

@@ -1,4 +1,3 @@
-import os
 import pytest
 from pathlib import Path
 import subprocess
@@ -8,7 +7,8 @@ NOTEBOOKS = [
         "GettingStarted.ipynb",
         "ExtraMethods.ipynb",
         "StorageBackends.ipynb",
-        "SecureStorage.ipynb"
+        "SecureStorage.ipynb",
+        "CacheStack.ipynb",
 ]
 
 

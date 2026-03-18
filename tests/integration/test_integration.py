@@ -103,7 +103,8 @@ def test_fleche_cache_stack():
     with cache(stack):
         # this should be loaded from cache1
         func(2)
-        assert not cache2.contains(key2)
+        # hit is automatically transferred to stack[0] (cache2)
+        assert cache2.contains(key2)
         assert cache1.contains(key2)
 
 
@@ -131,7 +132,8 @@ def test_fleche_cache_stack_context_manager():
         with cache(cache2, stack=True):
             # this should be loaded from cache1
             func(2)
-            assert not cache2.contains(key)
+            # hit is automatically transferred to base cache (cache2)
+            assert cache2.contains(key)
 
 
 @pytest.mark.parametrize(
