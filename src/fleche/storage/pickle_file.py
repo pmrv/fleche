@@ -1,5 +1,6 @@
 import pickle
 import logging
+import gzip
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -34,6 +35,7 @@ class PickleFile(FileStorage):
 
     secret_key: list[bytes] = field(default_factory=list)
     serializer: Any = field(repr=False)
+    compress: bool = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -60,12 +62,16 @@ class PickleFile(FileStorage):
     def _save(self, value: Any, key: Digest) -> Digest:
         signer = SignedBytes(self.secret_key)
         data = signer.dumps(self.serializer.dumps(value))
+        if self.compress:
+            data = gzip.compress(data)
         (self._path(key)).write_bytes(data)
         return key
 
     def _load(self, key: Digest) -> Any:
         try:
             content = (self._path(key)).read_bytes()
+            if self.compress:
+                content = gzip.decompress(content)
             signer = SignedBytes(self.secret_key)
             data = signer.loads(content)
             return self.serializer.loads(data)
