@@ -74,7 +74,7 @@ st_nested_values = st.recursive(
         (st_l := st.lists(children, max_size=6)),
         st.composite(lambda draw: tuple(draw(st_l)))(),
         st.dictionaries(st_key_values, children, max_size=6),  # Use only hashable keys
-        dataclasses(children),
+        dataclasses(children, frozen=True),
     ),
     max_leaves=10,
 )
