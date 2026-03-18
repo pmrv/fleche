@@ -291,7 +291,9 @@ class Cache(BaseCache):
 
         This may take time depending on cache size."""
         for key in self.calls.list():
-            call = self.load(key).fetch()  # ty: ignore
+            call = self.load(key)
+            if hasattr(call, "fetch"):
+                call = call.fetch()  # ty: ignore
             if call.to_lookup_key() != key:
                 # instantiate values too
                 self.save(call)
