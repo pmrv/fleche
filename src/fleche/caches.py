@@ -382,7 +382,7 @@ class CacheStack(BaseCache):
                 call = cache.load(key, lazy=lazy)
                 if i > 0:
                     try:
-                        self.save(call.fetch() if lazy else call)
+                        self.save(call.fetch() if lazy else call)  # ty: ignore
                         logger.info("Transferred hit for %s from higher cache to base cache", key)
                     except Rejected as e:
                         logger.warning("Failed to transfer hit for %s to base cache: %s", key, e)
