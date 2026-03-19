@@ -147,18 +147,21 @@ def compute(x, y, verbose=False, debug=False):
 
 ### Querying Results
 
-Find cached results matching specific criteria:
+Find cached results matching specific criteria (only after issuing a corresponding call):
 
 ```python
 @fleche()
 def fetch_data(user_id, date):
     return get_data(user_id, date)
 
+# Issue a call to cache the result
+fetch_data(user_id=123, date='2024-01-01')
+
 # Get all cached results
 all_results = fetch_data.query()
 
-# Get results matching metadata
-results = fetch_data.query(metadata={'user_id': 123})
+# Get results matching specific arguments
+results = fetch_data.query(user_id=123)
 
 # Load results lazily
 results = fetch_data.query(lazy=True)
