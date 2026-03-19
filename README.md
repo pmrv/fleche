@@ -103,26 +103,6 @@ def my_function(x):
     return x * 2
 ```
 
-### Storage Configuration
-
-Configure storage location and type via `fleche.config`:
-
-```python
-from fleche import config
-
-# File-based storage (default)
-config.storage = "file"  # ~/.cache/fleche/
-
-# SQLAlchemy backend
-config.storage = "sqlite:///./cache.db"
-
-# In-memory storage
-config.storage = "memory"
-
-# Custom path
-config.cache_directory = "/custom/cache/path"
-```
-
 ## Storage Backends
 
 ### File Storage (Default)
