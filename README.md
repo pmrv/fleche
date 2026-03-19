@@ -112,7 +112,7 @@ def my_function(x):
 ### SQL Storage
 - Requires `sqlalchemy`
 - Stores metadata and results in database
-- Supports any SQLAlchemy-compatible database
+- Currently supports SQLite
 - Query capabilities for cached results
 
 ### In-Memory Storage
