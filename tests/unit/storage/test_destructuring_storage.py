@@ -4,20 +4,27 @@ from fleche.storage.base import DigestedIterable, DigestedDict, Digested
 from fleche.digest import digest, Digest
 
 
-def test_destructuring_storage_recursive_list():
-    mem = Memory(storage={})
-    ds = DestructuringStorage(mem)
+@pytest.fixture
+def mem():
+    return Memory(storage={})
 
+
+@pytest.fixture
+def ds(mem):
+    return DestructuringStorage(mem)
+
+
+def make_ds(remaining_depth=0):
+    mem = Memory(storage={})
+    ds = DestructuringStorage(mem, remaining_depth=remaining_depth)
+    return mem, ds
+
+
+def test_destructuring_storage_recursive_list(ds, mem):
     data = [1, [2, 3], {"a": 4}]
     key = ds.save(data)
 
-    # Check that it's saved in the underlying memory storage
     assert key in mem.list()
-
-    # Check that components are also saved
-    # [2, 3] should be saved
-    # {"a": 4} should be saved
-    # etc.
 
     loaded = ds.load(key)
     assert loaded == data
@@ -26,10 +33,7 @@ def test_destructuring_storage_recursive_list():
     assert isinstance(loaded[2], dict)
 
 
-def test_destructuring_storage_recursive_dict():
-    mem = Memory(storage={})
-    ds = DestructuringStorage(mem)
-
+def test_destructuring_storage_recursive_dict(ds, mem):
     data = {"k1": [1, 2], "k2": {"inner": "v"}}
     key = ds.save(data)
 
@@ -39,10 +43,7 @@ def test_destructuring_storage_recursive_dict():
     assert isinstance(loaded["k2"], dict)
 
 
-def test_destructuring_storage_tuple():
-    mem = Memory(storage={})
-    ds = DestructuringStorage(mem)
-
+def test_destructuring_storage_tuple(ds):
     data = (1, 2, (3, 4))
     key = ds.save(data)
 
@@ -52,10 +53,7 @@ def test_destructuring_storage_tuple():
     assert isinstance(loaded[2], tuple)
 
 
-def test_destructuring_storage_evict():
-    mem = Memory(storage={})
-    ds = DestructuringStorage(mem)
-
+def test_destructuring_storage_evict(ds, mem):
     data = [1, 2]
     key = ds.save(data)
     assert key in mem.list()
@@ -69,78 +67,31 @@ def test_destructuring_storage_evict():
 # ---- Tests for _depth ----
 
 
-def _ds(**kwargs):
-    return DestructuringStorage(Memory(storage={}), **kwargs)
+@pytest.mark.parametrize("value, expected", [
+    (42, 1),
+    (3.14, 1),
+    ("hello", 1),
+    (b"data", 1),
+    (True, 1),
+    ([1, 2, 3], 2),
+    ((1, 2), 2),
+    ({"a": 1}, 2),
+    ([1, [2, 3]], 3),
+    ({"a": {"b": 1}}, 3),
+    ([], 1),
+    ({}, 1),
+    ((), 1),
+    ([[[1]]], 4),
+    ({"k": [1, [2]]}, 4),
+    ({(1, 2): 0}, 3),
+])
+def test_depth(ds, value, expected):
+    assert ds._depth(value) == expected
 
 
-def test_depth_scalar_int():
-    assert _ds()._depth(42) == 1
-
-
-def test_depth_scalar_float():
-    assert _ds()._depth(3.14) == 1
-
-
-def test_depth_scalar_str():
-    assert _ds()._depth("hello") == 1
-
-
-def test_depth_scalar_bytes():
-    assert _ds()._depth(b"data") == 1
-
-
-def test_depth_scalar_bool():
-    assert _ds()._depth(True) == 1
-
-
-def test_depth_flat_list():
-    assert _ds()._depth([1, 2, 3]) == 2
-
-
-def test_depth_flat_tuple():
-    assert _ds()._depth((1, 2)) == 2
-
-
-def test_depth_flat_dict():
-    assert _ds()._depth({"a": 1}) == 2
-
-
-def test_depth_nested_list():
-    assert _ds()._depth([1, [2, 3]]) == 3
-
-
-def test_depth_nested_dict():
-    assert _ds()._depth({"a": {"b": 1}}) == 3
-
-
-def test_depth_empty_list():
-    assert _ds()._depth([]) == 1
-
-
-def test_depth_empty_dict():
-    assert _ds()._depth({}) == 1
-
-
-def test_depth_empty_tuple():
-    assert _ds()._depth(()) == 1
-
-
-def test_depth_deeply_nested():
-    assert _ds()._depth([[[1]]]) == 4
-
-
-def test_depth_mixed_nesting():
-    assert _ds()._depth({"k": [1, [2]]}) == 4
-
-
-def test_depth_unknown_type_returns_huge():
+def test_depth_unknown_type_returns_huge(ds):
     """Non-scalar, non-collection types get depth 2**64 so they always get destructured."""
-    assert _ds()._depth(object()) == 2 ** 64
-
-
-def test_depth_dict_keys_count():
-    """Dict depth accounts for key depth too."""
-    assert _ds()._depth({(1, 2): 0}) == 3
+    assert ds._depth(object()) == 2 ** 64
 
 
 # ---- Tests for sunder / mend ----
@@ -174,9 +125,7 @@ def test_digested_dict_sunder():
         assert isinstance(v, Digest)
 
 
-def test_digested_iterable_mend_roundtrip():
-    mem = Memory(storage={})
-    ds = DestructuringStorage(mem)
+def test_digested_iterable_mend_roundtrip(ds, mem):
     data = [10, 20, 30]
     key = ds.save(data)
     raw = mem.load(key)
@@ -184,9 +133,7 @@ def test_digested_iterable_mend_roundtrip():
     assert raw.mend(ds) == data
 
 
-def test_digested_dict_mend_roundtrip():
-    mem = Memory(storage={})
-    ds = DestructuringStorage(mem)
+def test_digested_dict_mend_roundtrip(ds, mem):
     data = {"x": 1, "y": 2}
     key = ds.save(data)
     raw = mem.load(key)
@@ -205,13 +152,12 @@ def test_digest_transparency():
     assert digest(dd) == digest(dd_data)
 
 
-# ---- Tests for remaining_depth > 0 ----
+# ---- Tests for remaining_depth ----
 
 
 def test_remaining_depth_0_destructures_everything():
     """With remaining_depth=0, every element gets its own storage slot."""
-    mem = Memory(storage={})
-    ds = DestructuringStorage(mem, remaining_depth=0)
+    mem, ds = make_ds(remaining_depth=0)
     data = [1, 2, 3]
     key = ds.save(data)
     raw = mem.load(key)
@@ -221,8 +167,7 @@ def test_remaining_depth_0_destructures_everything():
 
 def test_remaining_depth_1_inlines_scalars():
     """With remaining_depth=1, scalar elements (depth 1) are kept inline."""
-    mem = Memory(storage={})
-    ds = DestructuringStorage(mem, remaining_depth=1)
+    mem, ds = make_ds(remaining_depth=1)
     data = [1, 2, 3]
     key = ds.save(data)
     raw = mem.load(key)
@@ -233,8 +178,7 @@ def test_remaining_depth_1_inlines_scalars():
 
 def test_remaining_depth_1_still_destructures_nested():
     """With remaining_depth=1, nested containers (depth>1) are still destructured."""
-    mem = Memory(storage={})
-    ds = DestructuringStorage(mem, remaining_depth=1)
+    mem, ds = make_ds(remaining_depth=1)
     data = [1, [2, 3]]
     key = ds.save(data)
     raw = mem.load(key)
@@ -246,8 +190,7 @@ def test_remaining_depth_1_still_destructures_nested():
 
 def test_remaining_depth_2_inlines_flat_list():
     """With remaining_depth=2, a flat list (depth 2) inside another list stays inline."""
-    mem = Memory(storage={})
-    ds = DestructuringStorage(mem, remaining_depth=2)
+    mem, ds = make_ds(remaining_depth=2)
     data = [1, [2, 3]]
     key = ds.save(data)
     raw = mem.load(key)
@@ -259,8 +202,7 @@ def test_remaining_depth_2_inlines_flat_list():
 
 def test_remaining_depth_2_destructures_deeper():
     """With remaining_depth=2, a list nested 3 deep is still destructured."""
-    mem = Memory(storage={})
-    ds = DestructuringStorage(mem, remaining_depth=2)
+    mem, ds = make_ds(remaining_depth=2)
     data = [1, [[2]]]
     key = ds.save(data)
     raw = mem.load(key)
@@ -272,8 +214,7 @@ def test_remaining_depth_2_destructures_deeper():
 
 def test_remaining_depth_dict():
     """remaining_depth works for dicts too."""
-    mem = Memory(storage={})
-    ds = DestructuringStorage(mem, remaining_depth=1)
+    mem, ds = make_ds(remaining_depth=1)
     data = {"a": 1, "b": [2, 3]}
     key = ds.save(data)
     raw = mem.load(key)
@@ -286,8 +227,7 @@ def test_remaining_depth_dict():
 
 def test_remaining_depth_tuple_preserves_type():
     """Tuples stay tuples through remaining_depth roundtrip."""
-    mem = Memory(storage={})
-    ds = DestructuringStorage(mem, remaining_depth=1)
+    _, ds = make_ds(remaining_depth=1)
     data = (1, 2, (3, 4))
     key = ds.save(data)
     loaded = ds.load(key)
@@ -298,10 +238,8 @@ def test_remaining_depth_tuple_preserves_type():
 
 def test_remaining_depth_reduces_storage_slots():
     """Higher remaining_depth should use fewer storage slots."""
-    mem0 = Memory(storage={})
-    ds0 = DestructuringStorage(mem0, remaining_depth=0)
-    mem2 = Memory(storage={})
-    ds2 = DestructuringStorage(mem2, remaining_depth=2)
+    mem0, ds0 = make_ds(remaining_depth=0)
+    mem2, ds2 = make_ds(remaining_depth=2)
 
     data = [1, 2, [3, 4]]
     ds0.save(data)
@@ -310,20 +248,18 @@ def test_remaining_depth_reduces_storage_slots():
     assert len(list(mem2.list())) < len(list(mem0.list()))
 
 
-def test_load_passthrough_non_digest():
+def test_load_passthrough_non_digest(ds):
     """_load returns non-Digest values as-is (inline values from mend)."""
-    ds = _ds()
     assert ds._load(42) == 42
     assert ds._load("hello") == "hello"
     assert ds._load([1, 2]) == [1, 2]
 
 
-def test_remaining_depth_empty_containers():
+@pytest.mark.parametrize("data", [[], (), {}])
+def test_remaining_depth_empty_containers(data):
     """Empty containers with remaining_depth > 0 round-trip correctly."""
-    mem = Memory(storage={})
-    ds = DestructuringStorage(mem, remaining_depth=2)
-    for data in [[], (), {}]:
-        key = ds.save(data)
-        loaded = ds.load(key)
-        assert loaded == data
-        assert type(loaded) == type(data)
+    _, ds = make_ds(remaining_depth=2)
+    key = ds.save(data)
+    loaded = ds.load(key)
+    assert loaded == data
+    assert type(loaded) == type(data)
