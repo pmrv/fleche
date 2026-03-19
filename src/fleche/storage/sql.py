@@ -1,4 +1,4 @@
-from typing import Iterable, Any
+from typing import Iterable, Any, List
 from pathlib import Path
 from dataclasses import dataclass, field
 from .base import CallStorage, AmbiguousDigestError
@@ -295,6 +295,86 @@ class Sql(CallStorage):
         finally:
             session.close()
 
+    def _normalize_value(self, v: Any) -> str:
+        """Return the stored form used in SQL for argument/result matching.
+
+        We must match the generic CallStorage.query semantics which compare
+        digest(template_value) == digest(stored_call_value).
+        In this backend, stored argument/result values are hex-digest strings,
+        and digest(Digest(x)) == x. Therefore we should always compare
+        Arg.value/CallModel.result to str(digest(template_value)).
+        """
+        return str(digest(v))
+
+    def _build_call_conditions(self, template: Call) -> List[Any]:
+        conditions = []
+        if template.name is not None:
+            conditions.append(CallModel.name == template.name)
+        if template.module is not None:
+            conditions.append(CallModel.module == template.module)
+        if template.version is not None:
+            conditions.append(CallModel.version == template.version)
+        if template.code_digest is not None:
+            conditions.append(CallModel.code_digest == template.code_digest)
+        if template.result is not None:
+            conditions.append(
+                CallModel.result == self._normalize_value(template.result)
+            )
+        return conditions
+
+    def _apply_argument_filters(self, stmt: Any, arguments: dict[str, Any]) -> Any:
+        if not arguments:
+            return stmt
+
+        for k, v in arguments.items():
+            Arg = aliased(ArgumentModel)
+            on_clause = and_(
+                Arg.call_key == CallModel.key,
+                Arg.name == str(k),
+            )
+            if v is not None:
+                on_clause = and_(on_clause, Arg.value == self._normalize_value(v))
+            stmt = stmt.join(Arg, on_clause)
+        return stmt
+
+    def _apply_metadata_filters(
+        self, stmt: Any, meta_specs: dict[str, dict[str, Any]] | None
+    ) -> Any:
+        if not meta_specs:
+            return stmt
+
+        # Determine if all filters are server-side compatible
+        server_side_meta = True
+        for _mname, filters in meta_specs.items():
+            for _k, _v in (filters or {}).items():
+                if _v is None or not isinstance(_v, (str, bool, int, float)):
+                    server_side_meta = False
+                    break
+            if not server_side_meta:
+                break
+
+        if server_side_meta:
+            # Build joins and conditions per metadata name
+            for mname, filters in meta_specs.items():
+                M = aliased(MetaModel)
+                stmt = stmt.join(
+                    M,
+                    and_(
+                        M.call_key == CallModel.key,
+                        M.name == mname,
+                    ),
+                )
+                for k, v in (filters or {}).items():
+                    if isinstance(v, bool):
+                        stmt = stmt.where(M.data[k].as_boolean() == v)
+                    elif isinstance(v, int):
+                        stmt = stmt.where(M.data[k].as_integer() == v)
+                    elif isinstance(v, float):
+                        stmt = stmt.where(M.data[k].as_float() == v)
+                    else:
+                        stmt = stmt.where(M.data[k].as_string() == v)
+        return stmt
+
     def query(self, template: Call) -> Iterable[Call]:
         """Find cached calls matching a template using SQL-side filtering.
 
@@ -320,80 +400,14 @@ class Sql(CallStorage):
         """
         session = self.session()
         try:
-
-            def normalize_value(v: Any) -> str:
-                """Return the stored form used in SQL for argument/result matching.
-
-                We must match the generic CallStorage.query semantics which compare
-                digest(template_value) == digest(stored_call_value).
-                In this backend, stored argument/result values are hex-digest strings,
-                and digest(Digest(x)) == x. Therefore we should always compare
-                Arg.value/CallModel.result to str(digest(template_value)).
-                """
-                return str(digest(v))
-
-            # Start by selecting the keys from calls that match simple field predicates
-            conditions = []
-            if template.name is not None:
-                conditions.append(CallModel.name == template.name)
-            if template.module is not None:
-                conditions.append(CallModel.module == template.module)
-            if template.version is not None:
-                conditions.append(CallModel.version == template.version)
-            if template.result is not None:
-                # Stored as hex string; normalize template value accordingly
-                conditions.append(CallModel.result == normalize_value(template.result))
-
             stmt = select(CallModel.key).select_from(CallModel)
 
-            # For each argument filter, join an aliased ArgumentModel and constrain name/value
-            if template.arguments:
-                for k, v in template.arguments.items():
-                    Arg = aliased(ArgumentModel)
-                    on_clause = and_(
-                        Arg.call_key == CallModel.key,
-                        Arg.name == str(k),
-                    )
-                    if v is not None:
-                        on_clause = and_(on_clause, Arg.value == normalize_value(v))
-                    stmt = stmt.join(Arg, on_clause)
-
-            # Optional: metadata filtering
-            server_side_meta = True
-            meta_specs: dict[str, dict[str, Any]] | None = template.metadata
-            if meta_specs:
-                # Determine if all filters are server-side compatible
-                for _mname, filters in meta_specs.items():
-                    for _k, _v in (filters or {}).items():
-                        if _v is None or not isinstance(_v, (str, bool, int, float)):
-                            server_side_meta = False
-                            break
-                    if not server_side_meta:
-                        break
-
-                if server_side_meta:
-                    # Build joins and conditions per metadata name
-                    for mname, filters in meta_specs.items():
-                        M = aliased(MetaModel)
-                        stmt = stmt.join(
-                            M,
-                            and_(
-                                M.call_key == CallModel.key,
-                                M.name == mname,
-                            ),
-                        )
-                        for k, v in (filters or {}).items():
-                            if isinstance(v, bool):
-                                stmt = stmt.where(M.data[k].as_boolean() == v)
-                            elif isinstance(v, int):
-                                stmt = stmt.where(M.data[k].as_integer() == v)
-                            elif isinstance(v, float):
-                                stmt = stmt.where(M.data[k].as_float() == v)
-                            else:
-                                stmt = stmt.where(M.data[k].as_string() == v)
-
+            conditions = self._build_call_conditions(template)
             if conditions:
                 stmt = stmt.where(and_(*conditions))
+
+            stmt = self._apply_argument_filters(stmt, template.arguments)
+            stmt = self._apply_metadata_filters(stmt, template.metadata)
 
             # Distinct to avoid duplicate keys if multiple argument joins could overlap
             stmt = stmt.distinct()
