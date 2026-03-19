@@ -1,8 +1,9 @@
 import logging
 from dataclasses import dataclass
+from numbers import Number
 
 from abc import ABC, abstractmethod
-from typing import Iterable, Any, Callable
+from typing import Iterable, Any, Callable, Self
 
 from ..digest import digest, Digest, DIGEST_LENGTH
 from ..call import Call
@@ -126,13 +127,27 @@ class Digested(ABC):
     def __digest__(self):
         return digest(self.underlying())
 
+    @abstractmethod
+    def mend(self, storage): ...
+
+    @classmethod
+    @abstractmethod
+    def sunder(cls, save: Callable[[Any], Digest], value): ...
+
 
 @dataclass
 class DigestedIterable(Digested):
-    items: Iterable
+    items: list | tuple
 
     def underlying(self):
         return self.items
+
+    @classmethod
+    def sunder(cls, save: Callable[[Any], Digest], value: list | tuple) -> Self:
+        return cls(type(value)(save(v) for v in value))
+
+    def mend(self, storage: 'DestructuringStorage') -> list | tuple:
+        return type(self.items)(map(storage._load, self.items))
 
 
 @dataclass
@@ -142,34 +157,74 @@ class DigestedDict(Digested):
     def underlying(self):
         return self.items
 
+    @classmethod
+    def sunder(cls, save: Callable[[Any], Digest], value: dict) -> Self:
+        return cls({save(k): save(v) for k, v in value.items()})
+
+    def mend(self, storage: 'DestructuringStorage') -> dict:
+        return {storage._load(k): storage._load(v) for k, v in self.items.items()}
+
 
 @dataclass
 class DestructuringStorage(Storage):
+    """Special cases certain types to enable to store their constituents separately.
+
+    This allows us to leverage redundancy in common data to save on storage.
+
+    Instead of saving values passed to :meth:`DestructuringStorage.save` as a single blob, break supported types into
+    smaller values and save these into the underlying storage :attr:`DestructuringStorage.storage`.  Instead of the full
+    object a :class:`.Digested` placeholder is created that contains digests and fragments and saved into the same
+    storage.  On loading the placeholder is retrieved and the constituents are by digest to recreate the original value.
+
+    Supported types for destructuring are `tuple`, `list`, and `dict`.
+
+    Args:
+        storage (:class:`Storage`): underlying storage
+        remaining_depth (int): destructure supported type until this 'nesting level' remains"""
     storage: Storage
+    remaining_depth: int = 0
+
+    def _depth(self, value: Any):
+        match value:
+            case list() | tuple():
+                return 1 + max((self._depth(v) for v in value), default=0)
+            case dict():
+                return 1 + max(
+                        max((self._depth(k) for k in value.keys()), default=0),
+                        max((self._depth(v) for v in value.values()), default=0),
+                )
+            case Number() | str() | bytes() | bool():
+                return 1
+            case _:
+                return 2 ** 64
 
     def _save(self, value: Any, key: Digest) -> Digest:
+        def depth_aware_save(value):
+            """recursively save content values iff they have more nested levels than given cutoff to avoid putting
+            each and every int/float/etc into its own storage bin."""
+            if self._depth(value) <= self.remaining_depth:
+                return value
+            else:
+                return self.save(value)
+
         if isinstance(value, Digest):
             return value
         match value:
             case list() | tuple():
-                return self.storage.save(
-                    DigestedIterable(type(value)(self.save(v) for v in value))
-                )
+                return self.storage.save(DigestedIterable.sunder(depth_aware_save, value))
             case dict():
-                return self.storage.save(
-                    DigestedDict({self.save(k): self.save(v) for k, v in value.items()})
-                )
+                return self.storage.save(DigestedDict.sunder(depth_aware_save, value))
             case _:
                 return self.storage.save(value, key)
 
-    def _load(self, key: Digest) -> Any:
+    def _load(self, key: Digest | Any) -> Any:
+        if not isinstance(key, Digest):
+            return key  # passing through an actual value from Digested.mend
         value = self.storage.load(key)
 
         match value:
-            case DigestedIterable(items=items):
-                return type(items)(self.load(v) for v in items)
-            case DigestedDict(items=items):
-                return {self.load(k): self.load(v) for k, v in items.items()}
+            case Digested():
+                return value.mend(self)
             case _:
                 return value
 
