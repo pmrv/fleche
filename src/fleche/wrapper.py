@@ -132,7 +132,7 @@ def fleche(
 
         @wraps(func)
         def _rerun_func(*args, **kwargs):
-            """Evict result and any nested calls and re-execute."""
+            """Force execution even if calls (or *any* nested ones) are already present in the cache and overwrite previously saved results."""
             cache: BaseCache = state._CACHE.get()
             with state.cache(RefreshingCache(cache)):
                 return wrapper(*args, **kwargs)
