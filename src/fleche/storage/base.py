@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from typing import Iterable, Any, Callable
 
 from ..digest import digest, Digest, DIGEST_LENGTH
-from ..call import Call
+from ..call import Call, QueryCall
 
 logger = logging.getLogger("fleche.storage")
 
@@ -229,7 +229,7 @@ class CallStorage(StorageBase):
             else:
                 self.save(new_call)
 
-    def query(self, template: Call) -> Iterable[Call]:
+    def query(self, template: QueryCall) -> Iterable[Call]:
         """Find cached calls that 'match' the template.
 
         Returns all calls where the given arguments, results or metadata match exactly the stored ones.  Values may be

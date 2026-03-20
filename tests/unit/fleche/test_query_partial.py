@@ -1,7 +1,7 @@
 from pytest import fixture
 
 from fleche import fleche, cache
-from fleche.call import LazyCall
+from fleche.call import QueryCall
 from fleche.caches import Cache
 from fleche.storage import Memory
 
@@ -11,25 +11,6 @@ def test_cache():
     return Cache(values=Memory({}), _calls=Memory({}))
 
 
-def test_query_lazy(test_cache):
-    """lazy keyword should be supported by .query on wrapped function."""
-    # Setup a fresh memory cache
-
-
-def test_query_partial_arguments(test_cache):
-
-    with cache(test_cache):
-
-        @fleche
-        def bar(x, y, z=10):
-            return x + y + z
-
-        bar(1, 5, 10)
-
-        call = list(bar.query(1, lazy=True))[0]
-        assert isinstance(call, LazyCall), "lazy keyword must yield LazyCall"
-
-
 def test_query_partial_arguments(test_cache):
     with cache(test_cache):
 
@@ -37,9 +18,7 @@ def test_query_partial_arguments(test_cache):
         def bar(x, y, z=10):
             return x + y + z
 
-        # Test that .call with partial=True works and applies defaults for missing
-        # We need to access the wrapper's get_call which is exposed as .call
-        call_obj = bar.call(y=5, partial=True)
+        call_obj = QueryCall.from_call(bar, y=5)
         assert call_obj.arguments == {"x": None, "y": 5, "z": 10}
 
         # Test that .query uses partial binding
@@ -71,7 +50,7 @@ def test_query_preserves_order_with_partial():
     def order_func(a, b, c):
         return a
 
-    call_obj = order_func.call(c=3, a=1, partial=True)
+    call_obj = QueryCall.from_call(order_func, c=3, a=1)
     # The order of arguments should follow the function signature
     assert list(call_obj.arguments.keys()) == ["a", "b", "c"]
     assert call_obj.arguments == {"a": 1, "b": None, "c": 3}

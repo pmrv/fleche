@@ -11,7 +11,7 @@ from collections import defaultdict
 from . import digest
 from . import state
 import fleche.metadata as metadata
-from .call import Call, AnyCall
+from .call import Call, AnyCall, QueryCall
 from .caches import Rejected, BaseCache, RefreshingCache
 
 
@@ -155,8 +155,8 @@ def fleche(
         print(ignored_args, required_args)
 
         @wraps(func)
-        def get_call(*args, partial=False, **kwargs):
-            call = Call.from_call(func, *args, partial=partial, **kwargs)
+        def get_call(*args, **kwargs):
+            call = Call.from_call(func, *args, **kwargs)
             # drop ignored arguments for the saved call object to make our lives much simpler when hashing or saving it
             # if we leave them in, then Cache.save needs to know about them indirectly to ensure correct digest key
             # generation, but then we'd also have to save it somehow and that just seems bothersome in particular for
@@ -192,7 +192,7 @@ def fleche(
             Returns:
                 iterable of matching :class:`.Call`
             """
-            call = get_call(*args, partial=True, **kwargs)
+            call = QueryCall.from_call(func, *args, **kwargs)
             if "metadata" in call.arguments:
                 logger.warning(
                     "Function argument 'metadata' shadowed by query argument"
