@@ -1,5 +1,11 @@
 # fleche
 
+[![docs](https://app.readthedocs.org/projects/fleche/badge/?version=latest)](https://fleche.readthedocs.io/en/latest/?badge=latest)
+
+
+
+
+
 A persistent caching solution for arbitrary Python functions - like `lru_cache` on steroids.
 
 > flèche is French for 'arrow' and also used in fencing as a fast attack.
