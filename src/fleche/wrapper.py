@@ -11,7 +11,7 @@ from . import digest
 from . import state
 import fleche.metadata as metadata
 from .call import Call, AnyCall
-from .caches import Rejected, BaseCache
+from .caches import Rejected, BaseCache, RefreshingCache
 
 
 import logging
@@ -52,6 +52,7 @@ def fleche(
     - .digest(*args, **kwargs): Get the cache key.
     - .load(*args, **kwargs): Load result from cache.
     - .contains(*args, **kwargs): Check if result is in cache.
+    - .rerun(*args, **kwargs): Forces reevaluation recursively.
     The original function is available via .__wrapped__.
     """
 
@@ -129,6 +130,13 @@ def fleche(
         def _contains_func(*args, **kwargs):
             return state._CACHE.get().contains(_digest_func(*args, **kwargs))
 
+        @wraps(func)
+        def _rerun_func(*args, **kwargs):
+            """Force execution even if calls (or *any* nested ones) are already present in the cache and overwrite previously saved results."""
+            cache: BaseCache = state._CACHE.get()
+            with state.cache(RefreshingCache(cache)):
+                return wrapper(*args, **kwargs)
+
         for name, helper, doc_prefix, ret in [
             ("call", get_call, "Get the Call object for", Call),
             ("digest", _digest_func, "Get the cache key for", digest.Digest),
@@ -140,6 +148,12 @@ def fleche(
             ),
             ("load", _load_func, "Load result from cache for", None),
             ("contains", _contains_func, "Check if result is in cache for", bool),
+            (
+                "rerun",
+                _rerun_func,
+                "Force reevaluation recursively for",
+                None,
+            ),
         ]:
             helper.__name__ = name
             helper.__qualname__ = f"{helper.__qualname__}.{name}"
@@ -224,6 +238,7 @@ def fleche(
         wrapper.query = _query_func         # ty: ignore
         wrapper.load = _load_func           # ty: ignore
         wrapper.contains = _contains_func   # ty: ignore
+        wrapper.rerun = _rerun_func          # ty: ignore
         return wrapper
 
     if callable(_func):

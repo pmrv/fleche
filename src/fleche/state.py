@@ -1,6 +1,7 @@
 from contextlib import contextmanager, AbstractContextManager
 from contextvars import ContextVar
-from typing import Union
+from typing import Union, overload, Iterator
+from typing_extensions import Self
 
 from .caches import BaseCache, Cache
 from .config import load_cache_config, load_default_metadata
@@ -9,20 +10,30 @@ from .metadata import MetaData, Tags
 _CACHE: ContextVar[BaseCache] = ContextVar("fleche.CACHE", default=load_cache_config())
 
 
+@overload
+def cache(new_cache: None = None, stack: bool = False) -> BaseCache: ...
+
+
+@overload
 def cache(
-    new_cache: Union[Cache, str] | None = None, stack=False
-) -> Union[BaseCache, AbstractContextManager[None]]:
+    new_cache: BaseCache | str, stack: bool = False
+) -> AbstractContextManager[None]: ...
+
+
+def cache(
+    new_cache: BaseCache | str | None = None, stack: bool = False
+) -> BaseCache | AbstractContextManager[None]:
     """
     Manages the active cache for Fleche. If `new_cache` is provided, it returns a context manager
     that sets the cache for the duration of the context. If `new_cache` is None, it returns
     the currently active cache.
 
     Args:
-        new_cache (Optional[Cache]): An optional Cache object to set as the active cache.
+        new_cache (Optional[BaseCache]): An optional Cache object to set as the active cache.
         stack (bool, default False): if True, construct a CacheStack, with new_cache at the bottom
 
     Returns:
-        Union[:class:`.BaseCache`, Callable[..., Any]]:
+        Union[:class:`.BaseCache`, AbstractContextManager[None]]:
             The current cache object if `new_cache` is `None`, otherwise a context manager to set a new cache.
     """
     if new_cache is None:
@@ -34,7 +45,7 @@ def cache(
         raise ValueError(new_cache)
 
     @contextmanager
-    def cache_manager():
+    def cache_manager() -> Iterator[None]:
         if stack:
             cache = _CACHE.get().push(new_cache)
         else:
