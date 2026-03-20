@@ -39,6 +39,15 @@ logger = logging.getLogger("fleche.config")
 _live_caches: dict[str, Cache] = {}
 
 
+def _load_config(path: Path) -> dict[str, Any]:
+    try:
+        with open(path, "rb") as f:
+            return tomllib.load(f)
+    except Exception as e:
+        logger.error("Failed to load configuration from %s: %s", path, e)
+        return {}
+
+
 def _get_config_path() -> Path | None:
     path = Path("fleche.toml")
     if path.exists():
@@ -65,8 +74,7 @@ def load_default_metadata():
     if path is None or not path.exists():
         return (metadata.Runtime(),)
 
-    with open(path, "rb") as f:
-        config = tomllib.load(f)
+    config = _load_config(path)
 
     if "default" not in config or "metadata" not in config["default"]:
         return (metadata.Runtime(),)
@@ -143,8 +151,7 @@ def load_cache_config(name: str | None = None) -> Cache:
             logger.warning("No config file found. Using default memory cache.")
         return Cache(storage.Memory({}), storage.Memory({}))
 
-    with open(path, "rb") as f:
-        config = tomllib.load(f)
+    config = _load_config(path)
 
     cache_name = name
     cache_config = None
@@ -162,6 +169,12 @@ def load_cache_config(name: str | None = None) -> Cache:
             cache_config = default_cache
 
     if cache_config is None:
+        if cache_name not in config:
+            logger.warning(
+                "Cache '%s' not found in configuration. Using default memory cache.",
+                cache_name,
+            )
+            return Cache(storage.Memory({}), storage.Memory({}))
         cache_config = config[cache_name]
 
     cache = _create_cache(cache_config)
