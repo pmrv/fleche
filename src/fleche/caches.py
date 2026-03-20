@@ -99,14 +99,8 @@ class BaseCache(ABC):
         """
         ...
 
-    @overload
-    def query(self, call: Call, lazy: bool = False) -> Iterable[Call]: ...
-
-    @overload
-    def query(self, call: Call, lazy: bool = True) -> Iterable[LazyCall]: ...
-
     @abstractmethod
-    def query(self, call: Call, lazy: bool = True) -> Iterable[Call | LazyCall]: ...
+    def query(self, call: Call) -> Iterable[LazyCall]: ...
 
     def table(self) -> pd.DataFrame:
         """Return a pandas DataFrame summarizing cached calls via query().
@@ -130,7 +124,7 @@ class BaseCache(ABC):
         # fmt: on
 
         rows: dict[str, dict[str, Any]] = {}
-        for c in self.query(tpl, lazy=True):
+        for c in self.query(tpl):
             row = {
                     prop: getattr(c, prop) for prop in ("name", "module", "metadata")
             }
@@ -256,13 +250,7 @@ class Cache(BaseCache):
     def shrink(self, key: Digest | str) -> Digest:
         return self.calls.shrink(key)
 
-    @overload
-    def query(self, call: Call, lazy: bool = False) -> Iterable[Call]: ...
-
-    @overload
-    def query(self, call: Call, lazy: bool = True) -> Iterable[LazyCall]: ...
-
-    def query(self, call: Call, lazy: bool = True) -> Iterable[Call | LazyCall]:
+    def query(self, call: Call) -> Iterable[LazyCall]:
         """Query for cached calls that match a template and return decoded results.
 
         This delegates to the underlying :meth:`CallStorage.query` using the provided template ``call``. Any digested
@@ -272,7 +260,6 @@ class Cache(BaseCache):
             call: A ``Call`` instance used as a template; fields set to ``None``
                 act as wildcards. For arguments and result, comparisons follow
                 digest semantics (i.e., values are matched by their digest).
-            lazy: If True, return LazyCall instances instead of Call instances.
 
         Yields:
             Call | LazyCall: Matching calls with arguments and result decoded from digests
@@ -297,7 +284,7 @@ class Cache(BaseCache):
         )
         for c in self.calls.query(call):
             try:
-                yield self._decode_call(c, lazy)
+                yield self._decode_call(c, lazy=True)
             except Exception as err:
                 logger.error(
                     f"Failed to load matching call {c.to_lookup_key()} with {err}! Indicates corrupt cache."
@@ -342,23 +329,16 @@ class ReadOnlyCache(BaseCache):
     def contains(self, key: str) -> bool:
         return self.cache.contains(key)
 
-    @overload
-    def query(self, call: Call, lazy: bool = False) -> Iterable[Call]: ...
-
-    @overload
-    def query(self, call: Call, lazy: bool = True) -> Iterable[LazyCall]: ...
-
-    def query(self, call: Call, lazy: bool = True) -> Iterable[Call | LazyCall]:
+    def query(self, call: Call) -> Iterable[LazyCall]:
         """Forward queries to the wrapped cache.
 
         Args:
             call: A template ``Call`` where ``None`` fields act as wildcards.
-            lazy: If True, return LazyCall instances.
 
         Yields:
             Call | LazyCall: Results yielded by the wrapped cache's ``query`` method.
         """
-        return self.cache.query(call, lazy=lazy)
+        return self.cache.query(call)
 
 
 @dataclass(frozen=True)
@@ -377,14 +357,8 @@ class FilteredCache(ReadOnlyCache):
             return call
         raise KeyError(key)
 
-    @overload
-    def query(self, call: Call, lazy: bool = False) -> Iterable[Call]: ...
-
-    @overload
-    def query(self, call: Call, lazy: bool = True) -> Iterable[LazyCall]: ...
-
-    def query(self, call: Call, lazy: bool = True) -> Iterable[Call | LazyCall]:
-        for c in self.cache.query(call, lazy=lazy):
+    def query(self, call: Call) -> Iterable[LazyCall]:
+        for c in self.cache.query(call):
             if self.predicate(c):
                 yield c
 
@@ -491,13 +465,7 @@ class CacheStack(BaseCache):
     def shrink(self, key: Digest | str) -> Digest:
         return max([c.shrink(key) for c in self.stack], key=len)  # ty: ignore upstream bug, already filled
 
-    @overload
-    def query(self, call: Call, lazy: bool = False) -> Iterable[Call]: ...
-
-    @overload
-    def query(self, call: Call, lazy: bool = True) -> Iterable[LazyCall]: ...
-
-    def query(self, call: Call, lazy: bool = True) -> Iterable[Call | LazyCall]:
+    def query(self, call: Call) -> Iterable[LazyCall]:
         """Aggregate query results across the stack, avoiding duplicates.
 
         The caches are queried from bottom to top. Results are deduplicated by
@@ -506,14 +474,13 @@ class CacheStack(BaseCache):
 
         Args:
             call: A template ``Call`` where ``None`` fields act as wildcards.
-            lazy: If True, return LazyCall instances.
 
         Yields:
             Call | LazyCall: Matching calls from any cache in the stack, without duplicates.
         """
         seen = set()
         for cache in self.stack:
-            for c in cache.query(call, lazy=lazy):
+            for c in cache.query(call):
                 k = c.to_lookup_key()
                 if k in seen:
                     continue

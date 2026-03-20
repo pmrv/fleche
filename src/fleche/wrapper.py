@@ -177,7 +177,7 @@ def fleche(
             return get_call(*args, **kwargs).to_lookup_key()
 
         def _query_func(
-            *args, metadata={}, lazy: bool = False, **kwargs
+            *args, metadata={}, **kwargs
         ) -> Iterable[AnyCall]:
             """Return matching results from current cache.
 
@@ -188,7 +188,6 @@ def fleche(
                 *args, **kwargs: function arguments that should be matched in returned calls; pass `None` as a wildcard
                 metadata (dict[str, dict[str, json]]): metadata tags to additionall filter on; if this shadows a
                     function kwargs of the same name, you must pass it by position instead.
-                lazy (bool, default False): if True, return lazily loaded call, passed through :meth:`.BaseCache.query`.
 
             Returns:
                 iterable of matching :class:`.Call`
@@ -198,10 +197,8 @@ def fleche(
                 logger.warning(
                     "Function argument 'metadata' shadowed by query argument"
                 )
-            if "lazy" in call.arguments:
-                logger.warning("Function argument 'lazy' shadowed by query argument")
             call.metadata = metadata
-            return state._CACHE.get().query(call, lazy=lazy)
+            return state._CACHE.get().query(call)
 
         _query_doc = _query_func.__doc__
         _query_func = wraps(func)(_query_func)  # ty: ignore
