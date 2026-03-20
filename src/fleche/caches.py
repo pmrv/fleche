@@ -44,8 +44,7 @@ class BaseCache(ABC):
         ...
 
     @abstractmethod
-    def load_value(self, key: str) -> Any:
-        ...
+    def load_value(self, key: str) -> Any: ...
 
     @abstractmethod
     def evict(self, key: str | Digest) -> None:
@@ -58,17 +57,24 @@ class BaseCache(ABC):
         except KeyError:
             return False
 
-    # def transfer(self, other: 'Cache'):
-    #     # TODO: when migrating results up, we will need to think about what happens to conflicting metadata
-    #     # probably transfering items should just pop them off the lower cache, therefore the only reason this could
-    #     # happen is if a user runs the same function in two separate caches and then combines them.  In this case self
-    #     # should win, because its intuitive even if a bit dangerous
-    #     # TODO: make a design choice: is storage or metadata sovereign?
-    #     # for now: storage is king because that's the most important part
-    #     for key in self.storage.list():
-    #         other.save(key, *self.load(key))
+    def transfer(self, other: "BaseCache", pop: bool = False) -> None:
+        """Transfer all calls from this cache to another cache.
 
-    def push(self, cache: 'BaseCache') -> 'CacheStack':
+        Existing calls in the target cache may be overwritten by the transferred calls.
+
+        Args:
+            other: The destination cache.
+            pop: If True, evict transferred keys from the source cache after moving.
+        """
+        # fmt: off
+        tpl = Call(name=None, arguments=None, metadata=None, module=None, version=None, result=None)  # type: ignore
+        # fmt: on
+        for call in self.query(tpl, lazy=False):
+            other.save(call)
+            if pop and hasattr(self, "calls"):
+                self.calls.evict(call.to_lookup_key())  # type: ignore
+
+    def push(self, cache: "BaseCache") -> "CacheStack":
         return CacheStack((cache, self))
 
     @abstractmethod
@@ -119,7 +125,9 @@ class BaseCache(ABC):
         # Query all calls using a wildcard template; rely on concrete caches to
         # handle any necessary decoding (e.g., Cache decodes values on query()).
         # FIXME: We'll want a specific query call type at some point
-        tpl = Call(name=None, arguments=None, metadata=None, module=None, version=None, result=None)  # ty: ignore
+        # fmt: off
+        tpl = Call(name=None, arguments=None, metadata=None, module=None, version=None, result=None)  # type: ignore
+        # fmt: on
 
         rows: dict[str, dict[str, Any]] = {}
         for c in self.query(tpl, lazy=True):
@@ -135,7 +143,9 @@ class BaseCache(ABC):
 
         return pd.DataFrame.from_dict(rows, orient="index")
 
-    def filter(self, predicate: Callable[[Call | LazyCall], bool] | Call) -> 'FilteredCache':
+    def filter(
+        self, predicate: Callable[[Call | LazyCall], bool] | Call
+    ) -> "FilteredCache":
         """Create a read-only view of this cache that only exposes calls matching the predicate.
 
         Args:
@@ -221,10 +231,12 @@ class Cache(BaseCache):
                 metadata=call.metadata,
                 module=call.module,
                 version=call.version,
-                code_digest=call.code_digest
+                code_digest=call.code_digest,
             )
 
-        call.arguments = {k: self._handle_args_load(v) for k, v in call.arguments.items()}
+        call.arguments = {
+            k: self._handle_args_load(v) for k, v in call.arguments.items()
+        }
         call.result = self.load_value(call.result)
         return call
 
@@ -237,9 +249,6 @@ class Cache(BaseCache):
     def load(self, key: str, lazy: bool = True) -> Call | LazyCall:
         call = self.calls.load(key)
         return self._decode_call(call, lazy)
-
-    def evict(self, key: str | Digest) -> None:
-        self.calls.evict(key)
 
     def contains(self, key: str) -> bool:
         return self.calls.contains(key)
@@ -277,6 +286,7 @@ class Cache(BaseCache):
                 return self.values.expand(value)
             else:
                 return value
+
         call = replace(
                 call,
                 arguments={
@@ -290,8 +300,11 @@ class Cache(BaseCache):
                 yield self._decode_call(c, lazy)
             except Exception as err:
                 logger.error(
-                        f"Failed to load matching call {c.to_lookup_key()} with {err}! Indicates corrupt cache."
+                    f"Failed to load matching call {c.to_lookup_key()} with {err}! Indicates corrupt cache."
                 )
+
+    def evict(self, key: str | Digest) -> None:
+        self.calls.evict(key)
 
     def redigest(self) -> None:
         """Ensures consistent cache keys in case digest function changed.
@@ -312,7 +325,7 @@ class ReadOnlyCache(BaseCache):
     cache: BaseCache
 
     def save(self, call: Call):
-        raise Rejected("Cannot save to a ReadOnlyCache", self, call)
+        raise Rejected(self, call)
 
     def load(self, key, lazy: bool = True):
         return self.cache.load(key, lazy=lazy)
@@ -351,10 +364,13 @@ class ReadOnlyCache(BaseCache):
 @dataclass(frozen=True)
 class FilteredCache(ReadOnlyCache):
     """A read-only view of a cache that only exposes calls matching a predicate."""
+
     predicate: Callable[[Call | LazyCall], bool]
 
     def load(self, key, lazy: bool = True):
-        call: LazyCall = self.cache.load(key, lazy=True)  # ty: ignore bug or I'm really tired
+        call: LazyCall = self.cache.load(
+            key, lazy=True
+        )  # ty: ignore bug or I'm really tired
         if self.predicate(call):
             if not lazy:
                 return call.fetch()
@@ -473,7 +489,9 @@ class CacheStack(BaseCache):
                 continue
 
     def shrink(self, key: Digest | str) -> Digest:
-        return sorted([c.shrink(key) for c in self.stack], key=len)[-1]  # ty: ignore upstream bug, already filled
+        return sorted([c.shrink(key) for c in self.stack], key=len)[
+            -1
+        ]  # ty: ignore upstream bug, already filled
 
     @overload
     def query(self, call: Call, lazy: bool = False) -> Iterable[Call]: ...
