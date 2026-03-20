@@ -151,7 +151,7 @@ def fleche(
             (
                 "rerun",
                 _rerun_func,
-                "Evict result and any nested calls and re-execute for",
+                "Force reevaluation recursively for",
                 None,
             ),
         ]:
