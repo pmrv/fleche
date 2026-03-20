@@ -21,6 +21,16 @@ Welcome to the **Fleche** library documentation.
    query
    security
 
+.. toctree::
+   :maxdepth: 1
+   :caption: Notebooks:
+
+   notebooks/GettingStarted
+   notebooks/ExtraMethods
+   notebooks/StorageBackends
+   notebooks/SecureStorage
+   notebooks/CacheStack
+
 Indices and tables
 ==================
 

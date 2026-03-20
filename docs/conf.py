@@ -12,7 +12,10 @@ extensions = [
     'sphinx.ext.viewcode',
     'autoapi.extension',
     'sphinx_rtd_theme',
+    'nbsphinx',
 ]
+
+nbsphinx_execute = 'never'
 
 autoapi_dirs = ['../src']
 autoapi_ignore = ['*fleche/_version.py']
