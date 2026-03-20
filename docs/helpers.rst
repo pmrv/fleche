@@ -28,6 +28,11 @@ Attempts to load the result of a specific call from the cache. If the result is 
 
 Returns ``True`` if the result for the given call is already present in the cache, ``False`` otherwise.
 
+``.rerun(*args, **kwargs)``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Forces the function to re-execute, even if its result is already present in the cache, and saves the newly computed result to the cache. This forces reevaluation recursively for any nested `@fleche` calls as well.
+
 Accessing the Original Function
 -------------------------------
 
