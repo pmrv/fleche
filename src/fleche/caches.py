@@ -473,7 +473,7 @@ class CacheStack(BaseCache):
                 continue
 
     def shrink(self, key: Digest | str) -> Digest:
-        return sorted([c.shrink(key) for c in self.stack], key=len)[-1]  # ty: ignore upstream bug, already filled
+        return max([c.shrink(key) for c in self.stack], key=len)  # ty: ignore upstream bug, already filled
 
     @overload
     def query(self, call: Call, lazy: bool = False) -> Iterable[Call]: ...
