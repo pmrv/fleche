@@ -24,16 +24,20 @@ def _patch_bagofholding():
     and not a StrKeyDict as it would normally do because it
     is a subclass of str."""
 
-    def _get_group_content_class_fixed(obj: Any) -> Any:
-        t = type(obj)
-        if t is dict and all(
+    def _get_group_content_class_fixed(
+        obj: object,
+    ) -> type[bagofholding.content.Group[Any, Any]] | None:
+        if isinstance(obj, dict) and all(
             type(k) is str and bagofholding.content.is_simple_string(k) for k in obj
         ):
             return bagofholding.content.StrKeyDict
 
-        return bagofholding.content.KNOWN_GROUP_MAP.get(t)
+        return bagofholding.content.KNOWN_GROUP_MAP.get(type(obj))
 
-    bagofholding.content.get_group_content_class = _get_group_content_class_fixed
+    bagofholding.content.get_group_content_class = _get_group_content_class_fixed  # ty: ignore[invalid-assignment]
+
+
+_patched_bagofholding = False
 
 
 @dataclass
@@ -41,7 +45,10 @@ class BagOfHoldingH5File(FileStorage):
 
     @bagofholding_alarm
     def __post_init__(self):
-        _patch_bagofholding()
+        global _patched_bagofholding
+        if not _patched_bagofholding:
+            _patch_bagofholding()
+            _patched_bagofholding = True
         if hasattr(super(), "__post_init__"):
             super().__post_init__()
 
