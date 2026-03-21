@@ -19,3 +19,18 @@ def test_load_corrupt_h5_file(tmp_path, caplog):
             storage._load(key)
 
     assert f"Corrupt file present in cache for key {key}" in caplog.text
+
+
+def test_nested_dict_digest_keys(tmp_path):
+    from fleche.digest import Digest
+    storage = BagOfHoldingH5File(str(tmp_path))
+
+    val = {Digest("a"): {Digest("b"): Digest("c")}}
+    key = Digest("nested_key")
+
+    storage.save(val, key)
+    loaded = storage.load(key)
+
+    assert val == loaded
+    assert isinstance(next(iter(loaded.keys())), Digest)
+    assert isinstance(next(iter(loaded[Digest("a")].keys())), Digest)

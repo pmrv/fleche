@@ -16,6 +16,24 @@ with ImportAlarm(
     raise_exception=True,
 ) as bagofholding_alarm:
     from bagofholding import H5Bag
+    import bagofholding.content
+
+
+def _patch_bagofholding():
+    """Ensure that bagofholding treats Digest as a generic dict
+    and not a StrKeyDict as it would normally do because it
+    is a subclass of str."""
+
+    def _get_group_content_class_fixed(obj: Any) -> Any:
+        t = type(obj)
+        if t is dict and all(
+            type(k) is str and bagofholding.content.is_simple_string(k) for k in obj
+        ):
+            return bagofholding.content.StrKeyDict
+
+        return bagofholding.content.KNOWN_GROUP_MAP.get(t)
+
+    bagofholding.content.get_group_content_class = _get_group_content_class_fixed
 
 
 @dataclass
@@ -23,6 +41,7 @@ class BagOfHoldingH5File(FileStorage):
 
     @bagofholding_alarm
     def __post_init__(self):
+        _patch_bagofholding()
         if hasattr(super(), "__post_init__"):
             super().__post_init__()
 
