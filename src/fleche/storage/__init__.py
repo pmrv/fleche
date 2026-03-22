@@ -11,6 +11,8 @@ from .base import (
     CallStorage,
     CallStorageAdapter,
     DestructuringStorage,
+    LazyIterable,
+    LazyDict,
 )
 from .memory import Memory
 from .void import Void
@@ -26,6 +28,8 @@ __all__ = [
     "CallStorage",
     "CallStorageAdapter",
     "DestructuringStorage",
+    "LazyIterable",
+    "LazyDict",
     "Memory",
     "Void",
     "FileStorage",

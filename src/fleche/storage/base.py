@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Sequence, Mapping as MappingABC
 from dataclasses import dataclass
 from numbers import Number
 
@@ -165,6 +166,117 @@ class DigestedDict(Digested):
         return {storage._load(k): storage._load(v) for k, v in self.items.items()}
 
 
+class LazyIterable(Sequence):
+    """Lazy proxy for a :class:`DigestedIterable` that loads elements on access.
+
+    Elements are fetched from storage only when first accessed and cached thereafter.
+    Compares equal to the equivalent ``list`` or ``tuple`` depending on the underlying type.
+
+    Args:
+        digested: the :class:`DigestedIterable` placeholder holding element digests
+        storage: the :class:`DestructuringStorage` used to load elements
+    """
+
+    def __init__(self, digested: 'DigestedIterable', storage: 'DestructuringStorage'):
+        self._digested = digested
+        self._storage = storage
+        self._cache: dict[int, Any] = {}
+
+    def _load_item(self, index: int) -> Any:
+        if index not in self._cache:
+            self._cache[index] = self._storage._load(self._digested.items[index])
+        return self._cache[index]
+
+    def __len__(self) -> int:
+        return len(self._digested.items)
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            return type(self._digested.items)(
+                self._load_item(i) for i in range(*index.indices(len(self)))
+            )
+        if index < 0:
+            index += len(self)
+        if not 0 <= index < len(self):
+            raise IndexError(index)
+        return self._load_item(index)
+
+    def __eq__(self, other):
+        if isinstance(other, (list, tuple)):
+            return (
+                isinstance(other, type(self._digested.items))
+                and len(self) == len(other)
+                and all(a == b for a, b in zip(self, other))
+            )
+        if isinstance(other, LazyIterable):
+            return (
+                type(self._digested.items) == type(other._digested.items)
+                and self._digested.items == other._digested.items
+            )
+        return NotImplemented
+
+    def __repr__(self) -> str:
+        return repr(type(self._digested.items)(self))
+
+    def realize(self) -> 'list | tuple':
+        """Eagerly load and return the full underlying list or tuple."""
+        return type(self._digested.items)(self)
+
+
+class LazyDict(MappingABC):
+    """Lazy proxy for a :class:`DigestedDict` that loads values on access.
+
+    Keys are loaded eagerly (required for iteration and membership tests), while
+    values are fetched from storage only when first accessed and cached thereafter.
+    Compares equal to the equivalent ``dict``.
+
+    Args:
+        digested: the :class:`DigestedDict` placeholder holding key/value digests
+        storage: the :class:`DestructuringStorage` used to load keys and values
+    """
+
+    def __init__(self, digested: 'DigestedDict', storage: 'DestructuringStorage'):
+        self._digested = digested
+        self._storage = storage
+        # Load all keys eagerly; map real_key -> digest_key for deferred value lookup.
+        # Keys must be hashable, so realize any LazyIterable proxies (e.g. tuple keys).
+        self._key_map: dict[Any, Any] = {}
+        for dk in digested.items:
+            k = storage._load(dk)
+            if isinstance(k, LazyIterable):
+                k = k.realize()
+            self._key_map[k] = dk
+        self._value_cache: dict[Any, Any] = {}
+
+    def __len__(self) -> int:
+        return len(self._key_map)
+
+    def __iter__(self):
+        return iter(self._key_map)
+
+    def __getitem__(self, key):
+        dk = self._key_map[key]  # raises KeyError for missing keys
+        if key not in self._value_cache:
+            self._value_cache[key] = self._storage._load(self._digested.items[dk])
+        return self._value_cache[key]
+
+    def __eq__(self, other):
+        if isinstance(other, dict):
+            if len(self) != len(other):
+                return False
+            return all(k in other and other[k] == v for k, v in self.items())
+        if isinstance(other, LazyDict):
+            return self._digested.items == other._digested.items
+        return NotImplemented
+
+    def __repr__(self) -> str:
+        return repr(dict(self.items()))
+
+    def realize(self) -> dict:
+        """Eagerly load and return the full underlying dict."""
+        return dict(self.items())
+
+
 @dataclass
 class DestructuringStorage(Storage):
     """Special cases certain types to enable to store their constituents separately.
@@ -180,9 +292,13 @@ class DestructuringStorage(Storage):
 
     Args:
         storage (:class:`Storage`): underlying storage
-        remaining_depth (int): destructure supported type until this 'nesting level' remains"""
+        remaining_depth (int): destructure supported type until this 'nesting level' remains
+        lazy (bool): if ``True``, :meth:`load` returns :class:`LazyIterable` / :class:`LazyDict`
+            proxies instead of eagerly reconstructing the full structure; elements are fetched
+            from storage only when first accessed"""
     storage: Storage
     remaining_depth: int = 0
+    lazy: bool = False
 
     def _depth(self, value: Any):
         match value:
@@ -223,6 +339,10 @@ class DestructuringStorage(Storage):
         value = self.storage.load(key)
 
         match value:
+            case DigestedIterable() if self.lazy:
+                return LazyIterable(value, self)
+            case DigestedDict() if self.lazy:
+                return LazyDict(value, self)
             case Digested():
                 return value.mend(self)
             case _:
