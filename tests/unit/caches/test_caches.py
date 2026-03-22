@@ -197,6 +197,57 @@ def test_base_cache_transfer_pop():
     assert not c1.contains(str(call2.to_lookup_key()))
 
 
+def test_base_cache_transfer_no_overwrite_and_pop():
+    """Transfer with overwrite=False and pop=True: new entries are moved,
+    entries already present in target are evicted from source without overwriting."""
+    from fleche.storage.memory import Memory
+
+    c1 = Cache(values=Memory({}), _calls=Memory({}))
+    c2 = Cache(values=Memory({}), _calls=Memory({}))
+
+    call1 = Call(
+        name="f1",
+        arguments={"a": 1},
+        result=2,
+        module="test",
+        version="1.0",
+        metadata={},
+    )
+    call2 = Call(
+        name="f2",
+        arguments={"b": 3},
+        result=4,
+        module="test",
+        version="1.0",
+        metadata={},
+    )
+    # call1 already exists in c2 with a different result
+    call1_existing = Call(
+        name="f1",
+        arguments={"a": 1},
+        result="existing",
+        module="test",
+        version="1.0",
+        metadata={},
+    )
+
+    c1.save(call1)
+    c1.save(call2)
+    c2.save(call1_existing)
+
+    # overwrite=False (default): call1 already in c2, so it must not be overwritten
+    # pop=True: both entries should be evicted from c1 after transfer
+    c1.transfer(c2, pop=True, overwrite=False)
+
+    # call2 should now be in c2 (was new)
+    assert c2.contains(str(call2.to_lookup_key()))
+    # call1 in c2 should retain the original value, not be overwritten
+    assert c2.load(str(call1.to_lookup_key()), lazy=False).result == "existing"
+    # c1 should be empty — both entries evicted
+    assert not c1.contains(str(call1.to_lookup_key()))
+    assert not c1.contains(str(call2.to_lookup_key()))
+
+
 def test_readonly_cache_save():
     from fleche.call import Call
 
