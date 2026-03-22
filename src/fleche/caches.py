@@ -70,8 +70,7 @@ class BaseCache(ABC):
         tpl = Call(name=None, arguments=None, metadata=None, module=None, version=None, result=None)  # type: ignore
         # fmt: on
         for call in self.query(tpl, lazy=False):
-            key = call.to_lookup_key()
-            if overwrite or not other.contains(key):
+            if overwrite or not other.contains(key := call.to_lookup_key()):
                 other.save(call)
             if pop and hasattr(self, "calls"):
                 self.calls.evict(key)  # type: ignore
