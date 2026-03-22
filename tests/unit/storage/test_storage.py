@@ -1,10 +1,8 @@
 import pytest
-import string
-from hypothesis import given, settings, HealthCheck, strategies as st
+from hypothesis import given, settings, HealthCheck
 import numpy as np
-from pathlib import Path
 
-from fleche.storage import SaveError, PickleFile, Memory, BagOfHoldingH5File
+from fleche.storage import SaveError
 from fleche.storage.sql import Sql
 from fleche.call import Call
 from fleche.digest import digest, Digest
