@@ -10,6 +10,7 @@ from . import digest as _digest
 from .digest import Digest  # type hint convenience
 from . import storage
 from .call import Call, LazyCall
+from . import query
 
 logger = logging.getLogger("fleche.cache")
 
@@ -100,7 +101,10 @@ class BaseCache(ABC):
         ...
 
     @abstractmethod
-    def query(self, call: Call) -> Iterable[LazyCall]: ...
+    def _query(self, call: Call) -> Iterable[LazyCall]: ...
+
+    def query(self, call: Call) -> query.QueryIterator:
+        return query.QueryIterator(self._query(call))
 
     def table(self) -> pd.DataFrame:
         """Return a pandas DataFrame summarizing cached calls via query().
@@ -250,7 +254,7 @@ class Cache(BaseCache):
     def shrink(self, key: Digest | str) -> Digest:
         return self.calls.shrink(key)
 
-    def query(self, call: Call) -> Iterable[LazyCall]:
+    def _query(self, call: Call) -> Iterable[LazyCall]:
         """Query for cached calls that match a template and return decoded results.
 
         This delegates to the underlying :meth:`CallStorage.query` using the provided template ``call``. Any digested
@@ -329,7 +333,7 @@ class ReadOnlyCache(BaseCache):
     def contains(self, key: str) -> bool:
         return self.cache.contains(key)
 
-    def query(self, call: Call) -> Iterable[LazyCall]:
+    def _query(self, call: Call) -> Iterable[LazyCall]:
         """Forward queries to the wrapped cache.
 
         Args:
@@ -357,7 +361,7 @@ class FilteredCache(ReadOnlyCache):
             return call
         raise KeyError(key)
 
-    def query(self, call: Call) -> Iterable[LazyCall]:
+    def _query(self, call: Call) -> Iterable[LazyCall]:
         for c in self.cache.query(call):
             if self.predicate(c):
                 yield c
@@ -465,7 +469,7 @@ class CacheStack(BaseCache):
     def shrink(self, key: Digest | str) -> Digest:
         return max([c.shrink(key) for c in self.stack], key=len)  # ty: ignore upstream bug, already filled
 
-    def query(self, call: Call) -> Iterable[LazyCall]:
+    def _query(self, call: Call) -> Iterable[LazyCall]:
         """Aggregate query results across the stack, avoiding duplicates.
 
         The caches are queried from bottom to top. Results are deduplicated by
