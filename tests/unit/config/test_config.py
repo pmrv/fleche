@@ -80,6 +80,21 @@ def config_file_explicit_default():
 
 
 @pytest.fixture
+def config_file_unknown_metadata():
+    config = textwrap.dedent("""
+        [default]
+        cache = "mycache"
+        metadata = ["Runtime", "UnknownType"]
+    """)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        config_dir = Path(tmpdir) / "fleche"
+        config_dir.mkdir()
+        config_path = config_dir / "cache.toml"
+        config_path.write_text(config)
+        yield tmpdir
+
+
+@pytest.fixture
 def config_file_with_tags():
     config = textwrap.dedent("""
         [default]
@@ -243,7 +258,17 @@ def test_tags_disallowed(monkeypatch, config_file_with_tags):
     import importlib
     import fleche.state
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Tags metadata cannot be configured from the config file."):
+        importlib.reload(fleche.state)
+
+
+def test_unknown_metadata_type(monkeypatch, config_file_unknown_metadata):
+    monkeypatch.setenv("XDG_CONFIG_HOME", config_file_unknown_metadata)
+
+    import importlib
+    import fleche.state
+
+    with pytest.raises(ValueError, match="Unknown metadata type in config: UnknownType"):
         importlib.reload(fleche.state)
 
 
