@@ -11,6 +11,29 @@ from ..call import Call
 
 logger = logging.getLogger("fleche.storage")
 
+# Lazily-initialised @fleche-wrapped version of _depth_impl; set on first DestructuringStorage._save call.
+_depth_fleche = None
+
+
+def _depth_impl(value: Any) -> int:
+    """Return the nesting depth of *value*.
+
+    Scalars return 1, containers return 1 + max depth of their contents,
+    and unknown types return 2**64 so they are always destructured.
+    """
+    match value:
+        case list() | tuple():
+            return 1 + max((_depth_impl(v) for v in value), default=0)
+        case dict():
+            return 1 + max(
+                max((_depth_impl(k) for k in value.keys()), default=0),
+                max((_depth_impl(v) for v in value.values()), default=0),
+            )
+        case Number() | str() | bytes() | bool():
+            return 1
+        case _:
+            return 2 ** 64
+
 
 class SaveError(Exception):
     pass
@@ -300,38 +323,34 @@ class DestructuringStorage(Storage):
     remaining_depth: int = 0
     lazy: bool = False
 
-    def _depth(self, value: Any):
-        match value:
-            case list() | tuple():
-                return 1 + max((self._depth(v) for v in value), default=0)
-            case dict():
-                return 1 + max(
-                        max((self._depth(k) for k in value.keys()), default=0),
-                        max((self._depth(v) for v in value.values()), default=0),
-                )
-            case Number() | str() | bytes() | bool():
-                return 1
-            case _:
-                return 2 ** 64
+    def _depth(self, value: Any) -> int:
+        return _depth_impl(value)
 
     def _save(self, value: Any, key: Digest) -> Digest:
-        def depth_aware_save(value):
-            """recursively save content values iff they have more nested levels than given cutoff to avoid putting
-            each and every int/float/etc into its own storage bin."""
-            if self._depth(value) <= self.remaining_depth:
-                return value
-            else:
-                return self.save(value)
+        global _depth_fleche
+        if _depth_fleche is None:
+            from ..wrapper import fleche
+            _depth_fleche = fleche(_depth_impl)
+        from ..state import cache as _set_cache
+        from ..caches import Cache
+        from .memory import Memory as _Memory
 
-        if isinstance(value, Digest):
-            return value
-        match value:
-            case list() | tuple():
-                return self.storage.save(DigestedIterable.sunder(depth_aware_save, value))
-            case dict():
-                return self.storage.save(DigestedDict.sunder(depth_aware_save, value))
-            case _:
-                return self.storage.save(value, key)
+        with _set_cache(Cache(_Memory({}), _Memory({}))):
+            def depth_aware_save(v):
+                """Save v separately iff its nesting depth exceeds the cutoff; inline otherwise."""
+                if _depth_fleche(v) <= self.remaining_depth:
+                    return v
+                return self.save(v)
+
+            if isinstance(value, Digest):
+                return value
+            match value:
+                case list() | tuple():
+                    return self.storage.save(DigestedIterable.sunder(depth_aware_save, value))
+                case dict():
+                    return self.storage.save(DigestedDict.sunder(depth_aware_save, value))
+                case _:
+                    return self.storage.save(value, key)
 
     def _load(self, key: Digest | Any) -> Any:
         if not isinstance(key, Digest):
