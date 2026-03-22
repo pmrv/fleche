@@ -197,9 +197,10 @@ def test_base_cache_transfer_pop():
     assert not c1.contains(str(call2.to_lookup_key()))
 
 
-def test_base_cache_transfer_no_overwrite_and_pop():
+def test_base_cache_transfer_no_overwrite_and_pop(caplog):
     """Transfer with overwrite=False and pop=True: new entries are moved,
-    entries already present in target are evicted from source without overwriting."""
+    conflicting entries (already in target) are NOT evicted from source and a warning is logged."""
+    import logging
     from fleche.storage.memory import Memory
 
     c1 = Cache(values=Memory({}), _calls=Memory({}))
@@ -235,17 +236,18 @@ def test_base_cache_transfer_no_overwrite_and_pop():
     c1.save(call2)
     c2.save(call1_existing)
 
-    # overwrite=False (default): call1 already in c2, so it must not be overwritten
-    # pop=True: both entries should be evicted from c1 after transfer
-    c1.transfer(c2, pop=True, overwrite=False)
+    with caplog.at_level(logging.WARNING, logger="fleche.cache"):
+        c1.transfer(c2, pop=True, overwrite=False)
 
-    # call2 should now be in c2 (was new)
+    # call2 should now be in c2 (was new) and evicted from c1
     assert c2.contains(str(call2.to_lookup_key()))
+    assert not c1.contains(str(call2.to_lookup_key()))
     # call1 in c2 should retain the original value, not be overwritten
     assert c2.load(str(call1.to_lookup_key()), lazy=False).result == "existing"
-    # c1 should be empty — both entries evicted
-    assert not c1.contains(str(call1.to_lookup_key()))
-    assert not c1.contains(str(call2.to_lookup_key()))
+    # call1 should still be in c1 — NOT evicted because it conflicted
+    assert c1.contains(str(call1.to_lookup_key()))
+    # a warning should have been emitted for the skipped eviction
+    assert any("Not evicting" in m for m in caplog.messages)
 
 
 def test_readonly_cache_save():

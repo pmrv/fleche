@@ -71,10 +71,17 @@ class BaseCache(ABC):
         # fmt: on
         for call in self.query(tpl, lazy=False):
             key = call.to_lookup_key()
-            if overwrite or not other.contains(key):
+            conflict = not overwrite and other.contains(key)
+            if not conflict:
                 other.save(call)
             if pop and hasattr(self, "calls"):
-                self.calls.evict(key)  # type: ignore
+                if conflict:
+                    logger.warning(
+                        "Not evicting %s from source: already exists in target and overwrite=False",
+                        key,
+                    )
+                else:
+                    self.calls.evict(key)  # type: ignore
 
     def readonly(self) -> "ReadOnlyCache":
         """Return a read-only view of this cache."""
