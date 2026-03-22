@@ -42,3 +42,8 @@ class QueryIterator(Iterable[call.LazyCall]):
             rows[str(c.to_lookup_key())] = row
 
         return pd.DataFrame.from_dict(rows, orient="index")
+
+    def results(self) -> Iterable[Any]:
+        """Returns an iterable over the results of queried calls."""
+        for c in self.calls:
+            yield c.result
