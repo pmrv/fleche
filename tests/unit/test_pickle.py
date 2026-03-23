@@ -31,10 +31,10 @@ def test_value_storage_picklable(value_storage):
     assert type(restored) == type(value_storage)
 
 
-def test_call_storage_picklable(call_storage_adapter):
+def test_call_storage_picklable(call_storage):
     """All call storage backends are picklable."""
-    restored = roundtrip(call_storage_adapter)
-    assert type(restored) == type(call_storage_adapter)
+    restored = roundtrip(call_storage)
+    assert type(restored) == type(call_storage)
 
 
 def test_void_picklable():
@@ -69,7 +69,7 @@ def test_pickle_file_attributes_preserved(tmp_path, compress):
 
 
 # ---------------------------------------------------------------------------
-# Cache picklability — parametrized via value_storage + call_storage_adapter
+# Cache picklability — parametrized via value_storage + call_storage
 # ---------------------------------------------------------------------------
 
 
@@ -78,8 +78,8 @@ def _always_true(call):
 
 
 @pytest.fixture
-def cache(value_storage, call_storage_adapter):
-    return Cache(value_storage, call_storage_adapter)
+def cache(value_storage, call_storage):
+    return Cache(value_storage, call_storage)
 
 
 def test_cache_picklable(cache):
@@ -116,22 +116,22 @@ def test_cache_stack_picklable(cache):
 
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 @given(call=st_digested_calls)
-def test_call_storage_functional_roundtrip(call_storage_adapter, call):
+def test_call_storage_functional_roundtrip(call_storage, call):
     """Data saved to a call storage before pickling is accessible after restoring."""
     from fleche.storage import SaveError
     try:
-        key = call_storage_adapter.save(call)
+        key = call_storage.save(call)
     except SaveError:
         return
-    restored = roundtrip(call_storage_adapter)
+    restored = roundtrip(call_storage)
     assert restored.load(key) == call
 
 
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 @given(call=st_digested_calls)
-def test_cache_functional_roundtrip(value_storage, call_storage_adapter, call):
+def test_cache_functional_roundtrip(value_storage, call_storage, call):
     """Data saved to a cache before pickling is accessible after restoring."""
-    cache = Cache(value_storage, call_storage_adapter)
+    cache = Cache(value_storage, call_storage)
     try:
         key = cache.save(call)
     except Rejected:
@@ -143,9 +143,9 @@ def test_cache_functional_roundtrip(value_storage, call_storage_adapter, call):
 
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 @given(call=st_digested_calls)
-def test_cache_stack_functional_roundtrip(value_storage, call_storage_adapter, call):
+def test_cache_stack_functional_roundtrip(value_storage, call_storage, call):
     """CacheStack saves and loads correctly after pickling."""
-    cache = Cache(value_storage, call_storage_adapter)
+    cache = Cache(value_storage, call_storage)
     try:
         key = cache.save(call)
     except Rejected:
