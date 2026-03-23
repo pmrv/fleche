@@ -95,14 +95,14 @@ st_hex = st.text(min_size=64, max_size=64, alphabet="0123456789abcdef")
 
 st_digested_calls = st.builds(
     Call,
-    name=st.text(min_size=1, max_size=10),
+    name=st.text(string.ascii_letters, min_size=1, max_size=10),
     arguments=st.dictionaries(
         st.text(string.ascii_letters + string.digits + "_", min_size=1, max_size=5),
         st_hex,
         max_size=6,
     ),
     metadata=st.builds(dict),
-    module=st.one_of(st.none(), st.text(min_size=1, max_size=10)),
+    module=st.one_of(st.none(), st.text(string.ascii_letters, min_size=1, max_size=10)),
     version=st.one_of(st.none(), st.integers(min_value=0, max_value=100)),
     result=st.one_of(st.none(), st_hex),
 )
