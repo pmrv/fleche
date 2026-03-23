@@ -603,7 +603,7 @@ class SizeLimitedCache(BaseCache):
     max_size: int
 
     def __post_init__(self):
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
     # ------------------------------------------------------------------
     # Eviction policy – override this method to generalise to other strategies
@@ -631,53 +631,49 @@ class SizeLimitedCache(BaseCache):
     # ------------------------------------------------------------------
 
     def _evict_call_and_orphaned_values(self, key: _digest.Digest) -> None:
-        """Evict a call and any of its values not referenced by other calls.
+        """Evict a call and any of its values not referenced by other calls."""
+        with self._lock:
+            evicted_call = self.cache.calls.load(str(key))
 
-        Must be called while ``self._lock`` is held.
-        """
-        evicted_call = self.cache.calls.load(str(key))
-
-        # Collect digests stored in the call record (result + arguments).
-        candidate_digests: set[_digest.Digest] = set()
-        if isinstance(evicted_call.result, _digest.Digest):
-            candidate_digests.add(evicted_call.result)
-        for v in evicted_call.arguments.values():
-            if isinstance(v, _digest.Digest):
-                candidate_digests.add(v)
-
-        # Remove the call record first.
-        self.cache.calls.evict(str(key))
-
-        if not candidate_digests:
-            return
-
-        # Determine which digests are still referenced by remaining calls.
-        referenced: set[_digest.Digest] = set()
-        for remaining_key in self.cache.calls.list():
-            remaining_call = self.cache.calls.load(remaining_key)
-            if isinstance(remaining_call.result, _digest.Digest):
-                referenced.add(remaining_call.result)
-            for v in remaining_call.arguments.values():
+            # Collect digests stored in the call record (result + arguments).
+            candidate_digests: set[_digest.Digest] = set()
+            if isinstance(evicted_call.result, _digest.Digest):
+                candidate_digests.add(evicted_call.result)
+            for v in evicted_call.arguments.values():
                 if isinstance(v, _digest.Digest):
-                    referenced.add(v)
+                    candidate_digests.add(v)
 
-        # Evict values that are now orphaned.
-        for d in candidate_digests - referenced:
-            try:
-                self.cache.values.evict(d)
-            except (KeyError, Exception):
-                pass
+            # Remove the call record first.
+            self.cache.calls.evict(str(key))
+
+            if not candidate_digests:
+                return
+
+            # Determine which digests are still referenced by remaining calls.
+            referenced: set[_digest.Digest] = set()
+            for remaining_key in self.cache.calls.list():
+                remaining_call = self.cache.calls.load(remaining_key)
+                if isinstance(remaining_call.result, _digest.Digest):
+                    referenced.add(remaining_call.result)
+                for v in remaining_call.arguments.values():
+                    if isinstance(v, _digest.Digest):
+                        referenced.add(v)
+
+            # Evict values that are now orphaned.
+            for d in candidate_digests - referenced:
+                try:
+                    self.cache.values.evict(d)
+                except (KeyError, Exception):
+                    pass
 
     def _enforce_size_limit(self) -> None:
-        """Evict calls until the cache is within ``max_size``.
-
-        Must be called while ``self._lock`` is held.
-        """
-        keys = list(self.cache.calls.list())
-        while len(keys) > self.max_size:
-            target = self._pick_eviction_target(keys)
-            self._evict_call_and_orphaned_values(target)
+        """Evict calls until the cache is within ``max_size``."""
+        with self._lock:
             keys = list(self.cache.calls.list())
+            while len(keys) > self.max_size:
+                target = self._pick_eviction_target(keys)
+                self._evict_call_and_orphaned_values(target)
+                keys = list(self.cache.calls.list())
 
     # ------------------------------------------------------------------
     # BaseCache interface
