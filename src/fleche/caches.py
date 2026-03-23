@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import itertools
 import logging
 import random
 import threading
@@ -611,7 +612,7 @@ class SizeLimitedCache(BaseCache):
     # ------------------------------------------------------------------
 
     def _pick_eviction_target(self, keys: list[_digest.Digest]) -> _digest.Digest:
-        """Select the call to evict from the current set of cached call keys.
+        """Select the call to evict from a sample of cached call keys.
 
         This is the single, narrowly-scoped location that decides *which* call
         gets evicted.  The default implementation chooses uniformly at random.
@@ -619,7 +620,7 @@ class SizeLimitedCache(BaseCache):
         touching any other part of the class.
 
         Args:
-            keys: All call keys currently present in the cache (non-empty).
+            keys: A non-empty sample of call keys (at most ``max_size + 1`` entries).
 
         Returns:
             The key of the call that should be evicted.
@@ -667,13 +668,17 @@ class SizeLimitedCache(BaseCache):
                     pass
 
     def _enforce_size_limit(self) -> None:
-        """Evict calls until the cache is within ``max_size``."""
+        """Evict calls until the cache is within ``max_size``.
+
+        Only reads at most ``max_size + 1`` keys per iteration, so the cost is
+        O(max_size) rather than O(total cache size).
+        """
         with self._lock:
-            keys = list(self.cache.calls.list())
+            keys = list(itertools.islice(self.cache.calls.list(), self.max_size + 1))
             while len(keys) > self.max_size:
                 target = self._pick_eviction_target(keys)
                 self._evict_call_and_orphaned_values(target)
-                keys = list(self.cache.calls.list())
+                keys = list(itertools.islice(self.cache.calls.list(), self.max_size + 1))
 
     # ------------------------------------------------------------------
     # BaseCache interface
