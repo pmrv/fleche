@@ -1,6 +1,8 @@
+import importlib
 import pickle
 import logging
 import gzip
+import types
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -58,6 +60,20 @@ class PickleFile(FileStorage):
     def with_dill(cls, *args, **kwargs):
         """Construct a PickleFile using the dill module."""
         return cls(*args, serializer=dill, **kwargs)
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        serializer = state.get("serializer")
+        if isinstance(serializer, types.ModuleType):
+            state["serializer"] = serializer.__name__
+        return state
+
+    def __setstate__(self, state):
+        serializer_name = state.get("serializer")
+        if isinstance(serializer_name, str):
+            state = dict(state)
+            state["serializer"] = importlib.import_module(serializer_name)
+        self.__dict__.update(state)
 
     def _save(self, value: Any, key: Digest) -> Digest:
         signer = SignedBytes(self.secret_key)
