@@ -4,6 +4,7 @@ This module re-exports the primary storage interfaces and implementations
 for backward compatibility with `from fleche.storage import ...` imports.
 """
 
+from .thread_safe import ThreadSafeMixin
 from .base import (
     SaveError,
     AmbiguousDigestError,
@@ -11,9 +12,10 @@ from .base import (
     CallStorage,
     CallStorageAdapter,
     DestructuringMixin,
+    ThreadSafeCallStorageAdapter,
     DestructuringStorage,
 )
-from .memory import Memory
+from .memory import Memory, MemoryThreadSafe
 from .void import Void
 from .file import FileStorage
 from .pickle_file import PickleFile
@@ -27,8 +29,11 @@ __all__ = [
     "CallStorage",
     "CallStorageAdapter",
     "DestructuringMixin",
+    "ThreadSafeCallStorageAdapter",
     "DestructuringStorage",
+    "ThreadSafeMixin",
     "Memory",
+    "MemoryThreadSafe",
     "Void",
     "FileStorage",
     "PickleFile",

@@ -7,6 +7,7 @@ from typing import Iterable, Any, Callable, Self
 
 from ..digest import digest, Digest, DIGEST_LENGTH
 from ..call import Call, QueryCall
+from .thread_safe import ThreadSafeMixin
 
 logger = logging.getLogger("fleche.storage")
 
@@ -383,7 +384,7 @@ class CallStorage(StorageBase):
             return False
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class CallStorageAdapter(CallStorage):
     """Implement a CallStorage from a generic Storage."""
 
@@ -403,3 +404,12 @@ class CallStorageAdapter(CallStorage):
 
     def list(self) -> Iterable[Digest]:
         return self.storage.list()
+
+
+class ThreadSafeCallStorageAdapter(ThreadSafeMixin, CallStorageAdapter):
+    """Thread-safe :class:`CallStorageAdapter`.
+
+    The compound check-evict-save in :meth:`CallStorage.save` is executed
+    atomically under a per-instance :class:`threading.RLock` provided by
+    :class:`~fleche.storage.thread_safe.ThreadSafeMixin`.
+    """

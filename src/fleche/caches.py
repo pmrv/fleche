@@ -188,7 +188,10 @@ class Cache(BaseCache):
 
     def __post_init__(self, _calls):
         if isinstance(_calls, storage.Storage):
-            self.calls = storage.CallStorageAdapter(_calls)
+            if isinstance(_calls, storage.base.ThreadSafeMixin):
+                self.calls = storage.base.ThreadSafeCallStorageAdapter(_calls)
+            else:
+                self.calls = storage.CallStorageAdapter(_calls)
         else:
             self.calls = _calls
 
