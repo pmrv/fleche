@@ -4,6 +4,8 @@ on:
   issue_comment:
     types: [created]
   pull_request_review:
+    types: [submitted]
+  pull_request_review_comment:
     types: [created]
 
 permissions:
@@ -16,7 +18,10 @@ permissions:
 jobs:
   claude-response:
     runs-on: ubuntu-latest
-    if: contains(github.event.comment.body, '@claude')
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
     steps:
       - uses: actions/checkout@v6
       - uses: anthropics/claude-code-action@v1
