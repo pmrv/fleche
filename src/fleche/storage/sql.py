@@ -306,7 +306,7 @@ class Sql(CallStorage):
         """
         return str(digest(v))
 
-    def _build_call_conditions(self, template: Call) -> List[Any]:
+    def _build_call_conditions(self, template: QueryCall) -> List[Any]:
         conditions = []
         if template.name is not None:
             conditions.append(CallModel.name == template.name)
@@ -322,7 +322,7 @@ class Sql(CallStorage):
             )
         return conditions
 
-    def _apply_argument_filters(self, stmt: Any, arguments: dict[str, Any]) -> Any:
+    def _apply_argument_filters(self, stmt: Any, arguments: dict[str, Any] | None) -> Any:
         if not arguments:
             return stmt
 

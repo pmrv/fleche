@@ -122,8 +122,7 @@ class BaseCache(ABC):
         """
         # Query all calls using a wildcard template; rely on concrete caches to
         # handle any necessary decoding (e.g., Cache decodes values on query()).
-        # FIXME: We'll want a specific query call type at some point
-        tpl = call.QueryCall(name=None, arguments=None, metadata=None, module=None, version=None, result=None)  # ty: ignore
+        tpl = call.QueryCall(name=None, arguments=None, metadata=None, module=None, version=None, result=None)
         return self.query(tpl).table()
 
     def filter(self, predicate: Callable[[Call | LazyCall], bool] | Call) -> 'FilteredCache':
@@ -235,7 +234,7 @@ class Cache(BaseCache):
     def shrink(self, key: Digest | str) -> Digest:
         return self.calls.shrink(key)
 
-    def _query(self, call: Call) -> Iterable[LazyCall]:
+    def _query(self, call: call.QueryCall) -> Iterable[LazyCall]:
         """Query for cached calls that match a template and return decoded results.
 
         This delegates to the underlying :meth:`CallStorage.query` using the provided template ``call``. Any digested
