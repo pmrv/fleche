@@ -40,6 +40,16 @@ from fleche.caches import Cache
 from fleche.storage.memory import Memory
 from fleche.storage.pickle_file import PickleFile
 
+try:
+    import executorlib  # noqa: F401
+    _executorlib_available = True
+except ImportError:
+    _executorlib_available = False
+
+_skip_no_executorlib = pytest.mark.skipif(
+    not _executorlib_available, reason="executorlib not installed"
+)
+
 
 @fleche.fleche
 def double(x):
@@ -99,15 +109,13 @@ def test_process_executor_in_memory_cache_not_propagated():
 # ---------------------------------------------------------------------------
 
 
+@_skip_no_executorlib
 def test_executorlib_returns_correct_result():
     """
     Fleche-decorated functions can be called through executorlib.SingleNodeExecutor
     and return the correct result.
     """
-    try:
-        from executorlib import SingleNodeExecutor
-    except ImportError:
-        pytest.skip("executorlib not installed")
+    from executorlib import SingleNodeExecutor
 
     with SingleNodeExecutor() as executor:
         future = executor.submit(double, 21)
@@ -116,6 +124,7 @@ def test_executorlib_returns_correct_result():
     assert result == 42, f"Expected 42, got {result}"
 
 
+@_skip_no_executorlib
 def test_executorlib_in_memory_cache_not_propagated():
     """
     An in-memory cache set in the parent is NOT visible inside executorlib workers.
@@ -123,10 +132,7 @@ def test_executorlib_in_memory_cache_not_propagated():
     Results computed by the worker are not stored in the parent's in-memory cache.
     This is expected for any process-based executor.
     """
-    try:
-        from executorlib import SingleNodeExecutor
-    except ImportError:
-        pytest.skip("executorlib not installed")
+    from executorlib import SingleNodeExecutor
 
     mem = Memory({})
     cache = Cache(mem, mem)
@@ -142,6 +148,7 @@ def test_executorlib_in_memory_cache_not_propagated():
     )
 
 
+@_skip_no_executorlib
 def test_executorlib_file_backed_cache_shared():
     """
     Minimally working configuration: use file-backed storage so that worker
@@ -151,10 +158,7 @@ def test_executorlib_file_backed_cache_shared():
     shared directory.  After the executor finishes, the parent can read back
     the cached result from the same directory.
     """
-    try:
-        from executorlib import SingleNodeExecutor
-    except ImportError:
-        pytest.skip("executorlib not installed")
+    from executorlib import SingleNodeExecutor
 
     with tempfile.TemporaryDirectory() as tmpdir:
         values_dir = f"{tmpdir}/values"
