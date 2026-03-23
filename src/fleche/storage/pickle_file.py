@@ -2,6 +2,7 @@ import importlib
 import pickle
 import logging
 import gzip
+import types
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -62,8 +63,9 @@ class PickleFile(FileStorage):
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        if state.get("serializer") is not None:
-            state["serializer"] = state["serializer"].__name__
+        serializer = state.get("serializer")
+        if isinstance(serializer, types.ModuleType):
+            state["serializer"] = serializer.__name__
         return state
 
     def __setstate__(self, state):
