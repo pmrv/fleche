@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
 import logging
+import random
+import threading
 from dataclasses import dataclass, replace, field, InitVar
 from copy import copy
 from typing import Iterable, Any, Callable, overload
@@ -580,3 +582,135 @@ class CacheStack(BaseCache):
                     continue
                 seen.add(k)
                 yield c
+
+
+@dataclass
+class SizeLimitedCache(BaseCache):
+    """A cache wrapping a plain :class:`Cache` that enforces a maximum number of cached calls.
+
+    When a new call is saved and the number of cached calls exceeds ``max_size``,
+    a call is selected for eviction via :meth:`_pick_eviction_target`.  After the
+    call is removed, any argument or result values that are no longer referenced by
+    any remaining call are also evicted from value storage.  Both steps happen
+    atomically under a single lock, making the operation thread-safe.
+
+    Args:
+        cache: The underlying :class:`Cache` to wrap.
+        max_size: Maximum number of calls to keep.
+    """
+
+    cache: Cache
+    max_size: int
+
+    def __post_init__(self):
+        self._lock = threading.Lock()
+
+    # ------------------------------------------------------------------
+    # Eviction policy – override this method to generalise to other strategies
+    # (e.g. LRU, LFU, …).
+    # ------------------------------------------------------------------
+
+    def _pick_eviction_target(self, keys: list[_digest.Digest]) -> _digest.Digest:
+        """Select the call to evict from the current set of cached call keys.
+
+        This is the single, narrowly-scoped location that decides *which* call
+        gets evicted.  The default implementation chooses uniformly at random.
+        Override this method to implement a different eviction policy without
+        touching any other part of the class.
+
+        Args:
+            keys: All call keys currently present in the cache (non-empty).
+
+        Returns:
+            The key of the call that should be evicted.
+        """
+        return random.choice(keys)
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _evict_call_and_orphaned_values(self, key: _digest.Digest) -> None:
+        """Evict a call and any of its values not referenced by other calls.
+
+        Must be called while ``self._lock`` is held.
+        """
+        evicted_call = self.cache.calls.load(str(key))
+
+        # Collect digests stored in the call record (result + arguments).
+        candidate_digests: set[_digest.Digest] = set()
+        if isinstance(evicted_call.result, _digest.Digest):
+            candidate_digests.add(evicted_call.result)
+        for v in evicted_call.arguments.values():
+            if isinstance(v, _digest.Digest):
+                candidate_digests.add(v)
+
+        # Remove the call record first.
+        self.cache.calls.evict(str(key))
+
+        if not candidate_digests:
+            return
+
+        # Determine which digests are still referenced by remaining calls.
+        referenced: set[_digest.Digest] = set()
+        for remaining_key in self.cache.calls.list():
+            remaining_call = self.cache.calls.load(remaining_key)
+            if isinstance(remaining_call.result, _digest.Digest):
+                referenced.add(remaining_call.result)
+            for v in remaining_call.arguments.values():
+                if isinstance(v, _digest.Digest):
+                    referenced.add(v)
+
+        # Evict values that are now orphaned.
+        for d in candidate_digests - referenced:
+            try:
+                self.cache.values.evict(d)
+            except (KeyError, Exception):
+                pass
+
+    def _enforce_size_limit(self) -> None:
+        """Evict calls until the cache is within ``max_size``.
+
+        Must be called while ``self._lock`` is held.
+        """
+        keys = list(self.cache.calls.list())
+        while len(keys) > self.max_size:
+            target = self._pick_eviction_target(keys)
+            self._evict_call_and_orphaned_values(target)
+            keys = list(self.cache.calls.list())
+
+    # ------------------------------------------------------------------
+    # BaseCache interface
+    # ------------------------------------------------------------------
+
+    def save(self, call: call.Call) -> str:
+        with self._lock:
+            key = self.cache.save(call)
+            self._enforce_size_limit()
+            return key
+
+    def load(self, key: str, lazy: bool = True) -> call.Call | LazyCall:
+        return self.cache.load(key, lazy=lazy)
+
+    def load_value(self, key: str) -> Any:
+        return self.cache.load_value(key)
+
+    def contains(self, key: str) -> bool:
+        return self.cache.contains(key)
+
+    def evict(self, key: str | _digest.Digest) -> None:
+        with self._lock:
+            if len(str(key)) < _digest.DIGEST_LENGTH:
+                full_key = self.cache.calls.expand(key)
+            else:
+                full_key = _digest.Digest(str(key))
+            self._evict_call_and_orphaned_values(full_key)
+
+    def expand(self, key: _digest.Digest | str) -> _digest.Digest:
+        return self.cache.expand(key)
+
+    def shrink(self, key: _digest.Digest | str) -> _digest.Digest:
+        return self.cache.shrink(key)
+
+    def _query(self, c: call.QueryCall) -> Iterable[LazyCall]:
+        return self.cache._query(c)
