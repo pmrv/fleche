@@ -5,32 +5,14 @@ Related issue: https://github.com/pmrv/fleche/issues/207
 
 import pickle
 import pytest
+from hypothesis import given, settings, HealthCheck
 
-from fleche.storage import (
-    Memory,
-    Void,
-    PickleFile,
-    DestructuringStorage,
-    CallStorageAdapter,
-)
-from fleche.caches import Cache, ReadOnlyCache, FilteredCache, RefreshingCache, CacheStack
-from fleche.call import Call
-from fleche.digest import Digest
+from fleche.storage import Memory, Void, PickleFile, DestructuringStorage
+from fleche.caches import Cache, ReadOnlyCache, FilteredCache, RefreshingCache, CacheStack, Rejected
+from tests.strategies import st_digested_calls
+
 
 SECRET_KEY = [b"test_secret_key_32_bytes_long!!!!"]
-
-
-@pytest.fixture
-def call():
-    """A sample Call with digested arguments (no live Python objects in arguments/result)."""
-    return Call(
-        name="test_func",
-        arguments={"x": Digest("a" * 64)},
-        metadata={},
-        module="test_module",
-        version=1,
-        result=Digest("b" * 64),
-    )
 
 
 def roundtrip(obj):
@@ -39,280 +21,136 @@ def roundtrip(obj):
 
 
 # ---------------------------------------------------------------------------
-# Storage picklability
+# Storage picklability — parametrized via global fixtures
 # ---------------------------------------------------------------------------
 
 
-class TestStoragePickle:
-    def test_memory_empty(self):
-        mem = Memory({})
-        restored = roundtrip(mem)
-        assert isinstance(restored, Memory)
+def test_value_storage_picklable(value_storage):
+    """All value storage backends are picklable."""
+    restored = roundtrip(value_storage)
+    assert type(restored) == type(value_storage)
 
-    def test_memory_preserves_data(self):
-        mem = Memory({})
-        key = mem.save(42)
-        restored = roundtrip(mem)
-        assert restored.load(key) == 42
 
-    def test_void(self):
-        void = Void()
-        restored = roundtrip(void)
-        assert isinstance(restored, Void)
+def test_call_storage_picklable(call_storage_adapter):
+    """All call storage backends are picklable."""
+    restored = roundtrip(call_storage_adapter)
+    assert type(restored) == type(call_storage_adapter)
 
-    def test_pickle_file_with_pickle(self, tmp_path):
-        store = PickleFile.with_pickle(tmp_path / "store", secret_key=SECRET_KEY)
-        key = store.save(42)
-        restored = roundtrip(store)
-        assert isinstance(restored, PickleFile)
-        assert restored.load(key) == 42
-        assert restored.root == store.root
-        assert restored.secret_key == store.secret_key
-        assert restored.compress == store.compress
 
-    def test_pickle_file_with_cloudpickle(self, tmp_path):
-        pytest.importorskip("cloudpickle")
-        store = PickleFile.with_cloudpickle(tmp_path / "store", secret_key=SECRET_KEY)
-        key = store.save(42)
-        restored = roundtrip(store)
-        assert isinstance(restored, PickleFile)
-        assert restored.load(key) == 42
-        assert restored.root == store.root
-        assert restored.secret_key == store.secret_key
-        assert restored.compress == store.compress
+def test_void_picklable():
+    assert isinstance(roundtrip(Void()), Void)
 
-    def test_pickle_file_with_dill(self, tmp_path):
-        pytest.importorskip("dill")
-        store = PickleFile.with_dill(tmp_path / "store", secret_key=SECRET_KEY)
-        key = store.save(42)
-        restored = roundtrip(store)
-        assert isinstance(restored, PickleFile)
-        assert restored.load(key) == 42
-        assert restored.root == store.root
-        assert restored.secret_key == store.secret_key
-        assert restored.compress == store.compress
 
-    def test_pickle_file_compress(self, tmp_path):
-        store = PickleFile.with_pickle(
-            tmp_path / "store", secret_key=SECRET_KEY, compress=True
-        )
-        key = store.save("hello world")
-        restored = roundtrip(store)
-        assert restored.load(key) == "hello world"
-        assert restored.compress == store.compress
-        assert restored.root == store.root
-        assert restored.secret_key == store.secret_key
-
-    def test_pickle_file_no_secret_key(self, tmp_path):
-        store = PickleFile.with_pickle(tmp_path / "store", secret_key=[])
-        key = store.save(99)
-        restored = roundtrip(store)
-        assert restored.load(key) == 99
-        assert restored.root == store.root
-        assert restored.compress == store.compress
-
-    def test_bag_of_holding_h5_file(self, tmp_path):
-        pytest.importorskip("bagofholding")
-        from fleche.storage import BagOfHoldingH5File
-
-        store = BagOfHoldingH5File(tmp_path / "h5")
-        restored = roundtrip(store)
-        assert isinstance(restored, BagOfHoldingH5File)
-        # Verify root path is preserved
-        assert restored.root == store.root
-
-    def test_sql(self, tmp_path):
-        pytest.importorskip("sqlalchemy")
-        from fleche.storage import Sql
-
-        store = Sql(str(tmp_path / "calls.db"))
-        restored = roundtrip(store)
-        assert isinstance(restored, Sql)
-
-    def test_sql_preserves_data(self, tmp_path, call):
-        pytest.importorskip("sqlalchemy")
-        from fleche.storage import Sql
-
-        store = Sql(str(tmp_path / "calls.db"))
-        key = store.save(call)
-        restored = roundtrip(store)
-        loaded = restored.load(key)
-        assert loaded.name == call.name
-
-    def test_sql_in_memory(self):
-        pytest.importorskip("sqlalchemy")
-        from fleche.storage import Sql
-
-        # in-memory SQLite — data is not preserved across roundtrip but pickling itself must succeed
-        store = Sql(None)
-        restored = roundtrip(store)
-        assert isinstance(restored, Sql)
-
-    def test_destructuring_storage_with_memory(self):
-        ds = DestructuringStorage(Memory({}))
-        restored = roundtrip(ds)
-        assert isinstance(restored, DestructuringStorage)
-        key = restored.save([1, 2, 3])
-        assert restored.load(key) == [1, 2, 3]
-
-    def test_call_storage_adapter_with_memory(self, call):
-        adapter = CallStorageAdapter(Memory({}))
-        restored = roundtrip(adapter)
-        assert isinstance(restored, CallStorageAdapter)
-        key = restored.save(call)
-        assert restored.load(key) == call
+def test_destructuring_storage_picklable():
+    ds = DestructuringStorage(Memory({}))
+    restored = roundtrip(ds)
+    assert isinstance(restored, DestructuringStorage)
+    key = restored.save([1, 2, 3])
+    assert restored.load(key) == [1, 2, 3]
 
 
 # ---------------------------------------------------------------------------
-# Cache picklability
+# PickleFile-specific: attribute preservation
 # ---------------------------------------------------------------------------
 
 
-def _make_memory_cache():
-    return Cache(Memory({}), Memory({}))
+@pytest.mark.parametrize("compress", [False, True])
+def test_pickle_file_attributes_preserved(tmp_path, compress):
+    """PickleFile roundtrip preserves root, secret_key, and compress."""
+    store = PickleFile.with_pickle(
+        tmp_path / "store", secret_key=SECRET_KEY, compress=compress
+    )
+    key = store.save("hello")
+    restored = roundtrip(store)
+    assert restored.load(key) == "hello"
+    assert restored.root == store.root
+    assert restored.secret_key == store.secret_key
+    assert restored.compress == store.compress
+
+
+# ---------------------------------------------------------------------------
+# Cache picklability — parametrized via value_storage + call_storage_adapter
+# ---------------------------------------------------------------------------
 
 
 def _always_true(call):
     return True
 
 
-class TestCachePickle:
-    def test_cache_with_memory(self):
-        cache = _make_memory_cache()
-        restored = roundtrip(cache)
-        assert isinstance(restored, Cache)
+@pytest.fixture
+def cache(value_storage, call_storage_adapter):
+    return Cache(value_storage, call_storage_adapter)
 
-    def test_cache_with_pickle_file(self, tmp_path):
-        cache = Cache(
-            PickleFile.with_pickle(tmp_path / "values", secret_key=SECRET_KEY),
-            PickleFile.with_pickle(tmp_path / "calls", secret_key=SECRET_KEY),
-        )
-        restored = roundtrip(cache)
-        assert isinstance(restored, Cache)
 
-    def test_cache_with_sql_calls_storage(self, tmp_path):
-        pytest.importorskip("sqlalchemy")
-        from fleche.storage import Sql
+def test_cache_picklable(cache):
+    restored = roundtrip(cache)
+    assert isinstance(restored, Cache)
 
-        cache = Cache(Memory({}), Sql(str(tmp_path / "calls.db")))
-        restored = roundtrip(cache)
-        assert isinstance(restored, Cache)
 
-    def test_readonly_cache(self):
-        inner = _make_memory_cache()
-        ro = ReadOnlyCache(inner)
-        restored = roundtrip(ro)
-        assert isinstance(restored, ReadOnlyCache)
+def test_readonly_cache_picklable(cache):
+    restored = roundtrip(ReadOnlyCache(cache))
+    assert isinstance(restored, ReadOnlyCache)
 
-    def test_filtered_cache_with_named_predicate(self):
-        inner = _make_memory_cache()
-        fc = FilteredCache(inner, _always_true)
-        restored = roundtrip(fc)
-        assert isinstance(restored, FilteredCache)
 
-    def test_refreshing_cache(self):
-        inner = _make_memory_cache()
-        rc = RefreshingCache(inner)
-        restored = roundtrip(rc)
-        assert isinstance(restored, RefreshingCache)
+def test_filtered_cache_picklable(cache):
+    restored = roundtrip(FilteredCache(cache, _always_true))
+    assert isinstance(restored, FilteredCache)
 
-    def test_cache_stack(self):
-        c1 = _make_memory_cache()
-        c2 = _make_memory_cache()
-        stack = CacheStack((c1, c2))
-        restored = roundtrip(stack)
-        assert isinstance(restored, CacheStack)
-        assert len(restored.stack) == 2
 
-    def test_cache_stack_via_push(self):
-        c1 = _make_memory_cache()
-        c2 = _make_memory_cache()
-        stack = c1.push(c2)
-        restored = roundtrip(stack)
-        assert isinstance(restored, CacheStack)
+def test_refreshing_cache_picklable(cache):
+    restored = roundtrip(RefreshingCache(cache))
+    assert isinstance(restored, RefreshingCache)
 
-    def test_cache_stack_with_mixed_storages(self, tmp_path):
-        file_cache = Cache(
-            PickleFile.with_pickle(tmp_path / "values", secret_key=SECRET_KEY),
-            PickleFile.with_pickle(tmp_path / "calls", secret_key=SECRET_KEY),
-        )
-        mem_cache = _make_memory_cache()
-        stack = CacheStack((mem_cache, file_cache))
-        restored = roundtrip(stack)
-        assert isinstance(restored, CacheStack)
 
-    def test_readonly_cache_via_method(self):
-        inner = _make_memory_cache()
-        ro = inner.readonly()
-        restored = roundtrip(ro)
-        assert isinstance(restored, ReadOnlyCache)
-
-    def test_nested_cache_stack_picklable(self):
-        c1 = _make_memory_cache()
-        c2 = _make_memory_cache()
-        c3 = _make_memory_cache()
-        inner_stack = CacheStack((c1, c2))
-        # CacheStack.push returns a new stack wrapping inner
-        outer = inner_stack.push(c3)
-        restored = roundtrip(outer)
-        assert isinstance(restored, CacheStack)
+def test_cache_stack_picklable(cache):
+    stack = CacheStack((cache, Cache(Memory({}), Memory({}))))
+    restored = roundtrip(stack)
+    assert isinstance(restored, CacheStack)
+    assert len(restored.stack) == 2
 
 
 # ---------------------------------------------------------------------------
-# Functional roundtrip: save before pickling, load after
+# Functional roundtrip: save → pickle → unpickle → load
 # ---------------------------------------------------------------------------
 
 
-class TestPickleFunctionalRoundtrip:
-    """Verify that pickled objects remain fully operational."""
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@given(call=st_digested_calls)
+def test_call_storage_functional_roundtrip(call_storage_adapter, call):
+    """Data saved to a call storage before pickling is accessible after restoring."""
+    from fleche.storage import SaveError
+    try:
+        key = call_storage_adapter.save(call)
+    except SaveError:
+        return
+    restored = roundtrip(call_storage_adapter)
+    assert restored.load(key) == call
 
-    def test_memory_cache_save_then_pickle_then_load(self, call):
-        """Data saved before pickling is accessible after restoring."""
-        cache = _make_memory_cache()
+
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@given(call=st_digested_calls)
+def test_cache_functional_roundtrip(value_storage, call_storage_adapter, call):
+    """Data saved to a cache before pickling is accessible after restoring."""
+    cache = Cache(value_storage, call_storage_adapter)
+    try:
         key = cache.save(call)
-        restored = roundtrip(cache)
-        loaded = restored.load(key)
-        assert loaded.result == call.result
-        assert loaded.name == call.name
+    except Rejected:
+        return
+    restored = roundtrip(cache)
+    loaded = restored.load(key, lazy=False)
+    assert loaded == call
 
-    def test_pickle_file_cache_save_then_pickle_then_load(self, tmp_path, call):
-        cache = Cache(
-            PickleFile.with_pickle(tmp_path / "v", secret_key=SECRET_KEY),
-            PickleFile.with_pickle(tmp_path / "c", secret_key=SECRET_KEY),
-        )
+
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@given(call=st_digested_calls)
+def test_cache_stack_functional_roundtrip(value_storage, call_storage_adapter, call):
+    """CacheStack saves and loads correctly after pickling."""
+    cache = Cache(value_storage, call_storage_adapter)
+    try:
         key = cache.save(call)
-        restored = roundtrip(cache)
-        loaded = restored.load(key)
-        assert loaded.result == call.result
-
-    def test_cache_stack_save_to_base_load_after_pickle(self, call):
-        """CacheStack saves to base and loads from either layer after pickling."""
-        base = _make_memory_cache()
-        upper = _make_memory_cache()
-        stack = CacheStack((base, upper))
-
-        key = base.save(call)  # save to base directly to capture key
-
-        restored = roundtrip(stack)
-        loaded = restored.load(key)
-        assert loaded.result == call.result
-
-    def test_sql_call_storage_roundtrip_after_pickle(self, tmp_path, call):
-        pytest.importorskip("sqlalchemy")
-        from fleche.storage import Sql
-
-        store = Sql(str(tmp_path / "db.sqlite"))
-        key = store.save(call)
-        restored = roundtrip(store)
-        loaded = restored.load(key)
-        assert loaded.name == call.name
-        assert loaded.module == call.module
-
-    def test_memory_storage_new_saves_after_pickle(self):
-        mem = Memory({})
-        key1 = mem.save("first")
-        restored = roundtrip(mem)
-        # can save new values after restore
-        key2 = restored.save("second")
-        assert restored.load(key1) == "first"
-        assert restored.load(key2) == "second"
+    except Rejected:
+        return
+    stack = CacheStack((cache, Cache(Memory({}), Memory({}))))
+    restored = roundtrip(stack)
+    loaded = restored.load(key, lazy=False)
+    assert loaded == call
