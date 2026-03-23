@@ -585,7 +585,7 @@ class CacheStack(BaseCache):
                 yield c
 
 
-class SizeLimitedMixin:
+class SizeLimitedMixin(BaseCache):
     """Mixin that enforces a maximum number of cached calls with random eviction.
 
     Combine this with :class:`Cache` (mixin first in MRO) to get a size-limited
@@ -599,15 +599,14 @@ class SizeLimitedMixin:
     a call record is selected for eviction via :meth:`_pick_eviction_target`.
     Value storage is intentionally left untouched.
 
-    The concrete class must expose a ``calls`` attribute (a
-    :class:`~fleche.storage.CallStorage`) and a ``max_size`` integer, both of
-    which are provided automatically when mixed with :class:`Cache`.
+    The concrete class must provide a ``max_size`` integer, which is provided
+    automatically when mixed with :class:`Cache`.
     """
 
     max_size: int
 
     def __post_init__(self, *args, **kwargs):
-        super().__post_init__(*args, **kwargs)
+        super().__post_init__(*args, **kwargs)  # ty: ignore
         self._lock = threading.RLock()
 
     # ------------------------------------------------------------------
@@ -615,7 +614,7 @@ class SizeLimitedMixin:
     # (e.g. LRU, LFU, …).
     # ------------------------------------------------------------------
 
-    def _pick_eviction_target(self, keys: list[_digest.Digest]) -> _digest.Digest:
+    def _pick_eviction_target(self, keys: list[str]) -> str:
         """Select the call to evict from a sample of cached call keys.
 
         The default implementation chooses uniformly at random.  Override this
@@ -637,12 +636,13 @@ class SizeLimitedMixin:
         Only reads at most ``max_size + 1`` keys per iteration, so the cost is
         O(max_size) rather than O(total cache size).
         """
+        _wildcard = call.QueryCall()
         with self._lock:
-            keys = list(itertools.islice(self.calls.list(), self.max_size + 1))
+            keys = [c.to_lookup_key() for c in itertools.islice(self.query(_wildcard), self.max_size + 1)]
             while len(keys) > self.max_size:
                 target = self._pick_eviction_target(keys)
-                self.calls.evict(str(target))
-                keys = list(itertools.islice(self.calls.list(), self.max_size + 1))
+                super().evict(target)
+                keys = [c.to_lookup_key() for c in itertools.islice(self.query(_wildcard), self.max_size + 1)]
 
     def save(self, call: call.Call) -> str:
         with self._lock:
