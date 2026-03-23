@@ -18,7 +18,7 @@ class QueryIterator(Iterable[call.LazyCall]):
     def __iter__(self) -> Iterator[call.LazyCall]:
         yield from self.calls
 
-    def table(self, arguments: Iterable[str] = ()) -> pd.DataFrame:
+    def table(self, arguments: Iterable[str] = (), results=False) -> pd.DataFrame:
         """Return a pandas DataFrame summarizing queried calls.
 
         Arguments and results are elided.
@@ -27,12 +27,15 @@ class QueryIterator(Iterable[call.LazyCall]):
         Columns are:
             - `name`: the function name
             - `module`: the module name
+            - 'result`: if `results` argument is `True`
             - metadata fields are flattened and added as columns directly
 
         If given argument names collide with any of the above columns, the are prefixed by 'a_'.
+        Only requested arguments are loaded from cache.
 
         Args:
             arguments (iterable of str): add the given arguments (of the queried calls) as columns to the table
+            results (bool): if True, add results of queried calls to table
 
         Returns:
             :class:`pandas.DataFrame`: table of all calls on cache
@@ -45,6 +48,8 @@ class QueryIterator(Iterable[call.LazyCall]):
             row = {
                     prop: getattr(c, prop) for prop in ("name", "module", "metadata")
             }
+            if results:
+                row["result"] = c.result
             for a in arguments:
                 # TODO: quick and easy strategy to avoid name clashes, alternative would be to use multicolumns, but
                 # those are a bit annoying
