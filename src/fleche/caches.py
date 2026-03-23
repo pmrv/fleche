@@ -328,7 +328,7 @@ class Cache(BaseCache):
         # AmbiguousDigestError propagates directly
 
         if calls_result is not None and values_result is not None:
-            return max(calls_result, values_result, key=len)
+            return max(calls_result, values_result, key=len)  # type: ignore
         elif calls_result is not None:
             return calls_result
         elif values_result is not None:
@@ -607,7 +607,7 @@ class CacheStack(BaseCache):
             # AmbiguousDigestError propagates directly
         if not results:
             raise KeyError(key)
-        return max(results, key=len)
+        return max(results, key=len)  # type: ignore
 
     @overload
     def query(self, call: Call, lazy: bool = False) -> Iterable[Call]: ...
