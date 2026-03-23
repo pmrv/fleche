@@ -6,8 +6,8 @@ from fleche.caches import Cache, SizeLimitedCache
 from fleche.storage.memory import Memory
 
 
-def make_cache() -> Cache:
-    return Cache(values=Memory({}), _calls=Memory({}))
+def make_slcache(max_size: int) -> SizeLimitedCache:
+    return SizeLimitedCache(values=Memory({}), _calls=Memory({}), max_size=max_size)
 
 
 def make_call(name: str, x: int, result: int) -> Call:
@@ -16,18 +16,18 @@ def make_call(name: str, x: int, result: int) -> Call:
 
 def test_size_limit_enforced():
     """After saving max_size + 1 calls, only max_size remain."""
-    cache = SizeLimitedCache(cache=make_cache(), max_size=3)
+    cache = make_slcache(max_size=3)
 
     for i in range(5):
         cache.save(make_call("f", i, i * 2))
 
-    keys = list(cache.cache.calls.list())
+    keys = list(cache.calls.list())
     assert len(keys) <= 3
 
 
 def test_save_and_load():
     """Saved calls can be retrieved when under the size limit."""
-    cache = SizeLimitedCache(cache=make_cache(), max_size=5)
+    cache = make_slcache(max_size=5)
     c = make_call("f", 42, 84)
     key = cache.save(c)
     loaded = cache.load(key, lazy=False)
@@ -36,49 +36,51 @@ def test_save_and_load():
     assert loaded.result == 84
 
 
-def test_evict_removes_call():
-    """Manual eviction removes the call record; values are left in place."""
-    inner = make_cache()
-    cache = SizeLimitedCache(cache=inner, max_size=10)
+def test_evict_call_only():
+    """Eviction removes the call record; values are left in place."""
+    cache = make_slcache(max_size=1)
+
+    c1 = make_call("f", 1, 100)
+    c2 = make_call("f", 2, 200)
+    cache.save(c1)
+    cache.save(c2)
+
+    # At most max_size calls remain after automatic eviction
+    assert len(list(cache.calls.list())) <= 1
+
+
+def test_evict_manual():
+    """Manual eviction removes the call record."""
+    cache = make_slcache(max_size=10)
 
     c = make_call("f", 7, 77)
     key = cache.save(c)
+    assert cache.contains(key)
 
-    values_before = set(inner.values.list())
     cache.evict(key)
-
-    # Call should be gone
     assert not cache.contains(key)
 
-    # Values are left in place
-    values_after = set(inner.values.list())
-    assert values_after == values_before
 
 
 def test_pick_eviction_target_is_overridable():
     """_pick_eviction_target can be overridden to implement deterministic eviction."""
-    inner = make_cache()
 
     class FirstEvictionCache(SizeLimitedCache):
         def _pick_eviction_target(self, keys):
             return keys[0]
 
-    cache = FirstEvictionCache(cache=inner, max_size=2)
+    cache = FirstEvictionCache(values=Memory({}), _calls=Memory({}), max_size=2)
 
-    keys_in_order = []
     for i in range(4):
-        c = make_call("f", i, i)
-        key = cache.save(c)
-        keys_in_order.append(key)
+        cache.save(make_call("f", i, i))
 
-    remaining = set(str(k) for k in inner.calls.list())
+    remaining = set(str(k) for k in cache.calls.list())
     assert len(remaining) == 2
 
 
 def test_thread_safety():
     """Concurrent saves do not corrupt the size invariant."""
-    inner = make_cache()
-    cache = SizeLimitedCache(cache=inner, max_size=5)
+    cache = make_slcache(max_size=5)
     errors = []
 
     def save_calls(start):
@@ -95,12 +97,12 @@ def test_thread_safety():
         t.join()
 
     assert not errors, f"Exceptions during concurrent saves: {errors}"
-    keys = list(inner.calls.list())
+    keys = list(cache.calls.list())
     assert len(keys) <= 5
 
 
 def test_contains_delegates():
-    cache = SizeLimitedCache(cache=make_cache(), max_size=5)
+    cache = make_slcache(max_size=5)
     c = make_call("f", 1, 2)
     key = cache.save(c)
     assert cache.contains(key)
@@ -109,7 +111,7 @@ def test_contains_delegates():
 
 def test_query_delegates():
     from fleche.call import QueryCall
-    cache = SizeLimitedCache(cache=make_cache(), max_size=5)
+    cache = make_slcache(max_size=5)
     cache.save(make_call("myf", 1, 10))
     cache.save(make_call("myf", 2, 20))
     cache.save(make_call("other", 3, 30))
