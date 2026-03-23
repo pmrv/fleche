@@ -91,6 +91,23 @@ class BaseCache(ABC):
         return CacheStack((cache, self))
 
     @abstractmethod
+    def expand(self, key: Digest | str) -> Digest:
+        """
+        Expand a short digest prefix to its full-length digest.
+
+        Args:
+            key (str or :class:`Digest`): the short digest prefix to expand
+
+        Returns:
+            :class:`Digest`: the full-length digest
+
+        Raises:
+            KeyError: if the key is not found
+            :class:`AmbiguousDigestError`: if the prefix matches more than one entry
+        """
+        ...
+
+    @abstractmethod
     def shrink(self, key: Digest | str) -> Digest:
         """
         Find the shortest substring that is still an unambigious reference to the same call.
@@ -266,8 +283,57 @@ class Cache(BaseCache):
     def contains(self, key: str) -> bool:
         return self.calls.contains(key)
 
+    def expand(self, key: Digest | str) -> Digest:
+        calls_result = None
+        values_result = None
+
+        try:
+            calls_result = self.calls.expand(key)
+        except KeyError:
+            pass
+        # AmbiguousDigestError propagates directly
+
+        try:
+            values_result = self.values.expand(key)
+        except KeyError:
+            pass
+        # AmbiguousDigestError propagates directly
+
+        if calls_result is not None and values_result is not None:
+            if calls_result != values_result:
+                raise storage.AmbiguousDigestError(
+                    f"Short digest {key} expands to different full digests in calls and values storages."
+                )
+            return calls_result
+        elif calls_result is not None:
+            return calls_result
+        elif values_result is not None:
+            return values_result
+        raise KeyError(key)
+
     def shrink(self, key: Digest | str) -> Digest:
-        return self.calls.shrink(key)
+        calls_result = None
+        values_result = None
+
+        try:
+            calls_result = self.calls.shrink(key)
+        except KeyError:
+            pass
+        # AmbiguousDigestError propagates directly
+
+        try:
+            values_result = self.values.shrink(key)
+        except KeyError:
+            pass
+        # AmbiguousDigestError propagates directly
+
+        if calls_result is not None and values_result is not None:
+            return max(calls_result, values_result, key=len)
+        elif calls_result is not None:
+            return calls_result
+        elif values_result is not None:
+            return values_result
+        raise KeyError(key)
 
     @overload
     def query(self, call: Call, lazy: bool = False) -> Iterable[Call]: ...
@@ -342,6 +408,9 @@ class ReadOnlyCache(BaseCache):
 
     def load(self, key, lazy: bool = True):
         return self.cache.load(key, lazy=lazy)
+
+    def expand(self, key: Digest | str) -> Digest:
+        return self.cache.expand(key)
 
     def shrink(self, key: Digest | str) -> Digest:
         return self.cache.shrink(key)
@@ -437,6 +506,9 @@ class RefreshingCache(BaseCache):
     def evict(self, key: str | Digest) -> None:
         self.cache.evict(key)
 
+    def expand(self, key: Digest | str) -> Digest:
+        return self.cache.expand(key)
+
     def shrink(self, key: Digest | str) -> Digest:
         return self.cache.shrink(key)
 
@@ -501,8 +573,41 @@ class CacheStack(BaseCache):
             except (Rejected, KeyError):
                 continue
 
+    def expand(self, key: Digest | str) -> Digest:
+        result = None
+        for c in self.stack:
+            try:
+                r = c.expand(key)
+            except KeyError:
+                continue
+            # AmbiguousDigestError from a single cache propagates directly
+            if result is None:
+                result = r
+            elif result != r:
+                m1, m2 = sorted({result, r})
+                for i, (c1, c2) in enumerate(zip(m1, m2)):
+                    if c1 != c2:
+                        break
+                else:
+                    i = min(len(m1), len(m2))
+                raise storage.AmbiguousDigestError(
+                    f"Short digest {key} is ambiguous across caches; expands to: {[m1, m2]}; need at least {i+1} characters."
+                )
+        if result is None:
+            raise KeyError(key)
+        return result
+
     def shrink(self, key: Digest | str) -> Digest:
-        return max([c.shrink(key) for c in self.stack], key=len)  # ty: ignore upstream bug, already filled
+        results = []
+        for c in self.stack:
+            try:
+                results.append(c.shrink(key))
+            except KeyError:
+                continue
+            # AmbiguousDigestError propagates directly
+        if not results:
+            raise KeyError(key)
+        return max(results, key=len)
 
     @overload
     def query(self, call: Call, lazy: bool = False) -> Iterable[Call]: ...
