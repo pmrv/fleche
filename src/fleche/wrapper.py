@@ -152,7 +152,6 @@ def fleche(
             func.__version__ = version  # ty: ignore
 
         ignored_args, required_args = process_ignore_required_args(func, ignore, require)
-        print(ignored_args, required_args)
 
         @wraps(func)
         def get_call(*args, **kwargs):
@@ -249,6 +248,18 @@ def fleche(
 
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> _T:
+            cache: BaseCache = state._CACHE.get()
+
+            # expand args passed as digest early so that everything else below sees the real values
+            args = tuple(
+                cache.load_value(arg) if isinstance(arg, digest.Digest) else arg
+                for arg in args
+            )
+            kwargs = {
+                k: (cache.load_value(v) if isinstance(v, digest.Digest) else v)
+                for k, v in kwargs.items()
+            }
+
             missing = [r for r in required_args if r not in kwargs]
             if missing:
                 logger.warning(
@@ -256,7 +267,6 @@ def fleche(
                 )
                 return func(*args, **kwargs)
 
-            cache: BaseCache = state._CACHE.get()
             try:
                 call = get_call(*args, **kwargs)
                 key = call.to_lookup_key()
@@ -278,16 +288,7 @@ def fleche(
                 for m in active_meta:
                     metadata[m.name] |= m.pre(replace(call, metadata={}))
 
-                expanded_args = tuple(
-                    cache.load_value(arg) if isinstance(arg, digest.Digest) else arg
-                    for arg in args
-                )
-                expanded_kwargs = {
-                    k: (cache.load_value(v) if isinstance(v, digest.Digest) else v)
-                    for k, v in kwargs.items()
-                }
-
-                call.result: _T = func(*expanded_args, **expanded_kwargs)
+                call.result: _T = func(*args, **kwargs)
                 if call.result is None:
                     logger.warning("Function returned None, not caching")
                     return None
