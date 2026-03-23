@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-import itertools
 import logging
 import random
 import threading
@@ -608,6 +607,7 @@ class SizeLimitedMixin(BaseCache):
     def __post_init__(self, *args, **kwargs):
         super().__post_init__(*args, **kwargs)  # ty: ignore
         self._lock = threading.RLock()
+        self._keys: set[str] = {str(k) for k in self.calls.list()}
 
     # ------------------------------------------------------------------
     # Eviction policy – override this to generalise to other strategies
@@ -622,8 +622,7 @@ class SizeLimitedMixin(BaseCache):
         other part of the class.
 
         Args:
-            keys: A non-empty sample of call keys (at most ``max_size + 1``
-                entries).
+            keys: A non-empty list of all tracked call keys.
 
         Returns:
             The key of the call that should be evicted.
@@ -631,28 +630,23 @@ class SizeLimitedMixin(BaseCache):
         return random.choice(keys)
 
     def _enforce_size_limit(self) -> None:
-        """Evict call records until the cache is within ``max_size``.
-
-        Only reads at most ``max_size + 1`` keys per iteration, so the cost is
-        O(max_size) rather than O(total cache size).
-        """
-        _wildcard = call.QueryCall()
+        """Evict call records until the cache is within ``max_size``."""
         with self._lock:
-            keys = [c.to_lookup_key() for c in itertools.islice(self.query(_wildcard), self.max_size + 1)]
-            while len(keys) > self.max_size:
-                target = self._pick_eviction_target(keys)
-                super().evict(target)
-                keys = [c.to_lookup_key() for c in itertools.islice(self.query(_wildcard), self.max_size + 1)]
+            while len(self._keys) > self.max_size:
+                target = self._pick_eviction_target(list(self._keys))
+                self.evict(target)
 
     def save(self, call: call.Call) -> str:
         with self._lock:
             key = super().save(call)
+            self._keys.add(key)
             self._enforce_size_limit()
             return key
 
     def evict(self, key: str | _digest.Digest) -> None:
         with self._lock:
             super().evict(key)
+            self._keys.discard(str(key))
 
 
 @dataclass

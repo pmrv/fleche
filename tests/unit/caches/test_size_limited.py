@@ -120,3 +120,23 @@ def test_query_delegates():
     results = list(cache.query(tpl))
     assert len(results) == 2
     assert all(r.name == "myf" for r in results)
+
+
+def test_keys_initialized_from_existing_storage():
+    """_keys is populated from existing storage on construction; eviction respects pre-existing entries."""
+    # Populate a base Cache first, then wrap it with SizeLimitedCache sharing the same storages.
+    base = Cache(values=Memory({}), _calls=Memory({}))
+    for i in range(3):
+        base.save(make_call("f", i, i))
+
+    # Build a SizeLimitedCache over the same storages with max_size=2.
+    # The 3 pre-existing keys must be discovered during __post_init__.
+    from fleche.storage.memory import Memory as Mem
+    slc = SizeLimitedCache(values=base.values, _calls=base.calls, max_size=2)
+
+    # _keys must reflect all pre-existing entries
+    assert len(slc._keys) == 3
+
+    # Saving one more should trigger eviction down to max_size
+    slc.save(make_call("f", 99, 99))
+    assert len(slc._keys) <= 2
