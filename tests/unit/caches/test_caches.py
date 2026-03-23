@@ -154,8 +154,7 @@ def test_base_cache_transfer_overwrite():
     # Save conflict to c2
     key = c2.save(call1_conflict)
 
-    # Transfer should overwrite any existing conflicting results by default
-    c1.transfer(c2)
+    c1.transfer(c2, overwrite=True)
 
     assert c2.contains(str(call1.to_lookup_key()))
     # Ensure that it was actually overwritten. The call1 should be the one in the cache.
