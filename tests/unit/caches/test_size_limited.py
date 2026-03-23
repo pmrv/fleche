@@ -3,7 +3,6 @@ import threading
 
 from fleche.call import Call
 from fleche.caches import Cache, SizeLimitedCache
-from fleche.digest import Digest
 from fleche.storage.memory import Memory
 
 
@@ -37,49 +36,8 @@ def test_save_and_load():
     assert loaded.result == 84
 
 
-def test_orphaned_values_evicted():
-    """Values no longer referenced by any call are removed from value storage."""
-    inner = make_cache()
-    cache = SizeLimitedCache(cache=inner, max_size=1)
-
-    c1 = make_call("f", 1, 100)
-    c2 = make_call("f", 2, 200)
-    cache.save(c1)
-
-    # Record how many values exist after first save
-    values_after_c1 = set(inner.values.list())
-
-    cache.save(c2)
-
-    # After eviction there should be at most max_size calls
-    assert len(list(inner.calls.list())) <= 1
-
-    # Values belonging exclusively to c1 should have been removed
-    values_after_eviction = set(inner.values.list())
-    assert values_after_eviction <= values_after_c1 or len(values_after_eviction) <= len(values_after_c1)
-
-
-def test_shared_values_not_evicted():
-    """Values referenced by surviving calls are not removed during eviction."""
-    inner = make_cache()
-    cache = SizeLimitedCache(cache=inner, max_size=1)
-
-    # Two calls that share the same result value
-    shared_result = 999
-    c1 = make_call("f", 1, shared_result)
-    c2 = make_call("f", 2, shared_result)
-    cache.save(c1)
-    cache.save(c2)
-
-    # One call survives; its result digest must still be loadable
-    surviving_key = list(inner.calls.list())[0]
-    surviving_call = inner.calls.load(surviving_key)
-    if isinstance(surviving_call.result, Digest):
-        assert inner.values.contains(surviving_call.result)
-
-
-def test_evict_removes_orphaned_values():
-    """Manual eviction also cleans up orphaned values."""
+def test_evict_removes_call():
+    """Manual eviction removes the call record; values are left in place."""
     inner = make_cache()
     cache = SizeLimitedCache(cache=inner, max_size=10)
 
@@ -92,9 +50,9 @@ def test_evict_removes_orphaned_values():
     # Call should be gone
     assert not cache.contains(key)
 
-    # Values that were exclusively used by the evicted call should be gone
+    # Values are left in place
     values_after = set(inner.values.list())
-    assert values_after <= values_before
+    assert values_after == values_before
 
 
 def test_pick_eviction_target_is_overridable():
