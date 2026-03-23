@@ -57,22 +57,35 @@ class BaseCache(ABC):
         except KeyError:
             return False
 
-    def transfer(self, other: "BaseCache", pop: bool = False) -> None:
+    def transfer(self, other: "BaseCache", pop: bool = False, overwrite: bool = False) -> None:
         """Transfer all calls from this cache to another cache.
-
-        Existing calls in the target cache may be overwritten by the transferred calls.
 
         Args:
             other: The destination cache.
             pop: If True, evict transferred keys from the source cache after moving.
+            overwrite: If True, overwrite existing entries in the target cache.
+                If False (default), skip entries that already exist in the target.
         """
         # fmt: off
         tpl = Call(name=None, arguments=None, metadata=None, module=None, version=None, result=None)  # type: ignore
         # fmt: on
         for call in self.query(tpl, lazy=False):
-            other.save(call)
-            if pop and hasattr(self, "calls"):
-                self.calls.evict(call.to_lookup_key())  # type: ignore
+            key = call.to_lookup_key()
+            conflict = not overwrite and other.contains(key)
+            if not conflict:
+                other.save(call)
+            if pop:
+                if conflict:
+                    logger.warning(
+                        "Not evicting %s from source: already exists in target and overwrite=False",
+                        key,
+                    )
+                else:
+                    self.evict(key)
+
+    def readonly(self) -> "ReadOnlyCache":
+        """Return a read-only view of this cache."""
+        return ReadOnlyCache(self)
 
     def push(self, cache: "BaseCache") -> "CacheStack":
         return CacheStack((cache, self))
