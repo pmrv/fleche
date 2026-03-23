@@ -3,7 +3,7 @@ name: Claude Assistant
 on:
   issue_comment:
     types: [created]
-  pull_request_review_comment:
+  pull_request_review:
     types: [created]
 
 permissions:
@@ -11,6 +11,7 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+  actions: read
 
 jobs:
   claude-response:
@@ -22,4 +23,6 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           claude_args: |
-            --allowedTools "Bash(git *)"
+            --allowedTools "Bash(git *) Bash(python *)" "Bash(pip install *)" "Bash(pytest *)"
+          additional_permissions: |
+            actions: read
