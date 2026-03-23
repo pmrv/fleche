@@ -21,7 +21,33 @@ class Unhashable(Exception):
 
 
 class Digest(str):
-    pass
+    def expand(self, cache=None) -> "Digest":
+        """Expand a short digest prefix to its full-length digest using the cache.
+
+        Args:
+            cache: A cache instance to use. If None, uses the current context's cache.
+
+        Returns:
+            The full-length :class:`Digest`.
+        """
+        if cache is None:
+            from .state import cache as get_cache
+            cache = get_cache()
+        return cache.expand(self)
+
+    def shrink(self, cache=None) -> "Digest":
+        """Shrink a digest to its shortest unambiguous prefix using the cache.
+
+        Args:
+            cache: A cache instance to use. If None, uses the current context's cache.
+
+        Returns:
+            The shortest unambiguous :class:`Digest` prefix.
+        """
+        if cache is None:
+            from .state import cache as get_cache
+            cache = get_cache()
+        return cache.shrink(self)
 
 
 DIGEST_LENGTH = 64
