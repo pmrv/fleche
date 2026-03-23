@@ -2,7 +2,7 @@ from typing import Iterable, Any, List
 from pathlib import Path
 from dataclasses import dataclass, field
 from .base import CallStorage, AmbiguousDigestError
-from ..call import Call
+from ..call import Call, QueryCall
 from ..digest import Digest, DIGEST_LENGTH, digest
 
 from pyiron_snippets.import_alarm import ImportAlarm
@@ -306,7 +306,7 @@ class Sql(CallStorage):
         """
         return str(digest(v))
 
-    def _build_call_conditions(self, template: Call) -> List[Any]:
+    def _build_call_conditions(self, template: QueryCall) -> List[Any]:
         conditions = []
         if template.name is not None:
             conditions.append(CallModel.name == template.name)
@@ -322,7 +322,7 @@ class Sql(CallStorage):
             )
         return conditions
 
-    def _apply_argument_filters(self, stmt: Any, arguments: dict[str, Any]) -> Any:
+    def _apply_argument_filters(self, stmt: Any, arguments: dict[str, Any] | None) -> Any:
         if not arguments:
             return stmt
 
@@ -375,7 +375,7 @@ class Sql(CallStorage):
                         stmt = stmt.where(M.data[k].as_string() == v)
         return stmt
 
-    def query(self, template: Call) -> Iterable[Call]:
+    def query(self, template: QueryCall) -> Iterable[Call]:
         """Find cached calls matching a template using SQL-side filtering.
 
         Semantics match CallStorage.query:

@@ -91,7 +91,7 @@ def test_lazy_call_digest():
 
 
 def test_cache_query_lazy():
-    """Verify that Cache.query(lazy=True) yields LazyCall instances."""
+    """Verify that Cache.query() yields LazyCall instances."""
     values_storage = Memory({})
     calls_storage = Memory({})
     cache = Cache(values_storage, calls_storage)
@@ -104,7 +104,7 @@ def test_cache_query_lazy():
     )
 
     # Query with lazy=True
-    results = list(cache.query(tpl, lazy=True))
+    results = list(cache.query(tpl))
     assert len(results) == 2
     for r in results:
         assert isinstance(r, LazyCall)

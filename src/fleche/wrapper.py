@@ -11,7 +11,7 @@ from collections import defaultdict
 from . import digest
 from . import state
 import fleche.metadata as metadata
-from .call import Call, AnyCall
+from .call import Call, AnyCall, QueryCall
 from .caches import Rejected, BaseCache, RefreshingCache
 
 
@@ -152,11 +152,10 @@ def fleche(
             func.__version__ = version  # ty: ignore
 
         ignored_args, required_args = process_ignore_required_args(func, ignore, require)
-        print(ignored_args, required_args)
 
         @wraps(func)
-        def get_call(*args, partial=False, **kwargs):
-            call = Call.from_call(func, *args, partial=partial, **kwargs)
+        def get_call(*args, **kwargs):
+            call = Call.from_call(func, *args, **kwargs)
             # drop ignored arguments for the saved call object to make our lives much simpler when hashing or saving it
             # if we leave them in, then Cache.save needs to know about them indirectly to ensure correct digest key
             # generation, but then we'd also have to save it somehow and that just seems bothersome in particular for
@@ -177,7 +176,7 @@ def fleche(
             return get_call(*args, **kwargs).to_lookup_key()
 
         def _query_func(
-            *args, metadata={}, lazy: bool = False, **kwargs
+            *args, metadata={}, **kwargs
         ) -> Iterable[AnyCall]:
             """Return matching results from current cache.
 
@@ -188,20 +187,17 @@ def fleche(
                 *args, **kwargs: function arguments that should be matched in returned calls; pass `None` as a wildcard
                 metadata (dict[str, dict[str, json]]): metadata tags to additionall filter on; if this shadows a
                     function kwargs of the same name, you must pass it by position instead.
-                lazy (bool, default False): if True, return lazily loaded call, passed through :meth:`.BaseCache.query`.
 
             Returns:
                 iterable of matching :class:`.Call`
             """
-            call = get_call(*args, partial=True, **kwargs)
+            call = QueryCall.from_call(func, *args, **kwargs)
             if "metadata" in call.arguments:
                 logger.warning(
                     "Function argument 'metadata' shadowed by query argument"
                 )
-            if "lazy" in call.arguments:
-                logger.warning("Function argument 'lazy' shadowed by query argument")
             call.metadata = metadata
-            return state._CACHE.get().query(call, lazy=lazy)
+            return state._CACHE.get().query(call)
 
         _query_doc = _query_func.__doc__
         _query_func = wraps(func)(_query_func)  # ty: ignore
@@ -252,6 +248,18 @@ def fleche(
 
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> _T:
+            cache: BaseCache = state._CACHE.get()
+
+            # expand args passed as digest early so that everything else below sees the real values
+            args = tuple(
+                cache.load_value(arg) if isinstance(arg, digest.Digest) else arg
+                for arg in args
+            )
+            kwargs = {
+                k: (cache.load_value(v) if isinstance(v, digest.Digest) else v)
+                for k, v in kwargs.items()
+            }
+
             missing = [r for r in required_args if r not in kwargs]
             if missing:
                 logger.warning(
@@ -259,7 +267,6 @@ def fleche(
                 )
                 return func(*args, **kwargs)
 
-            cache: BaseCache = state._CACHE.get()
             try:
                 call = get_call(*args, **kwargs)
                 key = call.to_lookup_key()
@@ -281,16 +288,7 @@ def fleche(
                 for m in active_meta:
                     metadata[m.name] |= m.pre(replace(call, metadata={}))
 
-                expanded_args = tuple(
-                    cache.load_value(arg) if isinstance(arg, digest.Digest) else arg
-                    for arg in args
-                )
-                expanded_kwargs = {
-                    k: (cache.load_value(v) if isinstance(v, digest.Digest) else v)
-                    for k, v in kwargs.items()
-                }
-
-                call.result: _T = func(*expanded_args, **expanded_kwargs)
+                call.result: _T = func(*args, **kwargs)
                 if call.result is None:
                     logger.warning("Function returned None, not caching")
                     return None

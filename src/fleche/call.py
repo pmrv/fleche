@@ -24,18 +24,12 @@ class Call:
     result: Any = None
 
     @classmethod
-    def from_call(cls, func, *args, partial=False, **kwargs):
+    def from_call(cls, func, *args, **kwargs):
         # Normalize arguments using function signature
         sig = signature(func)
-        if partial:
-            bound = sig.bind_partial(*args, **kwargs)
-            bound.apply_defaults()
-            # missing arguments are set to None
-            arguments = {name: bound.arguments.get(name) for name in sig.parameters}
-        else:
-            bound = sig.bind(*args, **kwargs)
-            bound.apply_defaults()
-            arguments = dict(bound.arguments)
+        bound = sig.bind(*args, **kwargs)
+        bound.apply_defaults()
+        arguments = dict(bound.arguments)
 
         # Preserve declared parameter order via bound.arguments (OrderedDict)
         call = cls(func.__name__, arguments)
@@ -174,11 +168,82 @@ class LazyCall:
         return digest.digest(c)
 
 
+AnyQueryType = None | digest.Digest | Any
+StrQueryType = None | digest.Digest | str
+
+@dataclass
+class QueryCall:
+    name: StrQueryType = None
+    arguments: dict[str, AnyQueryType] | None = None
+    metadata: dict[str, dict[str, StrQueryType]] | None = None
+    module: str | None = None
+    version: int | None = None
+    code_digest: digest.Digest | None = None
+    result: AnyQueryType = None
+
+    @classmethod
+    def from_call(cls, func, *args, **kwargs):
+        # Normalize arguments using function signature
+        sig = signature(func)
+        bound = sig.bind_partial(*args, **kwargs)
+        bound.apply_defaults()
+        # missing arguments are set to None
+        arguments = {name: bound.arguments.get(name) for name in sig.parameters}
+
+        call = cls(func.__name__, arguments)
+        if hasattr(func, "__version__"):
+            call.version = func.__version__
+        if hasattr(func, "__module__"):
+            call.module = func.__module__
+        return call
+
+    def matches(self, other: 'Call | LazyCall') -> bool:
+        """Check if this call matches another call, treating None as a wildcard in this object."""
+        def none_or_equal(a, b):
+            if a is None:
+                return True
+            # Use digest to handle both raw values and Digest objects consistently
+            return digest.digest(a) == digest.digest(b)
+
+        if not none_or_equal(self.name, other.name):
+            return False
+        if not none_or_equal(self.module, other.module):
+            return False
+        if not none_or_equal(self.version, other.version):
+            return False
+        if not none_or_equal(self.code_digest, other.code_digest):
+            return False
+        if not none_or_equal(self.result, other.result):
+            return False
+
+        if self.arguments is not None:
+            for k, v in self.arguments.items():
+                if k not in other.arguments:
+                    return False
+                if not none_or_equal(v, other.arguments[k]):
+                    return False
+
+        if self.metadata:
+            for mname, filters in self.metadata.items():
+                data = other.metadata.get(mname)
+                if data is None:
+                    return False
+                for kk, vv in (filters or {}).items():
+                    if vv is None:
+                        if kk not in data:
+                            return False
+                    else:
+                        if data.get(kk) != vv:
+                            return False
+        return True
+
+
 AnyCall = Call | LazyCall
 
 
 __all__ = [
         "Call",
         "LazyCall",
+        "QueryCall",
         "AnyCall"
 ]

@@ -108,6 +108,25 @@ def test_method_digest_expansion():
         dx = c.values.save(5)
         assert obj.add(D(dx)) == 15
 
+def test_digested_args_are_not_saved():
+    '''Regression test where previously we would accidentaly expand the digests too late, so that the functions run
+    correctly, but are entered into the call storage as having received the literal digest as an input rather than the
+    value.'''
+
+    c = Cache(Memory({}), Memory({}))
+
+    @fleche
+    def func(x):
+        return x
+
+    with cache(c):
+        value_key = c.values.save(4)
+        func(value_key)
+        key_with_digest = func.digest(value_key)
+        key_with_value = func.digest(4)
+
+        assert key_with_digest == key_with_value
+        assert not isinstance(c.load(key_with_digest).arguments["x"], Digest)
 
 def test_short_digest_expansion_via_D():
     # If the storage supports expansion of short digests, D(short) should also work

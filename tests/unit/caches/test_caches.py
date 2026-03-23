@@ -158,7 +158,7 @@ def test_base_cache_transfer_overwrite():
 
     assert c2.contains(str(call1.to_lookup_key()))
     # Ensure that it was actually overwritten. The call1 should be the one in the cache.
-    loaded_call = c2.load(str(call1.to_lookup_key()), lazy=False)
+    loaded_call = c2.load(str(call1.to_lookup_key()))
     assert loaded_call.result == 2
 
 
