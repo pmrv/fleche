@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
 import logging
+import random
+import threading
 from dataclasses import dataclass, replace, field, InitVar
 from copy import copy
 from typing import Iterable, Any, Callable, overload
@@ -580,3 +582,86 @@ class CacheStack(BaseCache):
                     continue
                 seen.add(k)
                 yield c
+
+
+class SizeLimitedMixin:
+    """Mixin that enforces a maximum number of cached calls with random eviction.
+
+    Combine this with :class:`Cache` (mixin first in MRO) to get a size-limited
+    cache::
+
+        @dataclass
+        class SizeLimitedCache(SizeLimitedMixin, Cache):
+            max_size: int
+
+    When a new call is saved and the number of cached calls exceeds ``max_size``,
+    a call record is selected for eviction via :meth:`_pick_eviction_target`.
+    Value storage is intentionally left untouched.
+
+    The concrete class must provide a ``max_size`` integer, which is provided
+    automatically when mixed with :class:`Cache`.
+    """
+
+    max_size: int
+
+    def __post_init__(self, *args, **kwargs):
+        super().__post_init__(*args, **kwargs)  # ty: ignore
+        self._lock = threading.RLock()
+        self._keys: set[str] = {c.to_lookup_key() for c in self.query(call.QueryCall())}
+
+    # ------------------------------------------------------------------
+    # Eviction policy – override this to generalise to other strategies
+    # (e.g. LRU, LFU, …).
+    # ------------------------------------------------------------------
+
+    def _pick_eviction_target(self, keys: list[str]) -> str:
+        """Select the call to evict from a sample of cached call keys.
+
+        The default implementation chooses uniformly at random.  Override this
+        method to implement a different eviction policy without touching any
+        other part of the class.
+
+        Args:
+            keys: A non-empty list of all tracked call keys.
+
+        Returns:
+            The key of the call that should be evicted.
+        """
+        return random.choice(keys)
+
+    def _enforce_size_limit(self) -> None:
+        """Evict call records until the cache is within ``max_size``."""
+        with self._lock:
+            while len(self._keys) > self.max_size:
+                target = self._pick_eviction_target(list(self._keys))
+                self.evict(target)
+
+    def save(self, call: call.Call) -> str:
+        with self._lock:
+            key = super().save(call)
+            self._keys.add(key)
+            self._enforce_size_limit()
+            return key
+
+    def evict(self, key: str | _digest.Digest) -> None:
+        with self._lock:
+            super().evict(key)
+            self._keys.discard(str(key))
+
+
+@dataclass
+class SizeLimitedCache(SizeLimitedMixin, Cache):
+    """A :class:`Cache` that enforces a maximum number of cached calls.
+
+    When a new call is saved and the number of cached calls exceeds ``max_size``,
+    a call record is selected for eviction via :meth:`_pick_eviction_target`.
+    The default policy evicts uniformly at random; override
+    :meth:`_pick_eviction_target` to change this.
+
+    Args:
+        values: Value storage (forwarded to :class:`Cache`).
+        _calls: Call storage (forwarded to :class:`Cache`).
+        max_size: Maximum number of calls to keep.
+    """
+
+    max_size: int

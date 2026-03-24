@@ -125,6 +125,8 @@ def main():
             "SqlMemory": "🔴",
             "Pickle+Sql": "🟢",
             "H5+Sql": "🟠",
+            "SizeLimitedCache(Memory,max=10)": "🟣",
+            "SizeLimitedCache(Memory,max=100)": "🟣",
         }
         return colors.get(backend, "⚪️")
 
