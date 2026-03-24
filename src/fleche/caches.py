@@ -584,7 +584,7 @@ class CacheStack(BaseCache):
                 yield c
 
 
-class SizeLimitedMixin(BaseCache):
+class SizeLimitedMixin:
     """Mixin that enforces a maximum number of cached calls with random eviction.
 
     Combine this with :class:`Cache` (mixin first in MRO) to get a size-limited
