@@ -14,6 +14,59 @@ from pyiron_snippets.import_alarm import ImportAlarm
 
 logger = logging.getLogger("fleche.storage.pickle_file")
 
+_HMAC_MIN_KEY_BYTES = 32
+
+
+def _normalize_secret_key(key) -> list[bytes]:
+    """
+    Normalize a secret key value to ``list[bytes]``.
+
+    Accepts:
+    - ``bytes``: wrapped in a list
+    - ``str``: split on ``":"`` delimiter, each part encoded to UTF-8
+    - ``list[bytes]``: each element validated for minimum length
+    - ``list[str]``: each element (or colon-delimited parts) encoded to UTF-8
+
+    Each resulting key must be at least ``_HMAC_MIN_KEY_BYTES`` bytes long.
+
+    Raises:
+        TypeError: if ``key`` or any element is not ``bytes`` or ``str``.
+        ValueError: if any resulting key is shorter than ``_HMAC_MIN_KEY_BYTES``.
+    """
+    if isinstance(key, (bytes, str)):
+        key = [key]
+
+    if not isinstance(key, list):
+        raise TypeError(
+            f"secret_key must be bytes, str, or list, got {type(key).__name__}"
+        )
+
+    result = []
+    for k in key:
+        if isinstance(k, str):
+            for part in k.split(":"):
+                encoded = part.encode("utf-8")
+                if len(encoded) < _HMAC_MIN_KEY_BYTES:
+                    raise ValueError(
+                        f"Each secret key must be at least {_HMAC_MIN_KEY_BYTES} bytes, "
+                        f"got {len(encoded)}"
+                    )
+                result.append(encoded)
+        elif isinstance(k, bytes):
+            if len(k) < _HMAC_MIN_KEY_BYTES:
+                raise ValueError(
+                    f"Each secret key must be at least {_HMAC_MIN_KEY_BYTES} bytes, "
+                    f"got {len(k)}"
+                )
+            result.append(k)
+        else:
+            raise TypeError(
+                f"Each element of secret_key must be bytes or str, "
+                f"got {type(k).__name__}"
+            )
+
+    return result
+
 with ImportAlarm(
     "PickleFile.with_cloudpickle requires 'cloudpickle' to be installed. "
     "Install it with `pip install fleche[cloudpickle]`.",
@@ -43,6 +96,8 @@ class PickleFile(FileStorage):
         super().__post_init__()
         if not self.secret_key:
             self.secret_key = get_secret_key()
+        else:
+            self.secret_key = _normalize_secret_key(self.secret_key)
 
     @classmethod
     def with_pickle(cls, *args, **kwargs):
