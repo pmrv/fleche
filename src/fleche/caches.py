@@ -607,7 +607,7 @@ class SizeLimitedMixin(BaseCache):
     def __post_init__(self, *args, **kwargs):
         super().__post_init__(*args, **kwargs)  # ty: ignore
         self._lock = threading.RLock()
-        self._keys: set[str] = {str(k) for k in self.calls.list()}
+        self._keys: set[str] = {str(c.to_lookup_key()) for c in self.query(call.QueryCall())}
 
     # ------------------------------------------------------------------
     # Eviction policy – override this to generalise to other strategies
