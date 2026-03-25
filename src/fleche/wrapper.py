@@ -270,15 +270,12 @@ def fleche(
             try:
                 call = get_call(*args, **kwargs)
                 key = call.to_lookup_key()
-            except digest.Unhashable as e:
-                logger.warning("No hash for argument: %s", e.args[0])
-                return func(*args, **kwargs)
-
-
-            try:
                 result = cache.load(key).result
                 logger.debug("Cache hit for %s with key %s", call.name, key)
                 return result
+            except digest.Unhashable as e:
+                logger.warning("No hash for argument: %s", e.args[0])
+                return func(*args, **kwargs)
             except KeyError:
                 logger.debug("Cache miss for %s with key %s", call.name, key)
 
