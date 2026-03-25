@@ -13,6 +13,7 @@ from . import state
 import fleche.metadata as metadata
 from .call import Call, AnyCall, QueryCall
 from .caches import Rejected, BaseCache, RefreshingCache
+from .query import QueryIterator
 
 
 import logging
@@ -197,6 +198,13 @@ def fleche(
                     "Function argument 'metadata' shadowed by query argument"
                 )
             call.metadata = metadata
+            for k, v in call.arguments.items():
+                if v is not None:
+                    try:
+                        digest.digest(v)
+                    except digest.Unhashable as e:
+                        logger.warning("No hash for query argument: %s", e.args[0])
+                        return QueryIterator(iter([]))
             return state._CACHE.get().query(call)
 
         _query_doc = _query_func.__doc__
