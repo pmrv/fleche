@@ -1,3 +1,6 @@
+import cmath
+import struct
+
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
@@ -93,6 +96,36 @@ def test_different_floats_have_different_hashes(x, y):
         assert digest(x) == digest(y)
     else:
         assert digest(x) != digest(y)
+
+
+@given(st.complex_numbers(allow_nan=True), st.complex_numbers(allow_nan=True))
+def test_different_complex_numbers_have_different_digests(x, y):
+    """Test that two different complex numbers have different digests."""
+    # Digest is based on raw binary packing of real and imaginary parts
+    x_bytes = struct.pack("<dd", x.real, x.imag)
+    y_bytes = struct.pack("<dd", y.real, y.imag)
+
+    if x_bytes == y_bytes:
+        assert digest(x) == digest(y)
+    else:
+        assert digest(x) != digest(y)
+
+
+@given(st.complex_numbers(allow_nan=True))
+def test_complex_numbers_can_be_digested(x):
+    """Test that complex numbers (including NaN) can be digested without error."""
+    digest(x)
+
+
+@given(
+    st.one_of(
+        st.builds(np.complex64, st.complex_numbers(allow_nan=False)),
+        st.builds(np.complex128, st.complex_numbers(allow_nan=False)),
+    )
+)
+def test_numpy_complex_can_be_digested(x):
+    """Test that numpy complex numbers can be digested and match their Python complex equivalent."""
+    assert digest(x) == digest(complex(x))
 
 
 @given(st.lists(st.integers()))

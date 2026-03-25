@@ -1,3 +1,4 @@
+import cmath
 import hashlib
 import logging
 import dataclasses
@@ -169,6 +170,14 @@ def _digest(value: Any) -> Digest:
                     (value.bit_length() + 8) // 8, byteorder="little", signed=True
                 )
             )
+        case np.complexfloating():
+            return digest(complex(value))
+        case complex():
+            # Pack real and imaginary parts as raw binary.
+            # Using struct.pack (rather than hash()) avoids collisions with real numbers
+            # (hash(1+0j) == hash(1)) and correctly handles NaN components since
+            # NaN hash values are location-dependent (same issue as for float NaN above).
+            m.update(struct.pack("<dd", value.real, value.imag))
         case Number():
             # lest we have nice things
             if math.isnan(value):

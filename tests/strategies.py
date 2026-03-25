@@ -52,6 +52,7 @@ key_strategies = [
     st.none(),
     st.integers(),
     st.floats(allow_nan=False),
+    st.complex_numbers(allow_nan=False),
     st.text(),
     st.binary(),
     st.booleans(),
