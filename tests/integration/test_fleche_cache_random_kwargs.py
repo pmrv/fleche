@@ -1,7 +1,7 @@
 """Integration test: random kwargs through @fleche, then query via Cache.query and function.query."""
 
 import random
-from dataclasses import dataclass
+import string
 
 import hypothesis.strategies as st
 from hypothesis import given, settings
@@ -11,64 +11,21 @@ from fleche.call import QueryCall
 from fleche.caches import Cache
 from fleche.storage import Memory
 
-
-# ---------------------------------------------------------------------------
-# Sample dataclasses for hypothesis
-# ---------------------------------------------------------------------------
-
-@dataclass(frozen=True)
-class Point:
-    x: float
-    y: float
+from tests.strategies import st_nested_values
 
 
-@dataclass(frozen=True)
-class Config:
-    name: str
-    value: int
-
-
-# ---------------------------------------------------------------------------
-# Hypothesis strategy for values that fleche can digest
-# ---------------------------------------------------------------------------
-
-_leaf = st.one_of(
-    st.integers(),
-    st.floats(allow_nan=False, allow_infinity=False),
-    st.text(max_size=20),
-    st.booleans(),
-    st.none(),
-    st.binary(max_size=20),
-    st.builds(Point, x=st.floats(allow_nan=False, allow_infinity=False),
-                      y=st.floats(allow_nan=False, allow_infinity=False)),
-    st.builds(Config, name=st.text(max_size=10), value=st.integers()),
-)
-
-digestable_values = st.recursive(
-    _leaf,
-    lambda children: st.one_of(
-        st.lists(children, max_size=3),
-        st.tuples(children, children),
-        st.dictionaries(st.text(max_size=10), children, max_size=3),
-    ),
-    max_leaves=5,
-)
-
-# Strategy for valid Python-identifier keys mapped to digestable values
-_ident_chars = "abcdefghijklmnopqrstuvwxyz"
-_ident_key = st.text(alphabet=_ident_chars, min_size=1, max_size=8)
+# Strategy for valid Python-identifier keys mapped to nested values (incl. dataclasses)
+_ident_key = st.text(
+    alphabet=string.ascii_lowercase, min_size=1, max_size=8
+).filter(lambda k: k != "metadata")  # 'metadata' is reserved by .query()
 
 kwargs_strategy = st.dictionaries(
-    _ident_key.filter(lambda k: k != "metadata"),  # 'metadata' is reserved by .query()
-    digestable_values,
+    _ident_key,
+    st_nested_values,
     min_size=1,
     max_size=6,
 )
 
-
-# ---------------------------------------------------------------------------
-# Test
-# ---------------------------------------------------------------------------
 
 @given(kwargs=kwargs_strategy)
 @settings(max_examples=100, deadline=None)
