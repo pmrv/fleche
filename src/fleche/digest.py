@@ -2,6 +2,7 @@ import cmath
 import hashlib
 import logging
 import dataclasses
+import numbers
 from numbers import Number
 import struct
 import types
@@ -178,7 +179,7 @@ def _digest(value: Any) -> Digest:
                 # because nans are not singletons this causes the code below to potentially assign different digests to
                 # the same nan!  So in this case we revert back to just packing it into binary rep, because negative and
                 # positive nans have different binary rep
-                if isinstance(value, (complex, np.complexfloating)):
+                if isinstance(value, numbers.Complex):
                     m.update(struct.pack("<dd", value.real, value.imag))
                 else:
                     m.update(struct.pack("<d", value))

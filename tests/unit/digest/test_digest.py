@@ -130,6 +130,13 @@ def test_complex_matches_real_without_imaginary_part():
     assert digest(2) == digest(2 + 0j)
 
 
+def test_int_matches_float_without_fractional_part():
+    """Test that digest(1) == digest(1.0) per standard Python hash semantics."""
+    assert digest(1) == digest(1.0)
+    assert digest(2) == digest(2.0)
+    assert digest(-3) == digest(-3.0)
+
+
 @given(
     st.one_of(
         st.builds(np.complex64, st.complex_numbers(allow_nan=False)),
