@@ -8,8 +8,6 @@ import types
 import importlib.metadata
 from collections.abc import Iterable
 from typing import Any, TypeVar, Callable, Type, Generic
-import math
-
 import numpy as np
 
 logger = logging.getLogger("fleche.digest")
@@ -170,21 +168,9 @@ def _digest(value: Any) -> Digest:
                     (value.bit_length() + 8) // 8, byteorder="little", signed=True
                 )
             )
-        case np.complexfloating():
-            return digest(complex(value))
-        case complex():
-            if math.isnan(value.real) or math.isnan(value.imag):
-                # NaN hash values are location-dependent (same issue as for float NaN above).
-                # Pack both components as raw binary; negative and positive NaN have different
-                # binary representations.
-                m.update(struct.pack("<dd", value.real, value.imag))
-            else:
-                # Use Python's generic hash semantics: hash(1) == hash(1+0j),
-                # so digest(1) == digest(1+0j) as expected.
-                return digest(hash(value))
         case Number():
             # lest we have nice things
-            if math.isnan(value):
+            if cmath.isnan(value):
                 # somehow hash(float('nan')) can yield different values even if having the same sign, because the
                 # bespoke python hash special cases nan such that their location in memory is taken into account
                 # apparently this is useful:
@@ -192,10 +178,13 @@ def _digest(value: Any) -> Digest:
                 # because nans are not singletons this causes the code below to potentially assign different digests to
                 # the same nan!  So in this case we revert back to just packing it into binary rep, because negative and
                 # positive nans have different binary rep
-                m.update(struct.pack("<d", value))
+                if isinstance(value, (complex, np.complexfloating)):
+                    m.update(struct.pack("<dd", value.real, value.imag))
+                else:
+                    m.update(struct.pack("<d", value))
                 # on the other hand the IEEE standard does *not* assign a unique binary representation to NaN, but let's
                 # burn that bridge we someone else tries to cross it.
-                # the good news is that numpy nans seem to map to the same binary and are also detected by math.isnan
+                # the good news is that numpy nans seem to map to the same binary and are also detected by cmath.isnan
             else:
                 # rely on python's 'generic' hash semantics for all numbers to translate all of them to an integer
                 value = hash(value)

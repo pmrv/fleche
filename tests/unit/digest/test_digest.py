@@ -101,10 +101,7 @@ def test_different_floats_have_different_hashes(x, y):
 @given(st.complex_numbers(allow_nan=True), st.complex_numbers(allow_nan=True))
 def test_different_complex_numbers_have_different_digests(x, y):
     """Test that two different complex numbers have different digests."""
-    x_nan = math.isnan(x.real) or math.isnan(x.imag)
-    y_nan = math.isnan(y.real) or math.isnan(y.imag)
-
-    if x_nan or y_nan:
+    if cmath.isnan(x) or cmath.isnan(y):
         # NaN case: digest is based on raw binary packing of real and imaginary parts
         x_bytes = struct.pack("<dd", x.real, x.imag)
         y_bytes = struct.pack("<dd", y.real, y.imag)
