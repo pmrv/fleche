@@ -101,20 +101,36 @@ def test_different_floats_have_different_hashes(x, y):
 @given(st.complex_numbers(allow_nan=True), st.complex_numbers(allow_nan=True))
 def test_different_complex_numbers_have_different_digests(x, y):
     """Test that two different complex numbers have different digests."""
-    # Digest is based on raw binary packing of real and imaginary parts
-    x_bytes = struct.pack("<dd", x.real, x.imag)
-    y_bytes = struct.pack("<dd", y.real, y.imag)
+    x_nan = math.isnan(x.real) or math.isnan(x.imag)
+    y_nan = math.isnan(y.real) or math.isnan(y.imag)
 
-    if x_bytes == y_bytes:
-        assert digest(x) == digest(y)
+    if x_nan or y_nan:
+        # NaN case: digest is based on raw binary packing of real and imaginary parts
+        x_bytes = struct.pack("<dd", x.real, x.imag)
+        y_bytes = struct.pack("<dd", y.real, y.imag)
+        if x_bytes == y_bytes:
+            assert digest(x) == digest(y)
+        else:
+            assert digest(x) != digest(y)
     else:
-        assert digest(x) != digest(y)
+        # Non-NaN: follows Python hash semantics (hash(1) == hash(1+0j))
+        if hash(x) == hash(y):
+            assert digest(x) == digest(y)
+        else:
+            assert digest(x) != digest(y)
 
 
 @given(st.complex_numbers(allow_nan=True))
 def test_complex_numbers_can_be_digested(x):
     """Test that complex numbers (including NaN) can be digested without error."""
     digest(x)
+
+
+def test_complex_matches_real_without_imaginary_part():
+    """Test that digest(1) == digest(1+0j) per standard Python hash semantics."""
+    assert digest(1) == digest(1 + 0j)
+    assert digest(1.0) == digest(1 + 0j)
+    assert digest(2) == digest(2 + 0j)
 
 
 @given(

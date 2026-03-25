@@ -173,11 +173,15 @@ def _digest(value: Any) -> Digest:
         case np.complexfloating():
             return digest(complex(value))
         case complex():
-            # Pack real and imaginary parts as raw binary.
-            # Using struct.pack (rather than hash()) avoids collisions with real numbers
-            # (hash(1+0j) == hash(1)) and correctly handles NaN components since
-            # NaN hash values are location-dependent (same issue as for float NaN above).
-            m.update(struct.pack("<dd", value.real, value.imag))
+            if math.isnan(value.real) or math.isnan(value.imag):
+                # NaN hash values are location-dependent (same issue as for float NaN above).
+                # Pack both components as raw binary; negative and positive NaN have different
+                # binary representations.
+                m.update(struct.pack("<dd", value.real, value.imag))
+            else:
+                # Use Python's generic hash semantics: hash(1) == hash(1+0j),
+                # so digest(1) == digest(1+0j) as expected.
+                return digest(hash(value))
         case Number():
             # lest we have nice things
             if math.isnan(value):
