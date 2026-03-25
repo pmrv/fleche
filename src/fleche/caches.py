@@ -136,7 +136,12 @@ class BaseCache(ABC):
     def _query(self, call: call.QueryCall) -> Iterable[LazyCall]: ...
 
     def query(self, call: call.QueryCall) -> query.QueryIterator:
-        return query.QueryIterator(self._query(call))
+        def _safe_iter():
+            try:
+                yield from self._query(call)
+            except _digest.Unhashable as e:
+                logger.warning("No hash for query argument: %s", e.args[0])
+        return query.QueryIterator(_safe_iter())
 
     def table(self) -> pd.DataFrame:
         """Return a pandas DataFrame summarizing cached calls via query().
