@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 
 from fleche import fleche, cache
@@ -148,7 +150,7 @@ def test_defaults_with_ignored_argument():
     assert k_default == k_override_ignored
 
 
-def test_unhashable_call_warns_and_calls_through():
+def test_unhashable_call_warns_and_calls_through(caplog):
     call_count = [0]
 
     @fleche
@@ -157,22 +159,26 @@ def test_unhashable_call_warns_and_calls_through():
         return 42
 
     c = Cache(Memory({}), Memory({}))
-    with cache(c):
-        result = f(UnhashableThing())
+    with caplog.at_level(logging.WARNING, logger="fleche"):
+        with cache(c):
+            result = f(UnhashableThing())
 
     assert result == 42
     assert call_count[0] == 1
+    assert any("No hash for argument" in r.message for r in caplog.records)
 
 
-def test_unhashable_query_warns_and_returns_empty():
+def test_unhashable_query_warns_and_returns_empty(caplog):
     @fleche
     def f(x):
         return x
 
     c = Cache(Memory({}), Memory({}))
-    with cache(c):
-        f(1)
-        f(2)
-        results = list(f.query(UnhashableThing()))
+    with caplog.at_level(logging.WARNING, logger="fleche"):
+        with cache(c):
+            f(1)
+            f(2)
+            results = list(f.query(UnhashableThing()))
 
     assert results == []
+    assert any("No hash for query argument" in r.message for r in caplog.records)
