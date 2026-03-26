@@ -184,29 +184,38 @@ class DestructuringStorage(Storage):
     storage: Storage
     remaining_depth: int = 0
 
-    def _depth(self, value: Any):
+    def _depth(self, value: Any, memo: dict | None = None) -> int:
+        if memo is None:
+            memo = {}
+        obj_id = id(value)
+        if obj_id in memo:
+            return memo[obj_id]
         match value:
             case list() | tuple():
-                return 1 + max((self._depth(v) for v in value), default=0)
+                result = 1 + max((self._depth(v, memo) for v in value), default=0)
             case dict():
-                return 1 + max(
-                        max((self._depth(k) for k in value.keys()), default=0),
-                        max((self._depth(v) for v in value.values()), default=0),
+                result = 1 + max(
+                        max((self._depth(k, memo) for k in value.keys()), default=0),
+                        max((self._depth(v, memo) for v in value.values()), default=0),
                 )
             case Number() | str() | bytes() | bool():
-                return 1
+                result = 1
             case _:
-                return 2 ** 64
+                result = 2 ** 64
+        memo[obj_id] = result
+        return result
 
     def __post_init__(self):
         if isinstance(self.storage, DestructuringStorage):
             raise ValueError("DestructuringStorage cannot wrap another DestructuringStorage")
 
     def _save(self, value: Any, key: Digest) -> Digest:
+        memo: dict = {}
+
         def depth_aware_save(value):
             """recursively save content values iff they have more nested levels than given cutoff to avoid putting
             each and every int/float/etc into its own storage bin."""
-            if self._depth(value) <= self.remaining_depth:
+            if self._depth(value, memo) <= self.remaining_depth:
                 return value
             else:
                 return self.save(value)
