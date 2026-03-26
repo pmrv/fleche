@@ -1,4 +1,3 @@
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -23,56 +22,45 @@ def test_destructuring_storage_wrapping_memory():
     assert cfg == {"type": "DestructuringStorage", "storage": {"type": "Memory"}}
 
 
-def test_destructuring_storage_nested():
+def test_destructuring_storage_no_nesting():
     inner = storage.DestructuringStorage(storage.Memory({}))
-    s = storage.DestructuringStorage(inner)
+    with pytest.raises(ValueError, match="DestructuringStorage"):
+        storage.DestructuringStorage(inner)
+
+
+def test_pickle_file(tmp_path):
+    root = tmp_path / "values"
+    s = storage.PickleFile.with_pickle(root=root)
     cfg = storage_to_config(s)
-    assert cfg == {
-        "type": "DestructuringStorage",
-        "storage": {
-            "type": "DestructuringStorage",
-            "storage": {"type": "Memory"},
-        },
-    }
+    assert cfg["type"] == "PickleFile"
+    assert cfg["root"] == str(s.root)
 
 
-def test_pickle_file():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        root = Path(tmpdir) / "values"
-        s = storage.PickleFile.with_pickle(root=root)
-        cfg = storage_to_config(s)
-        assert cfg["type"] == "PickleFile"
-        assert cfg["root"] == str(s.root)
-
-
-def test_cloudpickle_file():
+def test_cloudpickle_file(tmp_path):
     pytest.importorskip("cloudpickle")
-    with tempfile.TemporaryDirectory() as tmpdir:
-        root = Path(tmpdir) / "values"
-        s = storage.PickleFile.with_cloudpickle(root=root)
-        cfg = storage_to_config(s)
-        assert cfg["type"] == "CloudpickleFile"
-        assert cfg["root"] == str(s.root)
+    root = tmp_path / "values"
+    s = storage.PickleFile.with_cloudpickle(root=root)
+    cfg = storage_to_config(s)
+    assert cfg["type"] == "CloudpickleFile"
+    assert cfg["root"] == str(s.root)
 
 
-def test_dill_file():
+def test_dill_file(tmp_path):
     pytest.importorskip("dill")
-    with tempfile.TemporaryDirectory() as tmpdir:
-        root = Path(tmpdir) / "values"
-        s = storage.PickleFile.with_dill(root=root)
-        cfg = storage_to_config(s)
-        assert cfg["type"] == "DillFile"
-        assert cfg["root"] == str(s.root)
+    root = tmp_path / "values"
+    s = storage.PickleFile.with_dill(root=root)
+    cfg = storage_to_config(s)
+    assert cfg["type"] == "DillFile"
+    assert cfg["root"] == str(s.root)
 
 
-def test_bagofholding_h5file():
+def test_bagofholding_h5file(tmp_path):
     pytest.importorskip("bagofholding")
-    with tempfile.TemporaryDirectory() as tmpdir:
-        root = Path(tmpdir) / "values"
-        s = storage.BagOfHoldingH5File(root=root)
-        cfg = storage_to_config(s)
-        assert cfg["type"] == "BagOfHoldingH5File"
-        assert cfg["root"] == str(s.root)
+    root = tmp_path / "values"
+    s = storage.BagOfHoldingH5File(root=root)
+    cfg = storage_to_config(s)
+    assert cfg["type"] == "BagOfHoldingH5File"
+    assert cfg["root"] == str(s.root)
 
 
 def test_sql():
@@ -124,11 +112,10 @@ def test_roundtrip_destructuring_memory():
     assert result == {"type": "DestructuringStorage", "storage": {"type": "Memory"}}
 
 
-def test_roundtrip_pickle_file():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        root = Path(tmpdir) / "values"
-        original = storage.PickleFile.with_pickle(root=root)
-        cfg = storage_to_config(original)
-        reconstructed = _get_storage(cfg)
-        assert isinstance(reconstructed, storage.PickleFile)
-        assert reconstructed.root == original.root
+def test_roundtrip_pickle_file(tmp_path):
+    root = tmp_path / "values"
+    original = storage.PickleFile.with_pickle(root=root)
+    cfg = storage_to_config(original)
+    reconstructed = _get_storage(cfg)
+    assert isinstance(reconstructed, storage.PickleFile)
+    assert reconstructed.root == original.root
