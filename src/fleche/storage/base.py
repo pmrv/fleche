@@ -143,31 +143,38 @@ class DigestedDict(Digested):
         return self.items
 
 
-@dataclass
-class DestructuringStorage(Storage):
-    storage: Storage
+class DestructuringMixin:
+    """Mixin that recursively destructures collections on save/load.
 
-    def __post_init__(self):
-        if isinstance(self.storage, DestructuringStorage):
-            raise ValueError("DestructuringStorage cannot wrap another DestructuringStorage")
+    Place before a concrete :class:`Storage` in the MRO to add destructuring
+    behavior.  Lists, tuples, and dicts are broken apart so each element is
+    stored independently; on load the original structure is reassembled.
+
+    Example::
+
+        class DestructuringMemory(DestructuringMixin, Memory):
+            pass
+
+        dm = DestructuringMemory(storage={})
+        key = dm.save([1, [2, 3]])
+        assert dm.load(key) == [1, [2, 3]]
+    """
 
     def _save(self, value: Any, key: Digest) -> Digest:
         if isinstance(value, Digest):
             return value
         match value:
             case list() | tuple():
-                return self.storage.save(
-                    DigestedIterable(type(value)(self.save(v) for v in value))
-                )
+                wrapped = DigestedIterable(type(value)(self.save(v) for v in value))
+                return super()._save(wrapped, digest(wrapped))
             case dict():
-                return self.storage.save(
-                    DigestedDict({self.save(k): self.save(v) for k, v in value.items()})
-                )
+                wrapped = DigestedDict({self.save(k): self.save(v) for k, v in value.items()})
+                return super()._save(wrapped, digest(wrapped))
             case _:
-                return self.storage.save(value, key)
+                return super()._save(value, key)
 
     def _load(self, key: Digest) -> Any:
-        value = self.storage.load(key)
+        value = super()._load(key)
 
         match value:
             case DigestedIterable(items=items):
@@ -177,14 +184,41 @@ class DestructuringStorage(Storage):
             case _:
                 return value
 
+
+@dataclass
+class _DelegatingStorage(Storage):
+    """Storage that delegates all operations to a wrapped storage instance."""
+
+    storage: Storage
+
+    def _save(self, value: Any, key: Digest) -> Digest:
+        return self.storage.save(value, key)
+
+    def _load(self, key: Digest) -> Any:
+        return self.storage.load(key)
+
     def _contains(self, key: Digest) -> bool:
         return self.storage.contains(key)
 
     def _evict(self, key: Digest) -> None:
-        self.storage.evict(key)
+        return self.storage.evict(key)
 
     def list(self) -> Iterable[Digest]:
         return self.storage.list()
+
+
+@dataclass
+class DestructuringStorage(DestructuringMixin, _DelegatingStorage):
+    """Storage wrapper that recursively destructures collections.
+
+    This is a convenience class combining :class:`DestructuringMixin` with
+    delegation to a wrapped storage.  Prefer using :class:`DestructuringMixin`
+    directly as a mixin with a concrete storage class when possible.
+    """
+
+    def __post_init__(self):
+        if isinstance(self.storage, DestructuringMixin):
+            raise ValueError("DestructuringStorage cannot wrap a storage that already uses DestructuringMixin")
 
 
 class CallStorage(StorageBase):

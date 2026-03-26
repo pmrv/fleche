@@ -10,6 +10,7 @@ from .base import (
     Storage,
     CallStorage,
     CallStorageAdapter,
+    DestructuringMixin,
     DestructuringStorage,
 )
 from .memory import Memory
@@ -25,6 +26,7 @@ __all__ = [
     "Storage",
     "CallStorage",
     "CallStorageAdapter",
+    "DestructuringMixin",
     "DestructuringStorage",
     "Memory",
     "Void",

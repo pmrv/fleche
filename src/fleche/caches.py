@@ -192,7 +192,7 @@ class Cache(BaseCache):
         else:
             self.calls = _calls
 
-        if not isinstance(self.values, storage.DestructuringStorage):
+        if not isinstance(self.values, storage.DestructuringMixin):
             self.values = storage.DestructuringStorage(self.values)
 
     def load_value(self, key):
