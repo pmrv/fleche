@@ -1,4 +1,5 @@
 import pytest
+from fleche.caches import Cache
 from fleche.storage import (
     Memory,
     PickleFile,
@@ -41,3 +42,8 @@ def value_storage(request, tmp_path):
         return PickleFile.with_pickle(tmp_path / "pickle", secret_key=secret_key)
     elif request.param == "h5":
         return BagOfHoldingH5File(tmp_path / "h5")
+
+
+@pytest.fixture
+def cache_fixture(value_storage, call_storage):
+    return Cache(value_storage, call_storage)

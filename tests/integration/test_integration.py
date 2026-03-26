@@ -1,16 +1,11 @@
 import pytest
 import time
-import tempfile
 
 from fleche import fleche, cache
 from fleche.digest import digest
 from fleche.caches import Cache, ReadOnlyCache, CacheStack
 from fleche.call import Call
-from fleche.storage import Memory, PickleFile
-from fleche.storage.sql import Sql
-
-temp = tempfile.TemporaryDirectory()
-storages = [Memory({}), PickleFile.with_cloudpickle(temp.name)]
+from fleche.storage import Memory
 
 
 @fleche
@@ -29,10 +24,9 @@ def fib_impl(n):
 functions_to_test = [(slow_function_impl, 2), (fib_impl, 15)]
 
 
-@pytest.mark.parametrize("storage", storages)
 @pytest.mark.parametrize("func, arg", functions_to_test)
-def test_fleche_performance(storage, func, arg):
-    with cache(Cache(storage, storage)):
+def test_fleche_performance(cache_fixture, func, arg):
+    with cache(cache_fixture):
 
         start_time = time.time()
         func(arg)
@@ -45,13 +39,13 @@ def test_fleche_performance(storage, func, arg):
         assert second_call_time < first_call_time / 2
 
 
-def test_fleche_readonly_cache():
+def test_fleche_readonly_cache(cache_fixture):
 
     @fleche
     def func(x):
         return x
 
-    c = Cache(Memory({}), Memory({}))
+    c = cache_fixture
     ro_cache = ReadOnlyCache(c)
 
     with cache(ro_cache):
@@ -136,24 +130,8 @@ def test_fleche_cache_stack_context_manager():
             assert cache2.contains(key)
 
 
-@pytest.mark.parametrize(
-    "backend",
-    [
-        "memory_memory",  # values=Memory, calls=Memory
-        "memory_sql",  # values=Memory, calls=Sql (in-memory SQLite)
-    ],
-)
-def test_cache_hit_returns_materialized_value(backend):
-    if backend == "memory_memory":
-        values = Memory({})
-        calls = Memory({})
-    elif backend == "memory_sql":
-        values = Memory({})
-        calls = Sql()  # in-memory SQLite by default
-    else:
-        raise AssertionError("unknown backend")
-
-    c = Cache(values, calls)
+def test_cache_hit_returns_materialized_value(cache_fixture):
+    c = cache_fixture
 
     @fleche
     def twice(x):

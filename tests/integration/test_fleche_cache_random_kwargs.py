@@ -8,8 +8,6 @@ from hypothesis import given, settings
 
 from fleche import fleche, cache
 from fleche.call import QueryCall
-from fleche.caches import Cache
-from fleche.storage import Memory
 
 from tests.strategies import st_nested_values
 
@@ -29,7 +27,7 @@ kwargs_strategy = st.dictionaries(
 
 @given(kwargs=kwargs_strategy)
 @settings(max_examples=100, deadline=None)
-def test_fleche_cache_query_random_kwargs(kwargs):
+def test_fleche_cache_query_random_kwargs(cache_fixture, kwargs):
     """Cache.query and function.query(**kwargs) yield back a cached call.
 
     After calling the decorated function, verify that:
@@ -39,7 +37,7 @@ def test_fleche_cache_query_random_kwargs(kwargs):
          ``Cache.query`` still yields the original call.
     """
 
-    test_cache = Cache(values=Memory({}), _calls=Memory({}))
+    test_cache = cache_fixture
 
     @fleche
     def test(**kwargs):

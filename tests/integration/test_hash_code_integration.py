@@ -1,11 +1,9 @@
 from fleche import fleche, cache
-from fleche.caches import Cache
-from fleche.storage import Memory
 
 
-def test_hash_code_integration():
+def test_hash_code_integration(cache_fixture):
     # Use a real cache to verify end-to-end behavior
-    with cache(Cache(Memory({}), Memory({}))):
+    with cache(cache_fixture):
 
         def func_v1(x):
             return x + 1
@@ -30,8 +28,8 @@ def test_hash_code_integration():
         assert wrapped_v2.contains(10)
 
 
-def test_hash_code_disabled_integration():
-    with cache(Cache(Memory({}), Memory({}))):
+def test_hash_code_disabled_integration(cache_fixture):
+    with cache(cache_fixture):
 
         def func_v1(x):
             return x + 1

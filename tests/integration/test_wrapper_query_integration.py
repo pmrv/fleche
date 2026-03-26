@@ -1,10 +1,9 @@
 import pytest
 
 from fleche import fleche, cache, tags
-from fleche.storage.sql import Sql
 
 
-def test_wrapper_query_integration(tmp_path):
+def test_wrapper_query_integration(cache_fixture):
     """Integration: run functions, then query via wrapper.query with metadata.
 
     Intent: Ensure that the end-to-end flow of saving calls/results through the
@@ -16,14 +15,7 @@ def test_wrapper_query_integration(tmp_path):
       - Metadata filters in the template produce the expected subset
     """
 
-    # Create an isolated Sql for calls and a Memory store for values
-    store = Sql(str(tmp_path / "calls.db"))
-
-    # Build a cache with distinct value storage and call storage
-    from fleche.caches import Cache
-    from fleche.storage import Memory
-
-    test_cache = Cache(values=Memory({}), _calls=store)
+    test_cache = cache_fixture
 
     @fleche
     def add(a, b):
@@ -83,20 +75,16 @@ def test_wrapper_query_integration(tmp_path):
             ), "Query should only return calls where arguments match"
 
 
-def test_query_by_result_integration(tmp_path):
+def test_query_by_result_integration(cache_fixture):
     """Integration: query by result value using a Call template via cache().query.
 
     Intent: Ensure we can filter by the result of a call using digest semantics.
     We use the same Sql calls store and Memory values store to demonstrate that
     querying by result returns the expected call(s).
     """
-    store = Sql(str(tmp_path / "calls.db"))
-
-    from fleche.caches import Cache
-    from fleche.storage import Memory
     from fleche.call import Call
 
-    test_cache = Cache(values=Memory({}), _calls=store)
+    test_cache = cache_fixture
 
     @fleche
     def add(a, b):
