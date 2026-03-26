@@ -34,14 +34,14 @@ def value_storage(request, tmp_path):
         return Memory({})
     elif request.param == "cloudpickle":
         return PickleFile.with_cloudpickle(
-            tmp_path / "cloudpickle", secret_key=secret_key
+            tmp_path / "values" / "cloudpickle", secret_key=secret_key
         )
     elif request.param == "dill":
-        return PickleFile.with_dill(tmp_path / "dill", secret_key=secret_key)
+        return PickleFile.with_dill(tmp_path / "values" / "dill", secret_key=secret_key)
     elif request.param == "pickle":
-        return PickleFile.with_pickle(tmp_path / "pickle", secret_key=secret_key)
+        return PickleFile.with_pickle(tmp_path / "values" / "pickle", secret_key=secret_key)
     elif request.param == "h5":
-        return BagOfHoldingH5File(tmp_path / "h5")
+        return BagOfHoldingH5File(tmp_path / "values" / "h5")
 
 
 @pytest.fixture

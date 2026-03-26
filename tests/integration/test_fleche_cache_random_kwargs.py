@@ -4,7 +4,7 @@ import random
 import string
 
 import hypothesis.strategies as st
-from hypothesis import given, settings
+from hypothesis import HealthCheck, given, settings
 
 from fleche import fleche, cache
 from fleche.call import QueryCall
@@ -26,7 +26,7 @@ kwargs_strategy = st.dictionaries(
 
 
 @given(kwargs=kwargs_strategy)
-@settings(max_examples=100, deadline=None)
+@settings(max_examples=100, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
 def test_fleche_cache_query_random_kwargs(cache_fixture, kwargs):
     """Cache.query and function.query(**kwargs) yield back a cached call.
 
