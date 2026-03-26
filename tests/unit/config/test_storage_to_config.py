@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from fleche import storage
-from fleche.config import storage_to_config, _get_storage
+from fleche.config import storage_to_config, storage_from_config, _get_storage
 
 
 def test_memory():
@@ -91,21 +91,21 @@ def test_unknown_storage_raises():
 
 def test_roundtrip_memory():
     cfg = {"type": "Memory"}
-    s = _get_storage(cfg.copy())
+    s = storage_from_config(cfg)
     assert isinstance(s, storage.Memory)
     assert storage_to_config(s) == {"type": "Memory"}
 
 
 def test_roundtrip_void():
     cfg = {"type": "Void"}
-    s = _get_storage(cfg.copy())
+    s = storage_from_config(cfg)
     assert isinstance(s, storage.Void)
     assert storage_to_config(s) == {"type": "Void"}
 
 
 def test_roundtrip_destructuring_memory():
     cfg = {"type": "DestructuringStorage", "storage": {"type": "Memory"}}
-    s = _get_storage(cfg.copy())
+    s = storage_from_config(cfg)
     assert isinstance(s, storage.DestructuringStorage)
     assert isinstance(s.storage, storage.Memory)
     result = storage_to_config(s)
@@ -116,6 +116,23 @@ def test_roundtrip_pickle_file(tmp_path):
     root = tmp_path / "values"
     original = storage.PickleFile.with_pickle(root=root)
     cfg = storage_to_config(original)
-    reconstructed = _get_storage(cfg)
+    reconstructed = storage_from_config(cfg)
     assert isinstance(reconstructed, storage.PickleFile)
     assert reconstructed.root == original.root
+
+
+def test_storage_from_config_does_not_mutate():
+    cfg = {"type": "Memory"}
+    storage_from_config(cfg)
+    assert cfg == {"type": "Memory"}
+
+
+def test_storage_from_config_destructuring_does_not_mutate():
+    cfg = {"type": "DestructuringStorage", "storage": {"type": "Memory"}}
+    storage_from_config(cfg)
+    assert cfg == {"type": "DestructuringStorage", "storage": {"type": "Memory"}}
+
+
+def test_storage_from_config_unknown_type():
+    with pytest.raises(ValueError, match="UnknownType"):
+        storage_from_config({"type": "UnknownType"})

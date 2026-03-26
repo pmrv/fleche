@@ -94,26 +94,42 @@ def load_default_metadata():
     return tuple(meta_objects)
 
 
-def _get_storage(config: dict[str, Any]) -> storage.Storage:
-    storage_type = config.pop("type")
+def storage_from_config(d: dict[str, Any]) -> storage.Storage:
+    """Construct a :class:`~fleche.storage.Storage` from a config dict.
+
+    The dict must contain a ``"type"`` key (case-sensitive) and any additional
+    parameters required by that storage backend.  The input dict is **not**
+    mutated.
+
+    Supported types: ``"Memory"``, ``"Void"``, ``"DestructuringStorage"``,
+    ``"PickleFile"``, ``"CloudpickleFile"``, ``"DillFile"``,
+    ``"BagOfHoldingH5File"``, ``"Sql"``.
+    """
+    d = dict(d)
+    storage_type = d.pop("type")
     match storage_type:
         case "Memory":
             return storage.Memory({})
         case "Void":
             return storage.Void()
         case "DestructuringStorage":
-            inner = _get_storage(config.pop("storage"))
+            inner = storage_from_config(d.pop("storage"))
             return storage.DestructuringStorage(inner)
         case "PickleFile":
-            return storage.PickleFile.with_pickle(**config)
+            return storage.PickleFile.with_pickle(**d)
         case "CloudpickleFile":
-            return storage.PickleFile.with_cloudpickle(**config)
+            return storage.PickleFile.with_cloudpickle(**d)
         case "DillFile":
-            return storage.PickleFile.with_dill(**config)
+            return storage.PickleFile.with_dill(**d)
         case "BagOfHoldingH5File" | "Sql":
-            return getattr(storage, storage_type)(**config)
+            return getattr(storage, storage_type)(**d)
         case _:
             raise ValueError(f"Unknown storage type: {storage_type}")
+
+
+def _get_storage(config: dict[str, Any]) -> storage.Storage:
+    """Deprecated: use :func:`storage_from_config` instead."""
+    return storage_from_config(config)
 
 
 def storage_to_config(s: storage.Storage) -> dict[str, Any]:
