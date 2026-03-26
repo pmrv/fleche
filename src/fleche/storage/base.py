@@ -132,7 +132,7 @@ class Digested(ABC):
 
     @classmethod
     @abstractmethod
-    def sunder(cls, save: Callable[[Any], Digest], value): ...
+    def sunder(cls, save: Callable[[Any], Digest | Any], value): ...
 
 
 @dataclass
@@ -143,7 +143,7 @@ class DigestedIterable(Digested):
         return self.items
 
     @classmethod
-    def sunder(cls, save: Callable[[Any], Digest], value: list | tuple) -> Self:
+    def sunder(cls, save: Callable[[Any], Digest | Any], value: list | tuple) -> Self:
         return cls(type(value)(save(v) for v in value))
 
     def mend(self, storage: 'DestructuringStorage') -> list | tuple:
@@ -158,7 +158,7 @@ class DigestedDict(Digested):
         return self.items
 
     @classmethod
-    def sunder(cls, save: Callable[[Any], Digest], value: dict) -> Self:
+    def sunder(cls, save: Callable[[Any], Digest | Any], value: dict) -> Self:
         return cls({save(k): save(v) for k, v in value.items()})
 
     def mend(self, storage: 'DestructuringStorage') -> dict:
