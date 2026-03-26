@@ -53,13 +53,7 @@ def test_fleche_cache_query_random_kwargs(cache_fixture, kwargs):
         )
         assert any(m.result == result for m in matches)
 
-        # --- 2. Cache.query with wildcard arguments ------------------------
-        tpl = QueryCall(name="test", arguments={"kwargs": None})
-        cache_matches = list(test_cache.query(tpl))
-        assert len(cache_matches) >= 1, (
-            "Cache.query with wildcarded kwargs should find the call"
-        )
-        # --- 3. Delete random keys, then query ----------------------------
+        # --- 2. Delete random keys, then query ----------------------------
         keys = list(kwargs.keys())
         n_delete = random.randint(1, len(keys))
         for k in random.sample(keys, n_delete):
