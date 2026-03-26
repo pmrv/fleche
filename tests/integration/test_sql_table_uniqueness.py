@@ -1,12 +1,18 @@
 
 import pytest
+from fleche.storage.sql import Sql
+from fleche.storage.memory import Memory
+from fleche.caches import Cache
 from fleche import fleche, cache, tags
 
-def test_sql_table_uniqueness(cache_fixture):
+def test_sql_table_uniqueness(tmp_path):
     """Integration test to verify that cache.table() does not contain more items than cache.calls.list()
     when using a SQL backend, even with joins.
     """
-    c = cache_fixture
+    db_path = tmp_path / "test.db"
+    sql_storage = Sql(str(db_path))
+    val_storage = Memory(storage={})
+    c = Cache(values=val_storage, _calls=sql_storage)
 
     with cache(c):
         @fleche
