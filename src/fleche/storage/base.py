@@ -147,6 +147,10 @@ class DigestedDict(Digested):
 class DestructuringStorage(Storage):
     storage: Storage
 
+    def __post_init__(self):
+        if isinstance(self.storage, DestructuringStorage):
+            raise ValueError("DestructuringStorage cannot wrap another DestructuringStorage")
+
     def _save(self, value: Any, key: Digest) -> Digest:
         if isinstance(value, Digest):
             return value

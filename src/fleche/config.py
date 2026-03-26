@@ -27,6 +27,7 @@ calls.root = "~/.fleche/calls"
 
 import tomllib
 import logging
+import types
 from pathlib import Path
 import os
 from typing import Any
@@ -100,6 +101,9 @@ def _get_storage(config: dict[str, Any]) -> storage.Storage:
             return storage.Memory({})
         case "Void":
             return storage.Void()
+        case "DestructuringStorage":
+            inner = _get_storage(config.pop("storage"))
+            return storage.DestructuringStorage(inner)
         case "PickleFile":
             return storage.PickleFile.with_pickle(**config)
         case "CloudpickleFile":
@@ -110,6 +114,42 @@ def _get_storage(config: dict[str, Any]) -> storage.Storage:
             return getattr(storage, storage_type)(**config)
         case _:
             raise ValueError(f"Unknown storage type: {storage_type}")
+
+
+def storage_to_config(s: storage.Storage) -> dict[str, Any]:
+    """Convert a Storage instance to a config dict (inverse of ``_get_storage``).
+
+    The returned dict contains a ``"type"`` key and any additional parameters
+    needed to reconstruct the storage via :func:`_get_storage`.
+    :class:`~fleche.storage.DestructuringStorage` is handled as a first-class
+    case, producing a nested ``"storage"`` entry for its inner backend.
+    """
+    match s:
+        case storage.DestructuringStorage(storage=inner):
+            return {"type": "DestructuringStorage", "storage": storage_to_config(inner)}
+        case storage.Memory():
+            return {"type": "Memory"}
+        case storage.Void():
+            return {"type": "Void"}
+        case storage.PickleFile():
+            serializer = s.serializer
+            serializer_name = serializer.__name__ if isinstance(serializer, types.ModuleType) else str(serializer)
+            match serializer_name:
+                case "pickle":
+                    type_name = "PickleFile"
+                case "cloudpickle":
+                    type_name = "CloudpickleFile"
+                case "dill":
+                    type_name = "DillFile"
+                case _:
+                    raise ValueError(f"Unknown PickleFile serializer: {serializer_name!r}")
+            return {"type": type_name, "root": str(s.root)}
+        case storage.BagOfHoldingH5File():
+            return {"type": "BagOfHoldingH5File", "root": str(s.root)}
+        case storage.Sql():
+            return {"type": "Sql", "url": s.url}
+        case _:
+            raise ValueError(f"Cannot convert storage of type {type(s).__name__!r} to config")
 
 
 def _create_cache(cache_config: dict[str, Any]) -> Cache:
