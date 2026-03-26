@@ -44,7 +44,7 @@ def value_storage(request, tmp_path):
         return BagOfHoldingH5File(tmp_path / "values" / "h5")
 
 
-@pytest.fixture(params=["memory-memory", "cloudpickle-cloudpickle", "cloudpickle-sql"])
+@pytest.fixture(params=["memory-memory", "cloudpickle-cloudpickle", "cloudpickle-sql", "h5-h5"])
 def cache_fixture(request, tmp_path):
     if request.param == "memory-memory":
         return Cache(Memory({}), CallStorageAdapter(Memory({})))
@@ -57,4 +57,9 @@ def cache_fixture(request, tmp_path):
         return Cache(
             PickleFile.with_cloudpickle(tmp_path / "values" / "cloudpickle", secret_key=secret_key),
             Sql(tmp_path / "calls.db"),
+        )
+    elif request.param == "h5-h5":
+        return Cache(
+            BagOfHoldingH5File(tmp_path / "values" / "h5"),
+            CallStorageAdapter(BagOfHoldingH5File(tmp_path / "calls" / "h5")),
         )
