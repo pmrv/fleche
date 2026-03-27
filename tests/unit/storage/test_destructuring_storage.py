@@ -62,36 +62,38 @@ st_scalars = st.one_of(
 @given(st_scalars)
 def test_depth_scalar(value):
     ds = DestructuringStorage(Memory(storage={}))
-    assert ds._depth(value) == 1
+    assert ds._depth(value) == 0
 
 
-@given(st.lists(st_scalars, min_size=1))
+@given(st.one_of([
+    st.lists(st_scalars, min_size=1),
+    st.lists(st_scalars, min_size=1).map(tuple),
+    st.dictionaries(st.text(), st_scalars, min_size=1),
+]))
 def test_depth_flat_list(items):
     ds = DestructuringStorage(Memory(storage={}))
-    assert ds._depth(items) == 2
+    assert ds._depth(items) == 1
 
 
-@given(st.lists(st_scalars, min_size=1).map(tuple))
-def test_depth_flat_tuple(items):
-    ds = DestructuringStorage(Memory(storage={}))
-    assert ds._depth(items) == 2
+# def test_depth_flat_tuple(items):
+#     ds = DestructuringStorage(Memory(storage={}))
+#     assert ds._depth(items) == 1
 
 
-@given(st.dictionaries(st.text(), st_scalars, min_size=1))
-def test_depth_flat_dict(items):
-    ds = DestructuringStorage(Memory(storage={}))
-    assert ds._depth(items) == 2
+# def test_depth_flat_dict(items):
+#     ds = DestructuringStorage(Memory(storage={}))
+#     assert ds._depth(items) == 1
 
 
 @pytest.mark.parametrize("value, expected", [
     ([], 1),
     ({}, 1),
     ((), 1),
-    ([1, [2, 3]], 3),
-    ({"a": {"b": 1}}, 3),
-    ([[[1]]], 4),
-    ({"k": [1, [2]]}, 4),
-    ({(1, 2): 0}, 3),
+    ([1, [2, 3]], 2),
+    ({"a": {"b": 1}}, 2),
+    ([[[1]]], 3),
+    ({"k": [1, [2]]}, 3),
+    ({(1, 2): 0}, 2),
 ])
 def test_depth_specific(ds, value, expected):
     assert ds._depth(value) == expected
@@ -99,7 +101,7 @@ def test_depth_specific(ds, value, expected):
 
 def test_depth_unknown_type_returns_huge(ds):
     """Non-scalar, non-collection types get depth 2**64 so they always get destructured."""
-    assert ds._depth(object()) == 2 ** 64
+    assert ds._depth(object()) == float('inf')
 
 
 # ---- Tests for sunder / mend ----
@@ -166,9 +168,9 @@ def test_digest_transparency_dict(d):
 
 
 @given(st.lists(st_scalars, min_size=1, max_size=6))
-def test_remaining_depth_0_destructures_everything(items):
-    """With remaining_depth=0, every element gets its own storage slot."""
-    mem, ds = make_ds(remaining_depth=0)
+def test_remaining_depth_m1_destructures_everything(items):
+    """With remaining_depth=-1, every element gets its own storage slot."""
+    mem, ds = make_ds(remaining_depth=-1)
     key = ds.save(items)
     raw = mem.load(key)
     assert isinstance(raw, DigestedIterable)
@@ -192,6 +194,7 @@ def test_remaining_depth_1_still_destructures_nested():
     data = [1, [2, 3]]
     key = ds.save(data)
     raw = mem.load(key)
+    data[6]
     assert isinstance(raw, DigestedIterable)
     assert raw.items[0] == 1
     assert isinstance(raw.items[1], Digest)

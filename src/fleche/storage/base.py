@@ -184,7 +184,7 @@ class DestructuringStorage(Storage):
     storage: Storage
     remaining_depth: int = 0
 
-    def _depth(self, value: Any, memo: dict | None = None) -> int:
+    def _depth(self, value: Any, memo: dict | None = None) -> int | float:
         if memo is None:
             memo = {}
         obj_id = id(value)
@@ -198,10 +198,10 @@ class DestructuringStorage(Storage):
                         max((self._depth(k, memo) for k in value.keys()), default=0),
                         max((self._depth(v, memo) for v in value.values()), default=0),
                 )
-            case Number() | str() | bytes() | bool():
-                result = 1
+            case Number() | str() | bytes():
+                result = 0
             case _:
-                result = 2 ** 64
+                result = float('inf')
         memo[obj_id] = result
         return result
 
@@ -218,17 +218,18 @@ class DestructuringStorage(Storage):
             if self._depth(value, memo) <= self.remaining_depth:
                 return value
             else:
-                return self.save(value)
+                match value:
+                    case list() | tuple():
+                        return self.storage.save(DigestedIterable.sunder(depth_aware_save, value))
+                    case dict():
+                        return self.storage.save(DigestedDict.sunder(depth_aware_save, value))
+                    case _:
+                        return self.storage.save(value)
 
         if isinstance(value, Digest):
             return value
-        match value:
-            case list() | tuple():
-                return self.storage.save(DigestedIterable.sunder(depth_aware_save, value))
-            case dict():
-                return self.storage.save(DigestedDict.sunder(depth_aware_save, value))
-            case _:
-                return self.storage.save(value, key)
+
+        depth_aware_save(value)
 
     def _load(self, key: Digest | Any) -> Any:
         if not isinstance(key, Digest):
