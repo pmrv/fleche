@@ -192,6 +192,8 @@ def fleche(
                 iterable of matching :class:`.Call`
             """
             call = QueryCall.from_call(func, *args, **kwargs)
+            for ign in ignored_args:
+                del call.arguments[ign]
             if "metadata" in call.arguments:
                 logger.warning(
                     "Function argument 'metadata' shadowed by query argument"
