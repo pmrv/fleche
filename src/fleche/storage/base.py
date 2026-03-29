@@ -200,7 +200,7 @@ class CallStorage(StorageBase):
     @abstractmethod
     def _save(self, call: Call) -> Digest: ...
 
-    def load(self, key: str) -> Call:
+    def load(self, key: str | Digest) -> Call:
         if len(key) < DIGEST_LENGTH:
             key = self.expand(key)
         else:
