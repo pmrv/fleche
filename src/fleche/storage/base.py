@@ -130,10 +130,6 @@ class Digested(ABC):
     @abstractmethod
     def mend(self, storage): ...
 
-    @classmethod
-    @abstractmethod
-    def sunder(cls, save: Callable[[Any], Digest | Any], value): ...
-
 
 @dataclass
 class DigestedIterable(Digested):
@@ -141,10 +137,6 @@ class DigestedIterable(Digested):
 
     def underlying(self):
         return self.items
-
-    @classmethod
-    def sunder(cls, save: Callable[[Any], Digest | Any], value: list | tuple) -> Self:
-        return cls(type(value)(save(v) for v in value))
 
     def mend(self, storage: 'DestructuringStorage') -> list | tuple:
         return type(self.items)(map(storage._load, self.items))
@@ -156,10 +148,6 @@ class DigestedDict(Digested):
 
     def underlying(self):
         return self.items
-
-    @classmethod
-    def sunder(cls, save: Callable[[Any], Digest | Any], value: dict) -> Self:
-        return cls({save(k): save(v) for k, v in value.items()})
 
     def mend(self, storage: 'DestructuringStorage') -> dict:
         return {storage._load(k): storage._load(v) for k, v in self.items.items()}
@@ -180,49 +168,98 @@ class DestructuringStorage(Storage):
 
     Args:
         storage (:class:`Storage`): underlying storage
-        remaining_depth (int): destructure supported type until this 'nesting level' remains"""
+        remaining_depth (int): elements whose depth is strictly less than this are inlined (not stored separately).
+            Use 0 to store every element separately, negative values to store scalars separately too."""
     storage: Storage
     remaining_depth: int = 0
-
-    def _depth(self, value: Any, memo: dict | None = None) -> int | float:
-        if memo is None:
-            memo = {}
-        obj_id = id(value)
-        if obj_id in memo:
-            return memo[obj_id]
-        match value:
-            case list() | tuple():
-                result = 1 + max((self._depth(v, memo) for v in value), default=0)
-            case dict():
-                result = 1 + max(
-                        max((self._depth(k, memo) for k in value.keys()), default=0),
-                        max((self._depth(v, memo) for v in value.values()), default=0),
-                )
-            case Number() | str() | bytes():
-                result = 0
-            case _:
-                result = float('inf')
-        memo[obj_id] = result
-        return result
 
     def __post_init__(self):
         if isinstance(self.storage, DestructuringStorage):
             raise ValueError("DestructuringStorage cannot wrap another DestructuringStorage")
 
-    def _save(self, value: Any, key: Digest, _memo = None) -> Digest:
-        if _memo is None:
-            _memo = {}
+    def _intern_rec(self, value: Any) -> tuple[Any, int | float]:
+        """Post-order traversal: recurse to leaves, decide inline-vs-store on the way back up.
 
+        Returns ``(result, depth)`` where *result* is the plain value when ``depth < remaining_depth``
+        (the element is inlined in its parent's :class:`Digested` wrapper) or a :class:`Digest` when
+        the element was written to storage separately.  Every node in the structure is visited exactly
+        once (O(n)), unlike a separate depth-counting pass.
+        """
+        match value:
+            case list() | tuple():
+                children = [self._intern_rec(v) for v in value]
+                depth = 1 + max((d for _, d in children), default=0)
+
+                if depth < self.remaining_depth:
+                    # Inline this container — reuse the original object if nothing was transformed (req 4)
+                    if all(r is v for (r, _), v in zip(children, value)):
+                        return value, depth
+                    return type(value)(r for r, _ in children), depth
+
+                # Store this container separately
+                items = type(value)(r for r, _ in children)
+                # If every child is a plain value (no Digest), store a plain container (req 3)
+                if not any(isinstance(r, Digest) for r in items):
+                    return self.storage.save(items), depth
+                return self.storage.save(DigestedIterable(items)), depth
+
+            case dict():
+                kk = [self._intern_rec(k) for k in value]
+                vv = [self._intern_rec(v) for v in value.values()]
+                depth = 1 + max(
+                    max((d for _, d in kk), default=0),
+                    max((d for _, d in vv), default=0),
+                )
+
+                if depth < self.remaining_depth:
+                    # Inline this dict — reuse original if nothing changed (req 4)
+                    if all(rk is k and rv is v
+                           for (rk, _), k, (rv, _), v
+                           in zip(kk, value.keys(), vv, value.values())):
+                        return value, depth
+                    return {rk: rv for (rk, _), (rv, _) in zip(kk, vv)}, depth
+
+                # Store this dict separately
+                items = {rk: rv for (rk, _), (rv, _) in zip(kk, vv)}
+                # If no key or value is a Digest, store a plain dict (req 3)
+                if not any(isinstance(r, Digest) for r in (*items.keys(), *items.values())):
+                    return self.storage.save(items), depth
+                return self.storage.save(DigestedDict(items)), depth
+
+            case Number() | str() | bytes():
+                depth = 0
+                if depth < self.remaining_depth:
+                    return value, depth
+                return self.storage.save(value), depth
+
+            case _:
+                return self.storage.save(value), float('inf')
+
+    def _save(self, value: Any, key: Digest) -> Digest:
         if isinstance(value, Digest):
             return value
 
-        value_depth = self._depth(value, _memo)
-
         match value:
-            case list() | tuple() if value_depth <= self.remaining_depth:
-                return self.storage.save(DigestedIterable.sunder(self.save, value), key)
-            case dict() if value_depth <= self.remaining_depth:
-                return self.storage.save(DigestedDict.sunder(self.save, value), key)
+            case list() | tuple():
+                children = [self._intern_rec(v) for v in value]
+                items = type(value)(r for r, _ in children)
+                if not any(isinstance(r, Digest) for r in items):
+                    # All children inlined: store plain container (req 3)
+                    # Reuse original object if nothing changed (req 4)
+                    if all(r is v for (r, _), v in zip(children, value)):
+                        return self.storage.save(value, key)
+                    return self.storage.save(items, key)
+                return self.storage.save(DigestedIterable(items), key)
+
+            case dict():
+                kk = [self._intern_rec(k) for k in value]
+                vv = [self._intern_rec(v) for v in value.values()]
+                items = {rk: rv for (rk, _), (rv, _) in zip(kk, vv)}
+                if not any(isinstance(r, Digest) for r in (*items.keys(), *items.values())):
+                    # All children inlined: store plain dict (req 3)
+                    return self.storage.save(items, key)
+                return self.storage.save(DigestedDict(items), key)
+
             case _:
                 return self.storage.save(value, key)
 
