@@ -209,27 +209,22 @@ class DestructuringStorage(Storage):
         if isinstance(self.storage, DestructuringStorage):
             raise ValueError("DestructuringStorage cannot wrap another DestructuringStorage")
 
-    def _save(self, value: Any, key: Digest) -> Digest:
-        memo: dict = {}
-
-        def depth_aware_save(value):
-            """recursively save content values iff they have more nested levels than given cutoff to avoid putting
-            each and every int/float/etc into its own storage bin."""
-            if self._depth(value, memo) <= self.remaining_depth:
-                return value
-            else:
-                match value:
-                    case list() | tuple():
-                        return self.storage.save(DigestedIterable.sunder(depth_aware_save, value))
-                    case dict():
-                        return self.storage.save(DigestedDict.sunder(depth_aware_save, value))
-                    case _:
-                        return self.storage.save(value)
+    def _save(self, value: Any, key: Digest, _memo = None) -> Digest:
+        if _memo is None:
+            _memo = {}
 
         if isinstance(value, Digest):
             return value
 
-        depth_aware_save(value)
+        value_depth = self._depth(value, _memo)
+
+        match value:
+            case list() | tuple() if value_depth <= self.remaining_depth:
+                return self.storage.save(DigestedIterable.sunder(self.save, value), key)
+            case dict() if value_depth <= self.remaining_depth:
+                return self.storage.save(DigestedDict.sunder(self.save, value), key)
+            case _:
+                return self.storage.save(value, key)
 
     def _load(self, key: Digest | Any) -> Any:
         if not isinstance(key, Digest):

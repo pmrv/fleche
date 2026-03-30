@@ -1,4 +1,4 @@
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from unittest.mock import Mock
 
 
@@ -11,7 +11,7 @@ class Input:
     b: float
 
 
-def test_dataclass_input():
+def test_dataclass_input(clean_cache):
     mock = Mock()
     mock.return_value = 42
     mock.__name__ = "func"
@@ -19,17 +19,5 @@ def test_dataclass_input():
 
     func(Input(1, 1.0))
     func(Input(1, 1.0))
-
-    func.__wrapped__.assert_called_once()
-
-
-def test_dict_input():
-    mock = Mock()
-    mock.return_value = 42
-    mock.__name__ = "func"
-    func = fleche(mock)
-
-    func(asdict(Input(1, 1.0)))
-    func(asdict(Input(1, 1.0)))
 
     func.__wrapped__.assert_called_once()

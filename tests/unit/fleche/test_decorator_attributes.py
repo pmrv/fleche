@@ -9,8 +9,12 @@ def test_fleche_extra_attributes():
     c = Cache(Memory({}), Memory({}))
     with cache(c):
 
+        call_count = 0
+
         @fleche(version=1)
         def add(a, b=1):
+            nonlocal call_count
+            call_count += 1
             return a + b
 
         # Test call
@@ -28,12 +32,16 @@ def test_fleche_extra_attributes():
 
         # Run and cache
         assert add(1, b=2) == 3
+        assert call_count == 1
 
         # Test contains again
         assert add.contains(1, b=2)
 
         # Test load
         assert add.load(1, b=2) == 3
+
+        assert add.rerun(1, b=2) == 3
+        assert call_count == 2
 
 
 def test_hash_settings():
