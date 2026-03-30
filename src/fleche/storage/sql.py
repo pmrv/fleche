@@ -196,11 +196,11 @@ class Sql(CallStorage):
         finally:
             session.close()
 
-    def _load(self, key: str) -> Call:
+    def _load(self, key: Digest) -> Call:
         session = self.session()
         try:
             call_model = session.execute(
-                select(CallModel).where(CallModel.key == key)
+                select(CallModel).where(CallModel.key == str(key))
             ).scalar_one_or_none()
             if call_model is None:
                 raise KeyError(key)
@@ -208,7 +208,7 @@ class Sql(CallStorage):
             arguments = {arg.name: Digest(arg.value) for arg in call_model.arguments}
 
             meta_rows = (
-                session.execute(select(MetaModel).where(MetaModel.call_key == key))
+                session.execute(select(MetaModel).where(MetaModel.call_key == str(key)))
                 .scalars()
                 .all()
             )
@@ -281,10 +281,10 @@ class Sql(CallStorage):
             f"Short digest {key} is ambiguous; need at least {i+1} characters."
         )
 
-    def _evict(self, key: str) -> None:
+    def _evict(self, key: Digest) -> None:
         session = self.session()
         try:
-            instance = session.get(CallModel, key)
+            instance = session.get(CallModel, str(key))
             if instance is None:
                 return
             session.delete(instance)

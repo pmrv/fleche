@@ -30,8 +30,16 @@ def test_wrapper_query_integration(tmp_path):
         return a + b
 
     @fleche
-    def noise(a, b):
+    def minus(a, b):
         return b - a
+
+    @fleche(ignore='noise')
+    def same(a, b, noise):
+        return add(a, b) - minus(a, b)
+
+    @fleche(ignore='noisekw')
+    def samekw(a, b, noisekw=None):
+        return add(a, b) - minus(a, b)
 
     # Use our test cache for this block
     with cache(test_cache):
@@ -39,12 +47,15 @@ def test_wrapper_query_integration(tmp_path):
         with tags(project="alpha", phase="train"):
             add(1, 2)
             add(a=3, b=4)
-            noise(
+            minus(
                 1, 2
             )  # insert different function with same args into the cache to ensure name check works
         with tags(project="beta", phase="eval"):
             add(10, 4)
-            noise(10, 4)
+            minus(10, 4)
+
+        same(2, 2, 'noise')
+        samekw(1, 1)
 
         calls_alpha = list(
             add.query(a=None, b=None, metadata={"tags": {"project": "alpha"}})
@@ -82,6 +93,8 @@ def test_wrapper_query_integration(tmp_path):
                 c.arguments.get("b") == 4
             ), "Query should only return calls where arguments match"
 
+        assert len(list(same.query())) == 1
+        assert len(list(samekw.query())) == 1
 
 def test_query_by_result_integration(tmp_path):
     """Integration: query by result value using a Call template via cache().query.
