@@ -143,7 +143,7 @@ class DigestedIterable(Digested):
     def underlying(self):
         return self.items
 
-    def mend(self, storage: 'DestructuringStorage') -> list | tuple:
+    def mend(self, storage: 'DestructuringMixin') -> list | tuple:
         return type(self.items)(map(storage._load, self.items))
 
     @classmethod
@@ -164,7 +164,7 @@ class DigestedDict(Digested):
     def underlying(self):
         return self.items
 
-    def mend(self, storage: 'DestructuringStorage') -> dict:
+    def mend(self, storage: 'DestructuringMixin') -> dict:
         return {storage._load(k): storage._load(v) for k, v in self.items.items()}
 
     @classmethod
@@ -179,7 +179,7 @@ class DigestedDict(Digested):
         return cls(items), depth
 
 
-class DestructuringMixin:
+class DestructuringMixin(Storage):
     """Mixin that recursively destructures collections on save/load.
 
     Place before a concrete :class:`Storage` in the MRO to add destructuring
