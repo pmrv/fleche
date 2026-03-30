@@ -1,0 +1,4 @@
+__pycache__/
+*.egg-info/
+.hypothesis/
+src/fleche/_version.py
