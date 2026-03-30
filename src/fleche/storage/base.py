@@ -129,7 +129,7 @@ class Digested(ABC):
         return digest(self.underlying())
 
     @abstractmethod
-    def mend(self, storage): ...
+    def mend(self, storage: 'DestructuringMixin'): ...
 
     @classmethod
     @abstractmethod
@@ -191,6 +191,8 @@ class DestructuringMixin(Storage):
         class DestructuringMemory(DestructuringMixin, Memory):
             pass
 
+        # ``storage`` here is the backing dict required by ``Memory``, not a
+        # Storage instance.
         dm = DestructuringMemory(storage={})
         key = dm.save([1, [2, 3]])
         assert dm.load(key) == [1, [2, 3]]
