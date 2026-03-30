@@ -4,6 +4,7 @@ import struct
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
+from hypothesis.extra import numpy as hnp
 from tests.strategies import st_nested_values
 import numpy as np
 from dataclasses import dataclass, make_dataclass, is_dataclass, fields
@@ -304,3 +305,41 @@ def test_dataclasses_with_different_names_have_different_digests(fields_dict):
     b = B(**fields_dict)
 
     assert digest(a) != digest(b)
+
+
+@given(st.data())
+def test_numpy_array_hashes_distinctly(data):
+    """Test that numpy arrays with distinct dtype, shape, or content have different digests."""
+    arr1 = data.draw(hnp.arrays(dtype=hnp.scalar_dtypes(), shape=hnp.array_shapes()))
+    arr2 = data.draw(hnp.arrays(dtype=hnp.scalar_dtypes(), shape=hnp.array_shapes()))
+
+    distinct_dtype = arr1.dtype != arr2.dtype
+    distinct_shape = arr1.shape != arr2.shape
+    distinct_content = arr1.tobytes() != arr2.tobytes()
+
+    if distinct_dtype or distinct_shape or distinct_content:
+        assert digest(arr1) != digest(arr2), (
+            f"Arrays should hash differently but didn't.\n"
+            f"arr1: shape={arr1.shape}, dtype={arr1.dtype}, digest={digest(arr1)}\n"
+            f"arr2: shape={arr2.shape}, dtype={arr2.dtype}, digest={digest(arr2)}\n"
+            f"Differences: dtype={distinct_dtype}, shape={distinct_shape}, content={distinct_content}"
+        )
+    else:
+        assert digest(arr1) == digest(arr2)
+
+
+def test_numpy_explicit_cases():
+    """Test digest distinguishes arrays that differ only in dtype or shape (not raw bytes)."""
+    # Same content, different dtype
+    a = np.array([0], dtype="int32")
+    b = np.array([0], dtype="float32")
+    assert a.tobytes() == b.tobytes()
+    assert a.dtype != b.dtype
+    assert digest(a) != digest(b)
+
+    # Same content, different shape
+    c = np.array([1, 2, 3, 4], dtype="int64")
+    d = np.array([[1, 2], [3, 4]], dtype="int64")
+    assert c.tobytes() == d.tobytes()
+    assert c.shape != d.shape
+    assert digest(c) != digest(d)
