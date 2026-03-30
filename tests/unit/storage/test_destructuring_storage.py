@@ -61,27 +61,24 @@ st_scalars = st.one_of(
 )
 
 
+@pytest.mark.parametrize("container", [list, tuple])
 @given(st.lists(st_base_values, min_size=1, max_size=6))
-def test_digest_transparency_iterable_all_digests(items):
-    """DigestedIterable whose items are all Digests hashes like the original list."""
-    di = DigestedIterable([digest(v) for v in items])
-    assert digest(di) == digest(items)
+def test_digest_transparency_iterable_all_digests(container, items):
+    """DigestedIterable whose items are all Digests hashes like the original container."""
+    c = container(items)
+    di = DigestedIterable(container(digest(v) for v in items))
+    assert digest(di) == digest(c)
 
 
+@pytest.mark.parametrize("container", [list, tuple])
 @given(st.lists(st_base_values, min_size=2, max_size=6))
-def test_digest_transparency_iterable_mixed(items):
+def test_digest_transparency_iterable_mixed(container, items):
     """DigestedIterable with mixed plain and Digest items still hashes like the original."""
+    c = container(items)
     # inline first item, store rest as Digest
-    mixed = [items[0]] + [digest(v) for v in items[1:]]
+    mixed = container([items[0]] + [digest(v) for v in items[1:]])
     di = DigestedIterable(mixed)
-    assert digest(di) == digest(items)
-
-
-@given(st.lists(st_base_values, min_size=1, max_size=6).map(tuple))
-def test_digest_transparency_tuple(items):
-    """DigestedIterable wrapping a tuple hashes like the original tuple."""
-    di = DigestedIterable(tuple(digest(v) for v in items))
-    assert digest(di) == digest(items)
+    assert digest(di) == digest(c)
 
 
 @given(st.dictionaries(st_key_values, st_base_values, min_size=1, max_size=6))
