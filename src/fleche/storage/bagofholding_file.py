@@ -33,7 +33,7 @@ class BagOfHoldingH5File(FileStorage):
             raise SaveError(value) from None
         return key
 
-    def _load(self, key: str) -> Any:
+    def _load(self, key: Digest) -> Any:
         try:
             return H5Bag(self._path(key)).load()
         except FileNotFoundError:
