@@ -31,6 +31,12 @@ Welcome to the **Fleche** library documentation.
    notebooks/SecureStorage
    notebooks/CacheStack
 
+.. toctree::
+   :maxdepth: 2
+   :caption: API Reference:
+
+   autoapi/fleche/index
+
 Indices and tables
 ==================
 
