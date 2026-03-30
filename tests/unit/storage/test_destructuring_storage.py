@@ -150,10 +150,11 @@ def test_remaining_depth_1_inlines_scalars(container, items):
     assert ds.load(key) == c
 
 
-def test_remaining_depth_1_still_destructures_nested():
+@pytest.mark.parametrize("container", [list, tuple])
+def test_remaining_depth_1_still_destructures_nested(container):
     """With remaining_depth=1, nested containers (depth > 1) are still stored separately."""
     mem, ds = make_ds(remaining_depth=1)
-    data = [1, [2, 3]]
+    data = container([1, [2, 3]])
     key = ds.save(data)
     raw = mem.load(key)
     assert isinstance(raw, DigestedIterable)
@@ -162,21 +163,23 @@ def test_remaining_depth_1_still_destructures_nested():
     assert ds.load(key) == data
 
 
-def test_remaining_depth_2_inlines_flat_list():
+@pytest.mark.parametrize("container", [list, tuple])
+def test_remaining_depth_2_inlines_flat_list(container):
     """With remaining_depth=2, a flat list (depth 1) inside another list is inlined (req 3)."""
     mem, ds = make_ds(remaining_depth=2)
-    data = [1, [2, 3]]
+    data = container([1, [2, 3]])
     key = ds.save(data)
     raw = mem.load(key)
-    # All children inlined → stored as plain list, no DigestedIterable
+    # All children inlined → stored as plain container, no DigestedIterable
     assert raw == data
     assert ds.load(key) == data
 
 
-def test_remaining_depth_2_destructures_deeper():
+@pytest.mark.parametrize("container", [list, tuple])
+def test_remaining_depth_2_destructures_deeper(container):
     """With remaining_depth=2, a list nested 3 deep is still stored separately."""
     mem, ds = make_ds(remaining_depth=2)
-    data = [1, [[2]]]
+    data = container([1, [[2]]])
     key = ds.save(data)
     raw = mem.load(key)
     assert isinstance(raw, DigestedIterable)
