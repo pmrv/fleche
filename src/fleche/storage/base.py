@@ -119,7 +119,8 @@ class Storage(StorageBase):
 
 class Digested(ABC):
     @abstractmethod
-    def underlying(self): ...
+    def underlying(self):
+        """Return plain underlying value, ie. list/dict/etc of nested values or their partial digests"""
 
     # mess with our hash to ensure that we are referentially transparent with respect to the underlying list.
     # For the replacement of the 'real' list with the 'digested' list to be invisible to caches, they must hash to the
@@ -129,6 +130,10 @@ class Digested(ABC):
 
     @abstractmethod
     def mend(self, storage): ...
+
+    @classmethod
+    @abstractmethod
+    def sunder(cls, intern: Callable[[Any], tuple[Any, int | float]], value: Any): ...
 
 
 @dataclass
@@ -141,6 +146,17 @@ class DigestedIterable(Digested):
     def mend(self, storage: 'DestructuringStorage') -> list | tuple:
         return type(self.items)(map(storage._load, self.items))
 
+    @classmethod
+    def sunder(cls, intern: Callable[[Any], tuple[Any, int | float]], value: list | tuple):
+        children, depths = zip(*(intern(v) for v in value))
+        depth = 1 + max(depths)
+        items = type(value)(children)
+        print(value, items, [type(v) for v in items])
+        if all(not isinstance(r, Digest) for r in items):
+            # intern did do anything to our children because we're out of depth, return them verbatim
+            return items, depth
+        return cls(items), depth
+
 
 @dataclass
 class DigestedDict(Digested):
@@ -151,6 +167,17 @@ class DigestedDict(Digested):
 
     def mend(self, storage: 'DestructuringStorage') -> dict:
         return {storage._load(k): storage._load(v) for k, v in self.items.items()}
+
+    @classmethod
+    def sunder(cls, intern: Callable[[Any], tuple[Any, int | float]], value: dict):
+        kk, k_depths = zip(*(intern(k) for k in value))
+        vv, v_depths = zip(*(intern(v) for v in value.values()))
+        depth = 1 + max(max(k_depths), max(v_depths))
+        items = dict(zip(kk, vv))
+        if all(not isinstance(r, Digest) for r in (*items.keys(), *items.values())):
+            # intern did do anything to our children because we're out of depth, return them verbatim
+            return items, depth
+        return cls(items), depth
 
 
 @dataclass
@@ -189,37 +216,21 @@ class DestructuringStorage(Storage):
         match value:
             case Number() | str() | bytes():
                 depth = 0
-                if depth < self.remaining_depth:
-                    return value, depth
 
+            # treat exactly like scalars, but guard syntax gets a bit weird if we try to join
+            # technically this violates our recursion of 1 + max children depth, but I just can't see a use for
+            # destructuring the empty container
             case dict() | list() | tuple() if not value:
-                depth = 1
-                if depth < self.remaining_depth:
-                    return value, depth
+                depth = 0
 
             case list() | tuple():
-                children, depths = zip(*(self._intern_rec(v) for v in value))
-                depth = 1 + max(depths)
-                if depth < self.remaining_depth:
-                    return type(value)(children), depth
-                items = type(value)(children)
-                # If every child is a plain value (no Digest), store a plain container (req 3)
-                if not any(isinstance(r, Digest) for r in items):
-                    return self.storage.save(items), depth
-                return self.storage.save(DigestedIterable(items)), depth
+                value, depth = DigestedIterable.sunder(self._intern_rec, value)
 
             case dict():
-                kk, k_depths = zip(*(self._intern_rec(k) for k in value))
-                vv, v_depths = zip(*(self._intern_rec(v) for v in value.values()))
-                depth = 1 + max(max(k_depths), max(v_depths))
-                if depth < self.remaining_depth:
-                    return dict(zip(kk, vv)), depth
-                items = dict(zip(kk, vv))
-                # If no key or value is a Digest, store a plain dict (req 3)
-                if not any(isinstance(r, Digest) for r in (*items.keys(), *items.values())):
-                    return self.storage.save(items), depth
-                return self.storage.save(DigestedDict(items)), depth
+                value, depth = DigestedDict.sunder(self._intern_rec, value)
 
+        if depth < self.remaining_depth:
+            return value, depth
         return self.storage.save(value), depth
 
     def _save(self, value: Any, key: Digest) -> Digest:
