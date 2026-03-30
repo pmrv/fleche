@@ -1,6 +1,0 @@
-__pycache__/
-*.egg-info/
-.hypothesis/
-_version.py
-*.db
-notebooks/.*cache*/
