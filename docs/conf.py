@@ -19,6 +19,7 @@ nbsphinx_execute = 'never'
 
 autoapi_dirs = ['../src']
 autoapi_ignore = ['*fleche/_version.py']
+autoapi_add_toctree_entry = False
 
 html_theme = 'sphinx_rtd_theme'
 templates_path = ['_templates']
