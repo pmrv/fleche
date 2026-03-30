@@ -187,32 +187,35 @@ class DestructuringStorage(Storage):
         """
         match value:
             case list() | tuple():
-                children = [self._intern_rec(v) for v in value]
-                depth = 1 + max((d for _, d in children), default=0)
+                if value:
+                    children, depths = zip(*(self._intern_rec(v) for v in value))
+                else:
+                    children, depths = (), ()
+                depth = 1 + max(depths, default=0)
 
                 if depth < self.remaining_depth:
-                    return type(value)(r for r, _ in children), depth
+                    return type(value)(children), depth
 
                 # Store this container separately
-                items = type(value)(r for r, _ in children)
+                items = type(value)(children)
                 # If every child is a plain value (no Digest), store a plain container (req 3)
                 if not any(isinstance(r, Digest) for r in items):
                     return self.storage.save(items), depth
                 return self.storage.save(DigestedIterable(items)), depth
 
             case dict():
-                kk = [self._intern_rec(k) for k in value]
-                vv = [self._intern_rec(v) for v in value.values()]
-                depth = 1 + max(
-                    max((d for _, d in kk), default=0),
-                    max((d for _, d in vv), default=0),
-                )
+                if value:
+                    kk, k_depths = zip(*(self._intern_rec(k) for k in value))
+                    vv, v_depths = zip(*(self._intern_rec(v) for v in value.values()))
+                else:
+                    kk, k_depths, vv, v_depths = (), (), (), ()
+                depth = 1 + max(max(k_depths, default=0), max(v_depths, default=0))
 
                 if depth < self.remaining_depth:
-                    return {rk: rv for (rk, _), (rv, _) in zip(kk, vv)}, depth
+                    return dict(zip(kk, vv)), depth
 
                 # Store this dict separately
-                items = {rk: rv for (rk, _), (rv, _) in zip(kk, vv)}
+                items = dict(zip(kk, vv))
                 # If no key or value is a Digest, store a plain dict (req 3)
                 if not any(isinstance(r, Digest) for r in (*items.keys(), *items.values())):
                     return self.storage.save(items), depth
@@ -233,18 +236,23 @@ class DestructuringStorage(Storage):
 
         match value:
             case list() | tuple():
-                children = [self._intern_rec(v) for v in value]
-                items = type(value)(r for r, _ in children)
+                if value:
+                    children, _ = zip(*(self._intern_rec(v) for v in value))
+                else:
+                    children = ()
+                items = type(value)(children)
                 if not any(isinstance(r, Digest) for r in items):
                     return self.storage.save(items, key)
                 return self.storage.save(DigestedIterable(items), key)
 
             case dict():
-                kk = [self._intern_rec(k) for k in value]
-                vv = [self._intern_rec(v) for v in value.values()]
-                items = {rk: rv for (rk, _), (rv, _) in zip(kk, vv)}
+                if value:
+                    kk, _ = zip(*(self._intern_rec(k) for k in value))
+                    vv, _ = zip(*(self._intern_rec(v) for v in value.values()))
+                else:
+                    kk, vv = (), ()
+                items = dict(zip(kk, vv))
                 if not any(isinstance(r, Digest) for r in (*items.keys(), *items.values())):
-                    # All children inlined: store plain dict (req 3)
                     return self.storage.save(items, key)
                 return self.storage.save(DigestedDict(items), key)
 
