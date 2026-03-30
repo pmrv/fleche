@@ -208,11 +208,11 @@ def main():
     factories = {
         "Memory": lambda path: Memory({}),
         "PickleFile": lambda path: PickleFile.with_pickle(root=path),
-        "PickleFile_Signed": lambda path: PickleFile.with_pickle(root=path, secret_key=[b"test_key"]),
+        "PickleFile_Signed": lambda path: PickleFile.with_pickle(root=path, secret_key=[b"benchmark-test-key-at-least-32-bytes"]),
         "CloudpickleFile": lambda path: PickleFile.with_cloudpickle(root=path),
-        "CloudpickleFile_Signed": lambda path: PickleFile.with_cloudpickle(root=path, secret_key=[b"test_key"]),
+        "CloudpickleFile_Signed": lambda path: PickleFile.with_cloudpickle(root=path, secret_key=[b"benchmark-test-key-at-least-32-bytes"]),
         "DillFile": lambda path: PickleFile.with_dill(root=path),
-        "DillFile_Signed": lambda path: PickleFile.with_dill(root=path, secret_key=[b"test_key"]),
+        "DillFile_Signed": lambda path: PickleFile.with_dill(root=path, secret_key=[b"benchmark-test-key-at-least-32-bytes"]),
         # Sql is a CallStorage, skipped for general values
         "BagOfHoldingH5File": lambda path: BagOfHoldingH5File(
             root=path
