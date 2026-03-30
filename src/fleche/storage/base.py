@@ -185,12 +185,17 @@ class DestructuringStorage(Storage):
         the element was written to storage separately.  Every node in the structure is visited exactly
         once (O(n)), unlike a separate depth-counting pass.
         """
+        depth = float("inf")
         match value:
-            case list() | tuple() if not value:
+            case Number() | str() | bytes():
+                depth = 0
+                if depth < self.remaining_depth:
+                    return value, depth
+
+            case dict() | list() | tuple() if not value:
                 depth = 1
                 if depth < self.remaining_depth:
                     return value, depth
-                return self.storage.save(value), depth
 
             case list() | tuple():
                 children, depths = zip(*(self._intern_rec(v) for v in value))
@@ -202,12 +207,6 @@ class DestructuringStorage(Storage):
                 if not any(isinstance(r, Digest) for r in items):
                     return self.storage.save(items), depth
                 return self.storage.save(DigestedIterable(items)), depth
-
-            case dict() if not value:
-                depth = 1
-                if depth < self.remaining_depth:
-                    return value, depth
-                return self.storage.save(value), depth
 
             case dict():
                 kk, k_depths = zip(*(self._intern_rec(k) for k in value))
@@ -221,14 +220,7 @@ class DestructuringStorage(Storage):
                     return self.storage.save(items), depth
                 return self.storage.save(DigestedDict(items)), depth
 
-            case Number() | str() | bytes():
-                depth = 0
-                if depth < self.remaining_depth:
-                    return value, depth
-                return self.storage.save(value), depth
-
-            case _:
-                return self.storage.save(value), float('inf')
+        return self.storage.save(value), depth
 
     def _save(self, value: Any, key: Digest) -> Digest:
         if isinstance(value, Digest):
