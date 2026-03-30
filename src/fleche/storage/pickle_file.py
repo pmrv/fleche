@@ -4,6 +4,7 @@ import logging
 import gzip
 import types
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from .file import FileStorage
@@ -130,23 +131,22 @@ class PickleFile(FileStorage):
             state["serializer"] = importlib.import_module(serializer_name)
         self.__dict__.update(state)
 
-    def _do_save(self, value: Any, key: Digest) -> Digest:
+    def _to_file(self, value: Any, path: Path) -> None:
         signer = SignedBytes(self.secret_key)
         data = signer.dumps(self.serializer.dumps(value))
         if self.compress:
             data = gzip.compress(data)
-        (self._path(key)).write_bytes(data)
-        return key
+        path.write_bytes(data)
 
-    def _do_load(self, key: Digest) -> Any:
+    def _from_file(self, path: Path) -> Any:
         try:
-            content = (self._path(key)).read_bytes()
+            content = path.read_bytes()
             if self.compress:
                 content = gzip.decompress(content)
             signer = SignedBytes(self.secret_key)
             data = signer.loads(content)
             return self.serializer.loads(data)
         except FileNotFoundError:
-            raise KeyError(key) from None
+            raise KeyError(path) from None
         except SignatureError:
-            raise KeyError(key, "Value present but failed signature check.")
+            raise KeyError(path, "Value present but failed signature check.")

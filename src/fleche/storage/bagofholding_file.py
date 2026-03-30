@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 import logging
 
@@ -26,18 +27,17 @@ class BagOfHoldingH5File(FileStorage):
         if hasattr(super(), "__post_init__"):
             super().__post_init__()
 
-    def _do_save(self, value: Any, key: Digest) -> Digest:
+    def _to_file(self, value: Any, path: Path) -> None:
         try:
-            H5Bag.save(value, self._path(key))
+            H5Bag.save(value, path)
         except (ValueError, TypeError):  # h5py choked on something, pass it along
             raise SaveError(value) from None
-        return key
 
-    def _do_load(self, key: Digest) -> Any:
+    def _from_file(self, path: Path) -> Any:
         try:
-            return H5Bag(self._path(key)).load()
+            return H5Bag(path).load()
         except FileNotFoundError:
-            raise KeyError(key) from None
+            raise KeyError(path) from None
         except OSError as e:
-            logger.error(f"Corrupt file present in cache for key {key}: {e}")
-            raise KeyError(key) from e
+            logger.error(f"Corrupt file present in cache at path {path}: {e}")
+            raise KeyError(path) from e

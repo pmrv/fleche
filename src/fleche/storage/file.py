@@ -104,20 +104,21 @@ class FileStorage(Storage):
     def _save(self, value: Any, key: Digest) -> Digest:
         lock_path = self._path(f"{key}.lock")
         with file_write_lock(lock_path):
-            return self._do_save(value, key)
+            self._to_file(value, self._path(key))
+        return key
 
     def _load(self, key: Digest) -> Any:
         lock_path = self._path(f"{key}.lock")
         with file_read_lock(
             lock_path, self.lock_timeout, self.lock_wait_start, str(key)
         ):
-            return self._do_load(key)
+            return self._from_file(self._path(key))
 
     @abstractmethod
-    def _do_save(self, value: Any, key: Digest) -> Digest: ...
+    def _to_file(self, value: Any, path: Path) -> None: ...
 
     @abstractmethod
-    def _do_load(self, key: Digest) -> Any: ...
+    def _from_file(self, path: Path) -> Any: ...
 
     def _contains(self, key: Digest) -> bool:
         return self._path(key).exists()
