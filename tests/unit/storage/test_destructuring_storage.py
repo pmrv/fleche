@@ -52,93 +52,65 @@ def test_evict(ds, mem):
         ds.load(key)
 
 
-# ---- Tests for _depth ----
+# ---- Hash transparency tests (req 1) ----
+# Digested classes must hash exactly the way their underlying containers do,
+# even when some values have been replaced by Digests.
 
 st_scalars = st.one_of(
     st.integers(), st.floats(allow_nan=False), st.text(), st.binary(), st.booleans(),
 )
 
 
-@given(st_scalars)
-def test_depth_scalar(value):
-    ds = DestructuringStorage(Memory(storage={}))
-    assert ds._depth(value) == 0
-
-
-@given(st.one_of([
-    st.lists(st_scalars, min_size=1),
-    st.lists(st_scalars, min_size=1).map(tuple),
-    st.dictionaries(st.text(), st_scalars, min_size=1),
-]))
-def test_depth_flat_list(items):
-    ds = DestructuringStorage(Memory(storage={}))
-    assert ds._depth(items) == 1
-
-
-# def test_depth_flat_tuple(items):
-#     ds = DestructuringStorage(Memory(storage={}))
-#     assert ds._depth(items) == 1
-
-
-# def test_depth_flat_dict(items):
-#     ds = DestructuringStorage(Memory(storage={}))
-#     assert ds._depth(items) == 1
-
-
-@pytest.mark.parametrize("value, expected", [
-    ([], 1),
-    ({}, 1),
-    ((), 1),
-    ([1, [2, 3]], 2),
-    ({"a": {"b": 1}}, 2),
-    ([[[1]]], 3),
-    ({"k": [1, [2]]}, 3),
-    ({(1, 2): 0}, 2),
-])
-def test_depth_specific(ds, value, expected):
-    assert ds._depth(value) == expected
-
-
-def test_depth_unknown_type_returns_huge(ds):
-    """Non-scalar, non-collection types get depth 2**64 so they always get destructured."""
-    assert ds._depth(object()) == float('inf')
-
-
-# ---- Tests for sunder / mend ----
-
-
+@pytest.mark.parametrize("container", [list, tuple])
 @given(st.lists(st_base_values, min_size=1, max_size=6))
-def test_digested_iterable_sunder_list(items):
-    di = DigestedIterable.sunder(digest, items)
-    assert isinstance(di, DigestedIterable)
-    assert isinstance(di.items, list)
-    assert len(di.items) == len(items)
-    assert all(isinstance(i, Digest) for i in di.items)
+def test_digest_transparency_iterable_all_digests(container, items):
+    """DigestedIterable whose items are all Digests hashes like the original container."""
+    c = container(items)
+    di = DigestedIterable(container(digest(v) for v in items))
+    assert digest(di) == digest(c)
 
 
-@given(st.lists(st_base_values, min_size=1, max_size=6).map(tuple))
-def test_digested_iterable_sunder_tuple(items):
-    di = DigestedIterable.sunder(digest, items)
-    assert isinstance(di.items, tuple)
+@pytest.mark.parametrize("container", [list, tuple])
+@given(st.lists(st_base_values, min_size=2, max_size=6))
+def test_digest_transparency_iterable_mixed(container, items):
+    """DigestedIterable with mixed plain and Digest items still hashes like the original."""
+    c = container(items)
+    # inline first item, store rest as Digest
+    mixed = container([items[0]] + [digest(v) for v in items[1:]])
+    di = DigestedIterable(mixed)
+    assert digest(di) == digest(c)
 
 
 @given(st.dictionaries(st_key_values, st_base_values, min_size=1, max_size=6))
-def test_digested_dict_sunder(d):
-    dd = DigestedDict.sunder(digest, d)
-    assert isinstance(dd, DigestedDict)
-    assert len(dd.items) == len(d)
-    for k, v in dd.items.items():
-        assert isinstance(k, Digest)
-        assert isinstance(v, Digest)
+def test_digest_transparency_dict_all_digests(d):
+    """DigestedDict whose keys and values are all Digests hashes like the original dict."""
+    dd = DigestedDict({digest(k): digest(v) for k, v in d.items()})
+    assert digest(dd) == digest(d)
 
 
+@given(st.dictionaries(st_key_values, st_base_values, min_size=2, max_size=6))
+def test_digest_transparency_dict_mixed(d):
+    """DigestedDict with mixed plain and Digest entries still hashes like the original."""
+    items = list(d.items())
+    # inline first key-value pair, digest the rest
+    mixed = {items[0][0]: items[0][1]}
+    mixed.update({digest(k): digest(v) for k, v in items[1:]})
+    dd = DigestedDict(mixed)
+    assert digest(dd) == digest(d)
+
+
+# ---- Tests for mend ----
+
+
+@pytest.mark.parametrize("container", [list, tuple])
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 @given(st.lists(st_base_values, min_size=1, max_size=6))
-def test_digested_iterable_mend_roundtrip(ds, mem, items):
-    key = ds.save(items)
+def test_digested_iterable_mend_roundtrip(container, ds, mem, items):
+    c = container(items)
+    key = ds.save(c)
     raw = mem.load(key)
     assert isinstance(raw, DigestedIterable)
-    assert raw.mend(ds) == items
+    assert raw.mend(ds) == c
 
 
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
@@ -150,73 +122,64 @@ def test_digested_dict_mend_roundtrip(ds, mem, d):
     assert raw.mend(ds) == d
 
 
-@given(st.lists(st_base_values, min_size=1, max_size=6))
-def test_digest_transparency_iterable(items):
-    """Digested iterables must hash identically to the value they replace."""
-    di = DigestedIterable.sunder(digest, items)
-    assert digest(di) == digest(items)
-
-
-@given(st.dictionaries(st_key_values, st_base_values, min_size=1, max_size=6))
-def test_digest_transparency_dict(d):
-    """Digested dicts must hash identically to the value they replace."""
-    dd = DigestedDict.sunder(digest, d)
-    assert digest(dd) == digest(d)
-
-
 # ---- Tests for remaining_depth ----
 
 
+@pytest.mark.parametrize("container", [list, tuple])
 @given(st.lists(st_scalars, min_size=1, max_size=6))
-def test_remaining_depth_m1_destructures_everything(items):
-    """With remaining_depth=-1, every element gets its own storage slot."""
+def test_remaining_depth_m1_destructures_everything(container, items):
+    """With remaining_depth=-1, every element (including scalars) gets its own storage slot."""
     mem, ds = make_ds(remaining_depth=-1)
-    key = ds.save(items)
+    key = ds.save(container(items))
     raw = mem.load(key)
     assert isinstance(raw, DigestedIterable)
     assert all(isinstance(i, Digest) for i in raw.items)
 
 
+@pytest.mark.parametrize("container", [list, tuple])
 @given(st.lists(st_scalars, min_size=1, max_size=6))
-def test_remaining_depth_1_inlines_scalars(items):
-    """With remaining_depth=1, scalar elements (depth 1) are kept inline."""
+def test_remaining_depth_1_inlines_scalars(container, items):
+    """With remaining_depth=1, scalar elements are inlined; the container is stored as a plain container (req 3)."""
     mem, ds = make_ds(remaining_depth=1)
-    key = ds.save(items)
+    c = container(items)
+    key = ds.save(c)
     raw = mem.load(key)
-    assert isinstance(raw, DigestedIterable)
-    assert raw.items == items
-    assert ds.load(key) == items
+    # All scalars inlined → no DigestedIterable wrapper, just the plain container
+    assert raw == c
+    assert type(raw) is container
+    assert ds.load(key) == c
 
 
-def test_remaining_depth_1_still_destructures_nested():
-    """With remaining_depth=1, nested containers (depth>1) are still destructured."""
+@pytest.mark.parametrize("container", [list, tuple])
+def test_remaining_depth_1_still_destructures_nested(container):
+    """With remaining_depth=1, nested containers (depth > 1) are still stored separately."""
     mem, ds = make_ds(remaining_depth=1)
-    data = [1, [2, 3]]
+    data = container([1, [2, 3]])
     key = ds.save(data)
     raw = mem.load(key)
-    data[6]
     assert isinstance(raw, DigestedIterable)
     assert raw.items[0] == 1
     assert isinstance(raw.items[1], Digest)
     assert ds.load(key) == data
 
 
-def test_remaining_depth_2_inlines_flat_list():
-    """With remaining_depth=2, a flat list (depth 2) inside another list stays inline."""
+@pytest.mark.parametrize("container", [list, tuple])
+def test_remaining_depth_2_inlines_flat_list(container):
+    """With remaining_depth=2, a flat list (depth 1) inside another list is inlined (req 3)."""
     mem, ds = make_ds(remaining_depth=2)
-    data = [1, [2, 3]]
+    data = container([1, [2, 3]])
     key = ds.save(data)
     raw = mem.load(key)
-    assert isinstance(raw, DigestedIterable)
-    assert raw.items[0] == 1
-    assert raw.items[1] == [2, 3]
+    # All children inlined → stored as plain container, no DigestedIterable
+    assert raw == data
     assert ds.load(key) == data
 
 
-def test_remaining_depth_2_destructures_deeper():
-    """With remaining_depth=2, a list nested 3 deep is still destructured."""
+@pytest.mark.parametrize("container", [list, tuple])
+def test_remaining_depth_2_destructures_deeper(container):
+    """With remaining_depth=2, a list nested 3 deep is still stored separately."""
     mem, ds = make_ds(remaining_depth=2)
-    data = [1, [[2]]]
+    data = container([1, [[2]]])
     key = ds.save(data)
     raw = mem.load(key)
     assert isinstance(raw, DigestedIterable)
@@ -275,3 +238,28 @@ def test_remaining_depth_empty_containers(data):
     loaded = ds.load(key)
     assert loaded == data
     assert type(loaded) == type(data)
+
+
+# ---- Plain-container passthrough (req 3) ----
+
+
+@pytest.mark.parametrize("container", [list, tuple])
+def test_plain_container_stored_when_all_inline(container):
+    """When all elements are inlined, the container is stored without a Digested wrapper."""
+    mem, ds = make_ds(remaining_depth=10)
+    data = container([1, 2, container([3, 4])])
+    key = ds.save(data)
+    raw = mem.load(key)
+    # Everything fits within remaining_depth → plain container, no DigestedIterable
+    assert not isinstance(raw, Digested)
+    assert raw == data
+
+
+def test_plain_dict_stored_when_all_inline():
+    """When all dict entries are inlined, the dict is stored without a DigestedDict wrapper."""
+    mem, ds = make_ds(remaining_depth=10)
+    data = {"a": 1, "b": [2, 3]}
+    key = ds.save(data)
+    raw = mem.load(key)
+    assert not isinstance(raw, Digested)
+    assert raw == data
