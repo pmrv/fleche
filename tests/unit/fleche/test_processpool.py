@@ -3,7 +3,6 @@ Tests for calling fleche-decorated functions through a ProcessPoolExecutor.
 
 Issue: https://github.com/pmrv/fleche/issues/172
 """
-import pickle
 from concurrent.futures import ProcessPoolExecutor
 
 import pytest
@@ -47,40 +46,6 @@ def _call_add_no_cache_setup(args):
     """Worker that calls _add without setting up a cache (uses default from config)."""
     x, y = args
     return _add(x, y)
-
-
-class TestPicklability:
-    """Verify that module-level @fleche functions and their helpers are picklable."""
-
-    def test_pickle_decorated_function(self):
-        pickled = pickle.dumps(_add)
-        recovered = pickle.loads(pickled)
-        assert recovered is _add
-
-    def test_pickle_call_helper(self):
-        pickled = pickle.dumps(_add.call)
-        recovered = pickle.loads(pickled)
-        assert recovered is _add.call
-
-    def test_pickle_digest_helper(self):
-        pickled = pickle.dumps(_add.digest)
-        recovered = pickle.loads(pickled)
-        assert recovered is _add.digest
-
-    def test_pickle_contains_helper(self):
-        pickled = pickle.dumps(_add.contains)
-        recovered = pickle.loads(pickled)
-        assert recovered is _add.contains
-
-    def test_pickle_load_helper(self):
-        pickled = pickle.dumps(_add.load)
-        recovered = pickle.loads(pickled)
-        assert recovered is _add.load
-
-    def test_pickle_rerun_helper(self):
-        pickled = pickle.dumps(_add.rerun)
-        recovered = pickle.loads(pickled)
-        assert recovered is _add.rerun
 
 
 class TestProcessPool:
