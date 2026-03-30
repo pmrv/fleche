@@ -6,6 +6,7 @@ from fleche.storage import (
     Sql,
     CallStorageAdapter,
 )
+from fleche.caches import Cache
 
 secret_key = [b"test_secret_key_32_bytes_long!!!!"]
 
@@ -41,3 +42,7 @@ def value_storage(request, tmp_path):
         return PickleFile.with_pickle(tmp_path / "pickle", secret_key=secret_key)
     elif request.param == "h5":
         return BagOfHoldingH5File(tmp_path / "h5")
+
+@pytest.fixture
+def clean_cache():
+    yield Cache(Memory({}), Memory({}))
