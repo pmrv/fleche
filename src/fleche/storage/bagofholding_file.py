@@ -4,8 +4,7 @@ from typing import Any
 import logging
 
 from .file import FileStorage
-from .base import SaveError
-from ..digest import Digest
+from .base import SaveError, ValueMixin, CallMixin
 
 from pyiron_snippets.import_alarm import ImportAlarm
 
@@ -20,7 +19,7 @@ with ImportAlarm(
 
 
 @dataclass(frozen=True)
-class BagOfHoldingH5File(FileStorage):
+class BagOfHoldingH5FileBackend(FileStorage):
 
     @bagofholding_alarm
     def __post_init__(self):
@@ -41,3 +40,7 @@ class BagOfHoldingH5File(FileStorage):
         except OSError as e:
             logger.error(f"Corrupt file present in cache at path {path}: {e}")
             raise KeyError(path) from e
+
+
+class ValueBagOfHoldingH5File(ValueMixin, BagOfHoldingH5FileBackend): ...
+class CallBagOfHoldingH5File(CallMixin, BagOfHoldingH5FileBackend): ...

@@ -5,7 +5,7 @@ import pytest
 from fleche import fleche, cache
 from fleche.caches import Cache
 from fleche.digest import Unhashable
-from fleche.storage import Memory
+from fleche.storage import ValueMemory, CallMemory
 
 
 class UnhashableThing:
@@ -158,7 +158,7 @@ def test_unhashable_call_warns_and_calls_through(caplog):
         call_count[0] += 1
         return 42
 
-    c = Cache(Memory({}), Memory({}))
+    c = Cache(ValueMemory({}), CallMemory({}))
     with caplog.at_level(logging.WARNING, logger="fleche"):
         with cache(c):
             result = f(UnhashableThing())
@@ -173,7 +173,7 @@ def test_unhashable_query_warns_and_returns_empty(caplog):
     def f(x):
         return x
 
-    c = Cache(Memory({}), Memory({}))
+    c = Cache(ValueMemory({}), CallMemory({}))
     with caplog.at_level(logging.WARNING, logger="fleche"):
         with cache(c):
             f(1)

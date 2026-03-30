@@ -1,9 +1,9 @@
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock, MagicMock
 
 from fleche import fleche
 from fleche.caches import Cache
 from fleche.state import _CACHE, cache
-from fleche.storage import Memory
+from fleche.storage import ValueMemory, CallMemory
 
 
 def setup_function():
@@ -54,7 +54,7 @@ def test_fleche_retrieves_from_cache():
 
     key = my_func.digest(2)
 
-    with cache(Cache(Memory({}), Memory({}))):
+    with cache(Cache(ValueMemory({}), CallMemory({}))):
         # First call, should execute the function and save to cache
         assert my_func(2) == 42
         mock_function.assert_called_once_with(2)
@@ -73,7 +73,7 @@ def test_fleche_with_version_argument():
     def my_func(x):
         return mock_function(x)
 
-    c = Cache(Memory({}), Memory({}))
+    c = Cache(ValueMemory({}), CallMemory({}))
 
     with cache(c):
         # First call, should execute the function and save to cache
@@ -93,7 +93,7 @@ def test_fleche_with_version():
     mock_function = Mock(return_value=42)
     mock_function.__name__ = "mock_function"
 
-    with cache(Cache(Memory({}), Memory({}))):
+    with cache(Cache(ValueMemory({}), CallMemory({}))):
         mock_function.__version__ = 1
         my_func = fleche(mock_function)
 
@@ -117,7 +117,7 @@ def test_fleche_with_module():
     mock_function = Mock(return_value=42)
     mock_function.__name__ = "name"
 
-    with cache(Cache(Memory({}), Memory({}))):
+    with cache(Cache(ValueMemory({}), CallMemory({}))):
         # First call, should execute the function and save to cache
         mock_function.__module__ = "module1"
         # need to assigne dunder before wrapping for fleche to pick it up

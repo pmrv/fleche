@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Any, Generator
 
-from .base import Storage, DIGEST_LENGTH
-from ..digest import Digest, digest
+from .base import StorageBackend
+from ..digest import Digest
 
 logger = logging.getLogger("fleche.storage")
 
@@ -70,7 +70,7 @@ def file_read_lock(
 
 
 @dataclass(frozen=True)
-class FileStorage(Storage):
+class FileStorage(StorageBackend):
     """File-based storage backend using pickle.
 
     Stores objects on the filesystem.
@@ -101,13 +101,13 @@ class FileStorage(Storage):
         self._path(key).unlink(missing_ok=True)
         self._path(f"{key}.lock").unlink(missing_ok=True)
 
-    def _save(self, value: Any, key: Digest) -> Digest:
+    def put(self, value: Any, key: Digest) -> Digest:
         lock_path = self._path(f"{key}.lock")
         with file_write_lock(lock_path):
             self._to_file(value, self._path(key))
         return key
 
-    def _load(self, key: Digest) -> Any:
+    def get(self, key: Digest) -> Any:
         lock_path = self._path(f"{key}.lock")
         with file_read_lock(
             lock_path, self.lock_timeout, self.lock_wait_start, str(key)

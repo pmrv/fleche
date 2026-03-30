@@ -1,8 +1,6 @@
 import pickle
 import pytest
-from pathlib import Path
 from fleche.storage.pickle_file import PickleFile, _normalize_secret_key
-from fleche.digest import digest
 
 
 def test_secure_storage_tampering(tmp_path):

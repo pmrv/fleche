@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from numbers import Number
 
 from abc import ABC, abstractmethod
-from typing import Iterable, Any, Callable, Self
+from typing import Iterable, Any, Callable
 
 from ..digest import digest, Digest, DIGEST_LENGTH
 from ..call import Call, QueryCall
@@ -19,11 +19,36 @@ class AmbiguousDigestError(ValueError):
     pass
 
 
-class StorageBase(ABC):
-    """Shared functionality between value and call storages."""
+class StorageBackend(ABC):
+    """Primitive backend interface for key-value storage.
+
+    Backends implement the low-level ``put``/``get``/``pop``/``list``
+    operations.  Higher-level classes (:class:`ValueMixin`, :class:`CallMixin`)
+    add domain-specific logic on top.
+    """
+
+    # Primitive operations necessary to implement in new backends
 
     @abstractmethod
     def list(self) -> Iterable[Digest]: ...
+
+    @abstractmethod
+    def put(self, value: Any, key: Digest) -> Digest: ...
+
+    @abstractmethod
+    def get(self, key: Digest) -> Any: ...
+
+    @abstractmethod
+    def _evict(self, key: Digest) -> None: ...
+
+    def _contains(self, key: Digest) -> bool:
+        try:
+            self.get(key)
+            return True
+        except KeyError:
+            return False
+
+    # public API on top
 
     def evict(self, key: Digest | str) -> None:
         """Removes the entry corresponding to the key from the storage."""
@@ -33,8 +58,15 @@ class StorageBase(ABC):
             key = Digest(key)
         self._evict(key)
 
-    @abstractmethod
-    def _evict(self, key: Digest) -> None: ...
+    def contains(self, key: Digest | str) -> bool:
+        if len(key) < DIGEST_LENGTH:
+            try:
+                key = self.expand(key)
+            except KeyError:
+                return False
+        else:
+            key = Digest(key)
+        return self._contains(key)
 
     def expand(self, key: Digest | str) -> Digest:
         """Expands a short-hand digest to the full length one."""
@@ -72,31 +104,30 @@ class StorageBase(ABC):
             f"Digest {key} cannot be shrunk without becoming ambigious!"
         )
 
-    def contains(self, key: Digest | str) -> bool:
-        if len(key) < DIGEST_LENGTH:
-            try:
-                key = self.expand(key)
-            except KeyError:
-                return False
-        else:
-            key = Digest(key)
-        return self._contains(key)
+
+class ValueStorage(StorageBackend):
+    """Abstract domain interface for value storage."""
 
     @abstractmethod
-    def _contains(self, key: Digest) -> bool: ...
+    def save(self, value: Any, key: Digest | None = None) -> Digest: ...
+
+    @abstractmethod
+    def load(self, key: Digest | str) -> Any: ...
 
 
-class Storage(StorageBase):
-    """Abstract base class for defining storage mechanisms."""
+class ValueMixin(ValueStorage, StorageBackend):
+    """Bridges :class:`ValueStorage` with :class:`StorageBackend` primitives.
+
+    Implements ``save`` and ``load`` using ``put`` and ``get``.
+    Concrete classes inherit from this and a :class:`StorageBackend`
+    implementation to get a fully functional value storage.
+    """
 
     def save(self, value: Any, key: Digest | None = None) -> Digest:
         if key is None:
             key = digest(value)
         logger.debug("Saving value with key %s", key)
-        return self._save(value, key)
-
-    @abstractmethod
-    def _save(self, value: Any, key: Digest) -> Digest: ...
+        return self.put(value, key)
 
     def load(self, key: Digest | str) -> Any:
         if len(key) < DIGEST_LENGTH:
@@ -104,17 +135,7 @@ class Storage(StorageBase):
         else:
             key = Digest(key)
         logger.debug("Loading value with key %s", key)
-        return self._load(key)
-
-    @abstractmethod
-    def _load(self, key: Digest) -> Any: ...
-
-    def _contains(self, key: Digest) -> bool:
-        try:
-            self._load(key)
-            return True
-        except KeyError:
-            return False
+        return self.get(key)
 
 
 class Digested(ABC):
@@ -144,7 +165,7 @@ class DigestedIterable(Digested):
         return self.items
 
     def mend(self, storage: 'DestructuringMixin') -> list | tuple:
-        return type(self.items)(map(storage._load, self.items))
+        return type(self.items)(map(storage.get, self.items))
 
     @classmethod
     def sunder(cls, intern: Callable[[Any], tuple[Any, int | float]], value: list | tuple):
@@ -165,7 +186,7 @@ class DigestedDict(Digested):
         return self.items
 
     def mend(self, storage: 'DestructuringMixin') -> dict:
-        return {storage._load(k): storage._load(v) for k, v in self.items.items()}
+        return {storage.get(k): storage.get(v) for k, v in self.items.items()}
 
     @classmethod
     def sunder(cls, intern: Callable[[Any], tuple[Any, int | float]], value: dict):
@@ -179,20 +200,19 @@ class DigestedDict(Digested):
         return cls(items), depth
 
 
-class DestructuringMixin(Storage):
+class DestructuringMixin(StorageBackend):
     """Mixin that recursively destructures collections on save/load.
 
-    Place before a concrete :class:`Storage` in the MRO to add destructuring
-    behavior.  Lists, tuples, and dicts are broken apart so each element is
-    stored independently; on load the original structure is reassembled.
+    Place before a concrete :class:`StorageBackend` in the MRO to add
+    destructuring behavior.  Lists, tuples, and dicts are broken apart so each
+    element is stored independently; on load the original structure is
+    reassembled.
 
     Example::
 
-        class DestructuringMemory(DestructuringMixin, Memory):
+        class DestructuringMemory(ValueMixin, DestructuringMixin, Memory):
             pass
 
-        # ``storage`` here is the backing dict required by ``Memory``, not a
-        # Storage instance.
         dm = DestructuringMemory(storage={})
         key = dm.save([1, [2, 3]])
         assert dm.load(key) == [1, [2, 3]]
@@ -227,41 +247,41 @@ class DestructuringMixin(Storage):
 
         if depth < self.remaining_depth:
             return value, depth
-        return super()._save(value, digest(value)), depth
+        return super().put(value, digest(value)), depth
 
-    def _save(self, value: Any, key: Digest) -> Digest:
+    def put(self, value: Any, key: Digest) -> Digest:
         if isinstance(value, Digest):
             return value
 
         match value:
             case list() | tuple() if not value:
-                return super()._save(value, key)
+                return super().put(value, key)
 
             case list() | tuple():
                 children, _ = zip(*(self._intern_rec(v) for v in value))
                 items = type(value)(children)
                 if not any(isinstance(r, Digest) for r in items):
-                    return super()._save(items, key)
-                return super()._save(DigestedIterable(items), key)
+                    return super().put(items, key)
+                return super().put(DigestedIterable(items), key)
 
             case dict() if not value:
-                return super()._save(value, key)
+                return super().put(value, key)
 
             case dict():
                 kk, _ = zip(*(self._intern_rec(k) for k in value))
                 vv, _ = zip(*(self._intern_rec(v) for v in value.values()))
                 items = dict(zip(kk, vv))
                 if not any(isinstance(r, Digest) for r in (*items.keys(), *items.values())):
-                    return super()._save(items, key)
-                return super()._save(DigestedDict(items), key)
+                    return super().put(items, key)
+                return super().put(DigestedDict(items), key)
 
             case _:
-                return super()._save(value, key)
+                return super().put(value, key)
 
-    def _load(self, key: Digest | Any) -> Any:
+    def get(self, key: Digest | Any) -> Any:
         if not isinstance(key, Digest):
             return key  # passing through an actual value from Digested.mend
-        value = super()._load(key)
+        value = super().get(key)
 
         match value:
             case Digested():
@@ -270,67 +290,41 @@ class DestructuringMixin(Storage):
                 return value
 
 
-@dataclass(frozen=True)
-class _DelegatingStorage(Storage):
-    """Storage that delegates all operations to a wrapped storage instance."""
+class CallStorage(StorageBackend):
+    """Abstract domain interface for call storage."""
 
-    storage: Storage
+    @abstractmethod
+    def save(self, call: Call) -> Digest: ...
 
-    def _save(self, value: Any, key: Digest) -> Digest:
-        return self.storage.save(value, key)
-
-    def _load(self, key: Digest) -> Any:
-        return self.storage.load(key)
-
-    def _contains(self, key: Digest) -> bool:
-        return self.storage.contains(key)
-
-    def _evict(self, key: Digest) -> None:
-        return self.storage.evict(key)
-
-    def list(self) -> Iterable[Digest]:
-        return self.storage.list()
+    @abstractmethod
+    def load(self, key: Digest | str) -> Call: ...
 
 
-@dataclass(frozen=True)
-class DestructuringStorage(DestructuringMixin, _DelegatingStorage):
-    """Storage wrapper that recursively destructures collections.
+class CallMixin(CallStorage, StorageBackend):
+    """Bridges :class:`CallStorage` with :class:`StorageBackend` primitives.
 
-    This is a convenience class combining :class:`DestructuringMixin` with
-    delegation to a wrapped storage.  Prefer using :class:`DestructuringMixin`
-    directly as a mixin with a concrete storage class when possible.
+    Implements ``save`` and ``load`` using ``put`` and ``get``, deriving the
+    storage key from the call's lookup key.  Also provides ``transform`` and
+    ``query`` domain methods.
+
+    Concrete classes inherit from this and a :class:`StorageBackend`
+    implementation to get a fully functional call storage.
     """
-
-    remaining_depth: int = 0
-
-    def __post_init__(self):
-        if isinstance(self.storage, DestructuringMixin):
-            raise ValueError("DestructuringStorage cannot wrap a storage that already uses DestructuringMixin")
-
-
-class CallStorage(StorageBase):
-    """Special storage for saving :class:`Call` instances."""
 
     def save(self, call: Call) -> Digest:
         key = call.to_lookup_key()
         logger.debug("Saving call %s", key)
         if self.contains(str(key)):
             self.evict(str(key))
-        return self._save(call)
+        return self.put(call, key)
 
-    @abstractmethod
-    def _save(self, call: Call) -> Digest: ...
-
-    def load(self, key: str | Digest) -> Call:
+    def load(self, key: Digest | str) -> Call:
         if len(key) < DIGEST_LENGTH:
             key = self.expand(key)
         else:
             key = Digest(key)
         logger.debug("Loading call with key %s", key)
-        return self._load(key)
-
-    @abstractmethod
-    def _load(self, key: Digest) -> Call: ...
+        return self.get(key)
 
     def transform(self, func: Callable[[Call], Call] | None = None) -> None:
         """
@@ -350,7 +344,7 @@ class CallStorage(StorageBase):
             new_key = new_call.to_lookup_key()
             if new_key != k:
                 self.save(new_call)
-                self.evict(k)
+                self.pop(k)
             else:
                 self.save(new_call)
 
@@ -374,32 +368,3 @@ class CallStorage(StorageBase):
             call = self.load(key)
             if template.matches(call):
                 yield call
-
-    def _contains(self, key: Digest) -> bool:
-        try:
-            self._load(key)
-            return True
-        except KeyError:
-            return False
-
-
-@dataclass(frozen=True, slots=True)
-class CallStorageAdapter(CallStorage):
-    """Implement a CallStorage from a generic Storage."""
-
-    storage: Storage
-
-    def _save(self, call: Call) -> Digest:
-        return self.storage.save(call, call.to_lookup_key())
-
-    def _load(self, key: Digest) -> Call:
-        return self.storage.load(key)
-
-    def _contains(self, key: Digest) -> bool:
-        return self.storage.contains(key)
-
-    def _evict(self, key: Digest) -> None:
-        self.storage.evict(key)
-
-    def list(self) -> Iterable[Digest]:
-        return self.storage.list()

@@ -10,21 +10,6 @@ from fleche.caches import Cache, BaseCache
 from fleche.metadata import Runtime
 
 
-@dataclass
-class NestedStorage(storage.Storage):
-    inner: storage.Storage
-    arg: str
-
-    def save(self, value, key=None):
-        pass
-
-    def load(self, key):
-        pass
-
-    def list(self):
-        pass
-
-
 @pytest.fixture
 def config_file():
     config = textwrap.dedent("""
@@ -47,12 +32,6 @@ def config_file():
         values.root = "~/.fleche/values"
         calls.type = "CloudpickleFile"
         calls.root = "~/.fleche/calls"
-
-        [nested]
-        values.type = "NestedStorage"
-        values.arg = "test"
-        values.inner.type = "Memory"
-        calls.type = "Memory"
     """)
     with tempfile.TemporaryDirectory() as tmpdir:
         config_dir = Path(tmpdir) / "fleche"
@@ -198,20 +177,6 @@ def test_cache_instances_are_persistent(monkeypatch, config_file):
         cache2 = cache()
 
     assert cache1 is cache2
-
-
-@pytest.mark.xfail(reason="Missing overloading support for additional storage classes.")
-def test_nested_storage(monkeypatch, config_file):
-    monkeypatch.setenv("XDG_CONFIG_HOME", config_file)
-    storage.NestedStorage = NestedStorage
-
-    cache_obj = load_cache_config("nested")
-
-    assert isinstance(cache_obj, Cache)
-    values_storage = _get_values_storage(cache_obj)
-    assert isinstance(values_storage, NestedStorage)
-    assert values_storage.arg == "test"
-    assert isinstance(values_storage.inner, storage.Memory)
 
 
 def test_load_default_metadata(restore_fleche_state, monkeypatch, config_file):

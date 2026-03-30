@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from unittest.mock import Mock
 
-import pytest
 
 from fleche import fleche
 from fleche.digest import Digest

@@ -1,4 +1,3 @@
-import pytest
 
 from fleche import fleche, cache, tags
 from fleche.storage.sql import Sql
@@ -21,9 +20,9 @@ def test_wrapper_query_integration(tmp_path):
 
     # Build a cache with distinct value storage and call storage
     from fleche.caches import Cache
-    from fleche.storage import Memory
+    from fleche.storage import ValueMemory
 
-    test_cache = Cache(values=Memory({}), _calls=store)
+    test_cache = Cache(values=ValueMemory({}), calls=store)
 
     @fleche
     def add(a, b):
@@ -106,10 +105,10 @@ def test_query_by_result_integration(tmp_path):
     store = Sql(str(tmp_path / "calls.db"))
 
     from fleche.caches import Cache
-    from fleche.storage import Memory
+    from fleche.storage import ValueMemory
     from fleche.call import Call
 
-    test_cache = Cache(values=Memory({}), _calls=store)
+    test_cache = Cache(values=ValueMemory({}), calls=store)
 
     @fleche
     def add(a, b):

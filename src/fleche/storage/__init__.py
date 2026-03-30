@@ -7,31 +7,40 @@ for backward compatibility with `from fleche.storage import ...` imports.
 from .base import (
     SaveError,
     AmbiguousDigestError,
-    Storage,
+    StorageBackend,
+    ValueStorage,
+    ValueMixin,
     CallStorage,
-    CallStorageAdapter,
+    CallMixin,
     DestructuringMixin,
-    DestructuringStorage,
 )
-from .memory import Memory
-from .void import Void
+from .memory import ValueMemory, CallMemory
+from .void import ValueVoid, CallVoid
 from .file import FileStorage
-from .pickle_file import PickleFile
-from .bagofholding_file import BagOfHoldingH5File
+from .pickle_file import ValuePickleFile, CallPickleFile
+from .bagofholding_file import ValueBagOfHoldingH5File, CallBagOfHoldingH5File
 from .sql import Sql
 
 __all__ = [
     "SaveError",
     "AmbiguousDigestError",
-    "Storage",
+    "StorageBackend",
+    "ValueStorage",
+    "ValueMixin",
     "CallStorage",
-    "CallStorageAdapter",
+    "CallMixin",
     "DestructuringMixin",
-    "DestructuringStorage",
-    "Memory",
-    "Void",
+    "ValueMemory",
+    "CallMemory",
+    "ValueVoid",
+    "CallVoid",
     "FileStorage",
+    "ValuePickleFile",
+    "CallPickleFile",
     "PickleFile",
+    "ValueBagOfHoldingH5File",
+    "CallBagOfHoldingH5File",
     "BagOfHoldingH5File",
+    "CallSql",
     "Sql",
 ]

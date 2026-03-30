@@ -1,5 +1,4 @@
 import pytest
-from pathlib import Path
 
 from hypothesis import given, strategies as st
 
@@ -85,9 +84,9 @@ def test_sql_query_all_returns_all(store):
     when no fields are constrained (all None), i.e., the set of keys is equal.
     """
     c1, c2, c3 = make_calls()
-    k1 = store.save(c1)
-    k2 = store.save(c2)
-    k3 = store.save(c3)
+    store.save(c1)
+    store.save(c2)
+    store.save(c3)
 
     tpl = Call(
         name=None, arguments=None, metadata=None, module=None, version=None, result=None
@@ -105,8 +104,8 @@ def test_sql_query_by_name(store):
     filtering by name alone.
     """
     c1, c2, c3 = make_calls()
-    k1 = store.save(c1)
-    k2 = store.save(c2)
+    store.save(c1)
+    store.save(c2)
     store.save(c3)
 
     tpl = Call(
@@ -124,7 +123,7 @@ def test_sql_query_by_name_and_version(store):
     Invariant: SQL-backed query equals baseline for combined scalar filters.
     """
     c1, c2, c3 = make_calls()
-    k1 = store.save(c1)
+    store.save(c1)
     store.save(c2)
     store.save(c3)
 
@@ -144,8 +143,8 @@ def test_sql_query_by_argument_digest_string(store):
     the baseline selection using digest semantics.
     """
     c1, c2, c3 = make_calls()
-    k1 = store.save(c1)
-    k2 = store.save(c2)
+    store.save(c1)
+    store.save(c2)
     store.save(c3)
 
     # Filter by a single argument using its digest string value
@@ -170,8 +169,8 @@ def test_sql_query_by_argument_digest_object(store):
     strings for filtering, matching the baseline.
     """
     c1, c2, c3 = make_calls()
-    k1 = store.save(c1)
-    k2 = store.save(c2)
+    store.save(c1)
+    store.save(c2)
     store.save(c3)
 
     # Same filter but with Digest object
@@ -197,8 +196,8 @@ def test_sql_query_argument_wildcard_none(store):
     baseline.
     """
     c1, c2, c3 = make_calls()
-    k1 = store.save(c1)
-    k2 = store.save(c2)
+    store.save(c1)
+    store.save(c2)
     store.save(c3)
 
     # None in arguments acts as wildcard but requires presence of the key
@@ -236,7 +235,7 @@ def test_sql_query_by_result(store):
     Invariant: SQL-backed result filtering equals baseline selection by digest.
     """
     c1, c2, c3 = make_calls()
-    k1 = store.save(c1)
+    store.save(c1)
     store.save(c2)
     store.save(c3)
 
@@ -398,8 +397,8 @@ def test_find_by_metadata_name_only_returns_all_with_that_name(store):
     a 'tags' metadata entry, regardless of its keys/values.
     """
     c1, c2 = make_metadata_calls()
-    k1 = store.save(c1)
-    k2 = store.save(c2)
+    store.save(c1)
+    store.save(c2)
 
     # Name only: return all keys that have this metadata name
     # Name-only selection using query(): require presence of at least one key from that name
@@ -425,7 +424,7 @@ def test_find_by_metadata_multiple_filters(store):
     match only the call whose 'tags' has both project=alpha and phase=train.
     """
     c1, c2 = make_metadata_calls()
-    k1 = store.save(c1)
+    store.save(c1)
     store.save(c2)
 
     # Multiple key filters within same metadata name
@@ -450,7 +449,7 @@ def test_find_by_metadata_boolean_and_integer_filters(store):
     expressions and yield precise matches.
     """
     c1, c2 = make_metadata_calls()
-    k1 = store.save(c1)
+    store.save(c1)
     store.save(c2)
 
     # Boolean filter
@@ -486,7 +485,7 @@ def test_find_by_metadata_across_all_names(store):
     """
     c1, c2 = make_metadata_calls()
     store.save(c1)
-    k2 = store.save(c2)
+    store.save(c2)
 
     # Without name, search across all metadata names (e.g., walltime under runtime)
     tpl = Call(
@@ -508,7 +507,7 @@ def test_find_by_metadata_fallback_for_unsupported_types(store):
     list forces client-side validation.
     """
     c1, c2 = make_metadata_calls()
-    k1 = store.save(c1)
+    store.save(c1)
     store.save(c2)
 
     # Lists are not in the supported (str, bool, int, float); this should use the

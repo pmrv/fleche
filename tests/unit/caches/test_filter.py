@@ -1,12 +1,12 @@
 import pytest
-from fleche.storage import Memory
+from fleche.storage import ValueMemory, CallMemory
 from fleche.caches import Cache, FilteredCache, Rejected
 from fleche.call import Call
 from fleche import fleche, cache
 
 
 def test_filter_by_name():
-    c = Cache(Memory({}), Memory({}))
+    c = Cache(ValueMemory({}), CallMemory({}))
 
     @fleche
     def foo(x):
@@ -36,7 +36,7 @@ def test_filter_by_name():
 
 
 def test_filter_reflects_changes():
-    c = Cache(Memory({}), Memory({}))
+    c = Cache(ValueMemory({}), CallMemory({}))
 
     @fleche
     def foo(x):
@@ -52,7 +52,7 @@ def test_filter_reflects_changes():
 
 
 def test_filter_with_template():
-    c = Cache(Memory({}), Memory({}))
+    c = Cache(ValueMemory({}), CallMemory({}))
 
     @fleche
     def foo(x):
@@ -77,7 +77,7 @@ def test_filter_with_template():
 
 
 def test_filtered_cache_is_readonly():
-    c = Cache(Memory({}), Memory({}))
+    c = Cache(ValueMemory({}), CallMemory({}))
     c_filtered = c.filter(lambda call: True)
     with pytest.raises(Rejected):
         c_filtered.save(Call(name="test", arguments={}))

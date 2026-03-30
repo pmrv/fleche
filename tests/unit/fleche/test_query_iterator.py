@@ -5,17 +5,17 @@ from fleche import fleche, cache
 from fleche.call import Call, LazyCall, QueryCall
 from fleche.caches import Cache
 from fleche.query import QueryIterator
-from fleche.storage import Memory
+from fleche.storage import ValueMemory, CallMemory
 
 
 @pytest.fixture
 def test_cache():
-    return Cache(values=Memory({}), _calls=Memory({}))
+    return Cache(values=ValueMemory({}), calls=CallMemory({}))
 
 
 def _make_cache_with_calls(*calls):
     """Helper: save given Call objects into a fresh in-memory cache and return it."""
-    c = Cache(values=Memory({}), _calls=Memory({}))
+    c = Cache(values=ValueMemory({}), calls=CallMemory({}))
     for call in calls:
         c.save(call)
     return c

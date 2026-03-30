@@ -94,3 +94,7 @@ tests/
 
 If tasked to work in a 'separate issue/PR' keep your detailed response there and only add a quick link to the original
 issue or PR.
+
+# General Instructions
+
+When you cannot complete a task or question because you are missing depedencies fail early and report the errors.

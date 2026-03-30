@@ -145,7 +145,7 @@ def test_bound_wrapper_pickle_preserves_cache_identity():
         bound = fleche_state.BoundWrapper.bind(_pickle_func)
 
     restored = pickle.loads(pickle.dumps(bound))
-    assert type(restored.cache) == type(bound.cache)
+    assert type(restored.cache) is type(bound.cache)
 
 
 def test_bound_wrapper_pickle_preserves_meta_tuple():

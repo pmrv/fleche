@@ -3,11 +3,11 @@ import threading
 
 from fleche.call import Call
 from fleche.caches import Cache, SizeLimitedCache
-from fleche.storage.memory import Memory
+from fleche.storage.memory import ValueMemory, CallMemory
 
 
 def make_slcache(max_size: int) -> SizeLimitedCache:
-    return SizeLimitedCache(values=Memory({}), _calls=Memory({}), max_size=max_size)
+    return SizeLimitedCache(values=ValueMemory({}), calls=CallMemory({}), max_size=max_size)
 
 
 def make_call(name: str, x: int, result: int) -> Call:
@@ -69,7 +69,7 @@ def test_pick_eviction_target_is_overridable():
         def _pick_eviction_target(self, keys):
             return keys[0]
 
-    cache = FirstEvictionCache(values=Memory({}), _calls=Memory({}), max_size=2)
+    cache = FirstEvictionCache(values=ValueMemory({}), calls=CallMemory({}), max_size=2)
 
     for i in range(4):
         cache.save(make_call("f", i, i))
@@ -110,7 +110,6 @@ def test_contains_delegates():
 
 
 def test_query_delegates():
-    from fleche.call import QueryCall
     cache = make_slcache(max_size=5)
     cache.save(make_call("myf", 1, 10))
     cache.save(make_call("myf", 2, 20))
@@ -125,14 +124,13 @@ def test_query_delegates():
 def test_keys_initialized_from_existing_storage():
     """_keys is populated from existing storage on construction; eviction respects pre-existing entries."""
     # Populate a base Cache first, then wrap it with SizeLimitedCache sharing the same storages.
-    base = Cache(values=Memory({}), _calls=Memory({}))
+    base = Cache(values=ValueMemory({}), calls=CallMemory({}))
     for i in range(3):
         base.save(make_call("f", i, i))
 
     # Build a SizeLimitedCache over the same storages with max_size=2.
     # The 3 pre-existing keys must be discovered during __post_init__.
-    from fleche.storage.memory import Memory as Mem
-    slc = SizeLimitedCache(values=base.values, _calls=base.calls, max_size=2)
+    slc = SizeLimitedCache(values=base.values, calls=base.calls, max_size=2)
 
     # _keys must reflect all pre-existing entries
     assert len(slc._keys) == 3

@@ -30,8 +30,8 @@ import pytest
 
 import fleche
 from fleche.caches import Cache
-from fleche.storage.memory import Memory
-from fleche.storage.pickle_file import PickleFile
+from fleche.storage.memory import ValueMemory, CallMemory
+from fleche.storage.pickle_file import ValuePickleFile, CallPickleFile
 
 try:
     import executorlib  # noqa: F401
@@ -56,8 +56,8 @@ def double(x):
 
 def _worker_with_file_cache(x, values_dir, calls_dir):
     """Worker that sets up a shared file-backed cache and runs the fleche function."""
-    values_storage = PickleFile.with_pickle(root=values_dir)
-    calls_storage = PickleFile.with_pickle(root=calls_dir)
+    values_storage = ValuePickleFile.with_pickle(root=values_dir)
+    calls_storage = CallPickleFile.with_pickle(root=calls_dir)
     worker_cache = Cache(values_storage, calls_storage)
     with fleche.cache(worker_cache):
         return double(x)
@@ -73,8 +73,7 @@ def test_threadpool_inheritance_failure():
     Demonstrate that standard fleche.cache() context manager
     does not propagate to ThreadPoolExecutor in this environment.
     """
-    mem = Memory({})
-    cache1 = Cache(mem, mem)
+    cache1 = Cache(ValueMemory({}), CallMemory({}))
 
     with fleche.cache(cache1):
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
@@ -89,8 +88,7 @@ def test_threadpool_explicit_context_propagation():
     """
     Demonstrate that explicit context propagation works.
     """
-    mem = Memory({})
-    cache1 = Cache(mem, mem)
+    cache1 = Cache(ValueMemory({}), CallMemory({}))
 
     with fleche.cache(cache1):
         ctx = contextvars.copy_context()
@@ -126,8 +124,7 @@ def test_process_executor_in_memory_cache_not_propagated():
     Results computed in the worker are stored in the worker's ephemeral default
     cache and are NOT accessible from the parent's in-memory cache object.
     """
-    mem = Memory({})
-    cache = Cache(mem, mem)
+    cache = Cache(ValueMemory({}), CallMemory({}))
 
     with fleche.cache(cache):
         with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
@@ -170,8 +167,7 @@ def test_executorlib_in_memory_cache_not_propagated():
     """
     from executorlib import SingleNodeExecutor
 
-    mem = Memory({})
-    cache = Cache(mem, mem)
+    cache = Cache(ValueMemory({}), CallMemory({}))
 
     with fleche.cache(cache):
         with SingleNodeExecutor() as executor:
@@ -201,8 +197,8 @@ def test_executorlib_file_backed_cache_shared():
         calls_dir = f"{tmpdir}/calls"
 
         # Parent-side cache pointing at the shared directories
-        parent_values = PickleFile.with_pickle(root=values_dir)
-        parent_calls = PickleFile.with_pickle(root=calls_dir)
+        parent_values = ValuePickleFile.with_pickle(root=values_dir)
+        parent_calls = CallPickleFile.with_pickle(root=calls_dir)
         parent_cache = Cache(parent_values, parent_calls)
 
         with SingleNodeExecutor() as executor:

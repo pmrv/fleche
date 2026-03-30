@@ -1,5 +1,3 @@
-from pathlib import Path
-import pytest
 from fleche.storage.sql import _coerce_sqlite_url
 
 

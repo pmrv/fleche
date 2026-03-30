@@ -2,7 +2,6 @@ import pytest
 
 from fleche import storage
 from fleche.caches import BaseCache, Cache, CacheStack, ReadOnlyCache, SizeLimitedCache
-from fleche.call import QueryCall
 from fleche.config import cache_from_config, cache_to_config
 
 

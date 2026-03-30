@@ -2,7 +2,7 @@ from unittest.mock import Mock
 from fleche import fleche
 from fleche.caches import Cache
 from fleche.state import cache
-from fleche.storage import Memory
+from fleche.storage import ValueMemory, CallMemory
 
 def test_rerun_basic():
     mock_func = Mock(side_effect=[1, 2])
@@ -11,7 +11,7 @@ def test_rerun_basic():
     def func(x):
         return mock_func(x)
 
-    with cache(Cache(Memory({}), Memory({}))):
+    with cache(Cache(ValueMemory({}), CallMemory({}))):
         # First call: cache miss, execute
         assert func(1) == 1
         assert mock_func.call_count == 1
@@ -41,7 +41,7 @@ def test_rerun_nested():
         mock_outer(x)
         return inner(x)
 
-    with cache(Cache(Memory({}), Memory({}))):
+    with cache(Cache(ValueMemory({}), CallMemory({}))):
         # First call: both miss
         assert outer(1) == 10
         assert mock_outer.call_count == 1
@@ -77,7 +77,7 @@ def test_rerun_nested_multiple_levels():
     def l1(x):
         return l2(x)
 
-    with cache(Cache(Memory({}), Memory({}))):
+    with cache(Cache(ValueMemory({}), CallMemory({}))):
         assert l1(0) == 1
         assert mock_l3.call_count == 1
 

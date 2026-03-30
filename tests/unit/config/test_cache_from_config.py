@@ -1,4 +1,3 @@
-import pytest
 
 from fleche import storage
 from fleche.caches import Cache, CacheStack, ReadOnlyCache, SizeLimitedCache

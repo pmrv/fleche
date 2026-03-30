@@ -39,7 +39,7 @@ def test_cache_stack_load_miss():
     c1.load.side_effect = KeyError
     c2 = Mock()
     c2.load.side_effect = KeyError
-    stack = CacheStack((c1, c2))
+    CacheStack((c1, c2))
 
 
 def test_cachestack_query_bottom_to_top_and_dedupe():

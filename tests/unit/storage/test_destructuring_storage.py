@@ -1,6 +1,6 @@
 import pytest
 from hypothesis import given, settings, HealthCheck, strategies as st
-from fleche.storage import Memory, DestructuringStorage
+from fleche.storage import ValueMemory, DestructuringStorage
 from fleche.storage.base import DigestedIterable, DigestedDict, Digested
 from fleche.digest import digest, Digest
 
@@ -9,7 +9,7 @@ from tests.strategies import st_base_values, st_nested_values, st_key_values
 
 @pytest.fixture
 def mem():
-    return Memory(storage={})
+    return ValueMemory(storage={})
 
 
 @pytest.fixture
@@ -18,7 +18,7 @@ def ds(mem):
 
 
 def make_ds(remaining_depth=0):
-    mem = Memory(storage={})
+    mem = ValueMemory(storage={})
     ds = DestructuringStorage(mem, remaining_depth=remaining_depth)
     return mem, ds
 
@@ -212,8 +212,8 @@ def test_remaining_depth_reduces_storage_slots():
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 @given(st_base_values)
 def test_load_passthrough_non_digest(ds, value):
-    """_load returns non-Digest values as-is (inline values from mend)."""
-    assert ds._load(value) == value
+    """get returns non-Digest values as-is (inline values from mend)."""
+    assert ds.get(value) == value
 
 
 @given(
@@ -223,7 +223,7 @@ def test_load_passthrough_non_digest(ds, value):
 )
 def test_cross_depth_roundtrip(value, write_depth, read_depth):
     """Data written at one remaining_depth is readable at any other."""
-    mem = Memory(storage={})
+    mem = ValueMemory(storage={})
     writer = DestructuringStorage(mem, remaining_depth=write_depth)
     reader = DestructuringStorage(mem, remaining_depth=read_depth)
     key = writer.save(value)
@@ -237,7 +237,7 @@ def test_remaining_depth_empty_containers(data):
     key = ds.save(data)
     loaded = ds.load(key)
     assert loaded == data
-    assert type(loaded) == type(data)
+    assert type(loaded) is type(data)
 
 
 # ---- Plain-container passthrough (req 3) ----

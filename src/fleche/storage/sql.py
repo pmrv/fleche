@@ -1,7 +1,7 @@
 from typing import Iterable, Any, List
 from pathlib import Path
 from dataclasses import dataclass, field
-from .base import CallStorage, AmbiguousDigestError
+from .base import StorageBackend, CallMixin, AmbiguousDigestError
 from ..call import Call, QueryCall
 from ..digest import Digest, DIGEST_LENGTH, digest
 
@@ -120,7 +120,7 @@ def _enable_sqlite_foreign_keys(engine) -> None:
 
 
 @dataclass(frozen=True)
-class Sql(CallStorage):
+class SqlBackend(StorageBackend):
     """SQLAlchemy-backed CallStorage with JSON metadata and DB-backed expand()."""
 
     url: str | None = None
@@ -153,8 +153,7 @@ class Sql(CallStorage):
         # Re-initialize unpickleable fields
         self.__post_init__()
 
-    def _save(self, call: Call) -> Digest:
-        key = call.to_lookup_key()
+    def put(self, call: Any, key: Digest) -> Digest:
         session = self.session()
         try:
             existing = session.get(CallModel, str(key))
@@ -198,7 +197,7 @@ class Sql(CallStorage):
         finally:
             session.close()
 
-    def _load(self, key: Digest) -> Call:
+    def get(self, key: Digest) -> Call:
         session = self.session()
         try:
             call_model = session.execute(
@@ -440,3 +439,6 @@ class Sql(CallStorage):
             c = self.load(k)
             if meta_matches(c):
                 yield c
+
+
+class Sql(CallMixin, SqlBackend): ...

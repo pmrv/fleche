@@ -13,9 +13,9 @@ def test_load_file_not_found(tmp_path):
     non_existent_key = Digest("a" * 64)
 
     # Verify that attempting to load a non-existent file raises KeyError
-    # We call _load directly to bypass expansion/lock logic and target the specific code path
+    # We call get directly to bypass expansion/lock logic and target the specific code path
     with pytest.raises(KeyError) as exc_info:
-        storage._load(non_existent_key)
+        storage.get(non_existent_key)
 
     # Ensure the correct path is in the exception
     assert str(storage._path(non_existent_key)) in str(exc_info.value)
@@ -30,7 +30,7 @@ def test_compression(tmp_path):
     key = Digest("a" * 64)
 
     # Save the value
-    storage._save(value, key)
+    storage.put(value, key)
 
     # Check if the file is compressed
     content = (tmp_path / str(key)).read_bytes()
@@ -38,7 +38,7 @@ def test_compression(tmp_path):
     assert content.startswith(b"\x1f\x8b")
 
     # Load the value
-    loaded_value = storage._load(key)
+    loaded_value = storage.get(key)
     assert loaded_value == value
 
 

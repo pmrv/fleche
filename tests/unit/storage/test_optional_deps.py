@@ -19,7 +19,6 @@ def _test_missing_dep(module_name: str, deps_to_mock: dict, test_logic: callable
 
 def test_cloudpickle_missing():
     def logic():
-        import fleche.storage.pickle_file
         from fleche.storage.pickle_file import PickleFile
 
         with pytest.raises(ImportError, match="PickleFile.with_cloudpickle requires"):
@@ -30,7 +29,6 @@ def test_cloudpickle_missing():
 
 def test_dill_missing():
     def logic():
-        import fleche.storage.pickle_file
         from fleche.storage.pickle_file import PickleFile
 
         with pytest.raises(ImportError, match="PickleFile.with_dill requires"):
@@ -41,7 +39,6 @@ def test_dill_missing():
 
 def test_bagofholding_missing():
     def logic():
-        import fleche.storage.bagofholding_file
         from fleche.storage.bagofholding_file import BagOfHoldingH5File
 
         with pytest.raises(ImportError, match="BagOfHoldingH5File requires"):
@@ -52,7 +49,6 @@ def test_bagofholding_missing():
 
 def test_sqlalchemy_missing():
     def logic():
-        import fleche.storage.sql
         from fleche.storage.sql import Sql
 
         with pytest.raises(ImportError, match="Sql requires"):

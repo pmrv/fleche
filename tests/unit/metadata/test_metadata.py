@@ -5,13 +5,13 @@ import pytest
 from fleche import fleche, cache, tags, project, meta
 from fleche.caches import Cache
 from fleche.metadata import MetaData, Call
-from fleche.storage import Memory
+from fleche.storage import ValueMemory, CallMemory
 
 
 @pytest.fixture
 def cache_it() -> Cache:
-    values_storage = Memory({})
-    calls_storage = Memory({})
+    values_storage = ValueMemory({})
+    calls_storage = CallMemory({})
     return Cache(values_storage, calls_storage)
 
 
@@ -163,8 +163,8 @@ def test_fleche_decorator_and_context_manager(cache_it: Cache):
 
 
 def test_tags():
-    values_storage = Memory({})
-    calls_storage = Memory({})
+    values_storage = ValueMemory({})
+    calls_storage = CallMemory({})
 
     with cache(Cache(values_storage, calls_storage)):
 

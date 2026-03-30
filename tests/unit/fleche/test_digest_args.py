@@ -2,12 +2,12 @@ import pytest
 from fleche import fleche, cache, D
 from fleche.caches import Cache
 from fleche.digest import Digest
-from fleche.storage import Memory
+from fleche.storage import ValueMemory, CallMemory
 from unittest.mock import Mock
 
 
 def test_positional_digest_expansion():
-    c = Cache(Memory({}), Memory({}))
+    c = Cache(ValueMemory({}), CallMemory({}))
 
     @fleche
     def add(a, b):
@@ -22,7 +22,7 @@ def test_positional_digest_expansion():
 
 
 def test_keyword_digest_expansion():
-    c = Cache(Memory({}), Memory({}))
+    c = Cache(ValueMemory({}), CallMemory({}))
 
     @fleche
     def power(base, exp=1):
@@ -37,7 +37,7 @@ def test_keyword_digest_expansion():
 
 
 def test_mixed_args_expansion():
-    c = Cache(Memory({}), Memory({}))
+    c = Cache(ValueMemory({}), CallMemory({}))
 
     @fleche
     def mixed(a, b, c, d=None):
@@ -50,7 +50,7 @@ def test_mixed_args_expansion():
 
 
 def test_expansion_failure_raises_keyerror():
-    c = Cache(Memory({}), Memory({}))
+    c = Cache(ValueMemory({}), CallMemory({}))
 
     @fleche
     def func(x):
@@ -62,7 +62,7 @@ def test_expansion_failure_raises_keyerror():
 
 
 def test_non_recursive_expansion_revisited():
-    c = Cache(Memory({}), Memory({}))
+    c = Cache(ValueMemory({}), CallMemory({}))
 
     mock_func = Mock(side_effect=lambda x: x)
 
@@ -83,7 +83,7 @@ def test_non_recursive_expansion_revisited():
         # Nested digest is NOT expanded in the call
         mock_func.reset_mock()
         nested = [D(d_inner)]
-        res = func(nested)
+        func(nested)
         assert mock_func.call_count == 1
         args, _ = mock_func.call_args
         assert isinstance(args[0][0], Digest)  # NOT expanded
@@ -102,7 +102,7 @@ def test_method_digest_expansion():
         def add(self, x):
             return self.val + x
 
-    c = Cache(Memory({}), Memory({}))
+    c = Cache(ValueMemory({}), CallMemory({}))
     with cache(c):
         obj = MyClass(10)
         dx = c.values.save(5)
@@ -113,7 +113,7 @@ def test_digested_args_are_not_saved():
     correctly, but are entered into the call storage as having received the literal digest as an input rather than the
     value.'''
 
-    c = Cache(Memory({}), Memory({}))
+    c = Cache(ValueMemory({}), CallMemory({}))
 
     @fleche
     def func(x):
@@ -131,7 +131,7 @@ def test_digested_args_are_not_saved():
 def test_short_digest_expansion_via_D():
     # If the storage supports expansion of short digests, D(short) should also work
     # if it's eventually passed to storage.load
-    c = Cache(Memory({}), Memory({}))
+    c = Cache(ValueMemory({}), CallMemory({}))
 
     @fleche
     def func(x):

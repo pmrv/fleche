@@ -1,7 +1,6 @@
 
-import pytest
 from fleche.storage.sql import Sql
-from fleche.storage.memory import Memory
+from fleche.storage.memory import ValueMemory
 from fleche.caches import Cache
 from fleche import fleche, cache, tags
 
@@ -11,8 +10,8 @@ def test_sql_table_uniqueness(tmp_path):
     """
     db_path = tmp_path / "test.db"
     sql_storage = Sql(str(db_path))
-    val_storage = Memory(storage={})
-    c = Cache(values=val_storage, _calls=sql_storage)
+    val_storage = ValueMemory(storage={})
+    c = Cache(values=val_storage, calls=sql_storage)
 
     with cache(c):
         @fleche

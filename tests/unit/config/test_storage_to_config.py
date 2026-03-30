@@ -1,9 +1,8 @@
-from pathlib import Path
 
 import pytest
 
 from fleche import storage
-from fleche.config import storage_to_config, storage_from_config, _get_storage
+from fleche.config import storage_to_config, storage_from_config
 
 
 def test_memory():
@@ -73,16 +72,16 @@ def test_sql():
 
 def test_unknown_storage_raises():
     class CustomStorage(storage.Storage):
-        def _save(self, value, key):
+        def put(self, value, key):
             return key
 
-        def _load(self, key):
+        def get(self, key):
             raise KeyError(key)
 
         def list(self):
             return ()
 
-        def _evict(self, key):
+        def pop(self, key):
             pass
 
     with pytest.raises(ValueError, match="CustomStorage"):

@@ -1,11 +1,11 @@
 from fleche import fleche, cache
 from fleche.caches import Cache
-from fleche.storage import Memory
+from fleche.storage import ValueMemory, CallMemory
 
 
 def test_hash_code_integration():
     # Use a real cache to verify end-to-end behavior
-    with cache(Cache(Memory({}), Memory({}))):
+    with cache(Cache(ValueMemory({}), CallMemory({}))):
 
         def func_v1(x):
             return x + 1
@@ -31,7 +31,7 @@ def test_hash_code_integration():
 
 
 def test_hash_code_disabled_integration():
-    with cache(Cache(Memory({}), Memory({}))):
+    with cache(Cache(ValueMemory({}), CallMemory({}))):
 
         def func_v1(x):
             return x + 1

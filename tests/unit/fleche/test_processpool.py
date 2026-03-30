@@ -5,11 +5,10 @@ Issue: https://github.com/pmrv/fleche/issues/172
 """
 from concurrent.futures import ProcessPoolExecutor
 
-import pytest
 
 from fleche import fleche, cache
 from fleche.caches import Cache
-from fleche.storage import Memory
+from fleche.storage import ValueMemory, CallMemory
 
 
 # Module-level decorated function — must be at module level to be picklable
@@ -26,13 +25,13 @@ def _square(x):
 def _call_add_with_memory_cache(args):
     """Worker that runs _add inside a fresh Memory cache."""
     x, y = args
-    with cache(Cache(Memory({}), Memory({}))):
+    with cache(Cache(ValueMemory({}), CallMemory({}))):
         return _add(x, y)
 
 
 def _call_square_with_memory_cache(x):
     """Worker that runs _square inside a fresh Memory cache."""
-    with cache(Cache(Memory({}), Memory({}))):
+    with cache(Cache(ValueMemory({}), CallMemory({}))):
         return _square(x)
 
 

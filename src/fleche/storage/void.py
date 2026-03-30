@@ -1,20 +1,20 @@
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-from .base import Storage
+from .base import ValueMixin, CallMixin, StorageBackend
 from ..digest import Digest
 
 
 @dataclass(frozen=True)
-class Void(Storage):
+class VoidBackend(StorageBackend):
     """
     A concrete implementation of Storage that does not store anything.
     """
 
-    def _save(self, value: Any, key: Digest) -> Digest:
+    def put(self, value: Any, key: Digest) -> Digest:
         return key
 
-    def _load(self, key: Digest) -> Any:
+    def get(self, key: Digest) -> Any:
         raise KeyError(key)
 
     def list(self) -> Iterable[Digest]:
@@ -25,3 +25,7 @@ class Void(Storage):
 
     def _contains(self, key: Digest) -> bool:
         return False
+
+
+class ValueVoid(ValueMixin, VoidBackend): ...
+class CallVoid(CallMixin, VoidBackend): ...

@@ -2,11 +2,8 @@ import time
 import sys
 import os
 import json
-import statistics
 import shutil
 import tempfile
-import gc
-from typing import Any
 import numpy as np
 
 from fleche import fleche, cache
