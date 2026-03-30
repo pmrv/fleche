@@ -1,15 +1,25 @@
-"""Tests that all storages, caches, and their configurations are picklable.
+"""Tests that all storages, caches, their configurations, and decorated functions are picklable.
 
-Related issue: https://github.com/pmrv/fleche/issues/207
+Related issues:
+- https://github.com/pmrv/fleche/issues/207
+- https://github.com/pmrv/fleche/issues/172
 """
 
 import pickle
 import pytest
 from hypothesis import given, settings, HealthCheck
 
+from fleche import fleche
 from fleche.storage import Memory, Void, PickleFile, DestructuringStorage
+from fleche.storage.sql import Sql
 from fleche.caches import Cache, ReadOnlyCache, FilteredCache, RefreshingCache, CacheStack, Rejected
 from tests.strategies import st_digested_calls
+
+
+# Module-level decorated function — must be at module level to be picklable
+@fleche
+def _example(x, y):
+    return x + y
 
 
 SECRET_KEY = [b"test_secret_key_32_bytes_long!!!!"]
@@ -154,3 +164,56 @@ def test_cache_stack_functional_roundtrip(value_storage, call_storage, call):
     restored = roundtrip(stack)
     loaded = restored.load(key, lazy=False)
     assert loaded == call
+
+
+# ---------------------------------------------------------------------------
+# SQL backend picklability
+# ---------------------------------------------------------------------------
+
+
+def test_sql_picklable():
+    """Sql storage backend roundtrips through pickle correctly."""
+    sql = Sql("sqlite:///:memory:")
+    restored = roundtrip(sql)
+    assert sql == restored
+
+
+# ---------------------------------------------------------------------------
+# Decorated function and helper picklability
+# ---------------------------------------------------------------------------
+
+
+def test_pickle_decorated_function():
+    pickled = pickle.dumps(_example)
+    recovered = pickle.loads(pickled)
+    assert recovered is _example
+
+
+def test_pickle_call_helper():
+    pickled = pickle.dumps(_example.call)
+    recovered = pickle.loads(pickled)
+    assert recovered is _example.call
+
+
+def test_pickle_digest_helper():
+    pickled = pickle.dumps(_example.digest)
+    recovered = pickle.loads(pickled)
+    assert recovered is _example.digest
+
+
+def test_pickle_contains_helper():
+    pickled = pickle.dumps(_example.contains)
+    recovered = pickle.loads(pickled)
+    assert recovered is _example.contains
+
+
+def test_pickle_load_helper():
+    pickled = pickle.dumps(_example.load)
+    recovered = pickle.loads(pickled)
+    assert recovered is _example.load
+
+
+def test_pickle_rerun_helper():
+    pickled = pickle.dumps(_example.rerun)
+    recovered = pickle.loads(pickled)
+    assert recovered is _example.rerun
