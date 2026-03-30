@@ -17,8 +17,8 @@ def test_load_file_not_found(tmp_path):
     with pytest.raises(KeyError) as exc_info:
         storage._load(non_existent_key)
 
-    # Ensure the correct key is in the exception
-    assert str(exc_info.value) == f"'{non_existent_key}'"
+    # Ensure the correct path is in the exception
+    assert str(storage._path(non_existent_key)) in str(exc_info.value)
 
 
 def test_compression(tmp_path):
