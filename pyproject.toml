@@ -34,7 +34,7 @@ docs = [
     "sphinx-rtd-theme",
     "sphinx-autoapi",
     "nbsphinx",
-    "ipython",
+    "ipython_pygments_lexers",
 ]
 cloudpickle = [
     "cloudpickle",
