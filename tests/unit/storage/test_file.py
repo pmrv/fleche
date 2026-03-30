@@ -8,10 +8,10 @@ from typing import Any
 
 @dataclass
 class ConcreteFileStorage(FileStorage):
-    def _save(self, value: Any, key: Digest) -> None:
+    def _to_file(self, value: Any, path: Path) -> None:
         pass
 
-    def _load(self, key: Digest) -> Any:
+    def _from_file(self, path: Path) -> Any:
         return None
 
 

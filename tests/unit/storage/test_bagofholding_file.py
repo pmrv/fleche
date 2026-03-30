@@ -18,4 +18,4 @@ def test_load_corrupt_h5_file(tmp_path, caplog):
         with pytest.raises(KeyError):
             storage._load(key)
 
-    assert f"Corrupt file present in cache for key {key}" in caplog.text
+    assert f"Corrupt file present in cache at path {path}" in caplog.text
