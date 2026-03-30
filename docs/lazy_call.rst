@@ -1,60 +1,54 @@
-Lazy Loading with LazyCall
-==========================
+Lazy Loading
+============
 
-In many caching scenarios, function results or arguments can be large objects (e.g., massive datasets, trained models, or high-resolution images). Loading these objects from the cache every time you inspect a call can be expensive and slow.
+In many caching scenarios, function results or arguments can be large objects (e.g., massive datasets, trained models, or high-resolution images). Loading all of them from the cache every time you inspect a call would be expensive and slow.
 
-To address this, Fleche provides a **lazy loading** mechanism via the ``LazyCall`` class.
-This is turned on by default.
+Fleche avoids this by returning **lazy call objects** from ``load()`` and ``query()`` by default. Arguments and results are only fetched from the underlying storage when you actually access them.
 
-What is LazyCall?
-----------------
+What is a LazyCall?
+-------------------
 
-A ``LazyCall`` is a lightweight sibling to the standard ``Call`` object. Instead of holding the actual Python objects for arguments and results, it holds their **digests** (unique identifiers) and a reference to the cache.
-
-The actual data is only loaded from the underlying storage when you explicitly access it.
-
-Using Lazy Loading
-------------------
-
-You can request lazy loading by passing ``lazy=True`` to the ``load()`` or ``query()`` methods of a cache.
-Using :meth:`.LazyCall.fetch()` you can force the loading of all arguments and the results from cache.
+When you call ``cache().load(key)`` or iterate over ``cache().query(...)``, you get back a ``LazyCall`` rather than a full ``Call``. A ``LazyCall`` holds the digests (unique identifiers) of the arguments and result, plus a reference to the cache, but none of the actual Python objects. Those are loaded on demand the first time you touch them.
 
 .. code-block:: python
 
    from fleche import cache
 
-   # Normal load: loads everything into memory
-   call = cache().load(key, lazy=False)
-   print(call.result)  # Already loaded
-
-   # Lazy load: loads only metadata and digests
-   lazy_call = cache().load(key, lazy=True)
+   # Default: returns a LazyCall — cheap, no deserialization yet
+   lazy_call = cache().load(key)
 
    # Arguments and results are fetched only when accessed
-   print(lazy_call.result)  # Triggers a load from value storage
+   print(lazy_call.result)          # Triggers a load from value storage
    print(lazy_call.arguments['x'])  # Triggers a load for argument 'x'
 
-   lazy_call.fetch() == call
+To load everything upfront, pass ``lazy=False`` or call ``.fetch()`` on an existing ``LazyCall``:
+
+.. code-block:: python
+
+   # Eager load: deserializes everything immediately
+   call = cache().load(key, lazy=False)
+   print(call.result)  # Already in memory
+
+   # Or fetch from a lazy call you already have
+   call = lazy_call.fetch()
 
 Parity with Call
 ----------------
 
-Despite being "lazy", ``LazyCall`` maintains full parity with ``Call``:
+``LazyCall`` is a drop-in stand-in for ``Call``:
 
 * **Digests**: ``digest(lazy_call)`` is identical to ``digest(original_call)``.
-* **Lookup Keys**: ``lazy_call.to_lookup_key()`` returns the same key as the non-lazy version.
+* **Lookup Keys**: ``lazy_call.to_lookup_key()`` returns the same key.
 * **Immutability**: Like ``Call``, ``LazyCall`` is a frozen dataclass.
 
 LazyArguments
 -------------
 
-The ``arguments`` attribute of a ``LazyCall`` returns a ``LazyArguments`` proxy. This proxy implements the standard Python ``Mapping`` interface, allowing you to use it like a dictionary while benefiting from lazy retrieval of individual arguments.
+The ``arguments`` attribute of a ``LazyCall`` returns a ``LazyArguments`` proxy. This proxy implements the standard Python ``Mapping`` interface, so you can use it like a regular dictionary. Each argument is fetched from storage the first time it is accessed by key.
 
-Performance Benefits
---------------------
+When lazy loading helps most
+-----------------------------
 
-Lazy loading is particularly beneficial when:
-
-1. **Browsing Cache**: You are iterating over many calls (e.g., via ``query()``) and only need to inspect metadata or specific arguments.
-2. **Existence Checks**: The ``contains()`` method in Fleche uses lazy loading internally to check for a call's existence without deserializing its result.
-3. **Large Objects**: Your cache contains large data structures that are not always needed.
+1. **Browsing large caches**: When iterating over many calls via ``query()``, you can inspect names, digests, and metadata without deserializing any results.
+2. **Existence checks**: ``contains()`` uses lazy loading internally — it never deserializes a result just to confirm something is cached.
+3. **Selective access**: When you only need one or two arguments out of a call that stores many large objects.
