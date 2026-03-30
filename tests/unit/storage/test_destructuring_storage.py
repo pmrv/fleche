@@ -102,13 +102,15 @@ def test_digest_transparency_dict_mixed(d):
 # ---- Tests for mend ----
 
 
+@pytest.mark.parametrize("container", [list, tuple])
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 @given(st.lists(st_base_values, min_size=1, max_size=6))
-def test_digested_iterable_mend_roundtrip(ds, mem, items):
-    key = ds.save(items)
+def test_digested_iterable_mend_roundtrip(container, ds, mem, items):
+    c = container(items)
+    key = ds.save(c)
     raw = mem.load(key)
     assert isinstance(raw, DigestedIterable)
-    assert raw.mend(ds) == items
+    assert raw.mend(ds) == c
 
 
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
@@ -123,26 +125,29 @@ def test_digested_dict_mend_roundtrip(ds, mem, d):
 # ---- Tests for remaining_depth ----
 
 
+@pytest.mark.parametrize("container", [list, tuple])
 @given(st.lists(st_scalars, min_size=1, max_size=6))
-def test_remaining_depth_m1_destructures_everything(items):
+def test_remaining_depth_m1_destructures_everything(container, items):
     """With remaining_depth=-1, every element (including scalars) gets its own storage slot."""
     mem, ds = make_ds(remaining_depth=-1)
-    key = ds.save(items)
+    key = ds.save(container(items))
     raw = mem.load(key)
     assert isinstance(raw, DigestedIterable)
     assert all(isinstance(i, Digest) for i in raw.items)
 
 
+@pytest.mark.parametrize("container", [list, tuple])
 @given(st.lists(st_scalars, min_size=1, max_size=6))
-def test_remaining_depth_1_inlines_scalars(items):
-    """With remaining_depth=1, scalar elements are inlined; the container is stored as a plain list (req 3)."""
+def test_remaining_depth_1_inlines_scalars(container, items):
+    """With remaining_depth=1, scalar elements are inlined; the container is stored as a plain container (req 3)."""
     mem, ds = make_ds(remaining_depth=1)
-    key = ds.save(items)
+    c = container(items)
+    key = ds.save(c)
     raw = mem.load(key)
     # All scalars inlined → no DigestedIterable wrapper, just the plain container
-    assert raw == items
-    assert type(raw) is list
-    assert ds.load(key) == items
+    assert raw == c
+    assert type(raw) is container
+    assert ds.load(key) == c
 
 
 def test_remaining_depth_1_still_destructures_nested():
@@ -235,10 +240,11 @@ def test_remaining_depth_empty_containers(data):
 # ---- Plain-container passthrough (req 3) ----
 
 
-def test_plain_container_stored_when_all_inline():
+@pytest.mark.parametrize("container", [list, tuple])
+def test_plain_container_stored_when_all_inline(container):
     """When all elements are inlined, the container is stored without a Digested wrapper."""
     mem, ds = make_ds(remaining_depth=10)
-    data = [1, 2, [3, 4]]
+    data = container([1, 2, container([3, 4])])
     key = ds.save(data)
     raw = mem.load(key)
     # Everything fits within remaining_depth → plain container, no DigestedIterable

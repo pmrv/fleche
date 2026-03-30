@@ -191,9 +191,6 @@ class DestructuringStorage(Storage):
                 depth = 1 + max((d for _, d in children), default=0)
 
                 if depth < self.remaining_depth:
-                    # Inline this container — reuse the original object if nothing was transformed (req 4)
-                    if all(r is v for (r, _), v in zip(children, value)):
-                        return value, depth
                     return type(value)(r for r, _ in children), depth
 
                 # Store this container separately
@@ -212,11 +209,6 @@ class DestructuringStorage(Storage):
                 )
 
                 if depth < self.remaining_depth:
-                    # Inline this dict — reuse original if nothing changed (req 4)
-                    if all(rk is k and rv is v
-                           for (rk, _), k, (rv, _), v
-                           in zip(kk, value.keys(), vv, value.values())):
-                        return value, depth
                     return {rk: rv for (rk, _), (rv, _) in zip(kk, vv)}, depth
 
                 # Store this dict separately
@@ -244,10 +236,6 @@ class DestructuringStorage(Storage):
                 children = [self._intern_rec(v) for v in value]
                 items = type(value)(r for r, _ in children)
                 if not any(isinstance(r, Digest) for r in items):
-                    # All children inlined: store plain container (req 3)
-                    # Reuse original object if nothing changed (req 4)
-                    if all(r is v for (r, _), v in zip(children, value)):
-                        return self.storage.save(value, key)
                     return self.storage.save(items, key)
                 return self.storage.save(DigestedIterable(items), key)
 
