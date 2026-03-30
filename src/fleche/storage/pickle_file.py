@@ -130,7 +130,7 @@ class PickleFile(FileStorage):
             state["serializer"] = importlib.import_module(serializer_name)
         self.__dict__.update(state)
 
-    def _save(self, value: Any, key: Digest) -> Digest:
+    def _do_save(self, value: Any, key: Digest) -> Digest:
         signer = SignedBytes(self.secret_key)
         data = signer.dumps(self.serializer.dumps(value))
         if self.compress:
@@ -138,7 +138,7 @@ class PickleFile(FileStorage):
         (self._path(key)).write_bytes(data)
         return key
 
-    def _load(self, key: Digest) -> Any:
+    def _do_load(self, key: Digest) -> Any:
         try:
             content = (self._path(key)).read_bytes()
             if self.compress:
