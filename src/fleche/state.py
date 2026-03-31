@@ -1,7 +1,6 @@
 from contextlib import contextmanager, AbstractContextManager
 from contextvars import ContextVar
 from dataclasses import dataclass
-import functools
 from typing import overload, Iterator, Callable
 
 from .caches import BaseCache
@@ -121,8 +120,20 @@ class BoundWrapper:
 
         Returns:
             :class:`.BoundWrapper`: instance with the bound cache and metadata state"""
-        return cls(functools.partial(func, *args, **kwargs), _CACHE.get(), _METADATA.get())
+        return cls(func, _CACHE.get(), _METADATA.get())
+
+    def __reduce__(self):
+        # Always resolve BoundWrapper from its canonical location so that pickle
+        # works correctly even if fleche.state was reloaded after this instance
+        # was created (which would make self.__class__ a stale reference).
+        import fleche.state
+        return (fleche.state.BoundWrapper, (self.func, self.cache, self.meta))
 
     def __call__(self, *args, **kwargs):
-        with _CACHE.set(self.cache), _METADATA.set(self.meta):
+        token_cache = _CACHE.set(self.cache)
+        token_meta = _METADATA.set(self.meta)
+        try:
             return self.func(*args, **kwargs)
+        finally:
+            _METADATA.reset(token_meta)
+            _CACHE.reset(token_cache)
