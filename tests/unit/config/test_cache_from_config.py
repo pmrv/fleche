@@ -7,7 +7,6 @@ from fleche.config import cache_from_config
 
 def test_cache_memory():
     cfg = {
-        "type": "Cache",
         "values": {"type": "Memory"},
         "calls": {"type": "Memory"},
     }
@@ -18,21 +17,21 @@ def test_cache_memory():
     assert isinstance(c.calls.storage, storage.Memory)
 
 
-def test_cache_default_type():
-    """type defaults to "Cache" when absent."""
+def test_cache_does_not_mutate_input():
     cfg = {
         "values": {"type": "Memory"},
         "calls": {"type": "Memory"},
     }
-    c = cache_from_config(cfg)
-    assert isinstance(c, Cache)
+    original = dict(cfg)
+    cache_from_config(cfg)
+    assert cfg == original
 
 
-def test_cache_does_not_mutate_input():
+def test_size_limited_cache_does_not_mutate_input():
     cfg = {
-        "type": "Cache",
         "values": {"type": "Memory"},
         "calls": {"type": "Memory"},
+        "max_size": 10,
     }
     original = dict(cfg)
     cache_from_config(cfg)
@@ -42,7 +41,6 @@ def test_cache_does_not_mutate_input():
 def test_cache_wraps_values_in_destructuring_storage():
     """values without DestructuringStorage in config gets wrapped automatically."""
     cfg = {
-        "type": "Cache",
         "values": {"type": "Memory"},
         "calls": {"type": "Memory"},
     }
@@ -53,7 +51,6 @@ def test_cache_wraps_values_in_destructuring_storage():
 def test_cache_with_explicit_destructuring_storage():
     """If values is already a DestructuringStorage dict, it is not double-wrapped."""
     cfg = {
-        "type": "Cache",
         "values": {"type": "DestructuringStorage", "storage": {"type": "Memory"}},
         "calls": {"type": "Memory"},
     }
@@ -66,7 +63,6 @@ def test_cache_with_explicit_destructuring_storage():
 
 def test_cache_void():
     cfg = {
-        "type": "Cache",
         "values": {"type": "Void"},
         "calls": {"type": "Void"},
     }
@@ -77,8 +73,8 @@ def test_cache_void():
 
 
 def test_size_limited_cache():
+    """Presence of max_size implicitly creates a SizeLimitedCache."""
     cfg = {
-        "type": "SizeLimitedCache",
         "values": {"type": "Memory"},
         "calls": {"type": "Memory"},
         "max_size": 10,
@@ -92,27 +88,37 @@ def test_size_limited_cache():
 
 
 def test_readonly_cache():
+    """read_only: True implicitly wraps the cache in ReadOnlyCache."""
     cfg = {
-        "type": "ReadOnlyCache",
-        "cache": {
-            "type": "Cache",
-            "values": {"type": "Memory"},
-            "calls": {"type": "Memory"},
-        },
+        "values": {"type": "Memory"},
+        "calls": {"type": "Memory"},
+        "read_only": True,
     }
     c = cache_from_config(cfg)
     assert isinstance(c, ReadOnlyCache)
     assert isinstance(c.cache, Cache)
 
 
-def test_cache_stack():
+def test_readonly_size_limited_cache():
+    """read_only and max_size can be combined."""
     cfg = {
-        "type": "CacheStack",
-        "stack": [
-            {"type": "Cache", "values": {"type": "Memory"}, "calls": {"type": "Memory"}},
-            {"type": "Cache", "values": {"type": "Void"}, "calls": {"type": "Void"}},
-        ],
+        "values": {"type": "Memory"},
+        "calls": {"type": "Memory"},
+        "max_size": 5,
+        "read_only": True,
     }
+    c = cache_from_config(cfg)
+    assert isinstance(c, ReadOnlyCache)
+    assert isinstance(c.cache, SizeLimitedCache)
+    assert c.cache.max_size == 5
+
+
+def test_cache_stack_from_list():
+    """A list of dicts is implicitly treated as a CacheStack."""
+    cfg = [
+        {"values": {"type": "Memory"}, "calls": {"type": "Memory"}},
+        {"values": {"type": "Void"}, "calls": {"type": "Void"}},
+    ]
     c = cache_from_config(cfg)
     assert isinstance(c, CacheStack)
     assert len(c.stack) == 2
@@ -121,31 +127,23 @@ def test_cache_stack():
 
 
 def test_cache_stack_nested_readonly():
-    cfg = {
-        "type": "CacheStack",
-        "stack": [
-            {
-                "type": "ReadOnlyCache",
-                "cache": {"type": "Cache", "values": {"type": "Memory"}, "calls": {"type": "Memory"}},
-            },
-            {"type": "Cache", "values": {"type": "Void"}, "calls": {"type": "Void"}},
-        ],
-    }
+    """CacheStack from list with a read_only element."""
+    cfg = [
+        {
+            "values": {"type": "Memory"},
+            "calls": {"type": "Memory"},
+            "read_only": True,
+        },
+        {"values": {"type": "Void"}, "calls": {"type": "Void"}},
+    ]
     c = cache_from_config(cfg)
     assert isinstance(c, CacheStack)
     assert isinstance(c.stack[0], ReadOnlyCache)
     assert isinstance(c.stack[1], Cache)
 
 
-def test_unknown_cache_type_raises():
-    cfg = {"type": "NonExistentCache", "values": {"type": "Memory"}, "calls": {"type": "Memory"}}
-    with pytest.raises(ValueError, match="NonExistentCache"):
-        cache_from_config(cfg)
-
-
 def test_cache_pickle_file(tmp_path):
     cfg = {
-        "type": "Cache",
         "values": {"type": "PickleFile", "root": str(tmp_path / "values")},
         "calls": {"type": "PickleFile", "root": str(tmp_path / "calls")},
     }
