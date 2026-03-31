@@ -1,18 +1,21 @@
 Digests as Arguments
 ====================
 
-`fleche` supports passing `Digest` objects as arguments to functions. When a `Digest` is passed as a top-level argument (either positional or keyword), `fleche` automatically expands it to its cached value before calling the decorated function.
+`fleche` supports passing `Digest` objects as arguments to functions. When a `Digest` is passed as a top-level argument (either positional or keyword), `fleche` automatically looks up the corresponding value in the **value storage** and passes the resolved value to the decorated function.
 
-This allows for efficient chaining of cached functions where you don't need to load the full result into memory if you're just going to pass it to another cached function.
+This allows for efficient chaining of cached functions where intermediate results can be referenced by their value digest rather than held in memory.
 
 Usage
 -----
 
-You can use the convenience wrapper `D` to mark a string as a digest:
+You can use the convenience wrapper ``D`` to mark a string as a value digest:
 
 .. code-block:: python
 
-    from fleche import fleche, D
+    from fleche import fleche, D, cache
+    from fleche.caches import Cache
+    from fleche.storage import Memory
+    from fleche.digest import digest
 
     @fleche
     def func_a(x):
@@ -22,14 +25,17 @@ You can use the convenience wrapper `D` to mark a string as a digest:
     def func_b(y):
         return y * 2
 
-    # Get the digest of the result of func_a(5)
-    print(func_a.digest(5))
-    # '0e69e4e8496e7caebdefd277a0dfbd65929419a52f6183ace4000d4029add987'
+    with cache(Cache(Memory({}), Memory({}))):
+        result_a = func_a(5)  # returns 6, stores it in value storage
 
-    # Pass it to func_b. func_b will receive the value 6, not the digest string.
-    # You can even use a short digest!
-    result = func_b(D('0e69e4e8'))
-    assert result == 12
+        # The digest of the stored *value* (not the call lookup key)
+        value_digest = digest(result_a)
+
+        # Pass the value digest to func_b — it loads 6 from the cache
+        result_b = func_b(D(value_digest))
+        assert result_b == 12
+
+Note the distinction between a **call lookup key** (returned by ``func.digest()``) and a **value digest** (the SHA256 of the Python object itself, obtained via ``fleche.digest.digest()``). ``D()`` works with value digests because it resolves arguments through the value storage.
 
 Behavior
 --------
