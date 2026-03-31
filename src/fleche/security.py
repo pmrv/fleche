@@ -17,6 +17,7 @@ def get_secret_key() -> list[bytes]:
 
     Only supports FLECHE_SECRET_KEY environment variable.
     If multiple keys are present, they should be colon-separated.
+    Each key must be a hex-encoded string which is decoded to bytes.
     If no key is found, returns an empty list (security is disabled).
 
     Returns:
@@ -24,7 +25,7 @@ def get_secret_key() -> list[bytes]:
     """
     env_key = os.environ.get("FLECHE_SECRET_KEY")
     if env_key:
-        return [k.encode("utf-8") for k in env_key.split(":")]
+        return [bytes.fromhex(k) for k in env_key.split(":")]
     return []
 
 @dataclass(slots=True, frozen=True)
