@@ -22,7 +22,7 @@ Backward Compatibility
 The signing implementation is designed to be partially backward compatible. Signatures are appended to the *end* of the ``pickle`` byte stream.
 
 1. **Unsigned to Signed:** Once security is enabled with a secret key, **all** cache entries must be signed. Existing completely unsigned cache files will fail validation and be treated as misses, requiring caches to be rebuilt securely.
-2. **Signed to Unsigned:** If you disable the secret key, or a different unauthenticating instance reads the cache, the standard ``pickle`` library will successfully load the data and naturally ignore the trailing 32-byte signature.
+2. **Signed to Unsigned:** If you disable the secret key, or a different unauthenticating instance reads the cache, the standard ``pickle`` library will successfully load the data and naturally ignore the trailing 64-byte signature.
 
 Key Rotation and Distributed Trust
 ----------------------------------
