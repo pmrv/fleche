@@ -1,9 +1,10 @@
 from contextlib import contextmanager, AbstractContextManager
 from contextvars import ContextVar
-from typing import Union, overload, Iterator
-from typing_extensions import Self
+from dataclasses import dataclass
+import functools
+from typing import overload, Iterator, Callable
 
-from .caches import BaseCache, Cache
+from .caches import BaseCache
 from .config import load_cache_config, load_default_metadata
 from .metadata import MetaData, Tags
 
@@ -93,3 +94,35 @@ def project(name):
         name (str): The name of the project.
     """
     return tags(project=name)
+
+
+@dataclass
+class BoundWrapper:
+    """Utility class that freezes global state for the cache and metadata config.
+
+    Essentially acts like an early binding closure.
+
+    This is intended to enable passing around fleche-decorated functions in pickled form by baking in the state into the
+    pickle on request."""
+
+    func: Callable
+    cache: BaseCache
+    meta: tuple[MetaData, ...]
+
+    @classmethod
+    def bind(cls, func):
+        """Bind cache and metadata state.
+
+        Returns a new callable that will behave always as if run under the context under which :meth:`.bind()` was
+        originally called.
+
+        Args:
+            func (callable): any callable; plain functions that only call fleche-wrapped ones are explicitly allowed
+
+        Returns:
+            :class:`.BoundWrapper`: instance with the bound cache and metadata state"""
+        return cls(functools.partial(func, *args, **kwargs), _CACHE.get(), _METADATA.get())
+
+    def __call__(self, *args, **kwargs):
+        with _CACHE.set(self.cache), _METADATA.set(self.meta):
+            return self.func(*args, **kwargs)
