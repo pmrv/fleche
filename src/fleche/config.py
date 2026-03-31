@@ -33,7 +33,7 @@ import os
 from typing import Any
 
 from . import storage, metadata
-from .caches import Cache
+from .caches import BaseCache, Cache, CacheStack, ReadOnlyCache, SizeLimitedCache
 
 logger = logging.getLogger("fleche.config")
 
@@ -166,6 +166,44 @@ def storage_to_config(s: storage.Storage) -> dict[str, Any]:
             return {"type": "Sql", "url": s.url}
         case _:
             raise ValueError(f"Cannot convert storage of type {type(s).__name__!r} to config")
+
+
+def cache_from_config(d: dict[str, Any]) -> BaseCache:
+    """Construct a :class:`~fleche.caches.BaseCache` from a config dict.
+
+    The dict must contain a ``"type"`` key (defaults to ``"Cache"`` if absent)
+    and any additional parameters required by that cache type.  The input dict
+    is **not** mutated.
+
+    Supported types: ``"Cache"``, ``"SizeLimitedCache"``, ``"ReadOnlyCache"``,
+    ``"CacheStack"``.
+
+    For ``"Cache"`` and ``"SizeLimitedCache"``, ``values`` is always wrapped in
+    a :class:`~fleche.storage.DestructuringStorage` if it is not already one.
+    """
+    d = dict(d)
+    t = d.pop("type", "Cache")
+    match t:
+        case "Cache":
+            values_storage = storage_from_config(d["values"])
+            if not isinstance(values_storage, storage.DestructuringMixin):
+                values_storage = storage.DestructuringStorage(values_storage)
+            calls_storage = storage_from_config(d["calls"])
+            return Cache(values=values_storage, _calls=calls_storage)
+        case "SizeLimitedCache":
+            values_storage = storage_from_config(d["values"])
+            if not isinstance(values_storage, storage.DestructuringMixin):
+                values_storage = storage.DestructuringStorage(values_storage)
+            calls_storage = storage_from_config(d["calls"])
+            return SizeLimitedCache(values=values_storage, _calls=calls_storage, max_size=d["max_size"])
+        case "ReadOnlyCache":
+            inner = cache_from_config(d["cache"])
+            return ReadOnlyCache(inner)
+        case "CacheStack":
+            caches = [cache_from_config(c) for c in d["stack"]]
+            return CacheStack(tuple(caches))
+        case _:
+            raise ValueError(f"Unknown cache type: {t!r}")
 
 
 def _create_cache(cache_config: dict[str, Any]) -> Cache:
