@@ -14,7 +14,7 @@ To enable security, simply export a secret key before running your application:
 
     export FLECHE_SECRET_KEY="your-very-strong-secret-key"
 
-When enabled, ``fleche`` will compute an HMAC-SHA256 signature for all newly cached data and append it to the file. Upon loading, ``fleche`` separates the signature and verifies the integrity of the data. If the signature is invalid or missing entirely from a modified file, a ``KeyError`` is raised, effectively treating the entry as a cache miss.
+When enabled, ``fleche`` will compute an HMAC-SHA256 signature for all newly cached data and append it to the file. The signature is a 64-byte hex-encoded string (the hex representation of the 32-byte HMAC-SHA256 digest). Upon loading, ``fleche`` separates the signature and verifies the integrity of the data. If the signature is invalid or missing entirely from a modified file, a ``KeyError`` is raised, effectively treating the entry as a cache miss.
 
 Backward Compatibility
 --------------------
