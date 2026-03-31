@@ -9,8 +9,8 @@ Behavior
 --------
 
 * **Saving**: When saving a result, it is always written to the **first** cache in the stack.
-* **Loading**: When loading a result, the stack is traversed from top to bottom (in the order caches were provided).
-* **Automatic Hit Transfer**: If a result is found in a higher-level cache (index > 0), it is automatically transferred to the base cache (index 0). This ensures that frequently accessed data migrates to the fastest cache in your stack.
+* **Loading**: When loading a result, the stack is traversed starting from the base cache (index 0) through each fallback cache in order.
+* **Automatic Hit Transfer**: If a result is found in a fallback cache (index > 0), it is automatically copied down to the base cache (index 0). This ensures that frequently accessed data migrates to the fastest cache in your stack.
 
 Example
 -------
