@@ -1,7 +1,14 @@
 Configuration
 =============
 
-``fleche`` can be configured using a TOML file located at ``$XDG_CONFIG_HOME/fleche/cache.toml`` (or ``~/.config/fleche/cache.toml`` if ``$XDG_CONFIG_HOME`` is not set).
+``fleche`` looks for a configuration file in the following order:
+
+1. ``fleche.toml`` in the current working directory (local config)
+2. ``$XDG_CONFIG_HOME/fleche/cache.toml`` (if ``$XDG_CONFIG_HOME`` is set)
+3. ``$HOME/.fleche.toml`` (if ``$HOME`` is set)
+4. ``~/.fleche.toml`` (fallback)
+
+The first file found is used. If no configuration file exists, ``fleche`` falls back to a default in-memory cache.
 
 Reserved Cache Names
 --------------------
@@ -18,6 +25,20 @@ Example:
    from fleche import cache
    with cache("memory"):
        # Results will be cached in memory. The cache persists for the lifetime of the process.
+       ...
+
+``void``
+~~~~~~~~
+
+The name ``void`` is a reserved cache name. When requested, ``fleche`` will provide a no-op cache that discards all stored values. This is useful for disabling caching entirely without changing your code.
+
+Example:
+
+.. code-block:: python
+
+   from fleche import cache
+   with cache("void"):
+       # Results will not be cached at all. Every call executes the function.
        ...
 
 The ``[default]`` section
@@ -47,7 +68,7 @@ Example:
 .. code-block:: toml
 
    [default]
-   metadata = ["Runtime", "CallInfo"]
+   metadata = ["Runtime"]
 
 **Note:** The ``Tags`` metadata cannot be configured from the config file, as it requires arguments.
 
@@ -84,19 +105,18 @@ Available storage types
 Nested storage
 ~~~~~~~~~~~~~~
 
-You can also nest storage configurations. This is useful for creating complex storage backends, like a compressed storage that wraps another storage.
+You can also nest storage configurations. For example, :class:`~fleche.storage.DestructuringStorage` wraps another storage backend to recursively break down complex Python objects (lists, tuples, dicts) before storing them.
 
-To configure a nested storage, you can use a ``inner`` key, which contains the configuration for the inner storage.
+To configure a nested storage, use a ``storage`` sub-key containing the configuration for the inner storage.
 
 Example:
 
 .. code-block:: toml
 
    [nested]
-   values.type = "CompressedStorage"
-   values.compression = "gzip"
-   values.inner.type = "BagOfHoldingH5File"
-   values.inner.root  = "..."
+   values.type = "DestructuringStorage"
+   values.storage.type = "BagOfHoldingH5File"
+   values.storage.root = "~/.fleche/nested_values"
    calls.type = "CloudpickleFile"
    calls.root = "~/.fleche/calls"
 
@@ -109,7 +129,7 @@ Below is an example of a complete configuration file demonstrating several featu
 
    [default]
    cache = "persistent"
-   metadata = ["Runtime", "CallInfo"]
+   metadata = ["Runtime"]
 
    [persistent]
    # Store values in HDF5 files
@@ -125,11 +145,10 @@ Below is an example of a complete configuration file demonstrating several featu
    values.type = "Memory"
    calls.type = "Memory"
 
-   [compressed]
-   # Example of nested storage with compression
-   values.type = "CompressedStorage"
-   values.compression = "gzip"
-   values.inner.type = "BagOfHoldingH5File"
-   values.inner.root  = "~/.cache/fleche/compressed_values"
+   [destructured]
+   # Example of nested storage with destructuring
+   values.type = "DestructuringStorage"
+   values.storage.type = "BagOfHoldingH5File"
+   values.storage.root = "~/.cache/fleche/destructured_values"
    calls.type = "CloudpickleFile"
-   calls.root = "~/.cache/fleche/compressed_calls"
+   calls.root = "~/.cache/fleche/destructured_calls"
