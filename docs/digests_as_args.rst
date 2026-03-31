@@ -12,9 +12,7 @@ You can use the convenience wrapper ``D`` to mark a string as a value digest:
 
 .. code-block:: python
 
-    from fleche import fleche, D, cache
-    from fleche.caches import Cache
-    from fleche.storage import Memory
+    from fleche import fleche, D
     from fleche.digest import digest
 
     @fleche
@@ -25,15 +23,14 @@ You can use the convenience wrapper ``D`` to mark a string as a value digest:
     def func_b(y):
         return y * 2
 
-    with cache(Cache(Memory({}), Memory({}))):
-        result_a = func_a(5)  # returns 6, stores it in value storage
+    result_a = func_a(5)  # returns 6, stores it in value storage
 
-        # The digest of the stored *value* (not the call lookup key)
-        value_digest = digest(result_a)
+    # The digest of the stored *value* (not the call lookup key)
+    value_digest = digest(result_a)
 
-        # Pass the value digest to func_b — it loads 6 from the cache
-        result_b = func_b(D(value_digest))
-        assert result_b == 12
+    # Pass the value digest to func_b — it loads 6 from the cache
+    result_b = func_b(D(value_digest))
+    assert result_b == 12
 
 Note the distinction between a **call lookup key** (returned by ``func.digest()``) and a **value digest** (the SHA256 of the Python object itself, obtained via ``fleche.digest.digest()``). ``D()`` works with value digests because it resolves arguments through the value storage.
 
