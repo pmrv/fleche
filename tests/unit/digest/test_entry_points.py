@@ -153,7 +153,7 @@ def test_add_hook_with_tuple():
 
 
 def test_get_hooks():
-    """Test get_hooks combines _HOOKS and _EP_HOOKS."""
+    """Test get_hooks combines _HOOKS (reversed) and _EP_HOOKS."""
 
     def dummy_digest1(x):
         return "dummy1"
@@ -161,15 +161,38 @@ def test_get_hooks():
     def dummy_digest2(x):
         return "dummy2"
 
+    def dummy_digest3(x):
+        return "dummy3"
+
     hook1 = Hook(int, dummy_digest1)
-    hook2 = Hook(str, dummy_digest2)
+    hook2 = Hook(float, dummy_digest2)
+    hook3 = Hook(str, dummy_digest3)
 
     _HOOKS.append(hook1)
-    _EP_HOOKS.append(hook2)
+    _HOOKS.append(hook2)
+    _EP_HOOKS.append(hook3)
 
     hooks = get_hooks()
 
-    assert len(hooks) == 2
-    assert hooks[0] is hook1
-    assert hooks[1] is hook2
-    assert hooks == _HOOKS + _EP_HOOKS
+    assert len(hooks) == 3
+    # _HOOKS are reversed so last-added has priority
+    assert hooks[0] is hook2
+    assert hooks[1] is hook1
+    # EP hooks follow after
+    assert hooks[2] is hook3
+
+
+def test_add_hook_lifo_priority():
+    """Test that hooks added later via add_hook take precedence over earlier ones."""
+
+    def first_digest(obj):
+        return "first"
+
+    def second_digest(obj):
+        return "second"
+
+    add_hook(Hook(CustomType, first_digest))
+    add_hook(Hook(CustomType, second_digest))
+
+    obj = CustomType("test")
+    assert digest(obj) == "second"

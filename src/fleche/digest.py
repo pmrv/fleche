@@ -67,7 +67,7 @@ _EP_HOOKS = []
 
 
 def get_hooks():
-    return _HOOKS + _EP_HOOKS
+    return list(reversed(_HOOKS)) + _EP_HOOKS
 
 
 def add_hook(hook: Hook | tuple[Type[T], Callable[[T], str]]):
