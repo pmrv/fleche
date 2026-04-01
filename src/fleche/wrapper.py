@@ -10,7 +10,7 @@ from collections import defaultdict
 
 from . import digest
 from . import state
-import fleche.metadata as metadata
+from . import metadata
 from .call import Call, AnyCall, QueryCall
 from .caches import Rejected, BaseCache, RefreshingCache
 

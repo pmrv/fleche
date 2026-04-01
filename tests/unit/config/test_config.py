@@ -109,6 +109,15 @@ def config_file_no_default():
         yield tmpdir
 
 
+@pytest.fixture
+def restore_fleche_state():
+    """Reload fleche.state after each test to undo any importlib.reload side effects."""
+    yield
+    import importlib
+    import fleche.state
+    importlib.reload(fleche.state)
+
+
 def _get_values_storage(cache_obj):
     if isinstance(cache_obj.values, storage.DestructuringStorage):
         return cache_obj.values.storage
@@ -205,7 +214,7 @@ def test_nested_storage(monkeypatch, config_file):
     assert isinstance(values_storage.inner, storage.Memory)
 
 
-def test_load_default_metadata(monkeypatch, config_file):
+def test_load_default_metadata(restore_fleche_state, monkeypatch, config_file):
     monkeypatch.setenv("XDG_CONFIG_HOME", config_file)
 
     import importlib
@@ -218,7 +227,7 @@ def test_load_default_metadata(monkeypatch, config_file):
     assert isinstance(meta[0], Runtime)
 
 
-def test_load_default_cache(monkeypatch, config_file):
+def test_load_default_cache(restore_fleche_state, monkeypatch, config_file):
     monkeypatch.setenv("XDG_CONFIG_HOME", config_file)
 
     import importlib
@@ -237,7 +246,7 @@ def test_load_default_cache(monkeypatch, config_file):
         assert isinstance(cache_obj.cache.calls.storage, storage.Memory)
 
 
-def test_tags_disallowed(monkeypatch, config_file_with_tags):
+def test_tags_disallowed(restore_fleche_state, monkeypatch, config_file_with_tags):
     monkeypatch.setenv("XDG_CONFIG_HOME", config_file_with_tags)
 
     import importlib
