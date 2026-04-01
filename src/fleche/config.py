@@ -30,7 +30,7 @@ import logging
 import types
 from pathlib import Path
 import os
-from typing import Any
+from typing import Any, cast
 
 from . import storage, metadata
 from .caches import BaseCache, Cache, CacheStack, ReadOnlyCache, SizeLimitedCache
@@ -132,13 +132,18 @@ def _get_storage(config: dict[str, Any]) -> storage.Storage:
     return storage_from_config(config)
 
 
-def storage_to_config(s: storage.Storage) -> dict[str, Any]:
-    """Convert a Storage instance to a config dict (inverse of ``_get_storage``).
+def storage_to_config(s: storage.Storage | storage.CallStorage) -> dict[str, Any]:
+    """Convert a Storage or CallStorage instance to a config dict.
 
     The returned dict contains a ``"type"`` key and any additional parameters
-    needed to reconstruct the storage via :func:`_get_storage`.
+    needed to reconstruct the storage via :func:`storage_from_config`.
     :class:`~fleche.storage.DestructuringStorage` is handled as a first-class
     case, producing a nested ``"storage"`` entry for its inner backend.
+
+    Accepts both :class:`~fleche.storage.Storage` and bare
+    :class:`~fleche.storage.CallStorage` instances (e.g. ``Sql``), since ``Sql``
+    implements ``CallStorage`` directly without going through
+    ``CallStorageAdapter``.
     """
     match s:
         case storage.DestructuringStorage(storage=inner):
@@ -234,6 +239,56 @@ def cache_from_config(d: "dict[str, Any] | list[dict[str, Any]]") -> BaseCache:
         cache = ReadOnlyCache(cache)
 
     return cache
+
+
+def cache_to_config(c: BaseCache) -> "dict[str, Any] | list[dict[str, Any]]":
+    """Convert a :class:`~fleche.caches.BaseCache` to a config dict or list.
+
+    This is the inverse of :func:`cache_from_config`.  The output can be
+    round-tripped back via ``cache_from_config(cache_to_config(cache))``.
+
+    - :class:`~fleche.caches.Cache` → dict with ``"values"`` and ``"calls"``
+    - :class:`~fleche.caches.SizeLimitedCache` → same dict plus ``"max_size"``
+    - :class:`~fleche.caches.ReadOnlyCache` wrapping a ``Cache`` or
+      ``SizeLimitedCache`` → inner cache dict with ``"read_only": True``
+    - :class:`~fleche.caches.CacheStack` → list of dicts
+
+    ``values`` is serialised as-is (a ``DestructuringStorage`` wrapper is
+    preserved in the output).  ``calls`` unwraps the
+    :class:`~fleche.storage.CallStorageAdapter`.
+
+    Raises:
+        ValueError: for unsupported cache types or unsupported
+            ``ReadOnlyCache`` inner types.
+    """
+    match c:
+        case SizeLimitedCache():
+            calls_storage = c.calls.storage if isinstance(c.calls, storage.CallStorageAdapter) else c.calls
+            return {
+                "values": storage_to_config(c.values),
+                "calls": storage_to_config(calls_storage),
+                "max_size": c.max_size,
+            }
+        case Cache():
+            calls_storage = c.calls.storage if isinstance(c.calls, storage.CallStorageAdapter) else c.calls
+            return {
+                "values": storage_to_config(c.values),
+                "calls": storage_to_config(calls_storage),
+            }
+        case ReadOnlyCache():
+            inner = c.cache
+            if not isinstance(inner, (Cache, SizeLimitedCache)):
+                raise ValueError(
+                    f"ReadOnlyCache wrapping {type(inner).__name__!r} cannot be serialised to config"
+                )
+            d = cache_to_config(inner)
+            assert isinstance(d, dict)
+            d["read_only"] = True
+            return d
+        case CacheStack():
+            return cast("list[dict[str, Any]]", [cache_to_config(s) for s in c.stack])
+        case _:
+            raise ValueError(f"Cannot convert cache of type {type(c).__name__!r} to config")
 
 
 def _create_cache(cache_config: dict[str, Any]) -> Cache:
