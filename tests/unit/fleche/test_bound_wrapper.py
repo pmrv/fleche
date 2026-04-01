@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 import fleche.state as fleche_state
 from fleche import fleche
 from fleche.caches import Cache
-from fleche.state import BoundWrapper, cache, meta
+from fleche.state import cache, meta
 from fleche.storage import Memory
 
 
@@ -49,7 +49,7 @@ def test_bound_wrapper_uses_bound_cache_not_outer():
         return x * 2
 
     with cache(bound_cache):
-        bound = BoundWrapper.bind(my_func)
+        bound = fleche_state.BoundWrapper.bind(my_func)
 
     with cache(outer_cache):
         result = bound(5)
@@ -76,7 +76,7 @@ def test_bound_wrapper_preserves_metadata():
 
     with cache(bound_cache):
         with meta(mock_meta):
-            bound = BoundWrapper.bind(my_func)
+            bound = fleche_state.BoundWrapper.bind(my_func)
 
     result = bound(3)
     assert result == 4
@@ -103,7 +103,7 @@ def test_bound_wrapper_ignores_outer_metadata():
 
     with cache(bound_cache):
         with meta(bound_mock):
-            bound = BoundWrapper.bind(my_func)
+            bound = fleche_state.BoundWrapper.bind(my_func)
 
     with meta(outer_mock):
         result = bound(7)
@@ -123,7 +123,7 @@ def test_bound_wrapper_picklable():
     bound_cache = _make_cache()
 
     with cache(bound_cache):
-        bound = BoundWrapper.bind(_pickle_func)
+        bound = fleche_state.BoundWrapper.bind(_pickle_func)
 
     restored = pickle.loads(pickle.dumps(bound))
     # Use the live module reference to handle the case where fleche.state was
@@ -142,7 +142,7 @@ def test_bound_wrapper_pickle_preserves_cache_identity():
     bound_cache = _make_cache()
 
     with cache(bound_cache):
-        bound = BoundWrapper.bind(_pickle_func)
+        bound = fleche_state.BoundWrapper.bind(_pickle_func)
 
     restored = pickle.loads(pickle.dumps(bound))
     assert type(restored.cache) == type(bound.cache)
@@ -156,7 +156,7 @@ def test_bound_wrapper_pickle_preserves_meta_tuple():
 
     with cache(bound_cache):
         with meta(Tags({"env": "test"})):
-            bound = BoundWrapper.bind(_pickle_func)
+            bound = fleche_state.BoundWrapper.bind(_pickle_func)
 
     restored = pickle.loads(pickle.dumps(bound))
     assert restored.meta == bound.meta
@@ -181,7 +181,7 @@ def test_bound_wrapper_nested_fleche_functions():
         return inner(x) * 2
 
     with cache(bound_cache):
-        bound = BoundWrapper.bind(outer)
+        bound = fleche_state.BoundWrapper.bind(outer)
 
     with cache(outer_cache):
         result = bound(3)
@@ -212,7 +212,7 @@ def test_bound_wrapper_fleche_called_from_plain_function():
         return cached_func(x) + 1
 
     with cache(bound_cache):
-        bound = BoundWrapper.bind(plain_func)
+        bound = fleche_state.BoundWrapper.bind(plain_func)
 
     with cache(outer_cache):
         result = bound(2)
@@ -231,7 +231,7 @@ def test_bound_wrapper_pickle_nested_fleche_in_plain():
     bound_cache = _make_cache()
 
     with cache(bound_cache):
-        bound = BoundWrapper.bind(_pickle_plain_calls_fleche)
+        bound = fleche_state.BoundWrapper.bind(_pickle_plain_calls_fleche)
 
     restored = pickle.loads(pickle.dumps(bound))
     result = restored(3)

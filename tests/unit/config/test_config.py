@@ -109,6 +109,15 @@ def config_file_no_default():
         yield tmpdir
 
 
+@pytest.fixture(autouse=True)
+def restore_fleche_state():
+    """Reload fleche.state after each test to undo any importlib.reload side effects."""
+    yield
+    import importlib
+    import fleche.state
+    importlib.reload(fleche.state)
+
+
 def _get_values_storage(cache_obj):
     if isinstance(cache_obj.values, storage.DestructuringStorage):
         return cache_obj.values.storage

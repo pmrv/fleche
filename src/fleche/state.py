@@ -122,13 +122,6 @@ class BoundWrapper:
             :class:`.BoundWrapper`: instance with the bound cache and metadata state"""
         return cls(func, _CACHE.get(), _METADATA.get())
 
-    def __reduce__(self):
-        # Always resolve BoundWrapper from its canonical location so that pickle
-        # works correctly even if fleche.state was reloaded after this instance
-        # was created (which would make self.__class__ a stale reference).
-        import fleche.state
-        return (fleche.state.BoundWrapper, (self.func, self.cache, self.meta))
-
     def __call__(self, *args, **kwargs):
         token_cache = _CACHE.set(self.cache)
         token_meta = _METADATA.set(self.meta)
