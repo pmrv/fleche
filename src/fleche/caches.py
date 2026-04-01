@@ -489,6 +489,11 @@ class CacheStack(BaseCache):
 
     stack: tuple[BaseCache, ...]
 
+    def __post_init__(self):
+        for c in self.stack:
+            if isinstance(c, CacheStack):
+                raise ValueError("CacheStack cannot be nested inside another CacheStack")
+
     def save(self, call: Call):
         self.stack[0].save(call)
 

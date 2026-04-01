@@ -30,7 +30,7 @@ import logging
 import types
 from pathlib import Path
 import os
-from typing import Any
+from typing import Any, cast
 
 from . import storage, metadata
 from .caches import BaseCache, Cache, CacheStack, ReadOnlyCache, SizeLimitedCache
@@ -258,14 +258,14 @@ def cache_to_config(c: BaseCache) -> "dict[str, Any] | list[dict[str, Any]]":
     """
     match c:
         case SizeLimitedCache():
-            calls_storage = c.calls.storage if isinstance(c.calls, storage.CallStorageAdapter) else c.calls
+            calls_storage = c.calls.storage if isinstance(c.calls, storage.CallStorageAdapter) else cast(storage.Storage, c.calls)
             return {
                 "values": storage_to_config(c.values),
                 "calls": storage_to_config(calls_storage),
                 "max_size": c.max_size,
             }
         case Cache():
-            calls_storage = c.calls.storage if isinstance(c.calls, storage.CallStorageAdapter) else c.calls
+            calls_storage = c.calls.storage if isinstance(c.calls, storage.CallStorageAdapter) else cast(storage.Storage, c.calls)
             return {
                 "values": storage_to_config(c.values),
                 "calls": storage_to_config(calls_storage),
@@ -281,7 +281,7 @@ def cache_to_config(c: BaseCache) -> "dict[str, Any] | list[dict[str, Any]]":
             d["read_only"] = True
             return d
         case CacheStack():
-            return [cache_to_config(s) for s in c.stack]
+            return cast("list[dict[str, Any]]", [cache_to_config(s) for s in c.stack])
         case _:
             raise ValueError(f"Cannot convert cache of type {type(c).__name__!r} to config")
 
