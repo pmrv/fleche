@@ -132,13 +132,18 @@ def _get_storage(config: dict[str, Any]) -> storage.Storage:
     return storage_from_config(config)
 
 
-def storage_to_config(s: storage.Storage) -> dict[str, Any]:
-    """Convert a Storage instance to a config dict (inverse of ``_get_storage``).
+def storage_to_config(s: storage.Storage | storage.CallStorage) -> dict[str, Any]:
+    """Convert a Storage or CallStorage instance to a config dict.
 
     The returned dict contains a ``"type"`` key and any additional parameters
-    needed to reconstruct the storage via :func:`_get_storage`.
+    needed to reconstruct the storage via :func:`storage_from_config`.
     :class:`~fleche.storage.DestructuringStorage` is handled as a first-class
     case, producing a nested ``"storage"`` entry for its inner backend.
+
+    Accepts both :class:`~fleche.storage.Storage` and bare
+    :class:`~fleche.storage.CallStorage` instances (e.g. ``Sql``), since ``Sql``
+    implements ``CallStorage`` directly without going through
+    ``CallStorageAdapter``.
     """
     match s:
         case storage.DestructuringStorage(storage=inner):
@@ -258,14 +263,14 @@ def cache_to_config(c: BaseCache) -> "dict[str, Any] | list[dict[str, Any]]":
     """
     match c:
         case SizeLimitedCache():
-            calls_storage = c.calls.storage if isinstance(c.calls, storage.CallStorageAdapter) else cast(storage.Storage, c.calls)
+            calls_storage = c.calls.storage if isinstance(c.calls, storage.CallStorageAdapter) else c.calls
             return {
                 "values": storage_to_config(c.values),
                 "calls": storage_to_config(calls_storage),
                 "max_size": c.max_size,
             }
         case Cache():
-            calls_storage = c.calls.storage if isinstance(c.calls, storage.CallStorageAdapter) else cast(storage.Storage, c.calls)
+            calls_storage = c.calls.storage if isinstance(c.calls, storage.CallStorageAdapter) else c.calls
             return {
                 "values": storage_to_config(c.values),
                 "calls": storage_to_config(calls_storage),
