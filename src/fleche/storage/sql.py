@@ -119,7 +119,7 @@ def _enable_sqlite_foreign_keys(engine) -> None:
             cursor.close()
 
 
-@dataclass
+@dataclass(frozen=True)
 class Sql(CallStorage):
     """SQLAlchemy-backed CallStorage with JSON metadata and DB-backed expand()."""
 
@@ -131,14 +131,16 @@ class Sql(CallStorage):
 
     @sqlalchemy_alarm
     def __post_init__(self) -> None:
-        self.url = _coerce_sqlite_url(self.url)
-        assert self.url is not None
-        self.engine = create_engine(self.url, echo=self.echo, future=True)
-        _enable_sqlite_foreign_keys(self.engine)
-        Base.metadata.create_all(self.engine)
-        self.session = sessionmaker(
-            bind=self.engine, expire_on_commit=False, future=True
-        )
+        coerced_url = _coerce_sqlite_url(self.url)
+        assert coerced_url is not None
+        object.__setattr__(self, "url", coerced_url)
+        engine = create_engine(coerced_url, echo=self.echo, future=True)
+        _enable_sqlite_foreign_keys(engine)
+        Base.metadata.create_all(engine)
+        object.__setattr__(self, "engine", engine)
+        object.__setattr__(self, "session", sessionmaker(
+            bind=engine, expire_on_commit=False, future=True
+        ))
 
     def __getstate__(self):
         state = self.__dict__.copy()

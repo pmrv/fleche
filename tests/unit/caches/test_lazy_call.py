@@ -1,6 +1,6 @@
 import pytest
 from hypothesis import given
-from unittest.mock import Mock, call
+from unittest.mock import Mock, call, patch
 from fleche.call import Call, LazyCall, LazyArguments
 from fleche.caches import Cache
 from fleche import cache as cache_context
@@ -24,33 +24,33 @@ def test_lazy_call_load():
     assert lazy.name == "test_func"
 
     # Check that it's NOT yet loaded. We mock the internal load handlers to track calls.
-    cache._handle_args_load = Mock(side_effect=cache._handle_args_load)
-    cache.load_value = Mock(side_effect=cache.load_value)
+    with patch.object(Cache, '_handle_args_load', wraps=cache._handle_args_load) as mock_handle_args, \
+         patch.object(Cache, 'load_value', wraps=cache.load_value) as mock_load_value:
 
-    # Accessing arguments property returns a proxy, doesn't trigger load yet.
-    args = lazy.arguments
-    assert isinstance(args, LazyArguments)
-    assert cache._handle_args_load.call_count == 0
+        # Accessing arguments property returns a proxy, doesn't trigger load yet.
+        args = lazy.arguments
+        assert isinstance(args, LazyArguments)
+        assert mock_handle_args.call_count == 0
 
-    # Accessing an individual argument should trigger exactly one load for that argument.
-    val_a = args["a"]
-    assert val_a == 1
-    assert cache._handle_args_load.call_count == 1
-    cache._handle_args_load.assert_called_with(digest(1))
+        # Accessing an individual argument should trigger exactly one load for that argument.
+        val_a = args["a"]
+        assert val_a == 1
+        assert mock_handle_args.call_count == 1
+        mock_handle_args.assert_called_with(digest(1))
 
-    # Accessing another argument triggers another load.
-    val_b = args["b"]
-    assert val_b == 2
-    assert cache._handle_args_load.call_count == 2
+        # Accessing another argument triggers another load.
+        val_b = args["b"]
+        assert val_b == 2
+        assert mock_handle_args.call_count == 2
 
-    # Accessing result should trigger its own load.
-    # Note: load_value might have been called by _handle_args_load if arguments were complex,
-    # but here they are simple ints.
-    load_value_count_before = cache.load_value.call_count
-    res = lazy.result
-    assert res == 3
-    assert cache.load_value.call_count == load_value_count_before + 1
-    cache.load_value.assert_called_with(digest(3))
+        # Accessing result should trigger its own load.
+        # Note: load_value might have been called by _handle_args_load if arguments were complex,
+        # but here they are simple ints.
+        load_value_count_before = mock_load_value.call_count
+        res = lazy.result
+        assert res == 3
+        assert mock_load_value.call_count == load_value_count_before + 1
+        mock_load_value.assert_called_with(digest(3))
 
 
 def test_lazy_call_to_lookup_key():

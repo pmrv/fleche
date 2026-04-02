@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 
-@dataclass
+@dataclass(frozen=True)
 class ConcreteFileStorage(FileStorage):
     def _to_file(self, value: Any, path: Path) -> None:
         pass

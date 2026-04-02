@@ -270,7 +270,7 @@ class DestructuringMixin(Storage):
                 return value
 
 
-@dataclass
+@dataclass(frozen=True)
 class _DelegatingStorage(Storage):
     """Storage that delegates all operations to a wrapped storage instance."""
 
@@ -292,7 +292,7 @@ class _DelegatingStorage(Storage):
         return self.storage.list()
 
 
-@dataclass
+@dataclass(frozen=True)
 class DestructuringStorage(DestructuringMixin, _DelegatingStorage):
     """Storage wrapper that recursively destructures collections.
 

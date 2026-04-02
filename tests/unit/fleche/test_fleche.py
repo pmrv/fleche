@@ -1,4 +1,4 @@
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock, MagicMock, patch
 
 from fleche import fleche
 from fleche.caches import Cache
@@ -73,34 +73,20 @@ def test_fleche_with_version_argument():
     def my_func(x):
         return mock_function(x)
 
-    cache = Cache(Mock(), Mock())
-    storage_content = {}
+    c = Cache(Memory({}), Memory({}))
 
-    def load_from_storage(k):
-        if k not in storage_content:
-            raise KeyError(k)
-        return storage_content[k]
+    with cache(c):
+        # First call, should execute the function and save to cache
+        assert my_func(2) == 42
+        mock_function.assert_called_once_with(2)
 
-    def save_to_storage(v, key=None):
-        k = v.to_lookup_key()
-        storage_content[k] = v
-        return k
+        # Second call, with different version, should execute again
+        @fleche(version=2)
+        def my_func_v2(x):
+            return mock_function(x)
 
-    cache.calls.load = Mock(side_effect=load_from_storage)
-    cache.calls.save = Mock(side_effect=save_to_storage)
-    cache.values.save = Mock(return_value="digest_value")
-
-    # First call, should execute the function and save to cache
-    assert my_func(2) == 42
-    mock_function.assert_called_once_with(2)
-
-    # Second call, with different version, should execute again
-    @fleche(version=2)
-    def my_func_v2(x):
-        return mock_function(x)
-
-    assert my_func_v2(2) == 42
-    assert mock_function.call_count == 2
+        assert my_func_v2(2) == 42
+        assert mock_function.call_count == 2
 
 
 def test_fleche_with_version():

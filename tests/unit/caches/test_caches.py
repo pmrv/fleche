@@ -465,3 +465,26 @@ def test_cache_stack_push():
     stack2 = stack1.push(c3)
     assert isinstance(stack2, CacheStack)
     assert stack2.stack == (c3, c2, c1)
+
+
+def test_hash_builtin_caches():
+    """Test that all cache types respond properly to hash() builtin."""
+    from fleche.caches import ReadOnlyCache, FilteredCache, RefreshingCache, SizeLimitedCache
+    from fleche.storage import Void, CallStorageAdapter
+
+    values = Mock()
+    calls = Mock()
+    base_cache = Cache(values, calls)
+
+    # All these should be hashable
+    assert hash(base_cache) is not None
+    assert hash(ReadOnlyCache(base_cache)) is not None
+    assert hash(FilteredCache(base_cache, lambda c: True)) is not None
+    assert hash(RefreshingCache(base_cache)) is not None
+    assert hash(CacheStack((base_cache,))) is not None
+
+    # SizeLimitedCache with Void storage (no mutable fields)
+    void_value = Void()
+    void_call = CallStorageAdapter(Void())
+    slc = SizeLimitedCache(void_value, void_call, max_size=100)
+    assert hash(slc) is not None

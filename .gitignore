@@ -1,4 +1,5 @@
 __pycache__/
 *.egg-info/
+.ipynb_checkpoints/*
 .hypothesis/
 src/fleche/_version.py

@@ -179,7 +179,7 @@ class BaseCache(ABC):
         return FilteredCache(self, predicate)
 
 
-@dataclass
+@dataclass(frozen=True)
 class Cache(BaseCache):
     values: storage.Storage
     calls: storage.CallStorage = field(init=False)
@@ -188,12 +188,11 @@ class Cache(BaseCache):
 
     def __post_init__(self, _calls):
         if isinstance(_calls, storage.Storage):
-            self.calls = storage.CallStorageAdapter(_calls)
-        else:
-            self.calls = _calls
+            _calls = storage.CallStorageAdapter(_calls)
+        object.__setattr__(self, 'calls', _calls)
 
         if not isinstance(self.values, storage.DestructuringMixin):
-            self.values = storage.DestructuringStorage(self.values)
+            object.__setattr__(self, 'values', storage.DestructuringStorage(self.values))
 
     def load_value(self, key):
         if not isinstance(key, Digest):
@@ -613,11 +612,13 @@ class SizeLimitedMixin(BaseCache):
     """
 
     max_size: int
+    _lock: threading.RLock = field(init=False, repr=False, compare=False)
+    _keys: set[str] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self, *args, **kwargs):
         super().__post_init__(*args, **kwargs)  # ty: ignore
-        self._lock = threading.RLock()
-        self._keys: set[str] = {c.to_lookup_key() for c in self.query(call.QueryCall())}
+        object.__setattr__(self, '_lock', threading.RLock())
+        object.__setattr__(self, '_keys', {c.to_lookup_key() for c in self.query(call.QueryCall())})
 
     # ------------------------------------------------------------------
     # Eviction policy – override this to generalise to other strategies
@@ -659,7 +660,7 @@ class SizeLimitedMixin(BaseCache):
             self._keys.discard(str(key))
 
 
-@dataclass
+@dataclass(frozen=True)
 class SizeLimitedCache(SizeLimitedMixin, Cache):
     """A :class:`Cache` that enforces a maximum number of cached calls.
 

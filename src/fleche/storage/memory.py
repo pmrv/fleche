@@ -6,7 +6,7 @@ from ..digest import Digest
 from copy import deepcopy
 
 
-@dataclass
+@dataclass(frozen=True)
 class Memory(Storage):
     """
     A concrete implementation of Storage that stores values in an in-memory dictionary.

@@ -177,3 +177,26 @@ def test_sql_metadata_roundtrip_and_query(tmp_path):
     )
     names_walltime_2 = {c.name for c in store.query(t2)}
     assert names_walltime_2 == {"f2"}
+
+
+def test_hash_builtin_storages(tmp_path):
+    """Test that all storage types (except Memory) respond properly to hash() builtin."""
+    from fleche.storage import (
+        Memory, Void, DestructuringStorage, CallStorageAdapter
+    )
+
+    # Storages with only immutable fields should be hashable
+    void = Void()
+    assert hash(void) is not None
+
+    # Wrapper storages should also be hashable when wrapping hashable storages
+    dest_storage = DestructuringStorage(void)
+    assert hash(dest_storage) is not None
+
+    call_storage_adapter = CallStorageAdapter(void)
+    assert hash(call_storage_adapter) is not None
+
+    # Memory storage should raise TypeError due to mutable dict field
+    memory = Memory({})
+    with pytest.raises(TypeError):
+        hash(memory)

@@ -19,7 +19,7 @@ with ImportAlarm(
     from bagofholding import H5Bag
 
 
-@dataclass
+@dataclass(frozen=True)
 class BagOfHoldingH5File(FileStorage):
 
     @bagofholding_alarm

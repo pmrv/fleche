@@ -95,7 +95,7 @@ def project(name):
     return tags(project=name)
 
 
-@dataclass
+@dataclass(frozen=True, eq=True)
 class BoundWrapper:
     """Utility class that freezes global state for the cache and metadata config.
 

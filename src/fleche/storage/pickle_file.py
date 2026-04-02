@@ -83,7 +83,7 @@ with ImportAlarm(
     import dill
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class PickleFile(FileStorage):
     """
     Store values as files on the filesystem using a serialization module.
@@ -95,10 +95,8 @@ class PickleFile(FileStorage):
 
     def __post_init__(self):
         super().__post_init__()
-        if not self.secret_key:
-            self.secret_key = get_secret_key()
-        else:
-            self.secret_key = _normalize_secret_key(self.secret_key)
+        normalized_key = get_secret_key() if not self.secret_key else _normalize_secret_key(self.secret_key)
+        object.__setattr__(self, "secret_key", normalized_key)
 
     @classmethod
     def with_pickle(cls, *args, **kwargs):

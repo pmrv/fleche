@@ -69,7 +69,7 @@ def file_read_lock(
         raise
 
 
-@dataclass
+@dataclass(frozen=True)
 class FileStorage(Storage):
     """File-based storage backend using pickle.
 
@@ -81,7 +81,7 @@ class FileStorage(Storage):
     lock_wait_start: float = 0.001
 
     def __post_init__(self) -> None:
-        self.root = Path(self.root).expanduser().absolute().resolve()
+        object.__setattr__(self, "root", Path(self.root).expanduser().absolute().resolve())
 
     def _path(self, key: str) -> Path:
         self.root.mkdir(parents=True, exist_ok=True)

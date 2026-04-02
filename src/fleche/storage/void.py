@@ -5,7 +5,7 @@ from .base import Storage
 from ..digest import Digest
 
 
-@dataclass
+@dataclass(frozen=True)
 class Void(Storage):
     """
     A concrete implementation of Storage that does not store anything.
