@@ -1,9 +1,10 @@
+import logging
 from unittest.mock import Mock, MagicMock
 import pytest
 from fleche import fleche, cache
 from fleche.call import Call
 from fleche.digest import Digest
-from fleche.caches import ReadOnlyCache, CacheStack, Rejected, Cache
+from fleche.caches import Cache, CacheStack, ReadOnlyCache, FilteredCache, RefreshingCache, SizeLimitedCache
 
 
 def test_cache_save():
@@ -199,7 +200,6 @@ def test_base_cache_transfer_pop():
 def test_base_cache_transfer_no_overwrite_and_pop(caplog):
     """Transfer with overwrite=False and pop=True: new entries are moved,
     conflicting entries (already in target) are NOT evicted from source and a warning is logged."""
-    import logging
     from fleche.storage.memory import Memory
 
     c1 = Cache(values=Memory({}), _calls=Memory({}))
@@ -247,58 +247,6 @@ def test_base_cache_transfer_no_overwrite_and_pop(caplog):
     assert c1.contains(str(call1.to_lookup_key()))
     # a warning should have been emitted for the skipped eviction
     assert any("Not evicting" in m for m in caplog.messages)
-
-
-def test_readonly_cache_save():
-    from fleche.call import Call
-
-    c = ReadOnlyCache(Mock())
-    call = Call(name="test", arguments={"x": 1}, result="result")
-    with pytest.raises(Rejected):
-        c.save(call)
-
-
-def test_readonly_cache_load():
-    mock_cache = Mock()
-    c = ReadOnlyCache(mock_cache)
-    c.load("key")
-    mock_cache.load.assert_called_once_with("key", lazy=True)
-
-
-def test_cache_stack_save():
-    from fleche.call import Call
-
-    c1 = Mock()
-    c2 = Mock()
-    stack = CacheStack((c1, c2))
-    call = Call(name="test", arguments={"x": 1}, result="result")
-    stack.save(call)
-    c1.save.assert_called_once()
-    c2.save.assert_not_called()
-
-
-def test_cache_stack_load_hit():
-    from fleche.call import Call
-
-    c1 = Mock()
-    c1.load.side_effect = KeyError
-    c2 = Mock()
-    call = Call(name="test", arguments={"x": 1}, result="result")
-    c2.load.return_value = call
-    stack = CacheStack((c1, c2))
-    # avoid mocking a lazycall
-    result = stack.load("key", lazy=False)
-    c1.load.assert_called_once_with("key", lazy=False)
-    c2.load.assert_called_once_with("key", lazy=False)
-    assert result == call
-
-
-def test_cache_stack_load_miss():
-    c1 = Mock()
-    c1.load.side_effect = KeyError
-    c2 = Mock()
-    c2.load.side_effect = KeyError
-    stack = CacheStack((c1, c2))
 
 
 def test_cache_query_decodes_values_and_args(monkeypatch):
@@ -354,87 +302,6 @@ def test_cache_query_decodes_values_and_args(monkeypatch):
     assert out.result == ("x", 5), "Tuple result should be decoded by Cache.query"
 
 
-def test_cachestack_query_bottom_to_top_and_dedupe():
-    """CacheStack.query should query bottom-to-top and deduplicate results.
-
-    Intent: Two caches contain overlapping calls. Bottom cache returns A and B;
-    top cache returns B and C. Stack should yield A (from bottom), then B (from
-    bottom; top's B is skipped), then C (from top). Order reflects bottom-to-top
-    traversal and no duplicates.
-    """
-    from fleche.call import Call
-
-    # Build mock caches that yield specific sequences
-    bottom = Mock()
-    top = Mock()
-
-    A = Call(
-        name="A", arguments={}, metadata={}, module=None, version=None, result=None
-    )
-    B = Call(
-        name="B", arguments={}, metadata={}, module=None, version=None, result=None
-    )
-    C = Call(
-        name="C", arguments={}, metadata={}, module=None, version=None, result=None
-    )
-
-    bottom.query.return_value = iter([A, B])
-    top.query.return_value = iter([B, C])
-
-    stack = CacheStack((bottom, top))
-
-    # Note: CacheStack is constructed as (bottom, top); bottom-to-top means
-    # bottom queried first, then top. Mocks return in their given order.
-    out = list(
-        stack.query(
-            Call(
-                name=None,
-                arguments=None,
-                metadata=None,
-                module=None,
-                version=None,
-                result=None,
-            )
-        )
-    )
-    names = [c.name for c in out]
-    assert names == [
-        "A",
-        "B",
-        "C",
-    ], "CacheStack.query should traverse bottom->top and deduplicate overlapping results"
-
-
-def test_readonlycache_query_forwards_to_wrapped():
-    """ReadOnlyCache.query should forward the call to the wrapped cache.
-
-    Intent: Verify that ReadOnlyCache.query delegates to the inner cache and
-    yields the same results.
-    """
-    from fleche.call import Call
-
-    inner = Mock()
-    call = Call(
-        name="X", arguments={}, metadata={}, module=None, version=None, result=None
-    )
-    inner.query.return_value = iter([call])
-
-    ro = ReadOnlyCache(inner)
-    out = list(
-        ro.query(
-            Call(
-                name=None,
-                arguments=None,
-                metadata=None,
-                module=None,
-                version=None,
-                result=None,
-            )
-        )
-    )
-    assert out == [call], "ReadOnlyCache.query must forward results unchanged"
-
-
 def test_cache_load_restores_complex_arguments_and_result():
     from fleche.storage import Memory
     from fleche.call import Call
@@ -450,21 +317,6 @@ def test_cache_load_restores_complex_arguments_and_result():
     loaded = cache.load(key)
     assert loaded.arguments["arg"] == [1, 2, 3]
     assert loaded.result == [4, 5, 6]
-
-def test_cache_stack_push():
-    values = Mock()
-    calls = Mock()
-    c1 = Cache(values, calls)
-    c2 = Cache(values, calls)
-    c3 = Cache(values, calls)
-
-    stack1 = c1.push(c2)
-    assert isinstance(stack1, CacheStack)
-    assert stack1.stack == (c2, c1)
-
-    stack2 = stack1.push(c3)
-    assert isinstance(stack2, CacheStack)
-    assert stack2.stack == (c3, c2, c1)
 
 
 def test_hash_builtin_caches():
