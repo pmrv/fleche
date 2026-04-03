@@ -1,3 +1,6 @@
+# This file tests annotation-based declaration of Ignored/Required (e.g. `b: Ignored`).
+# See test_ignore_digest.py for tests focused on the `ignore=` kwarg syntax and
+# digest equality invariants across all binding forms.
 import pytest
 import logging
 from typing import Any
