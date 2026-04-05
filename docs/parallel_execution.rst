@@ -119,9 +119,14 @@ multiple workers can safely write to the same directory.
 
 .. note::
 
-   Fleche-decorated functions must be defined at **module level** so that they
-   can be pickled by the executor.  Lambdas and locally-defined functions will
-   raise a ``PicklingError``.
+   With the standard-library ``ProcessPoolExecutor`` (which uses ``pickle``),
+   fleche-decorated functions must be defined at **module level**.  Lambdas and
+   locally-defined functions will raise a ``PicklingError``.
+
+   Third-party executor libraries that use ``dill`` or ``cloudpickle`` for
+   serialisation — such as `executorlib <https://executorlib.readthedocs.io/>`_
+   or `parsl <https://parsl-project.org/>`_ — do not have this restriction and
+   can submit locally-defined functions directly.
 
 BoundWrapper — Freezing State for Workers
 -----------------------------------------
