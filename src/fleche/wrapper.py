@@ -142,6 +142,18 @@ def fleche(
     - .contains(*args, **kwargs): Check if result is in cache.
     - .rerun(*args, **kwargs): Forces reevaluation recursively.
     The original function is available via .__wrapped__.
+
+    .. warning::
+
+        ``isolate=True`` is **not thread-safe**.  Internally it calls
+        :func:`os.chdir`, which is a process-wide POSIX syscall shared by all
+        threads.  Concurrent calls with ``isolate=True`` from multiple threads
+        will clobber each other's working directory, and a thread may find its
+        temporary directory deleted before it has finished using it.
+
+        Use ``isolate=True`` only from a single thread, or run isolated calls
+        in separate processes (e.g. via :class:`concurrent.futures.ProcessPoolExecutor`)
+        where each process has its own working directory.
     """
 
     def decorator(func: Callable[..., _T]) -> Callable[..., _T]:
