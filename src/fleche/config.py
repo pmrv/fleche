@@ -124,7 +124,8 @@ def storage_from_config(d: dict[str, Any]) -> storage.Storage:
         case "BagOfHoldingH5File" | "Sql":
             return getattr(storage, storage_type)(**d)
         case _:
-            raise ValueError(f"Unknown storage type: {storage_type}")
+            available = ["Memory", "Void", "DestructuringStorage", "PickleFile", "CloudpickleFile", "DillFile", "BagOfHoldingH5File", "Sql"]
+            raise ValueError(f"Unknown storage type: {storage_type}, available are {available}")
 
 
 def _get_storage(config: dict[str, Any]) -> storage.Storage:
