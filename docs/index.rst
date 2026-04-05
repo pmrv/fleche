@@ -32,6 +32,7 @@ Welcome to the **Fleche** library documentation.
    custom_digests
    configuration
    query
+   parallel_execution
    security
 
 .. toctree::
