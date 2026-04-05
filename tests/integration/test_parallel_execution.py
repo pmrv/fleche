@@ -1,28 +1,20 @@
 """
-Integration tests: fleche-decorated functions submitted via executorlib's SingleNodeExecutor.
+Integration tests: fleche-decorated functions submitted via thread and process-based executors.
 
-Key question: can fleche wrapper functions be called through a SingleNodeExecutor from executorlib,
-and if so, does caching work?
+Thread-based execution (ThreadPoolExecutor)
+--------------------------------------------
+fleche uses a ``contextvars.ContextVar`` (``state._CACHE``) to track which cache is active.
+In Python, ContextVar values are NOT automatically inherited by threads spawned via
+ThreadPoolExecutor. The tests below document both the failure case and the workaround
+(explicit context propagation via ``contextvars.copy_context()``).
 
-Background: Context Var propagation
-------------------------------------
-fleche uses a ``contextvars.ContextVar`` (``state._CACHE``) to track which cache
-is active.  Python's ContextVar semantics differ by execution model:
+Process-based execution (ProcessPoolExecutor / executorlib SingleNodeExecutor)
+-------------------------------------------------------------------------------
+Worker processes are spawned as independent subprocesses with a fresh Python interpreter.
+ContextVars revert to their *default* values — in-memory state set in the parent is
+completely invisible to workers.
 
-* **Same thread** – ContextVars are inherited.
-* **ThreadPoolExecutor** – each task runs in a worker thread.  Whether context
-  is propagated depends on Python version; the test_threadpool.py tests cover this.
-* **ProcessPoolExecutor / executorlib workers** – worker processes are spawned
-  as independent subprocesses with a fresh Python interpreter.  ContextVars
-  revert to their *default* values.  In-memory state set in the parent is
-  completely invisible.
-
-executorlib's SingleNodeExecutor
----------------------------------
-executorlib (https://github.com/pyiron/executorlib) is built on top of
-``concurrent.futures`` and uses *process*-based workers.  Therefore:
-
-* fleche-decorated functions **can** be called through SingleNodeExecutor and
+* fleche-decorated functions **can** be called through ProcessPoolExecutor / executorlib and
   return correct results.
 * However, an in-memory cache set via ``fleche.cache(...)`` in the parent process
   is **not visible** in the worker; results are NOT stored in the parent's cache.
@@ -32,6 +24,7 @@ executorlib (https://github.com/pyiron/executorlib) is built on top of
 """
 
 import concurrent.futures
+import contextvars
 import tempfile
 import pytest
 
@@ -52,6 +45,11 @@ _skip_no_executorlib = pytest.mark.skipif(
 
 
 @fleche.fleche
+def my_func(x):
+    return x + 1
+
+
+@fleche.fleche
 def double(x):
     return x * 2
 
@@ -66,7 +64,45 @@ def _worker_with_file_cache(x, values_dir, calls_dir):
 
 
 # ---------------------------------------------------------------------------
-# Tests using concurrent.futures.ProcessPoolExecutor
+# ThreadPoolExecutor tests
+# ---------------------------------------------------------------------------
+
+
+def test_threadpool_inheritance_failure():
+    """
+    Demonstrate that standard fleche.cache() context manager
+    does not propagate to ThreadPoolExecutor in this environment.
+    """
+    mem = Memory({})
+    cache1 = Cache(mem, mem)
+
+    with fleche.cache(cache1):
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            # We expect this NOT to be in cache1 if inheritance fails
+            future = executor.submit(my_func, 100)
+            future.result()
+
+            assert not cache1.contains(my_func.digest(100))
+
+
+def test_threadpool_explicit_context_propagation():
+    """
+    Demonstrate that explicit context propagation works.
+    """
+    mem = Memory({})
+    cache1 = Cache(mem, mem)
+
+    with fleche.cache(cache1):
+        ctx = contextvars.copy_context()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(ctx.run, my_func, 200)
+            future.result()
+
+            assert cache1.contains(my_func.digest(200))
+
+
+# ---------------------------------------------------------------------------
+# ProcessPoolExecutor tests
 # (identical process-isolation semantics to executorlib.SingleNodeExecutor)
 # ---------------------------------------------------------------------------
 
@@ -105,7 +141,7 @@ def test_process_executor_in_memory_cache_not_propagated():
 
 
 # ---------------------------------------------------------------------------
-# Tests using executorlib.SingleNodeExecutor
+# executorlib.SingleNodeExecutor tests
 # ---------------------------------------------------------------------------
 
 
