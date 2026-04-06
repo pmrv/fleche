@@ -44,12 +44,12 @@ Registering Entry Points
 
 For library authors who want to provide ``fleche`` support for their types without requiring users to manually call ``add_hook``, ``fleche`` supports Python entry points.
 
-You can register your digest hooks in the ``fleche.digest`` entry point group in your ``pyproject.toml`` (or equivalent).
+You can register your digest hooks in the ``fleche`` entry point group with the name ``digest`` in your ``pyproject.toml`` (or equivalent).
 
 .. code-block:: toml
 
-   [project.entry-points."fleche.digest"]
-   my_package_hooks = "my_package.hooks:get_hooks"
+   [project.entry-points."fleche"]
+   digest = "my_package.hooks:get_hooks"
 
 The entry point can point to:
 * A single ``fleche.digest.Hook`` object.
