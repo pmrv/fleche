@@ -25,15 +25,19 @@ Example
     local_cache = Cache(Memory({}), Memory({}))
     remote_cache = Cache(Memory({}), Memory({}))
 
-    # Create a stack
-    stack = CacheStack((local_cache, remote_cache))
-
     @fleche
     def my_function(x):
         return x * 2
 
+    # Populate remote_cache with a result
+    with cache(remote_cache):
+        my_function(10)
+
+    # Create a stack with an empty local_cache on top
+    stack = CacheStack((local_cache, remote_cache))
+
     with cache(stack):
-        # Result is found in remote_cache, and automatically saved to local_cache
+        # Result is found in remote_cache and automatically copied to local_cache
         my_function(10)
 
 Automatic hit transfer only applies to full function calls (``Call`` objects) and not to individual values loaded via ``load_value``.
