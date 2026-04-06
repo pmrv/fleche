@@ -39,7 +39,7 @@ Parity with Call
 
 * **Digests**: ``digest(lazy_call)`` is identical to ``digest(original_call)``.
 * **Lookup Keys**: ``lazy_call.to_lookup_key()`` returns the same key.
-* **Immutability**: Like ``Call``, ``LazyCall`` is a frozen dataclass.
+* **Immutability**: ``LazyCall`` is a frozen dataclass — its fields cannot be reassigned after creation.
 
 LazyArguments
 -------------
