@@ -41,12 +41,14 @@ Use :func:`contextvars.copy_context` to snapshot the current context and
    import contextvars
    import concurrent.futures
    import fleche
+   from fleche.caches import Cache
+   from fleche.storage import Memory
 
    @fleche.fleche
    def compute(x):
        return x ** 2
 
-   my_cache = fleche.Cache(values_storage, calls_storage)
+   my_cache = Cache(Memory({}), Memory({}))
 
    with fleche.cache(my_cache):
        ctx = contextvars.copy_context()
@@ -139,13 +141,15 @@ manual setup:
 
    import concurrent.futures
    from fleche.state import BoundWrapper
+   from fleche.caches import Cache
+   from fleche.storage import Memory
    import fleche
 
    @fleche.fleche
    def predict(x):
        return x * 2
 
-   file_cache = fleche.Cache(values_storage, calls_storage)
+   file_cache = Cache(Memory({}), Memory({}))
 
    with fleche.cache(file_cache):
        bound_predict = BoundWrapper.bind(predict)
