@@ -1,5 +1,10 @@
 """lru_cache on 'roids."""
 
+try:
+    from ._version import __version__
+except ImportError:
+    __version__ = "unknown"
+
 from . import digest
 from .state import (
         cache,
@@ -38,6 +43,7 @@ def D(value) -> digest.Digest:
 
 
 __all__ = [
+        "__version__",
         "fleche",
         "cache",
         "meta",
