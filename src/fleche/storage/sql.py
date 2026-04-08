@@ -1,7 +1,10 @@
+import logging
 from typing import Iterable, Any, List
 from pathlib import Path
 from dataclasses import dataclass, field
-from .base import StorageBackend, CallMixin, AmbiguousDigestError
+from .base import KeyManagement, CallStorage, AmbiguousDigestError
+
+logger = logging.getLogger("fleche.storage")
 from ..call import Call, QueryCall
 from ..digest import Digest, DIGEST_LENGTH, digest
 
@@ -120,7 +123,7 @@ def _enable_sqlite_foreign_keys(engine) -> None:
 
 
 @dataclass(frozen=True)
-class SqlBackend(StorageBackend):
+class SqlBackend(KeyManagement):
     """SQLAlchemy-backed CallStorage with JSON metadata and DB-backed expand()."""
 
     url: str | None = None
@@ -296,6 +299,21 @@ class SqlBackend(StorageBackend):
         finally:
             session.close()
 
+    def save(self, call: Call) -> Digest:
+        key = call.to_lookup_key()
+        logger.debug("Saving call %s", key)
+        if self.contains(str(key)):
+            self.evict(str(key))
+        return self.put(call, key)
+
+    def load(self, key: Digest | str) -> Call:
+        if len(key) < DIGEST_LENGTH:
+            key = self.expand(key)
+        else:
+            key = Digest(key)
+        logger.debug("Loading call with key %s", key)
+        return self.get(key)
+
     def _normalize_value(self, v: Any) -> str:
         """Return the stored form used in SQL for argument/result matching.
 
@@ -441,4 +459,4 @@ class SqlBackend(StorageBackend):
                 yield c
 
 
-class Sql(CallMixin, SqlBackend): ...
+class Sql(SqlBackend, CallStorage): ...
