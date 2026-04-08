@@ -44,8 +44,8 @@ def test_simple_full():
 
 def test_args_partial():
     call = QueryCall.from_call(func_args, 1)
-    # *args defaults to empty tuple with apply_defaults()
-    assert call.arguments == {"a": 1, "args": ()}
+    # *args not supplied → None (wildcard)
+    assert call.arguments == {"a": 1, "args": None}
 
 
 def test_args_partial_with_values():
@@ -55,8 +55,8 @@ def test_args_partial_with_values():
 
 def test_kwargs_partial():
     call = QueryCall.from_call(func_kwargs, 1)
-    # **kwargs defaults to empty dict with apply_defaults()
-    assert call.arguments == {"a": 1, "kwargs": {}}
+    # **kwargs not supplied → None (wildcard)
+    assert call.arguments == {"a": 1, "kwargs": None}
 
 
 def test_kwargs_partial_with_values():
@@ -84,25 +84,19 @@ def test_posonly_partial_with_values():
     assert call.arguments == {"a": 1, "b": 2}
 
 
-def test_defaults_partial():
-    # Verify that defaults ARE applied even when partial=True.
+def test_defaults_not_specified():
+    # Unspecified args are None (wildcard), defaults are NOT applied.
     call = QueryCall.from_call(func_defaults)
-    assert call.arguments == {"a": 1, "b": 2}
-
-
-def test_defaults_full():
-    # Verify that defaults ARE applied when partial=False (default behavior).
-    call = QueryCall.from_call(func_defaults)
-    assert call.arguments == {"a": 1, "b": 2}
+    assert call.arguments == {"a": None, "b": None}
 
 
 def test_defaults_partial_explicit():
-    # If explicitly passed, overrides default
+    # If explicitly passed, the value is used; unspecified args remain None (wildcard)
     call = QueryCall.from_call(func_defaults, a=10)
-    assert call.arguments == {"a": 10, "b": 2}
+    assert call.arguments == {"a": 10, "b": None}
 
 
 def test_defaults_partial_explicit_none():
-    # If explicitly passed None, it overrides default (wildcard behavior)
+    # Explicitly passing None is still None (wildcard)
     call = QueryCall.from_call(func_defaults, b=None)
-    assert call.arguments == {"a": 1, "b": None}
+    assert call.arguments == {"a": None, "b": None}

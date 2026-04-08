@@ -186,8 +186,7 @@ class QueryCall:
         # Normalize arguments using function signature
         sig = signature(func)
         bound = sig.bind_partial(*args, **kwargs)
-        bound.apply_defaults()
-        # missing arguments are set to None
+        # Do NOT apply defaults: unspecified arguments are treated as None (wildcard)
         arguments = {name: bound.arguments.get(name) for name in sig.parameters}
 
         call = cls(func.__name__, arguments)
