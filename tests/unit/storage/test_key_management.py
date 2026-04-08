@@ -1,4 +1,4 @@
-import pytest
+import inspect
 from fleche.storage import (
     KeyManagement,
     StorageBackend,
@@ -59,6 +59,4 @@ def test_sql_query_uses_sqlbackend_implementation(tmp_path):
 def test_call_storage_has_transform():
     """transform() should be a concrete method on CallStorage, not only on CallMixin."""
     assert callable(getattr(CallStorage, "transform", None))
-    # Verify it's concrete (not abstract)
-    import inspect
     assert not getattr(CallStorage.transform, "__isabstractmethod__", False)
