@@ -123,7 +123,7 @@ def _enable_sqlite_foreign_keys(engine) -> None:
 
 
 @dataclass(frozen=True)
-class SqlBackend(KeyManagement):
+class Sql(CallStorage, KeyManagement):
     """SQLAlchemy-backed CallStorage with JSON metadata and DB-backed expand()."""
 
     url: str | None = None
@@ -457,6 +457,3 @@ class SqlBackend(KeyManagement):
             c = self.get(k)
             if meta_matches(c):
                 yield c
-
-
-class Sql(SqlBackend, CallStorage): ...
