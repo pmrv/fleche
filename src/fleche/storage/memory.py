@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-from .base import ValueMixin, CallMixin, StorageBackend
+from .base import ValueMixin, CallMixin, StorageBackend, DestructuringMixin
 from ..digest import Digest
 from copy import deepcopy
 
@@ -31,5 +31,5 @@ class MemoryBackend(StorageBackend):
         self.storage.pop(key, None)
 
 
-class ValueMemory(ValueMixin, MemoryBackend): ...
+class ValueMemory(ValueMixin, DestructuringMixin, MemoryBackend): ...
 class CallMemory(CallMixin, MemoryBackend): ...

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .file import FileStorage
-from .base import ValueMixin, CallMixin
+from .base import ValueMixin, CallMixin, DestructuringMixin
 from ..security import get_secret_key, SignedBytes, SignatureError
 
 from pyiron_snippets.import_alarm import ImportAlarm
@@ -150,5 +150,5 @@ class PickleFileBackend(FileStorage):
             raise KeyError(path, "Value present but failed signature check.")
 
 
-class ValuePickleFile(ValueMixin, PickleFileBackend): ...
+class ValuePickleFile(ValueMixin, DestructuringMixin, PickleFileBackend): ...
 class CallPickleFile(CallMixin, PickleFileBackend): ...

@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-from .base import ValueMixin, CallMixin, StorageBackend
+from .base import ValueMixin, CallMixin, StorageBackend, DestructuringMixin
 from ..digest import Digest
 
 
@@ -27,5 +27,5 @@ class VoidBackend(StorageBackend):
         return False
 
 
-class ValueVoid(ValueMixin, VoidBackend): ...
+class ValueVoid(ValueMixin, DestructuringMixin, VoidBackend): ...
 class CallVoid(CallMixin, VoidBackend): ...
