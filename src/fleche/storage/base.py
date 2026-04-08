@@ -299,6 +299,9 @@ class CallStorage(StorageBackend):
     @abstractmethod
     def load(self, key: Digest | str) -> Call: ...
 
+    @abstractmethod
+    def query(self, template: QueryCall) -> Iterable[Call]: ...
+
 
 class CallMixin(CallStorage, StorageBackend):
     """Bridges :class:`CallStorage` with :class:`StorageBackend` primitives.
@@ -344,7 +347,7 @@ class CallMixin(CallStorage, StorageBackend):
             new_key = new_call.to_lookup_key()
             if new_key != k:
                 self.save(new_call)
-                self.pop(k)
+                self.evict(k)
             else:
                 self.save(new_call)
 

@@ -3,7 +3,7 @@ import pytest
 from hypothesis import given, strategies as st
 
 from fleche.storage.sql import Sql
-from fleche.storage import Memory
+from fleche.storage import ValueMemory
 from fleche.caches import Cache
 from fleche.call import Call
 from fleche.digest import Digest, digest
@@ -311,7 +311,7 @@ def test_sql_call_digest_persistence(store):
 )
 def test_sql_query_matches_call_matches(call_data, template_data):
     """Verify that Sql storage query results are consistent with Call.matches()."""
-    values = Memory({})
+    values = ValueMemory({})
     sql_calls = Sql()  # in-memory sqlite
     cache = Cache(values, sql_calls)
 

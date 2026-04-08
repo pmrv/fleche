@@ -2,7 +2,7 @@ from unittest.mock import Mock
 import pytest
 from fleche.caches import CacheStack, Cache
 from fleche.call import Call
-from fleche.storage import Memory
+from fleche.storage import ValueMemory, CallMemory
 from fleche.digest import digest
 
 
@@ -112,8 +112,8 @@ def test_cache_stack_push():
 def test_cache_stack_load_transfers_call():
     """Verify that a hit in a higher cache is transferred to the base cache during a standard load."""
     # Setup two caches
-    c1 = Cache(Memory({}), Memory({}))
-    c2 = Cache(Memory({}), Memory({}))
+    c1 = Cache(ValueMemory({}), CallMemory({}))
+    c2 = Cache(ValueMemory({}), CallMemory({}))
 
     call = Call(name="test", arguments={"x": 1}, result="result")
     key = call.to_lookup_key()
@@ -140,8 +140,8 @@ def test_cache_stack_load_transfers_call():
 def test_cache_stack_load_lazy_transfers_call():
     """Verify that a lazy hit in a higher cache is transferred to the base cache."""
     # Setup two caches
-    c1 = Cache(Memory({}), Memory({}))
-    c2 = Cache(Memory({}), Memory({}))
+    c1 = Cache(ValueMemory({}), CallMemory({}))
+    c2 = Cache(ValueMemory({}), CallMemory({}))
 
     call = Call(name="test", arguments={"x": 1}, result="result")
     key = call.to_lookup_key()
@@ -163,8 +163,8 @@ def test_cache_stack_load_lazy_transfers_call():
 
 def test_cache_stack_load_value_does_not_transfer():
     """Verify that load_value does not transfer data to the base cache."""
-    c1 = Cache(Memory({}), Memory({}))
-    c2 = Cache(Memory({}), Memory({}))
+    c1 = Cache(ValueMemory({}), CallMemory({}))
+    c2 = Cache(ValueMemory({}), CallMemory({}))
 
     val = "some_value"
     key = digest(val)
@@ -188,9 +188,9 @@ def test_cache_stack_load_value_does_not_transfer():
 
 def test_cache_stack_multi_level_transfer():
     """Verify that a hit in a 3-level stack only transfers to the base cache."""
-    c1 = Cache(Memory({}), Memory({}))  # base
-    c2 = Cache(Memory({}), Memory({}))  # intermediate
-    c3 = Cache(Memory({}), Memory({}))  # top
+    c1 = Cache(ValueMemory({}), CallMemory({}))  # base
+    c2 = Cache(ValueMemory({}), CallMemory({}))  # intermediate
+    c3 = Cache(ValueMemory({}), CallMemory({}))  # top
 
     call = Call(name="test", arguments={"x": 1}, result="result")
     key = call.to_lookup_key()

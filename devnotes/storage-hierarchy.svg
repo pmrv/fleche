@@ -1,346 +1,392 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="900" viewBox="0 0 1100 900">
-  <defs>
-    <!-- Inheritance arrow: open triangle pointing to parent -->
-    <marker id="arrow-inherit" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-      <polygon points="0 0, 10 3.5, 0 7" fill="white" stroke="#444444" stroke-width="0.8"/>
-    </marker>
-    <!-- Composition: open diamond at source end -->
-    <marker id="diamond-comp" markerWidth="12" markerHeight="8" refX="12" refY="4" orient="auto-start-reverse">
-      <polygon points="6 0, 12 4, 6 8, 0 4" fill="white" stroke="#666666" stroke-width="1"/>
-    </marker>
-  </defs>
-
-  <!-- Canvas background -->
-  <rect x="0" y="0" width="1100" height="900" fill="white"/>
-
-  <!-- ═══════════════════════════════════════════════════════════
-       Region backgrounds
-       ═══════════════════════════════════════════════════════════ -->
-  <g id="regions">
-    <!-- Abstract Backend (StorageBackend alone) -->
-    <rect x="300" y="18" width="270" height="185" rx="10" ry="10"
-          fill="#EFF5FF" stroke="#9999CC" stroke-width="1" stroke-dasharray="5,3" opacity="0.7"/>
-    <text x="312" y="36" font-family="Helvetica, Arial, sans-serif" font-size="10"
-          fill="#9999CC" font-style="italic" opacity="0.8">Abstract Backend</text>
-
-    <!-- Domain Interfaces — left (ValueStorage) -->
-    <rect x="32" y="18" width="200" height="160" rx="10" ry="10"
-          fill="#F0FFF0" stroke="#77AA77" stroke-width="1" stroke-dasharray="5,3" opacity="0.7"/>
-    <text x="44" y="36" font-family="Helvetica, Arial, sans-serif" font-size="10"
-          fill="#77AA77" font-style="italic" opacity="0.8">Domain Interfaces</text>
-
-    <!-- Domain Interfaces — right (CallStorage) -->
-    <rect x="760" y="18" width="210" height="160" rx="10" ry="10"
-          fill="#F0FFF0" stroke="#77AA77" stroke-width="1" stroke-dasharray="5,3" opacity="0.7"/>
-    <text x="772" y="36" font-family="Helvetica, Arial, sans-serif" font-size="10"
-          fill="#77AA77" font-style="italic" opacity="0.8">Domain Interfaces</text>
-
-    <!-- Bridge Mixins (full width row) -->
-    <rect x="32" y="215" width="1055" height="165" rx="10" ry="10"
-          fill="#FFFBEE" stroke="#DDBB55" stroke-width="1" stroke-dasharray="5,3" opacity="0.7"/>
-    <text x="44" y="233" font-family="Helvetica, Arial, sans-serif" font-size="10"
-          fill="#DDBB55" font-style="italic" opacity="0.8">Bridge Mixins</text>
-
-    <!-- Value Backends -->
-    <rect x="32" y="428" width="620" height="335" rx="10" ry="10"
-          fill="#FAFAFA" stroke="#BBBBBB" stroke-width="1" stroke-dasharray="5,3" opacity="0.7"/>
-    <text x="44" y="446" font-family="Helvetica, Arial, sans-serif" font-size="10"
-          fill="#BBBBBB" font-style="italic" opacity="0.8">Value Backends</text>
-
-    <!-- Call Backends -->
-    <rect x="672" y="428" width="310" height="165" rx="10" ry="10"
-          fill="#FFF5FA" stroke="#CCAAAA" stroke-width="1" stroke-dasharray="5,3" opacity="0.7"/>
-    <text x="684" y="446" font-family="Helvetica, Arial, sans-serif" font-size="10"
-          fill="#CCAAAA" font-style="italic" opacity="0.8">Call Backends</text>
-  </g>
-
-  <!-- ═══════════════════════════════════════════════════════════
-       Edges  (drawn below nodes)
-       ═══════════════════════════════════════════════════════════ -->
-  <g id="edges" stroke-width="1.4" fill="none">
-
-    <!-- ValueStorage → ValueMixin -->
-    <line x1="148" y1="152" x2="248" y2="282"
-          stroke="#444444" marker-end="url(#arrow-inherit)"/>
-
-    <!-- StorageBackend → ValueMixin -->
-    <line x1="380" y1="198" x2="310" y2="282"
-          stroke="#444444" marker-end="url(#arrow-inherit)"/>
-
-    <!-- StorageBackend → CallMixin -->
-    <line x1="450" y1="198" x2="680" y2="282"
-          stroke="#444444" marker-end="url(#arrow-inherit)"/>
-
-    <!-- CallStorage → CallMixin -->
-    <line x1="840" y1="152" x2="770" y2="282"
-          stroke="#444444" marker-end="url(#arrow-inherit)"/>
-
-    <!-- StorageBackend → DestructuringMixin -->
-    <line x1="325" y1="198" x2="185" y2="282"
-          stroke="#444444" marker-end="url(#arrow-inherit)"/>
-
-    <!-- ValueMixin → Memory -->
-    <line x1="265" y1="378" x2="215" y2="458"
-          stroke="#444444" marker-end="url(#arrow-inherit)"/>
-
-    <!-- ValueMixin → Void -->
-    <line x1="298" y1="378" x2="350" y2="458"
-          stroke="#444444" marker-end="url(#arrow-inherit)"/>
-
-    <!-- ValueMixin → FileStorage -->
-    <line x1="330" y1="378" x2="490" y2="458"
-          stroke="#444444" marker-end="url(#arrow-inherit)"/>
-
-    <!-- ValueMixin → _DelegatingStorage -->
-    <line x1="240" y1="378" x2="115" y2="458"
-          stroke="#444444" marker-end="url(#arrow-inherit)"/>
-
-    <!-- FileStorage → PickleFile -->
-    <line x1="468" y1="553" x2="430" y2="638"
-          stroke="#444444" marker-end="url(#arrow-inherit)"/>
-
-    <!-- FileStorage → BagOfHoldingH5File -->
-    <line x1="520" y1="553" x2="580" y2="638"
-          stroke="#444444" marker-end="url(#arrow-inherit)"/>
-
-    <!-- DestructuringMixin → DestructuringStorage -->
-    <line x1="130" y1="378" x2="110" y2="638"
-          stroke="#444444" marker-end="url(#arrow-inherit)"/>
-
-    <!-- _DelegatingStorage → DestructuringStorage -->
-    <line x1="110" y1="543" x2="105" y2="638"
-          stroke="#444444" marker-end="url(#arrow-inherit)"/>
-
-    <!-- CallMixin → Sql -->
-    <line x1="710" y1="378" x2="730" y2="458"
-          stroke="#444444" marker-end="url(#arrow-inherit)"/>
-
-    <!-- CallMixin → CallStorageAdapter -->
-    <line x1="760" y1="378" x2="865" y2="458"
-          stroke="#444444" marker-end="url(#arrow-inherit)"/>
-
-    <!-- CallStorageAdapter --wraps--> ValueMixin  (dashed, diamond at CSA end) -->
-    <line x1="795" y1="490" x2="375" y2="330"
-          stroke="#666666" stroke-dasharray="5,3"
-          marker-end="url(#diamond-comp)"/>
-    <text x="595" y="398" font-family="Helvetica, Arial, sans-serif" font-size="9"
-          fill="#666666" font-style="italic">wraps</text>
-  </g>
-
-  <!-- ═══════════════════════════════════════════════════════════
-       Nodes
-       ═══════════════════════════════════════════════════════════ -->
-  <g id="nodes">
-
-    <!-- ─── StorageBackend (ABC) ─── cx=435, cy=100 ─── -->
-    <rect x="308" y="48" width="255" height="148" rx="6" ry="6" fill="#CCCCCC" opacity="0.35"/>
-    <rect x="305" y="45" width="255" height="148" rx="6" ry="6"
-          fill="#BDD7EE" stroke="#2E75B6" stroke-width="1.5"/>
-    <text x="432" y="62" text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
-          font-size="11" fill="#555555" font-style="italic">«ABC»</text>
-    <text x="432" y="78" text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
-          font-size="12" font-weight="bold" fill="#111111">StorageBackend</text>
-    <line x1="306" y1="86" x2="559" y2="86" stroke="#2E75B6" stroke-width="0.8" opacity="0.6"/>
-    <text x="313" y="100" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">put(value, key) : Digest</text>
-    <text x="313" y="115" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">get(key) : Any</text>
-    <text x="313" y="130" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">pop(key)</text>
-    <text x="313" y="145" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">list() : Iterable</text>
-    <line x1="313" y1="150" x2="553" y2="150" stroke="#AAAAAA" stroke-width="0.6" stroke-dasharray="4,2"/>
-    <text x="313" y="163" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">evict(key) / contains(key) : bool</text>
-    <text x="313" y="178" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">expand(key) / shrink(key) : Digest</text>
-
-    <!-- ─── ValueStorage (ABC) ─── cx=132, cy=85 ─── -->
-    <rect x="40" y="48" width="188" height="78" rx="6" ry="6" fill="#CCCCCC" opacity="0.35"/>
-    <rect x="37" y="45" width="188" height="78" rx="6" ry="6"
-          fill="#C6E0B4" stroke="#548235" stroke-width="1.5"/>
-    <text x="131" y="62" text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
-          font-size="11" fill="#555555" font-style="italic">«ABC»</text>
-    <text x="131" y="78" text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
-          font-size="12" font-weight="bold" fill="#111111">ValueStorage</text>
-    <line x1="38" y1="86" x2="224" y2="86" stroke="#548235" stroke-width="0.8" opacity="0.6"/>
-    <text x="45" y="100" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">save(value, key?) : Digest</text>
-    <text x="45" y="115" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">load(key) : Any</text>
-
-    <!-- ─── CallStorage (ABC) ─── cx=865, cy=85 ─── -->
-    <rect x="768" y="48" width="188" height="78" rx="6" ry="6" fill="#CCCCCC" opacity="0.35"/>
-    <rect x="765" y="45" width="188" height="78" rx="6" ry="6"
-          fill="#C6E0B4" stroke="#548235" stroke-width="1.5"/>
-    <text x="859" y="62" text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
-          font-size="11" fill="#555555" font-style="italic">«ABC»</text>
-    <text x="859" y="78" text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
-          font-size="12" font-weight="bold" fill="#111111">CallStorage</text>
-    <line x1="766" y1="86" x2="952" y2="86" stroke="#548235" stroke-width="0.8" opacity="0.6"/>
-    <text x="773" y="100" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">save(call) : Digest</text>
-    <text x="773" y="115" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">load(key) : Call</text>
-
-    <!-- ─── ValueMixin ─── cx=295, cy=315 ─── -->
-    <rect x="163" y="283" width="230" height="93" rx="6" ry="6" fill="#CCCCCC" opacity="0.35"/>
-    <rect x="160" y="280" width="230" height="93" rx="6" ry="6"
-          fill="#FFE699" stroke="#BF9000" stroke-width="1.5"/>
-    <text x="275" y="297" text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
-          font-size="12" font-weight="bold" fill="#111111">ValueMixin</text>
-    <line x1="161" y1="305" x2="389" y2="305" stroke="#BF9000" stroke-width="0.8" opacity="0.6"/>
-    <text x="168" y="319" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">save(value, key?) : Digest</text>
-    <text x="168" y="334" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">load(key) : Any</text>
-    <line x1="168" y1="339" x2="382" y2="339" stroke="#AAAAAA" stroke-width="0.6" stroke-dasharray="4,2"/>
-    <text x="168" y="365" font-family="Helvetica, Arial, sans-serif" font-size="10"
-          fill="#555555" font-style="italic">alias: Storage = ValueMixin</text>
-
-    <!-- ─── CallMixin ─── cx=725, cy=315 ─── -->
-    <rect x="603" y="283" width="240" height="108" rx="6" ry="6" fill="#CCCCCC" opacity="0.35"/>
-    <rect x="600" y="280" width="240" height="108" rx="6" ry="6"
-          fill="#FFE699" stroke="#BF9000" stroke-width="1.5"/>
-    <text x="720" y="297" text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
-          font-size="12" font-weight="bold" fill="#111111">CallMixin</text>
-    <line x1="601" y1="305" x2="839" y2="305" stroke="#BF9000" stroke-width="0.8" opacity="0.6"/>
-    <text x="608" y="319" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">save(call) : Digest</text>
-    <text x="608" y="334" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">load(key) : Call</text>
-    <text x="608" y="349" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">transform(func)</text>
-    <text x="608" y="364" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">query(template) : Iterable</text>
-
-    <!-- ─── DestructuringMixin ─── cx=80, cy=315 ─── -->
-    <rect x="42" y="283" width="195" height="93" rx="6" ry="6" fill="#CCCCCC" opacity="0.35"/>
-    <rect x="39" y="280" width="195" height="93" rx="6" ry="6"
-          fill="#FCE4D6" stroke="#C55A11" stroke-width="1.5"/>
-    <text x="136" y="297" text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
-          font-size="12" font-weight="bold" fill="#111111">DestructuringMixin</text>
-    <line x1="40" y1="305" x2="233" y2="305" stroke="#C55A11" stroke-width="0.8" opacity="0.6"/>
-    <text x="47" y="319" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">put(value, key) : Digest</text>
-    <text x="47" y="334" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">get(key) : Any</text>
-    <text x="47" y="349" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">remaining_depth : int</text>
-
-    <!-- ─── _DelegatingStorage ─── cx=90, cy=493 ─── -->
-    <rect x="42" y="458" width="200" height="78" rx="6" ry="6" fill="#CCCCCC" opacity="0.35"/>
-    <rect x="39" y="455" width="200" height="78" rx="6" ry="6"
-          fill="#EDEDED" stroke="#9E9E9E" stroke-width="1.5"/>
-    <text x="139" y="472" text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
-          font-size="12" font-weight="bold" fill="#111111">_DelegatingStorage</text>
-    <line x1="40" y1="480" x2="238" y2="480" stroke="#9E9E9E" stroke-width="0.8" opacity="0.6"/>
-    <text x="47" y="494" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">storage : ValueMixin</text>
-    <text x="47" y="509" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#555555" font-style="italic">(delegates all ops)</text>
-
-    <!-- ─── Memory ─── cx=240, cy=490 ─── -->
-    <rect x="178" y="458" width="130" height="63" rx="6" ry="6" fill="#CCCCCC" opacity="0.35"/>
-    <rect x="175" y="455" width="130" height="63" rx="6" ry="6"
-          fill="#F2F2F2" stroke="#7F7F7F" stroke-width="1.5"/>
-    <text x="240" y="472" text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
-          font-size="12" font-weight="bold" fill="#111111">Memory</text>
-    <line x1="176" y1="480" x2="304" y2="480" stroke="#7F7F7F" stroke-width="0.8" opacity="0.6"/>
-    <text x="183" y="494" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">storage : dict</text>
-
-    <!-- ─── Void ─── cx=360, cy=490 ─── -->
-    <rect x="313" y="458" width="130" height="63" rx="6" ry="6" fill="#CCCCCC" opacity="0.35"/>
-    <rect x="310" y="455" width="130" height="63" rx="6" ry="6"
-          fill="#F2F2F2" stroke="#7F7F7F" stroke-width="1.5"/>
-    <text x="375" y="472" text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
-          font-size="12" font-weight="bold" fill="#111111">Void</text>
-    <line x1="311" y1="480" x2="439" y2="480" stroke="#7F7F7F" stroke-width="0.8" opacity="0.6"/>
-    <text x="318" y="494" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">(no-op backend)</text>
-
-    <!-- ─── FileStorage «abstract» ─── cx=500, cy=498 ─── -->
-    <rect x="413" y="458" width="200" height="93" rx="6" ry="6" fill="#CCCCCC" opacity="0.35"/>
-    <rect x="410" y="455" width="200" height="93" rx="6" ry="6"
-          fill="#EDEDED" stroke="#9E9E9E" stroke-width="1.5"/>
-    <text x="510" y="472" text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
-          font-size="11" fill="#555555" font-style="italic">«abstract»</text>
-    <text x="510" y="488" text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
-          font-size="12" font-weight="bold" fill="#111111">FileStorage</text>
-    <line x1="411" y1="496" x2="609" y2="496" stroke="#9E9E9E" stroke-width="0.8" opacity="0.6"/>
-    <text x="418" y="510" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">root : Path</text>
-    <text x="418" y="525" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">_to_file(value, path)</text>
-    <text x="418" y="540" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">_from_file(path) : Any</text>
-
-    <!-- ─── DestructuringStorage ─── cx=100, cy=670 ─── -->
-    <rect x="42" y="638" width="225" height="78" rx="6" ry="6" fill="#CCCCCC" opacity="0.35"/>
-    <rect x="39" y="635" width="225" height="78" rx="6" ry="6"
-          fill="#F2F2F2" stroke="#7F7F7F" stroke-width="1.5"/>
-    <text x="151" y="652" text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
-          font-size="12" font-weight="bold" fill="#111111">DestructuringStorage</text>
-    <line x1="40" y1="660" x2="263" y2="660" stroke="#7F7F7F" stroke-width="0.8" opacity="0.6"/>
-    <text x="47" y="674" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">remaining_depth : int</text>
-    <text x="47" y="689" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#555555" font-style="italic">(backward-compat wrapper)</text>
-
-    <!-- ─── PickleFile ─── cx=415, cy=665 ─── -->
-    <rect x="288" y="638" width="255" height="78" rx="6" ry="6" fill="#CCCCCC" opacity="0.35"/>
-    <rect x="285" y="635" width="255" height="78" rx="6" ry="6"
-          fill="#F2F2F2" stroke="#7F7F7F" stroke-width="1.5"/>
-    <text x="412" y="652" text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
-          font-size="12" font-weight="bold" fill="#111111">PickleFile</text>
-    <line x1="286" y1="660" x2="539" y2="660" stroke="#7F7F7F" stroke-width="0.8" opacity="0.6"/>
-    <text x="293" y="674" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">serializer: pickle / cloudpickle / dill</text>
-    <text x="293" y="689" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">secret_key : list[bytes] / compress : bool</text>
-
-    <!-- ─── BagOfHoldingH5File ─── cx=590, cy=660 ─── -->
-    <rect x="558" y="638" width="200" height="63" rx="6" ry="6" fill="#CCCCCC" opacity="0.35"/>
-    <rect x="555" y="635" width="200" height="63" rx="6" ry="6"
-          fill="#F2F2F2" stroke="#7F7F7F" stroke-width="1.5"/>
-    <text x="655" y="652" text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
-          font-size="12" font-weight="bold" fill="#111111">BagOfHoldingH5File</text>
-    <line x1="556" y1="660" x2="754" y2="660" stroke="#7F7F7F" stroke-width="0.8" opacity="0.6"/>
-    <text x="563" y="674" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">HDF5 via bagofholding</text>
-
-    <!-- ─── Sql ─── cx=730, cy=490 ─── -->
-    <rect x="688" y="458" width="175" height="93" rx="6" ry="6" fill="#CCCCCC" opacity="0.35"/>
-    <rect x="685" y="455" width="175" height="93" rx="6" ry="6"
-          fill="#F2F2F2" stroke="#7F7F7F" stroke-width="1.5"/>
-    <text x="772" y="472" text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
-          font-size="12" font-weight="bold" fill="#111111">Sql</text>
-    <line x1="686" y1="480" x2="859" y2="480" stroke="#7F7F7F" stroke-width="0.8" opacity="0.6"/>
-    <text x="693" y="494" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">url : str / echo : bool</text>
-    <text x="693" y="509" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">SQLAlchemy-backed</text>
-    <text x="693" y="524" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">query() uses SQL filtering</text>
-
-    <!-- ─── CallStorageAdapter ─── cx=880, cy=490 ─── -->
-    <rect x="858" y="458" width="210" height="78" rx="6" ry="6" fill="#CCCCCC" opacity="0.35"/>
-    <rect x="855" y="455" width="210" height="78" rx="6" ry="6"
-          fill="#F2F2F2" stroke="#7F7F7F" stroke-width="1.5"/>
-    <text x="960" y="472" text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
-          font-size="12" font-weight="bold" fill="#111111">CallStorageAdapter</text>
-    <line x1="856" y1="480" x2="1064" y2="480" stroke="#7F7F7F" stroke-width="0.8" opacity="0.6"/>
-    <text x="863" y="494" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#333333">storage : ValueMixin</text>
-    <text x="863" y="509" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#555555" font-style="italic">(delegates primitives)</text>
-
-  </g>
-
-  <!-- ═══════════════════════════════════════════════════════════
-       Legend
-       ═══════════════════════════════════════════════════════════ -->
-  <g id="legend" transform="translate(660, 590)">
-    <rect x="0" y="0" width="330" height="150" rx="6" ry="6"
-          fill="white" stroke="#CCCCCC" stroke-width="1"/>
-    <text x="12" y="20" font-family="Helvetica, Arial, sans-serif" font-size="10"
-          font-weight="bold" fill="#444444">Legend</text>
-
-    <!-- Color swatches -->
-    <rect x="12" y="28" width="16" height="12" rx="2" fill="#BDD7EE" stroke="#2E75B6" stroke-width="1"/>
-    <text x="34" y="39" font-family="Helvetica, Arial, sans-serif" font-size="9" fill="#333333">StorageBackend ABC</text>
-
-    <rect x="12" y="46" width="16" height="12" rx="2" fill="#C6E0B4" stroke="#548235" stroke-width="1"/>
-    <text x="34" y="57" font-family="Helvetica, Arial, sans-serif" font-size="9" fill="#333333">Domain ABCs (ValueStorage / CallStorage)</text>
-
-    <rect x="12" y="64" width="16" height="12" rx="2" fill="#FFE699" stroke="#BF9000" stroke-width="1"/>
-    <text x="34" y="75" font-family="Helvetica, Arial, sans-serif" font-size="9" fill="#333333">Bridge Mixin (ValueMixin / CallMixin)</text>
-
-    <rect x="12" y="82" width="16" height="12" rx="2" fill="#FCE4D6" stroke="#C55A11" stroke-width="1"/>
-    <text x="34" y="93" font-family="Helvetica, Arial, sans-serif" font-size="9" fill="#333333">DestructuringMixin</text>
-
-    <rect x="12" y="100" width="16" height="12" rx="2" fill="#EDEDED" stroke="#9E9E9E" stroke-width="1"/>
-    <text x="34" y="111" font-family="Helvetica, Arial, sans-serif" font-size="9" fill="#333333">Abstract/delegating concrete</text>
-
-    <rect x="12" y="118" width="16" height="12" rx="2" fill="#F2F2F2" stroke="#7F7F7F" stroke-width="1"/>
-    <text x="34" y="129" font-family="Helvetica, Arial, sans-serif" font-size="9" fill="#333333">Concrete backend</text>
-
-    <!-- Arrow symbols -->
-    <line x1="175" y1="40" x2="215" y2="40" stroke="#444444" stroke-width="1.4"
-          marker-end="url(#arrow-inherit)"/>
-    <text x="222" y="44" font-family="Helvetica, Arial, sans-serif" font-size="9" fill="#333333">inherits</text>
-
-    <line x1="175" y1="70" x2="215" y2="70" stroke="#666666" stroke-width="1.4"
-          stroke-dasharray="5,3" marker-end="url(#diamond-comp)"/>
-    <text x="222" y="74" font-family="Helvetica, Arial, sans-serif" font-size="9" fill="#333333">has-a (wraps)</text>
-  </g>
-
-  <!-- Title -->
-  <text x="550" y="876" text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
-        font-size="11" fill="#888888">fleche storage class hierarchy · devnotes/make_svg.py</text>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 14.1.4 (0)
+ -->
+<!-- Title: StorageHierarchy Pages: 1 -->
+<svg width="1272pt" height="603pt"
+ viewBox="0.00 0.00 1272.00 603.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 598.8)">
+<title>StorageHierarchy</title>
+<polygon fill="white" stroke="none" points="-4,4 -4,-598.8 1268,-598.8 1268,4 -4,4"/>
+<g id="clust1" class="cluster">
+<title>cluster_abc</title>
+<polygon fill="#f0f4ff" stroke="#9999cc" points="607,-391.1 607,-586.8 730,-586.8 730,-391.1 607,-391.1"/>
+<text xml:space="preserve" text-anchor="middle" x="668.5" y="-569.5" font-family="Helvetica,Arial,sans-serif" font-size="14.00">Abstract Backend</text>
+</g>
+<g id="clust2" class="cluster">
+<title>cluster_domain</title>
+<polygon fill="#f5fff0" stroke="#66aa66" points="309,-252.67 309,-366.47 575,-366.47 575,-252.67 309,-252.67"/>
+<text xml:space="preserve" text-anchor="middle" x="442" y="-349.17" font-family="Helvetica,Arial,sans-serif" font-size="14.00">Domain Interfaces</text>
+</g>
+<g id="clust3" class="cluster">
+<title>cluster_mixins</title>
+<polygon fill="#fffbf0" stroke="#ccaa33" points="8,-103 8,-228.05 488,-228.05 488,-103 8,-103"/>
+<text xml:space="preserve" text-anchor="middle" x="248" y="-210.75" font-family="Helvetica,Arial,sans-serif" font-size="14.00">Bridge Mixins</text>
+</g>
+<g id="clust4" class="cluster">
+<title>cluster_backends</title>
+<polygon fill="#fafafa" stroke="#aaaaaa" points="602,-114.25 602,-372.1 1202,-372.1 1202,-114.25 602,-114.25"/>
+<text xml:space="preserve" text-anchor="middle" x="902" y="-354.8" font-family="Helvetica,Arial,sans-serif" font-size="14.00">Backend Implementations</text>
+</g>
+<g id="clust5" class="cluster">
+<title>cluster_value_typed</title>
+<polygon fill="#f0fff4" stroke="#66aa88" points="79,-8 79,-84 624,-84 624,-8 79,-8"/>
+<text xml:space="preserve" text-anchor="middle" x="351.5" y="-66.7" font-family="Helvetica,Arial,sans-serif" font-size="14.00">Typed Value Classes</text>
+</g>
+<g id="clust6" class="cluster">
+<title>cluster_call_typed</title>
+<polygon fill="#f0f4ff" stroke="#6688aa" points="651,-8 651,-84 1256,-84 1256,-8 651,-8"/>
+<text xml:space="preserve" text-anchor="middle" x="953.5" y="-66.7" font-family="Helvetica,Arial,sans-serif" font-size="14.00">Typed Call Classes</text>
+</g>
+<!-- StorageBackend -->
+<g id="node1" class="node">
+<title>StorageBackend</title>
+<path fill="#b3d9ff" stroke="#3366aa" d="M629.08,-399.6C629.08,-399.6 706.92,-399.6 706.92,-399.6 712.92,-399.6 718.92,-405.6 718.92,-411.6 718.92,-411.6 718.92,-543.3 718.92,-543.3 718.92,-549.3 712.92,-555.3 706.92,-555.3 706.92,-555.3 629.08,-555.3 629.08,-555.3 623.08,-555.3 617.08,-549.3 617.08,-543.3 617.08,-543.3 617.08,-411.6 617.08,-411.6 617.08,-405.6 623.08,-399.6 629.08,-399.6"/>
+<text xml:space="preserve" text-anchor="middle" x="668" y="-537.65" font-family="Helvetica,Arial,sans-serif" font-size="11.00">«ABC»</text>
+<text xml:space="preserve" text-anchor="middle" x="668" y="-526.4" font-family="Helvetica,Arial,sans-serif" font-size="11.00">StorageBackend</text>
+<polyline fill="none" stroke="#3366aa" points="617.08,-518.4 718.92,-518.4"/>
+<text xml:space="preserve" text-anchor="start" x="627.88" y="-500.75" font-family="Helvetica,Arial,sans-serif" font-size="11.00">put(value, key)</text>
+<text xml:space="preserve" text-anchor="start" x="627.88" y="-489.5" font-family="Helvetica,Arial,sans-serif" font-size="11.00">get(key)</text>
+<text xml:space="preserve" text-anchor="start" x="627.88" y="-478.25" font-family="Helvetica,Arial,sans-serif" font-size="11.00">_evict(key)</text>
+<text xml:space="preserve" text-anchor="start" x="627.88" y="-467" font-family="Helvetica,Arial,sans-serif" font-size="11.00">list()</text>
+<polyline fill="none" stroke="#3366aa" points="617.08,-459 718.92,-459"/>
+<text xml:space="preserve" text-anchor="start" x="627.88" y="-441.35" font-family="Helvetica,Arial,sans-serif" font-size="11.00">evict(key)</text>
+<text xml:space="preserve" text-anchor="start" x="627.88" y="-430.1" font-family="Helvetica,Arial,sans-serif" font-size="11.00">contains(key)</text>
+<text xml:space="preserve" text-anchor="start" x="627.88" y="-418.85" font-family="Helvetica,Arial,sans-serif" font-size="11.00">expand(key)</text>
+<text xml:space="preserve" text-anchor="start" x="627.88" y="-407.6" font-family="Helvetica,Arial,sans-serif" font-size="11.00">shrink(key)</text>
+</g>
+<!-- ValueMixin -->
+<g id="node4" class="node">
+<title>ValueMixin</title>
+<path fill="#ffeeaa" stroke="#aa8800" d="M197.07,-122.75C197.07,-122.75 298.93,-122.75 298.93,-122.75 304.93,-122.75 310.93,-128.75 310.93,-134.75 310.93,-134.75 310.93,-173.3 310.93,-173.3 310.93,-179.3 304.93,-185.3 298.93,-185.3 298.93,-185.3 197.07,-185.3 197.07,-185.3 191.07,-185.3 185.07,-179.3 185.07,-173.3 185.07,-173.3 185.07,-134.75 185.07,-134.75 185.07,-128.75 191.07,-122.75 197.07,-122.75"/>
+<text xml:space="preserve" text-anchor="middle" x="248" y="-167.65" font-family="Helvetica,Arial,sans-serif" font-size="11.00">ValueMixin</text>
+<polyline fill="none" stroke="#aa8800" points="185.07,-159.65 310.93,-159.65"/>
+<text xml:space="preserve" text-anchor="start" x="195.88" y="-142" font-family="Helvetica,Arial,sans-serif" font-size="11.00">Implements save/load</text>
+<text xml:space="preserve" text-anchor="start" x="195.88" y="-130.75" font-family="Helvetica,Arial,sans-serif" font-size="11.00">using put/get</text>
+</g>
+<!-- StorageBackend&#45;&gt;ValueMixin -->
+<g id="edge2" class="edge">
+<title>StorageBackend&#45;&gt;ValueMixin</title>
+<path fill="none" stroke="black" d="M616.92,-477C504.99,-477 248,-477 248,-477 248,-477 248,-197.09 248,-197.09"/>
+<polygon fill="none" stroke="black" points="251.5,-197.09 248,-187.09 244.5,-197.09 251.5,-197.09"/>
+</g>
+<!-- CallMixin -->
+<g id="node5" class="node">
+<title>CallMixin</title>
+<path fill="#ffeeaa" stroke="#aa8800" d="M366.07,-111.5C366.07,-111.5 467.93,-111.5 467.93,-111.5 473.93,-111.5 479.93,-117.5 479.93,-123.5 479.93,-123.5 479.93,-184.55 479.93,-184.55 479.93,-190.55 473.93,-196.55 467.93,-196.55 467.93,-196.55 366.07,-196.55 366.07,-196.55 360.07,-196.55 354.07,-190.55 354.07,-184.55 354.07,-184.55 354.07,-123.5 354.07,-123.5 354.07,-117.5 360.07,-111.5 366.07,-111.5"/>
+<text xml:space="preserve" text-anchor="middle" x="417" y="-178.9" font-family="Helvetica,Arial,sans-serif" font-size="11.00">CallMixin</text>
+<polyline fill="none" stroke="#aa8800" points="354.07,-170.9 479.93,-170.9"/>
+<text xml:space="preserve" text-anchor="start" x="364.88" y="-153.25" font-family="Helvetica,Arial,sans-serif" font-size="11.00">Implements save/load</text>
+<text xml:space="preserve" text-anchor="start" x="364.88" y="-142" font-family="Helvetica,Arial,sans-serif" font-size="11.00">using put/get</text>
+<text xml:space="preserve" text-anchor="start" x="364.88" y="-130.75" font-family="Helvetica,Arial,sans-serif" font-size="11.00">transform(func)</text>
+<text xml:space="preserve" text-anchor="start" x="364.88" y="-119.5" font-family="Helvetica,Arial,sans-serif" font-size="11.00">query(template)</text>
+</g>
+<!-- StorageBackend&#45;&gt;CallMixin -->
+<g id="edge4" class="edge">
+<title>StorageBackend&#45;&gt;CallMixin</title>
+<path fill="none" stroke="black" d="M616.64,-438C550.54,-438 444.12,-438 444.12,-438 444.12,-438 444.12,-208.36 444.12,-208.36"/>
+<polygon fill="none" stroke="black" points="447.63,-208.36 444.13,-198.36 440.63,-208.36 447.63,-208.36"/>
+</g>
+<!-- DestructuringMixin -->
+<g id="node6" class="node">
+<title>DestructuringMixin</title>
+<path fill="#ffe0aa" stroke="#cc7700" d="M27.7,-117.12C27.7,-117.12 130.3,-117.12 130.3,-117.12 136.3,-117.12 142.3,-123.12 142.3,-129.12 142.3,-129.12 142.3,-178.92 142.3,-178.92 142.3,-184.92 136.3,-190.92 130.3,-190.92 130.3,-190.92 27.7,-190.92 27.7,-190.92 21.7,-190.92 15.7,-184.92 15.7,-178.92 15.7,-178.92 15.7,-129.12 15.7,-129.12 15.7,-123.12 21.7,-117.12 27.7,-117.12"/>
+<text xml:space="preserve" text-anchor="middle" x="79" y="-173.27" font-family="Helvetica,Arial,sans-serif" font-size="11.00">DestructuringMixin</text>
+<polyline fill="none" stroke="#cc7700" points="15.7,-165.27 142.3,-165.27"/>
+<text xml:space="preserve" text-anchor="start" x="26.5" y="-147.62" font-family="Helvetica,Arial,sans-serif" font-size="11.00">put(): splits collections</text>
+<text xml:space="preserve" text-anchor="start" x="26.5" y="-136.38" font-family="Helvetica,Arial,sans-serif" font-size="11.00">get(): reassembles</text>
+<text xml:space="preserve" text-anchor="start" x="26.5" y="-125.12" font-family="Helvetica,Arial,sans-serif" font-size="11.00">remaining_depth: int</text>
+</g>
+<!-- StorageBackend&#45;&gt;DestructuringMixin -->
+<g id="edge5" class="edge">
+<title>StorageBackend&#45;&gt;DestructuringMixin</title>
+<path fill="none" stroke="black" d="M616.76,-517C473.46,-517 79,-517 79,-517 79,-517 79,-202.68 79,-202.68"/>
+<polygon fill="none" stroke="black" points="82.5,-202.68 79,-192.68 75.5,-202.68 82.5,-202.68"/>
+</g>
+<!-- MemoryBackend -->
+<g id="node7" class="node">
+<title>MemoryBackend</title>
+<path fill="white" stroke="#888888" d="M916.7,-272.42C916.7,-272.42 995.3,-272.42 995.3,-272.42 1001.3,-272.42 1007.3,-278.42 1007.3,-284.42 1007.3,-284.42 1007.3,-311.72 1007.3,-311.72 1007.3,-317.72 1001.3,-323.72 995.3,-323.72 995.3,-323.72 916.7,-323.72 916.7,-323.72 910.7,-323.72 904.7,-317.72 904.7,-311.72 904.7,-311.72 904.7,-284.42 904.7,-284.42 904.7,-278.42 910.7,-272.42 916.7,-272.42"/>
+<text xml:space="preserve" text-anchor="middle" x="956" y="-306.07" font-family="Helvetica,Arial,sans-serif" font-size="11.00">MemoryBackend</text>
+<polyline fill="none" stroke="#888888" points="904.7,-298.07 1007.3,-298.07"/>
+<text xml:space="preserve" text-anchor="start" x="915.5" y="-280.42" font-family="Helvetica,Arial,sans-serif" font-size="11.00">storage: dict</text>
+</g>
+<!-- StorageBackend&#45;&gt;MemoryBackend -->
+<g id="edge6" class="edge">
+<title>StorageBackend&#45;&gt;MemoryBackend</title>
+<path fill="none" stroke="black" d="M719.16,-477C801.92,-477 956,-477 956,-477 956,-477 956,-335.61 956,-335.61"/>
+<polygon fill="none" stroke="black" points="959.5,-335.61 956,-325.61 952.5,-335.61 959.5,-335.61"/>
+</g>
+<!-- VoidBackend -->
+<g id="node8" class="node">
+<title>VoidBackend</title>
+<path fill="white" stroke="#888888" d="M780.58,-272.42C780.58,-272.42 849.42,-272.42 849.42,-272.42 855.42,-272.42 861.42,-278.42 861.42,-284.42 861.42,-284.42 861.42,-311.72 861.42,-311.72 861.42,-317.72 855.42,-323.72 849.42,-323.72 849.42,-323.72 780.58,-323.72 780.58,-323.72 774.58,-323.72 768.58,-317.72 768.58,-311.72 768.58,-311.72 768.58,-284.42 768.58,-284.42 768.58,-278.42 774.58,-272.42 780.58,-272.42"/>
+<text xml:space="preserve" text-anchor="middle" x="815" y="-306.07" font-family="Helvetica,Arial,sans-serif" font-size="11.00">VoidBackend</text>
+<polyline fill="none" stroke="#888888" points="768.58,-298.07 861.42,-298.07"/>
+<text xml:space="preserve" text-anchor="start" x="779.38" y="-280.42" font-family="Helvetica,Arial,sans-serif" font-size="11.00">no&#45;op backend</text>
+</g>
+<!-- StorageBackend&#45;&gt;VoidBackend -->
+<g id="edge7" class="edge">
+<title>StorageBackend&#45;&gt;VoidBackend</title>
+<path fill="none" stroke="black" d="M719.41,-438C761.8,-438 815,-438 815,-438 815,-438 815,-335.58 815,-335.58"/>
+<polygon fill="none" stroke="black" points="818.5,-335.58 815,-325.58 811.5,-335.58 818.5,-335.58"/>
+</g>
+<!-- FileStorage -->
+<g id="node9" class="node">
+<title>FileStorage</title>
+<path fill="#f0f0f0" stroke="#888888" stroke-dasharray="5,2" d="M621.95,-255.55C621.95,-255.55 714.05,-255.55 714.05,-255.55 720.05,-255.55 726.05,-261.55 726.05,-267.55 726.05,-267.55 726.05,-328.6 726.05,-328.6 726.05,-334.6 720.05,-340.6 714.05,-340.6 714.05,-340.6 621.95,-340.6 621.95,-340.6 615.95,-340.6 609.95,-334.6 609.95,-328.6 609.95,-328.6 609.95,-267.55 609.95,-267.55 609.95,-261.55 615.95,-255.55 621.95,-255.55"/>
+<text xml:space="preserve" text-anchor="middle" x="668" y="-322.95" font-family="Helvetica,Arial,sans-serif" font-size="11.00">«abstract»</text>
+<text xml:space="preserve" text-anchor="middle" x="668" y="-311.7" font-family="Helvetica,Arial,sans-serif" font-size="11.00">FileStorage</text>
+<polyline fill="none" stroke="#888888" stroke-dasharray="5,2" points="609.95,-303.7 726.05,-303.7"/>
+<text xml:space="preserve" text-anchor="start" x="620.75" y="-286.05" font-family="Helvetica,Arial,sans-serif" font-size="11.00">root: Path</text>
+<text xml:space="preserve" text-anchor="start" x="620.75" y="-274.8" font-family="Helvetica,Arial,sans-serif" font-size="11.00">_to_file(value, path)</text>
+<text xml:space="preserve" text-anchor="start" x="620.75" y="-263.55" font-family="Helvetica,Arial,sans-serif" font-size="11.00">_from_file(path)</text>
+</g>
+<!-- StorageBackend&#45;&gt;FileStorage -->
+<g id="edge8" class="edge">
+<title>StorageBackend&#45;&gt;FileStorage</title>
+<path fill="none" stroke="black" d="M668,-399.3C668,-399.3 668,-352.5 668,-352.5"/>
+<polygon fill="none" stroke="black" points="671.5,-352.5 668,-342.5 664.5,-352.5 671.5,-352.5"/>
+</g>
+<!-- SqlBackend -->
+<g id="node12" class="node">
+<title>SqlBackend</title>
+<path fill="white" stroke="#888888" d="M1062.08,-261.17C1062.08,-261.17 1181.92,-261.17 1181.92,-261.17 1187.92,-261.17 1193.92,-267.17 1193.92,-273.17 1193.92,-273.17 1193.92,-322.97 1193.92,-322.97 1193.92,-328.97 1187.92,-334.97 1181.92,-334.97 1181.92,-334.97 1062.08,-334.97 1062.08,-334.97 1056.08,-334.97 1050.08,-328.97 1050.08,-322.97 1050.08,-322.97 1050.08,-273.17 1050.08,-273.17 1050.08,-267.17 1056.08,-261.17 1062.08,-261.17"/>
+<text xml:space="preserve" text-anchor="middle" x="1122" y="-317.32" font-family="Helvetica,Arial,sans-serif" font-size="11.00">SqlBackend</text>
+<polyline fill="none" stroke="#888888" points="1050.08,-309.32 1193.92,-309.32"/>
+<text xml:space="preserve" text-anchor="start" x="1060.88" y="-291.67" font-family="Helvetica,Arial,sans-serif" font-size="11.00">url: str</text>
+<text xml:space="preserve" text-anchor="start" x="1060.88" y="-280.42" font-family="Helvetica,Arial,sans-serif" font-size="11.00">SQLAlchemy&#45;backed</text>
+<text xml:space="preserve" text-anchor="start" x="1060.88" y="-269.17" font-family="Helvetica,Arial,sans-serif" font-size="11.00">query() uses SQL filtering</text>
+</g>
+<!-- StorageBackend&#45;&gt;SqlBackend -->
+<g id="edge11" class="edge">
+<title>StorageBackend&#45;&gt;SqlBackend</title>
+<path fill="none" stroke="black" d="M719.2,-517C837.93,-517 1122,-517 1122,-517 1122,-517 1122,-346.73 1122,-346.73"/>
+<polygon fill="none" stroke="black" points="1125.5,-346.73 1122,-336.73 1118.5,-346.73 1125.5,-346.73"/>
+</g>
+<!-- ValueStorage -->
+<g id="node2" class="node">
+<title>ValueStorage</title>
+<path fill="#c8f5c0" stroke="#33aa33" d="M329.2,-261.17C329.2,-261.17 410.8,-261.17 410.8,-261.17 416.8,-261.17 422.8,-267.17 422.8,-273.17 422.8,-273.17 422.8,-322.97 422.8,-322.97 422.8,-328.97 416.8,-334.97 410.8,-334.97 410.8,-334.97 329.2,-334.97 329.2,-334.97 323.2,-334.97 317.2,-328.97 317.2,-322.97 317.2,-322.97 317.2,-273.17 317.2,-273.17 317.2,-267.17 323.2,-261.17 329.2,-261.17"/>
+<text xml:space="preserve" text-anchor="middle" x="370" y="-317.32" font-family="Helvetica,Arial,sans-serif" font-size="11.00">«ABC»</text>
+<text xml:space="preserve" text-anchor="middle" x="370" y="-306.07" font-family="Helvetica,Arial,sans-serif" font-size="11.00">ValueStorage</text>
+<polyline fill="none" stroke="#33aa33" points="317.2,-298.07 422.8,-298.07"/>
+<text xml:space="preserve" text-anchor="start" x="328" y="-280.42" font-family="Helvetica,Arial,sans-serif" font-size="11.00">save(value, key?)</text>
+<text xml:space="preserve" text-anchor="start" x="328" y="-269.17" font-family="Helvetica,Arial,sans-serif" font-size="11.00">load(key)</text>
+</g>
+<!-- ValueStorage&#45;&gt;ValueMixin -->
+<g id="edge1" class="edge">
+<title>ValueStorage&#45;&gt;ValueMixin</title>
+<path fill="none" stroke="black" d="M324.2,-260.97C324.2,-218.28 324.2,-154 324.2,-154 324.2,-154 322.79,-154 322.79,-154"/>
+<polygon fill="none" stroke="black" points="322.79,-150.5 312.79,-154 322.79,-157.5 322.79,-150.5"/>
+</g>
+<!-- CallStorage -->
+<g id="node3" class="node">
+<title>CallStorage</title>
+<path fill="#c8f5c0" stroke="#33aa33" d="M477.45,-261.17C477.45,-261.17 554.55,-261.17 554.55,-261.17 560.55,-261.17 566.55,-267.17 566.55,-273.17 566.55,-273.17 566.55,-322.97 566.55,-322.97 566.55,-328.97 560.55,-334.97 554.55,-334.97 554.55,-334.97 477.45,-334.97 477.45,-334.97 471.45,-334.97 465.45,-328.97 465.45,-322.97 465.45,-322.97 465.45,-273.17 465.45,-273.17 465.45,-267.17 471.45,-261.17 477.45,-261.17"/>
+<text xml:space="preserve" text-anchor="middle" x="516" y="-317.32" font-family="Helvetica,Arial,sans-serif" font-size="11.00">«ABC»</text>
+<text xml:space="preserve" text-anchor="middle" x="516" y="-306.07" font-family="Helvetica,Arial,sans-serif" font-size="11.00">CallStorage</text>
+<polyline fill="none" stroke="#33aa33" points="465.45,-298.07 566.55,-298.07"/>
+<text xml:space="preserve" text-anchor="start" x="476.25" y="-280.42" font-family="Helvetica,Arial,sans-serif" font-size="11.00">save(call)</text>
+<text xml:space="preserve" text-anchor="start" x="476.25" y="-269.17" font-family="Helvetica,Arial,sans-serif" font-size="11.00">load(key) → Call</text>
+</g>
+<!-- CallStorage&#45;&gt;CallMixin -->
+<g id="edge3" class="edge">
+<title>CallStorage&#45;&gt;CallMixin</title>
+<path fill="none" stroke="black" d="M472.69,-260.98C472.69,-260.98 472.69,-208.38 472.69,-208.38"/>
+<polygon fill="none" stroke="black" points="476.19,-208.38 472.69,-198.38 469.19,-208.38 476.19,-208.38"/>
+</g>
+<!-- ValueMemory -->
+<g id="node13" class="node">
+<title>ValueMemory</title>
+<path fill="#c8f5d8" stroke="#33aa66" d="M212.2,-16.5C212.2,-16.5 275.8,-16.5 275.8,-16.5 281.8,-16.5 287.8,-22.5 287.8,-28.5 287.8,-28.5 287.8,-40.5 287.8,-40.5 287.8,-46.5 281.8,-52.5 275.8,-52.5 275.8,-52.5 212.2,-52.5 212.2,-52.5 206.2,-52.5 200.2,-46.5 200.2,-40.5 200.2,-40.5 200.2,-28.5 200.2,-28.5 200.2,-22.5 206.2,-16.5 212.2,-16.5"/>
+<text xml:space="preserve" text-anchor="start" x="211" y="-29.85" font-family="Helvetica,Arial,sans-serif" font-size="11.00">ValueMemory</text>
+</g>
+<!-- ValueMixin&#45;&gt;ValueMemory -->
+<g id="edge12" class="edge">
+<title>ValueMixin&#45;&gt;ValueMemory</title>
+<path fill="none" stroke="black" d="M229.4,-122.31C229.4,-122.31 229.4,-64.46 229.4,-64.46"/>
+<polygon fill="none" stroke="black" points="232.9,-64.46 229.4,-54.46 225.9,-64.46 232.9,-64.46"/>
+</g>
+<!-- ValueVoid -->
+<g id="node14" class="node">
+<title>ValueVoid</title>
+<path fill="#c8f5d8" stroke="#33aa66" d="M99.2,-16.5C99.2,-16.5 144.8,-16.5 144.8,-16.5 150.8,-16.5 156.8,-22.5 156.8,-28.5 156.8,-28.5 156.8,-40.5 156.8,-40.5 156.8,-46.5 150.8,-52.5 144.8,-52.5 144.8,-52.5 99.2,-52.5 99.2,-52.5 93.2,-52.5 87.2,-46.5 87.2,-40.5 87.2,-40.5 87.2,-28.5 87.2,-28.5 87.2,-22.5 93.2,-16.5 99.2,-16.5"/>
+<text xml:space="preserve" text-anchor="start" x="98" y="-29.85" font-family="Helvetica,Arial,sans-serif" font-size="11.00">ValueVoid</text>
+</g>
+<!-- ValueMixin&#45;&gt;ValueVoid -->
+<g id="edge14" class="edge">
+<title>ValueMixin&#45;&gt;ValueVoid</title>
+<path fill="none" stroke="black" d="M192.64,-122.44C192.64,-87.18 192.64,-35 192.64,-35 192.64,-35 168.42,-35 168.42,-35"/>
+<polygon fill="none" stroke="black" points="168.42,-31.5 158.42,-35 168.42,-38.5 168.42,-31.5"/>
+</g>
+<!-- ValuePickleFile -->
+<g id="node15" class="node">
+<title>ValuePickleFile</title>
+<path fill="#c8f5d8" stroke="#33aa66" d="M343.2,-16.5C343.2,-16.5 412.8,-16.5 412.8,-16.5 418.8,-16.5 424.8,-22.5 424.8,-28.5 424.8,-28.5 424.8,-40.5 424.8,-40.5 424.8,-46.5 418.8,-52.5 412.8,-52.5 412.8,-52.5 343.2,-52.5 343.2,-52.5 337.2,-52.5 331.2,-46.5 331.2,-40.5 331.2,-40.5 331.2,-28.5 331.2,-28.5 331.2,-22.5 337.2,-16.5 343.2,-16.5"/>
+<text xml:space="preserve" text-anchor="start" x="342" y="-29.85" font-family="Helvetica,Arial,sans-serif" font-size="11.00">ValuePickleFile</text>
+</g>
+<!-- ValueMixin&#45;&gt;ValuePickleFile -->
+<g id="edge16" class="edge">
+<title>ValueMixin&#45;&gt;ValuePickleFile</title>
+<path fill="none" stroke="black" d="M295.51,-122.44C295.51,-87.18 295.51,-35 295.51,-35 295.51,-35 319.46,-35 319.46,-35"/>
+<polygon fill="none" stroke="black" points="319.46,-38.5 329.46,-35 319.46,-31.5 319.46,-38.5"/>
+</g>
+<!-- ValueBagOfHoldingH5File -->
+<g id="node16" class="node">
+<title>ValueBagOfHoldingH5File</title>
+<path fill="#c8f5d8" stroke="#33aa66" d="M480.2,-16.5C480.2,-16.5 603.8,-16.5 603.8,-16.5 609.8,-16.5 615.8,-22.5 615.8,-28.5 615.8,-28.5 615.8,-40.5 615.8,-40.5 615.8,-46.5 609.8,-52.5 603.8,-52.5 603.8,-52.5 480.2,-52.5 480.2,-52.5 474.2,-52.5 468.2,-46.5 468.2,-40.5 468.2,-40.5 468.2,-28.5 468.2,-28.5 468.2,-22.5 474.2,-16.5 480.2,-16.5"/>
+<text xml:space="preserve" text-anchor="start" x="479" y="-29.85" font-family="Helvetica,Arial,sans-serif" font-size="11.00">ValueBagOfHoldingH5File</text>
+</g>
+<!-- ValueMixin&#45;&gt;ValueBagOfHoldingH5File -->
+<g id="edge18" class="edge">
+<title>ValueMixin&#45;&gt;ValueBagOfHoldingH5File</title>
+<path fill="none" stroke="black" d="M303.22,-122.48C303.22,-97.93 303.22,-68 303.22,-68 303.22,-68 474.06,-68 474.06,-68 474.06,-68 474.06,-64.33 474.06,-64.33"/>
+<polygon fill="none" stroke="black" points="477.56,-64.33 474.06,-54.33 470.56,-64.33 477.56,-64.33"/>
+</g>
+<!-- CallMemory -->
+<g id="node17" class="node">
+<title>CallMemory</title>
+<path fill="#c8d8f5" stroke="#3366aa" d="M1084.7,-16.5C1084.7,-16.5 1139.3,-16.5 1139.3,-16.5 1145.3,-16.5 1151.3,-22.5 1151.3,-28.5 1151.3,-28.5 1151.3,-40.5 1151.3,-40.5 1151.3,-46.5 1145.3,-52.5 1139.3,-52.5 1139.3,-52.5 1084.7,-52.5 1084.7,-52.5 1078.7,-52.5 1072.7,-46.5 1072.7,-40.5 1072.7,-40.5 1072.7,-28.5 1072.7,-28.5 1072.7,-22.5 1078.7,-16.5 1084.7,-16.5"/>
+<text xml:space="preserve" text-anchor="start" x="1083.5" y="-29.85" font-family="Helvetica,Arial,sans-serif" font-size="11.00">CallMemory</text>
+</g>
+<!-- CallMixin&#45;&gt;CallMemory -->
+<g id="edge20" class="edge">
+<title>CallMixin&#45;&gt;CallMemory</title>
+<path fill="none" stroke="black" d="M480.21,-119C651.54,-119 1112,-119 1112,-119 1112,-119 1112,-64.35 1112,-64.35"/>
+<polygon fill="none" stroke="black" points="1115.5,-64.35 1112,-54.35 1108.5,-64.35 1115.5,-64.35"/>
+</g>
+<!-- CallVoid -->
+<g id="node18" class="node">
+<title>CallVoid</title>
+<path fill="#c8d8f5" stroke="#3366aa" d="M980.7,-16.5C980.7,-16.5 1017.3,-16.5 1017.3,-16.5 1023.3,-16.5 1029.3,-22.5 1029.3,-28.5 1029.3,-28.5 1029.3,-40.5 1029.3,-40.5 1029.3,-46.5 1023.3,-52.5 1017.3,-52.5 1017.3,-52.5 980.7,-52.5 980.7,-52.5 974.7,-52.5 968.7,-46.5 968.7,-40.5 968.7,-40.5 968.7,-28.5 968.7,-28.5 968.7,-22.5 974.7,-16.5 980.7,-16.5"/>
+<text xml:space="preserve" text-anchor="start" x="979.5" y="-29.85" font-family="Helvetica,Arial,sans-serif" font-size="11.00">CallVoid</text>
+</g>
+<!-- CallMixin&#45;&gt;CallVoid -->
+<g id="edge22" class="edge">
+<title>CallMixin&#45;&gt;CallVoid</title>
+<path fill="none" stroke="black" d="M480.38,-117C627.35,-117 979,-117 979,-117 979,-117 979,-64.32 979,-64.32"/>
+<polygon fill="none" stroke="black" points="982.5,-64.32 979,-54.32 975.5,-64.32 982.5,-64.32"/>
+</g>
+<!-- CallPickleFile -->
+<g id="node19" class="node">
+<title>CallPickleFile</title>
+<path fill="#c8d8f5" stroke="#3366aa" d="M670.7,-16.5C670.7,-16.5 731.3,-16.5 731.3,-16.5 737.3,-16.5 743.3,-22.5 743.3,-28.5 743.3,-28.5 743.3,-40.5 743.3,-40.5 743.3,-46.5 737.3,-52.5 731.3,-52.5 731.3,-52.5 670.7,-52.5 670.7,-52.5 664.7,-52.5 658.7,-46.5 658.7,-40.5 658.7,-40.5 658.7,-28.5 658.7,-28.5 658.7,-22.5 664.7,-16.5 670.7,-16.5"/>
+<text xml:space="preserve" text-anchor="start" x="669.5" y="-29.85" font-family="Helvetica,Arial,sans-serif" font-size="11.00">CallPickleFile</text>
+</g>
+<!-- CallMixin&#45;&gt;CallPickleFile -->
+<g id="edge24" class="edge">
+<title>CallMixin&#45;&gt;CallPickleFile</title>
+<path fill="none" stroke="black" d="M480.28,-113C560.05,-113 686.9,-113 686.9,-113 686.9,-113 686.9,-64.22 686.9,-64.22"/>
+<polygon fill="none" stroke="black" points="690.4,-64.22 686.9,-54.22 683.4,-64.22 690.4,-64.22"/>
+</g>
+<!-- CallBagOfHoldingH5File -->
+<g id="node20" class="node">
+<title>CallBagOfHoldingH5File</title>
+<path fill="#c8d8f5" stroke="#3366aa" d="M798.7,-16.5C798.7,-16.5 913.3,-16.5 913.3,-16.5 919.3,-16.5 925.3,-22.5 925.3,-28.5 925.3,-28.5 925.3,-40.5 925.3,-40.5 925.3,-46.5 919.3,-52.5 913.3,-52.5 913.3,-52.5 798.7,-52.5 798.7,-52.5 792.7,-52.5 786.7,-46.5 786.7,-40.5 786.7,-40.5 786.7,-28.5 786.7,-28.5 786.7,-22.5 792.7,-16.5 798.7,-16.5"/>
+<text xml:space="preserve" text-anchor="start" x="797.5" y="-29.85" font-family="Helvetica,Arial,sans-serif" font-size="11.00">CallBagOfHoldingH5File</text>
+</g>
+<!-- CallMixin&#45;&gt;CallBagOfHoldingH5File -->
+<g id="edge26" class="edge">
+<title>CallMixin&#45;&gt;CallBagOfHoldingH5File</title>
+<path fill="none" stroke="black" d="M480.05,-116C590.34,-116 806.7,-116 806.7,-116 806.7,-116 806.7,-64.51 806.7,-64.51"/>
+<polygon fill="none" stroke="black" points="810.2,-64.51 806.7,-54.51 803.2,-64.51 810.2,-64.51"/>
+</g>
+<!-- Sql -->
+<g id="node21" class="node">
+<title>Sql</title>
+<path fill="#c8d8f5" stroke="#3366aa" d="M1206,-16.5C1206,-16.5 1236,-16.5 1236,-16.5 1242,-16.5 1248,-22.5 1248,-28.5 1248,-28.5 1248,-40.5 1248,-40.5 1248,-46.5 1242,-52.5 1236,-52.5 1236,-52.5 1206,-52.5 1206,-52.5 1200,-52.5 1194,-46.5 1194,-40.5 1194,-40.5 1194,-28.5 1194,-28.5 1194,-22.5 1200,-16.5 1206,-16.5"/>
+<text xml:space="preserve" text-anchor="start" x="1204.8" y="-29.85" font-family="Helvetica,Arial,sans-serif" font-size="11.00">Sql</text>
+</g>
+<!-- CallMixin&#45;&gt;Sql -->
+<g id="edge28" class="edge">
+<title>CallMixin&#45;&gt;Sql</title>
+<path fill="none" stroke="black" d="M480.42,-121C670.27,-121 1221,-121 1221,-121 1221,-121 1221,-64.36 1221,-64.36"/>
+<polygon fill="none" stroke="black" points="1224.5,-64.36 1221,-54.36 1217.5,-64.36 1224.5,-64.36"/>
+</g>
+<!-- MemoryBackend&#45;&gt;ValueMemory -->
+<g id="edge13" class="edge">
+<title>MemoryBackend&#45;&gt;ValueMemory</title>
+<path fill="none" stroke="black" d="M995.3,-272.07C995.3,-217.49 995.3,-96 995.3,-96 995.3,-96 258.6,-96 258.6,-96 258.6,-96 258.6,-64.47 258.6,-64.47"/>
+<polygon fill="none" stroke="black" points="262.1,-64.47 258.6,-54.47 255.1,-64.47 262.1,-64.47"/>
+</g>
+<!-- MemoryBackend&#45;&gt;CallMemory -->
+<g id="edge21" class="edge">
+<title>MemoryBackend&#45;&gt;CallMemory</title>
+<path fill="none" stroke="black" d="M1007.57,-298C1024.79,-298 1039.69,-298 1039.69,-298 1039.69,-298 1039.69,-35 1039.69,-35 1039.69,-35 1060.94,-35 1060.94,-35"/>
+<polygon fill="none" stroke="black" points="1060.95,-38.5 1070.94,-35 1060.94,-31.5 1060.95,-38.5"/>
+</g>
+<!-- VoidBackend&#45;&gt;ValueVoid -->
+<g id="edge15" class="edge">
+<title>VoidBackend&#45;&gt;ValueVoid</title>
+<path fill="none" stroke="black" d="M776.06,-272.05C776.06,-251.41 776.06,-226 776.06,-226 776.06,-226 149.55,-226 149.55,-226 149.55,-226 149.55,-64.38 149.55,-64.38"/>
+<polygon fill="none" stroke="black" points="153.05,-64.38 149.55,-54.38 146.05,-64.38 153.05,-64.38"/>
+</g>
+<!-- VoidBackend&#45;&gt;CallVoid -->
+<g id="edge23" class="edge">
+<title>VoidBackend&#45;&gt;CallVoid</title>
+<path fill="none" stroke="black" d="M849.85,-272.18C849.85,-269.65 849.85,-268 849.85,-268 849.85,-268 1001.3,-268 1001.3,-268 1001.3,-268 1001.3,-64.34 1001.3,-64.34"/>
+<polygon fill="none" stroke="black" points="1004.8,-64.34 1001.3,-54.34 997.8,-64.34 1004.8,-64.34"/>
+</g>
+<!-- PickleFileBackend -->
+<g id="node10" class="node">
+<title>PickleFileBackend</title>
+<path fill="white" stroke="#888888" d="M622.45,-122.75C622.45,-122.75 771.55,-122.75 771.55,-122.75 777.55,-122.75 783.55,-128.75 783.55,-134.75 783.55,-134.75 783.55,-173.3 783.55,-173.3 783.55,-179.3 777.55,-185.3 771.55,-185.3 771.55,-185.3 622.45,-185.3 622.45,-185.3 616.45,-185.3 610.45,-179.3 610.45,-173.3 610.45,-173.3 610.45,-134.75 610.45,-134.75 610.45,-128.75 616.45,-122.75 622.45,-122.75"/>
+<text xml:space="preserve" text-anchor="middle" x="697" y="-167.65" font-family="Helvetica,Arial,sans-serif" font-size="11.00">PickleFileBackend</text>
+<polyline fill="none" stroke="#888888" points="610.45,-159.65 783.55,-159.65"/>
+<text xml:space="preserve" text-anchor="start" x="621.25" y="-142" font-family="Helvetica,Arial,sans-serif" font-size="11.00">serializer (pickle/cloudpickle/dill)</text>
+<text xml:space="preserve" text-anchor="start" x="621.25" y="-130.75" font-family="Helvetica,Arial,sans-serif" font-size="11.00">secret_key, compress</text>
+</g>
+<!-- FileStorage&#45;&gt;PickleFileBackend -->
+<g id="edge9" class="edge">
+<title>FileStorage&#45;&gt;PickleFileBackend</title>
+<path fill="none" stroke="black" d="M668.25,-255.25C668.25,-255.25 668.25,-196.99 668.25,-196.99"/>
+<polygon fill="none" stroke="black" points="671.75,-196.99 668.25,-186.99 664.75,-196.99 671.75,-196.99"/>
+</g>
+<!-- BagOfHoldingH5FileBackend -->
+<g id="node11" class="node">
+<title>BagOfHoldingH5FileBackend</title>
+<path fill="white" stroke="#888888" d="M838.7,-128.37C838.7,-128.37 977.3,-128.37 977.3,-128.37 983.3,-128.37 989.3,-134.37 989.3,-140.37 989.3,-140.37 989.3,-167.67 989.3,-167.67 989.3,-173.67 983.3,-179.67 977.3,-179.67 977.3,-179.67 838.7,-179.67 838.7,-179.67 832.7,-179.67 826.7,-173.67 826.7,-167.67 826.7,-167.67 826.7,-140.37 826.7,-140.37 826.7,-134.37 832.7,-128.37 838.7,-128.37"/>
+<text xml:space="preserve" text-anchor="middle" x="908" y="-162.02" font-family="Helvetica,Arial,sans-serif" font-size="11.00">BagOfHoldingH5FileBackend</text>
+<polyline fill="none" stroke="#888888" points="826.7,-154.02 989.3,-154.02"/>
+<text xml:space="preserve" text-anchor="start" x="837.5" y="-136.38" font-family="Helvetica,Arial,sans-serif" font-size="11.00">HDF5 via bagofholding</text>
+</g>
+<!-- FileStorage&#45;&gt;BagOfHoldingH5FileBackend -->
+<g id="edge10" class="edge">
+<title>FileStorage&#45;&gt;BagOfHoldingH5FileBackend</title>
+<path fill="none" stroke="black" d="M726.12,-264C775.45,-264 838.27,-264 838.27,-264 838.27,-264 838.27,-191.6 838.27,-191.6"/>
+<polygon fill="none" stroke="black" points="841.78,-191.6 838.28,-181.6 834.78,-191.6 841.78,-191.6"/>
+</g>
+<!-- PickleFileBackend&#45;&gt;ValuePickleFile -->
+<g id="edge17" class="edge">
+<title>PickleFileBackend&#45;&gt;ValuePickleFile</title>
+<path fill="none" stroke="black" d="M637.25,-122.64C637.25,-103.23 637.25,-82 637.25,-82 637.25,-82 389.44,-82 389.44,-82 389.44,-82 389.44,-64.24 389.44,-64.24"/>
+<polygon fill="none" stroke="black" points="392.94,-64.24 389.44,-54.24 385.94,-64.24 392.94,-64.24"/>
+</g>
+<!-- PickleFileBackend&#45;&gt;CallPickleFile -->
+<g id="edge25" class="edge">
+<title>PickleFileBackend&#45;&gt;CallPickleFile</title>
+<path fill="none" stroke="black" d="M715.1,-122.31C715.1,-122.31 715.1,-64.46 715.1,-64.46"/>
+<polygon fill="none" stroke="black" points="718.6,-64.46 715.1,-54.46 711.6,-64.46 718.6,-64.46"/>
+</g>
+<!-- BagOfHoldingH5FileBackend&#45;&gt;ValueBagOfHoldingH5File -->
+<g id="edge19" class="edge">
+<title>BagOfHoldingH5FileBackend&#45;&gt;ValueBagOfHoldingH5File</title>
+<path fill="none" stroke="black" d="M859.57,-128C859.57,-120.35 859.57,-114 859.57,-114 859.57,-114 588.25,-114 588.25,-114 588.25,-114 588.25,-64.45 588.25,-64.45"/>
+<polygon fill="none" stroke="black" points="591.75,-64.45 588.25,-54.45 584.75,-64.45 591.75,-64.45"/>
+</g>
+<!-- BagOfHoldingH5FileBackend&#45;&gt;CallBagOfHoldingH5File -->
+<g id="edge27" class="edge">
+<title>BagOfHoldingH5FileBackend&#45;&gt;CallBagOfHoldingH5File</title>
+<path fill="none" stroke="black" d="M892.43,-128.09C892.43,-128.09 892.43,-64.49 892.43,-64.49"/>
+<polygon fill="none" stroke="black" points="895.93,-64.49 892.43,-54.49 888.93,-64.49 895.93,-64.49"/>
+</g>
+<!-- SqlBackend&#45;&gt;Sql -->
+<g id="edge29" class="edge">
+<title>SqlBackend&#45;&gt;Sql</title>
+<path fill="none" stroke="black" d="M1172.61,-260.94C1172.61,-188.42 1172.61,-35 1172.61,-35 1172.61,-35 1182.18,-35 1182.18,-35"/>
+<polygon fill="none" stroke="black" points="1182.18,-38.5 1192.18,-35 1182.18,-31.5 1182.18,-38.5"/>
+</g>
+</g>
 </svg>

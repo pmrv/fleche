@@ -19,30 +19,30 @@ def _test_missing_dep(module_name: str, deps_to_mock: dict, test_logic: callable
 
 def test_cloudpickle_missing():
     def logic():
-        from fleche.storage.pickle_file import PickleFile
+        from fleche.storage.pickle_file import ValuePickleFile
 
         with pytest.raises(ImportError, match="PickleFile.with_cloudpickle requires"):
-            PickleFile.with_cloudpickle("dummy")
+            ValuePickleFile.with_cloudpickle("dummy")
 
     _test_missing_dep("fleche.storage.pickle_file", {"cloudpickle": None}, logic)
 
 
 def test_dill_missing():
     def logic():
-        from fleche.storage.pickle_file import PickleFile
+        from fleche.storage.pickle_file import ValuePickleFile
 
         with pytest.raises(ImportError, match="PickleFile.with_dill requires"):
-            PickleFile.with_dill("dummy")
+            ValuePickleFile.with_dill("dummy")
 
     _test_missing_dep("fleche.storage.pickle_file", {"dill": None}, logic)
 
 
 def test_bagofholding_missing():
     def logic():
-        from fleche.storage.bagofholding_file import BagOfHoldingH5File
+        from fleche.storage.bagofholding_file import ValueBagOfHoldingH5File
 
         with pytest.raises(ImportError, match="BagOfHoldingH5File requires"):
-            BagOfHoldingH5File("dummy")
+            ValueBagOfHoldingH5File("dummy")
 
     _test_missing_dep("fleche.storage.bagofholding_file", {"bagofholding": None}, logic)
 

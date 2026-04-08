@@ -25,7 +25,7 @@ def test_void_storage_evict():
     key = digest("something")
 
     # Evict should do nothing and not raise
-    storage.pop(key)
+    storage.evict(key)
 
 
 def test_void_storage_expand():

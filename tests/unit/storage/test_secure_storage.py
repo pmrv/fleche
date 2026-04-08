@@ -1,6 +1,6 @@
 import pickle
 import pytest
-from fleche.storage.pickle_file import PickleFile, _normalize_secret_key
+from fleche.storage.pickle_file import ValuePickleFile as PickleFile, _normalize_secret_key
 
 
 def test_secure_storage_tampering(tmp_path):

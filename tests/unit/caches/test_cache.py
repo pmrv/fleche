@@ -320,7 +320,7 @@ def test_cache_load_restores_complex_arguments_and_result():
 def test_hash_builtin_caches():
     """Test that all cache types respond properly to hash() builtin."""
     from fleche.caches import ReadOnlyCache, FilteredCache, RefreshingCache, SizeLimitedCache
-    from fleche.storage import Void, CallStorageAdapter
+    from fleche.storage import ValueVoid, CallVoid
 
     values = Mock()
     calls = Mock()
@@ -334,7 +334,5 @@ def test_hash_builtin_caches():
     assert hash(CacheStack((base_cache,))) is not None
 
     # SizeLimitedCache with Void storage (no mutable fields)
-    void_value = Void()
-    void_call = CallStorageAdapter(Void())
-    slc = SizeLimitedCache(void_value, void_call, max_size=100)
+    slc = SizeLimitedCache(ValueVoid(), CallVoid(), max_size=100)
     assert hash(slc) is not None

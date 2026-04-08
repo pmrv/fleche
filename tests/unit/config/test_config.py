@@ -18,19 +18,19 @@ def config_file():
         metadata = ["Runtime"]
 
         [mycache]
-        values.type = "Memory"
-        calls.type = "Memory"
+        values.type = "memory"
+        calls.type = "memory"
 
         [transient]
-        values.type = "CloudpickleFile"
+        values.type = "cloudpickle"
         values.root = ".fleche/values"
-        calls.type = "CloudpickleFile"
+        calls.type = "cloudpickle"
         calls.root = ".fleche/calls"
 
         [global]
-        values.type = "BagOfHoldingH5File"
+        values.type = "bagofholding_hdf"
         values.root = "~/.fleche/values"
-        calls.type = "CloudpickleFile"
+        calls.type = "cloudpickle"
         calls.root = "~/.fleche/calls"
     """)
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -47,8 +47,8 @@ def config_file_explicit_default():
         [default]
         metadata = ["Runtime"]
         [default.cache]
-        values.type = "Memory"
-        calls.type = "Memory"
+        values.type = "memory"
+        calls.type = "memory"
     """)
     with tempfile.TemporaryDirectory() as tmpdir:
         config_dir = Path(tmpdir) / "fleche"
@@ -77,8 +77,8 @@ def config_file_with_tags():
 def config_file_no_default():
     config = textwrap.dedent("""
         [mycache]
-        values.type = "Memory"
-        calls.type = "Memory"
+        values.type = "memory"
+        calls.type = "memory"
     """)
     with tempfile.TemporaryDirectory() as tmpdir:
         config_dir = Path(tmpdir) / "fleche"
@@ -97,21 +97,14 @@ def restore_fleche_state():
     importlib.reload(fleche.state)
 
 
-def _get_values_storage(cache_obj):
-    if isinstance(cache_obj.values, storage.DestructuringStorage):
-        return cache_obj.values.storage
-    return cache_obj.values
-
-
 def test_load_cache_config_default(monkeypatch, config_file):
     monkeypatch.setenv("XDG_CONFIG_HOME", config_file)
 
     cache_obj = load_cache_config()
 
     assert isinstance(cache_obj, Cache)
-    assert isinstance(_get_values_storage(cache_obj), storage.Memory)
-    assert isinstance(cache_obj.calls, storage.CallStorageAdapter)
-    assert isinstance(cache_obj.calls.storage, storage.Memory)
+    assert isinstance(cache_obj.values, storage.ValueMemory)
+    assert isinstance(cache_obj.calls, storage.CallMemory)
 
 
 def test_load_cache_config_explicit_default(monkeypatch, config_file_explicit_default):
@@ -120,9 +113,8 @@ def test_load_cache_config_explicit_default(monkeypatch, config_file_explicit_de
     cache_obj = load_cache_config()
 
     assert isinstance(cache_obj, Cache)
-    assert isinstance(_get_values_storage(cache_obj), storage.Memory)
-    assert isinstance(cache_obj.calls, storage.CallStorageAdapter)
-    assert isinstance(cache_obj.calls.storage, storage.Memory)
+    assert isinstance(cache_obj.values, storage.ValueMemory)
+    assert isinstance(cache_obj.calls, storage.CallMemory)
 
 
 def test_load_cache_config_specific(monkeypatch, config_file):
@@ -131,29 +123,26 @@ def test_load_cache_config_specific(monkeypatch, config_file):
     cache_obj = load_cache_config("transient")
 
     assert isinstance(cache_obj, Cache)
-    values_storage = _get_values_storage(cache_obj)
-    assert isinstance(values_storage, storage.PickleFile)
-    assert values_storage.root == Path(".fleche/values").absolute()
-    assert isinstance(cache_obj.calls.storage, storage.PickleFile)
-    assert cache_obj.calls.storage.root == Path(".fleche/calls").absolute()
+    assert isinstance(cache_obj.values, storage.ValuePickleFile)
+    assert cache_obj.values.root == Path(".fleche/values").absolute()
+    assert isinstance(cache_obj.calls, storage.CallPickleFile)
+    assert cache_obj.calls.root == Path(".fleche/calls").absolute()
 
 
 def test_load_cache_config_no_file(monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", "/tmp/nonexistent")
     cache_obj = load_cache_config()
     assert isinstance(cache_obj, Cache)
-    assert isinstance(_get_values_storage(cache_obj), storage.Memory)
-    assert isinstance(cache_obj.calls, storage.CallStorageAdapter)
-    assert isinstance(cache_obj.calls.storage, storage.Memory)
+    assert isinstance(cache_obj.values, storage.ValueMemory)
+    assert isinstance(cache_obj.calls, storage.CallMemory)
 
 
 def test_load_cache_config_no_default(monkeypatch, config_file_no_default):
     monkeypatch.setenv("XDG_CONFIG_HOME", config_file_no_default)
     cache_obj = load_cache_config()
     assert isinstance(cache_obj, Cache)
-    assert isinstance(_get_values_storage(cache_obj), storage.Memory)
-    assert isinstance(cache_obj.calls, storage.CallStorageAdapter)
-    assert isinstance(cache_obj.calls.storage, storage.Memory)
+    assert isinstance(cache_obj.values, storage.ValueMemory)
+    assert isinstance(cache_obj.calls, storage.CallMemory)
 
 
 def test_cache_function_loads_by_name(monkeypatch, config_file):
@@ -162,9 +151,8 @@ def test_cache_function_loads_by_name(monkeypatch, config_file):
     with cache("global"):
         cache_obj = cache()
         assert isinstance(cache_obj, Cache)
-        values_storage = _get_values_storage(cache_obj)
-        assert isinstance(values_storage, storage.BagOfHoldingH5File)
-        assert values_storage.root == Path("~/.fleche/values").expanduser()
+        assert isinstance(cache_obj.values, storage.ValueBagOfHoldingH5File)
+        assert cache_obj.values.root == Path("~/.fleche/values").expanduser()
 
 
 def test_cache_instances_are_persistent(monkeypatch, config_file):
@@ -203,12 +191,8 @@ def test_load_default_cache(restore_fleche_state, monkeypatch, config_file):
     cache_obj = fleche.state._CACHE.get()
     assert isinstance(cache_obj, BaseCache)
     assert isinstance(cache_obj, Cache)
-    if hasattr(cache_obj, "values"):
-        assert isinstance(_get_values_storage(cache_obj), storage.Memory)
-        assert isinstance(cache_obj.calls.storage, storage.Memory)
-    else:
-        assert isinstance(_get_values_storage(cache_obj.cache), storage.Memory)
-        assert isinstance(cache_obj.cache.calls.storage, storage.Memory)
+    assert isinstance(cache_obj.values, storage.ValueMemory)
+    assert isinstance(cache_obj.calls, storage.CallMemory)
 
 
 def test_tags_disallowed(restore_fleche_state, monkeypatch, config_file_with_tags):
@@ -228,8 +212,8 @@ def test_load_cache_config_memory_special_case(monkeypatch, config_file):
     cache1 = load_cache_config("memory")
 
     assert isinstance(cache1, Cache)
-    assert isinstance(_get_values_storage(cache1), storage.Memory)
-    assert isinstance(cache1.calls.storage, storage.Memory)
+    assert isinstance(cache1.values, storage.ValueMemory)
+    assert isinstance(cache1.calls, storage.CallMemory)
 
     # Should be a singleton
     cache2 = load_cache_config("memory")
@@ -243,8 +227,8 @@ def test_load_cache_config_void_special_case(monkeypatch, config_file):
     cache1 = load_cache_config("void")
 
     assert isinstance(cache1, Cache)
-    assert isinstance(_get_values_storage(cache1), storage.Void)
-    assert isinstance(cache1.calls.storage, storage.Void)
+    assert isinstance(cache1.values, storage.ValueVoid)
+    assert isinstance(cache1.calls, storage.CallVoid)
 
     # Should be a singleton
     cache2 = load_cache_config("void")

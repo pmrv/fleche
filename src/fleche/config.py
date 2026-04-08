@@ -27,7 +27,7 @@ calls.root = "~/.fleche/calls"
 
 import tomllib
 import logging
-from typing import Literal, cast
+from typing import Literal, cast, overload
 from pathlib import Path
 import os
 from typing import Any
@@ -119,6 +119,12 @@ _STORAGE_CLASS_TO_NAME: dict[type, str] = {
     storage.CallPickleFile: "pickle",
 }
 
+
+@overload
+def storage_from_config(d: dict[str, Any], type="call") -> storage.CallStorage: ...
+
+@overload
+def storage_from_config(d: dict[str, Any], type="value") -> storage.ValueStorage: ...
 
 def storage_from_config(d: dict[str, Any], type: Literal["call", "value"]) -> storage.ValueStorage | storage.CallStorage:
     """Construct a :class:`~fleche.storage.StorageBackend` from a config dict.

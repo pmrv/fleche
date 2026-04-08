@@ -158,7 +158,7 @@ class SqlBackend(StorageBackend):
         try:
             existing = session.get(CallModel, str(key))
             if existing is not None:
-                if self.load(key) == call:
+                if self.get(key) == call:
                     return key
 
                 session.delete(existing)
@@ -436,7 +436,7 @@ class SqlBackend(StorageBackend):
             return True
 
         for k in keys:
-            c = self.load(k)
+            c = self.get(k)
             if meta_matches(c):
                 yield c
 

@@ -12,11 +12,11 @@ import fleche.state as fleche_state
 from fleche import fleche
 from fleche.caches import Cache
 from fleche.state import cache, meta
-from fleche.storage import Memory
+from fleche.storage import ValueMemory, CallMemory
 
 
 def _make_cache():
-    return Cache(Memory({}), Memory({}))
+    return Cache(ValueMemory({}), CallMemory({}))
 
 
 # Module-level fleche functions are required for pickle tests.

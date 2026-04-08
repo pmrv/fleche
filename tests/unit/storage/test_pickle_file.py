@@ -1,5 +1,5 @@
 import pytest
-from fleche.storage.pickle_file import PickleFile
+from fleche.storage.pickle_file import ValuePickleFile as PickleFile
 from fleche.digest import Digest
 
 

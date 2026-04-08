@@ -10,7 +10,7 @@ import pytest
 from hypothesis import given, settings, HealthCheck
 
 from fleche import fleche
-from fleche.storage import ValueMemory, CallMemory, ValueVoid, ValuePickleFile, DestructuringStorage
+from fleche.storage import ValueMemory, CallMemory, ValueVoid, ValuePickleFile
 from fleche.storage.sql import Sql
 from fleche.caches import Cache, ReadOnlyCache, FilteredCache, RefreshingCache, CacheStack, Rejected
 from tests.strategies import st_digested_calls
@@ -50,13 +50,6 @@ def test_call_storage_picklable(call_storage):
 def test_void_picklable():
     assert isinstance(roundtrip(ValueVoid()), ValueVoid)
 
-
-def test_destructuring_storage_picklable():
-    ds = DestructuringStorage(ValueMemory({}))
-    restored = roundtrip(ds)
-    assert isinstance(restored, DestructuringStorage)
-    key = restored.save([1, 2, 3])
-    assert restored.load(key) == [1, 2, 3]
 
 
 # ---------------------------------------------------------------------------
