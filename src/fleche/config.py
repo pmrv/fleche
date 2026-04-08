@@ -121,10 +121,10 @@ _STORAGE_CLASS_TO_NAME: dict[type, str] = {
 
 
 @overload
-def storage_from_config(d: dict[str, Any], type="call") -> storage.CallStorage: ...
+def storage_from_config(d: dict[str, Any], type: Literal["call"]) -> storage.CallStorage: ...
 
 @overload
-def storage_from_config(d: dict[str, Any], type="value") -> storage.ValueStorage: ...
+def storage_from_config(d: dict[str, Any], type: Literal["value"]) -> storage.ValueStorage: ...
 
 def storage_from_config(d: dict[str, Any], type: Literal["call", "value"]) -> storage.ValueStorage | storage.CallStorage:
     """Construct a :class:`~fleche.storage.StorageBackend` from a config dict.
@@ -137,9 +137,9 @@ def storage_from_config(d: dict[str, Any], type: Literal["call", "value"]) -> st
     backend = d.pop("type")
     match backend:
         case "memory":
-            return _STORAGE_NAME_MAPPING[backend, type]({})
+            return _STORAGE_NAME_MAPPING[backend, type]({})  # type: ignore
         case "void":
-            return _STORAGE_NAME_MAPPING[backend, type]()
+            return _STORAGE_NAME_MAPPING[backend, type]()  # type: ignore
         case "bagofholding_hdf" | "pickle" | "dill" | "cloudpickle":
             return _STORAGE_NAME_MAPPING[backend, type](**d)
         case "sql" if type == "call":
