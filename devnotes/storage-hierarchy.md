@@ -39,7 +39,7 @@ KeyManagement(ABC)
 
 `KeyManagement` is the root of all storage classes.  It provides the key-management
 helpers shared across the entire hierarchy without coupling backends to the
-`put`/`get` contract.  This allows `SqlBackend` to implement `CallStorage` directly
+`put`/`get` contract.  This allows `Sql` to implement `CallStorage` directly
 without inheriting from `StorageBackend`.
 
 ---
@@ -75,7 +75,7 @@ CallStorage(ABC)
 Neither interface inherits from `StorageBackend`; both inherit from
 `KeyManagement` directly.  This keeps the domain contracts free of backend
 concerns, allows them to be type-checked in isolation, and lets
-`SqlBackend` implement `CallStorage` without taking on the `put(value: Any)`
+`Sql` implement `CallStorage` without taking on the `put(value: Any)`
 contract from `StorageBackend`.
 
 ---
@@ -140,7 +140,6 @@ role belongs to the mixins above.
 | `FileStorage` | Filesystem | Abstract; subclasses implement `_to_file`/`_from_file` |
 | `PickleFileBackend` | Files (pickle/cloudpickle/dill) | HMAC-signed, optional gzip compression |
 | `BagOfHoldingH5FileBackend` | HDF5 files | Via the `bagofholding` library |
-| `SqlBackend` | SQLAlchemy (default: SQLite) | Stores `Call` fields in a relational schema; inherits `KeyManagement` directly (not `StorageBackend`) |
 
 ---
 
@@ -166,7 +165,11 @@ with a backend implementation.  The naming convention is `{Value|Call}{Backend}`
 | `CallVoid` | `CallMixin` | `VoidBackend` | |
 | `CallPickleFile` | `CallMixin` | `PickleFileBackend` | |
 | `CallBagOfHoldingH5File` | `CallMixin` | `BagOfHoldingH5FileBackend` | |
-| `Sql` | `CallStorage` (direct) | `SqlBackend` | Inherits `CallStorage` directly — no `CallMixin`; `query()` uses SQL |
+| `Sql` | `CallStorage`, `KeyManagement` (direct) | — | Full SQL implementation; no `CallMixin`; `query()` uses SQL directly |
+
+`Sql` is the exception to the Mixin × Backend pattern: it inherits `CallStorage`
+and `KeyManagement` directly and implements all SQL operations itself using
+SQLAlchemy, rather than delegating to a separate backend class.
 
 ---
 
@@ -190,219 +193,8 @@ class DestructuringValuePickleFile(ValueMixin, DestructuringMixin, PickleFileBac
 
 ---
 
-## DOT source
+## Regenerating the diagram
 
-The diagram above can be regenerated with:
-`dot -Tsvg devnotes/storage-hierarchy.dot -o devnotes/storage-hierarchy.svg`
-
-```dot
-digraph StorageHierarchy {
-    graph [
-        rankdir=TB
-        splines=ortho
-        nodesep=0.6
-        ranksep=0.8
-        fontname="Helvetica,Arial,sans-serif"
-        bgcolor="white"
-    ]
-    node [
-        shape=record
-        fontname="Helvetica,Arial,sans-serif"
-        fontsize=11
-        style="filled,rounded"
-        margin="0.15,0.10"
-    ]
-    edge [
-        fontname="Helvetica,Arial,sans-serif"
-        fontsize=9
-    ]
-
-    /* ── Key management layer ───────────────────────────────── */
-    subgraph cluster_keymanagement {
-        label="Key Management"
-        style=filled
-        fillcolor="#F8F0FF"
-        color="#9966CC"
-
-        KeyManagement [
-            label="{«ABC»\nKeyManagement|list()\l_evict(key)\l_contains(key)\l|evict(key)\lcontains(key)\lexpand(key)\lshrink(key)\l}"
-            fillcolor="#DDB3FF"
-            color="#6633AA"
-        ]
-    }
-
-    /* ── ABC layer ─────────────────────────────────────────── */
-    subgraph cluster_abc {
-        label="Abstract Backend"
-        style=filled
-        fillcolor="#F0F4FF"
-        color="#9999CC"
-
-        StorageBackend [
-            label="{«ABC»\nStorageBackend|put(value, key)\lget(key)\l}"
-            fillcolor="#B3D9FF"
-            color="#3366AA"
-        ]
-    }
-
-    /* ── Domain interface layer ────────────────────────────── */
-    subgraph cluster_domain {
-        label="Domain Interfaces"
-        style=filled
-        fillcolor="#F5FFF0"
-        color="#66AA66"
-
-        ValueStorage [
-            label="{«ABC»\nValueStorage|save(value, key?)\lload(key)\l}"
-            fillcolor="#C8F5C0"
-            color="#33AA33"
-        ]
-
-        CallStorage [
-            label="{«ABC»\nCallStorage|save(call)\lload(key) → Call\l|transform(func)\l}"
-            fillcolor="#C8F5C0"
-            color="#33AA33"
-        ]
-    }
-
-    /* ── Mixin / bridge layer ──────────────────────────────── */
-    subgraph cluster_mixins {
-        label="Bridge Mixins"
-        style=filled
-        fillcolor="#FFFBF0"
-        color="#CCAA33"
-
-        ValueMixin [
-            label="{ValueMixin|Implements save/load\lusing put/get\l}"
-            fillcolor="#FFEEAA"
-            color="#AA8800"
-        ]
-
-        CallMixin [
-            label="{CallMixin|Implements save/load\lusing put/get\lquery(template)\l}"
-            fillcolor="#FFEEAA"
-            color="#AA8800"
-        ]
-
-        DestructuringMixin [
-            label="{DestructuringMixin|put(): splits collections\lget(): reassembles\lremaining_depth: int\l}"
-            fillcolor="#FFE0AA"
-            color="#CC7700"
-        ]
-    }
-
-    /* ── Backend implementations ───────────────────────────── */
-    subgraph cluster_backends {
-        label="Backend Implementations"
-        style=filled
-        fillcolor="#FAFAFA"
-        color="#AAAAAA"
-
-        MemoryBackend [
-            label="{MemoryBackend|storage: dict\l}"
-            fillcolor="white"
-            color="#888888"
-        ]
-
-        VoidBackend [
-            label="{VoidBackend|no-op backend\l}"
-            fillcolor="white"
-            color="#888888"
-        ]
-
-        FileStorage [
-            label="{«abstract»\nFileStorage|root: Path\l_to_file(value, path)\l_from_file(path)\l}"
-            fillcolor="#F0F0F0"
-            color="#888888"
-            style="filled,rounded,dashed"
-        ]
-
-        PickleFileBackend [
-            label="{PickleFileBackend|serializer (pickle/cloudpickle/dill)\lsecret_key, compress\l}"
-            fillcolor="white"
-            color="#888888"
-        ]
-
-        BagOfHoldingH5FileBackend [
-            label="{BagOfHoldingH5FileBackend|HDF5 via bagofholding\l}"
-            fillcolor="white"
-            color="#888888"
-        ]
-
-        SqlBackend [
-            label="{SqlBackend|url: str\lSQLAlchemy-backed\l}"
-            fillcolor="white"
-            color="#888888"
-        ]
-    }
-
-    /* ── Typed value classes ───────────────────────────────── */
-    subgraph cluster_value_typed {
-        label="Typed Value Classes"
-        style=filled
-        fillcolor="#F0FFF4"
-        color="#66AA88"
-
-        ValueMemory             [label="{ValueMemory\l}",              fillcolor="#C8F5D8", color="#33AA66"]
-        ValueVoid               [label="{ValueVoid\l}",                fillcolor="#C8F5D8", color="#33AA66"]
-        ValuePickleFile         [label="{ValuePickleFile\l}",          fillcolor="#C8F5D8", color="#33AA66"]
-        ValueBagOfHoldingH5File [label="{ValueBagOfHoldingH5File\l}", fillcolor="#C8F5D8", color="#33AA66"]
-    }
-
-    /* ── Typed call classes ────────────────────────────────── */
-    subgraph cluster_call_typed {
-        label="Typed Call Classes"
-        style=filled
-        fillcolor="#F0F4FF"
-        color="#6688AA"
-
-        CallMemory              [label="{CallMemory\l}",               fillcolor="#C8D8F5", color="#3366AA"]
-        CallVoid                [label="{CallVoid\l}",                 fillcolor="#C8D8F5", color="#3366AA"]
-        CallPickleFile          [label="{CallPickleFile\l}",           fillcolor="#C8D8F5", color="#3366AA"]
-        CallBagOfHoldingH5File  [label="{CallBagOfHoldingH5File\l}",  fillcolor="#C8D8F5", color="#3366AA"]
-        Sql                     [label="{Sql\l}",                      fillcolor="#C8D8F5", color="#3366AA"]
-    }
-
-    /* ── Inheritance: key management root ─────────────────── */
-    KeyManagement -> StorageBackend [arrowhead=onormal, style=solid]
-    KeyManagement -> ValueStorage   [arrowhead=onormal, style=solid]
-    KeyManagement -> CallStorage    [arrowhead=onormal, style=solid]
-    KeyManagement -> SqlBackend     [arrowhead=onormal, style=solid]
-
-    /* ── Inheritance: mixins ───────────────────────────────── */
-    ValueStorage -> ValueMixin      [arrowhead=onormal, style=solid]
-    StorageBackend -> ValueMixin    [arrowhead=onormal, style=solid]
-    CallStorage -> CallMixin        [arrowhead=onormal, style=solid]
-    StorageBackend -> CallMixin     [arrowhead=onormal, style=solid]
-    StorageBackend -> DestructuringMixin [arrowhead=onormal, style=solid]
-
-    /* ── Inheritance: backends ─────────────────────────────── */
-    StorageBackend -> MemoryBackend             [arrowhead=onormal, style=solid]
-    StorageBackend -> VoidBackend               [arrowhead=onormal, style=solid]
-    StorageBackend -> FileStorage               [arrowhead=onormal, style=solid]
-    FileStorage -> PickleFileBackend            [arrowhead=onormal, style=solid]
-    FileStorage -> BagOfHoldingH5FileBackend    [arrowhead=onormal, style=solid]
-
-    /* ── Inheritance: typed value classes ──────────────────── */
-    ValueMixin -> ValueMemory               [arrowhead=onormal, style=solid]
-    MemoryBackend -> ValueMemory            [arrowhead=onormal, style=solid]
-    ValueMixin -> ValueVoid                 [arrowhead=onormal, style=solid]
-    VoidBackend -> ValueVoid                [arrowhead=onormal, style=solid]
-    ValueMixin -> ValuePickleFile           [arrowhead=onormal, style=solid]
-    PickleFileBackend -> ValuePickleFile    [arrowhead=onormal, style=solid]
-    ValueMixin -> ValueBagOfHoldingH5File  [arrowhead=onormal, style=solid]
-    BagOfHoldingH5FileBackend -> ValueBagOfHoldingH5File [arrowhead=onormal, style=solid]
-
-    /* ── Inheritance: typed call classes ───────────────────── */
-    CallMixin -> CallMemory                 [arrowhead=onormal, style=solid]
-    MemoryBackend -> CallMemory             [arrowhead=onormal, style=solid]
-    CallMixin -> CallVoid                   [arrowhead=onormal, style=solid]
-    VoidBackend -> CallVoid                 [arrowhead=onormal, style=solid]
-    CallMixin -> CallPickleFile             [arrowhead=onormal, style=solid]
-    PickleFileBackend -> CallPickleFile     [arrowhead=onormal, style=solid]
-    CallMixin -> CallBagOfHoldingH5File    [arrowhead=onormal, style=solid]
-    BagOfHoldingH5FileBackend -> CallBagOfHoldingH5File [arrowhead=onormal, style=solid]
-    CallStorage -> Sql                      [arrowhead=onormal, style=solid]
-    SqlBackend -> Sql                       [arrowhead=onormal, style=solid]
-}
+```
+dot -Tsvg devnotes/storage-hierarchy.dot -o devnotes/storage-hierarchy.svg
 ```

@@ -2,8 +2,8 @@ digraph StorageHierarchy {
     graph [
         rankdir=TB
         splines=ortho
-        nodesep=0.6
-        ranksep=0.8
+        nodesep=0.7
+        ranksep=1.1
         fontname="Helvetica,Arial,sans-serif"
         bgcolor="white"
     ]
@@ -12,7 +12,7 @@ digraph StorageHierarchy {
         fontname="Helvetica,Arial,sans-serif"
         fontsize=11
         style="filled,rounded"
-        margin="0.15,0.10"
+        margin="0.18,0.12"
     ]
     edge [
         fontname="Helvetica,Arial,sans-serif"
@@ -130,12 +130,6 @@ digraph StorageHierarchy {
             fillcolor="white"
             color="#888888"
         ]
-
-        SqlBackend [
-            label="{SqlBackend|url: str\lSQLAlchemy-backed\l}"
-            fillcolor="white"
-            color="#888888"
-        ]
     }
 
     /* ── Typed value classes ───────────────────────────────── */
@@ -162,14 +156,18 @@ digraph StorageHierarchy {
         CallVoid                [label="{CallVoid\l}",                 fillcolor="#C8D8F5", color="#3366AA"]
         CallPickleFile          [label="{CallPickleFile\l}",           fillcolor="#C8D8F5", color="#3366AA"]
         CallBagOfHoldingH5File  [label="{CallBagOfHoldingH5File\l}",  fillcolor="#C8D8F5", color="#3366AA"]
-        Sql                     [label="{Sql\l}",                      fillcolor="#C8D8F5", color="#3366AA"]
+
+        Sql [
+            label="{Sql|url: str\lSQLAlchemy-backed\lSQL-native query()\l}"
+            fillcolor="#C8D8F5"
+            color="#3366AA"
+        ]
     }
 
     /* ── Inheritance: key management root ─────────────────── */
     KeyManagement -> StorageBackend [arrowhead=onormal, style=solid]
     KeyManagement -> ValueStorage   [arrowhead=onormal, style=solid]
     KeyManagement -> CallStorage    [arrowhead=onormal, style=solid]
-    KeyManagement -> SqlBackend     [arrowhead=onormal, style=solid]
 
     /* ── Inheritance: mixins ───────────────────────────────── */
     ValueStorage -> ValueMixin      [arrowhead=onormal, style=solid]
@@ -204,6 +202,8 @@ digraph StorageHierarchy {
     PickleFileBackend -> CallPickleFile     [arrowhead=onormal, style=solid]
     CallMixin -> CallBagOfHoldingH5File    [arrowhead=onormal, style=solid]
     BagOfHoldingH5FileBackend -> CallBagOfHoldingH5File [arrowhead=onormal, style=solid]
+
+    /* ── Sql inherits CallStorage and KeyManagement directly ─ */
     CallStorage -> Sql                      [arrowhead=onormal, style=solid]
-    SqlBackend -> Sql                       [arrowhead=onormal, style=solid]
+    KeyManagement -> Sql                    [arrowhead=onormal, style=dashed, constraint=false]
 }
