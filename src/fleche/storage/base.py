@@ -65,6 +65,7 @@ class KeyManagement(ABC):
         if not matches:
             raise KeyError(key)
         if len(matches) > 1:
+            # find longest common prefix of the first two matches to find where they diverge
             m1, m2 = matches[0], matches[1]
             for i, (c1, c2) in enumerate(zip(m1, m2)):
                 if c1 != c2:
@@ -335,9 +336,9 @@ class CallStorage(KeyManagement):
 class CallMixin(CallStorage, StorageBackend):
     """Bridges :class:`CallStorage` with :class:`StorageBackend` primitives.
 
-    Implements ``save`` and ``load`` using ``put`` and ``get``, deriving the
-    storage key from the call's lookup key.  Also provides ``transform`` and
-    ``query`` domain methods.
+    Implements ``save``, ``load``, and ``query`` using ``put`` and ``get``,
+    deriving the storage key from the call's lookup key.  ``transform`` is
+    inherited from :class:`CallStorage`.
 
     Concrete classes inherit from this and a :class:`StorageBackend`
     implementation to get a fully functional call storage.
