@@ -263,28 +263,19 @@ def test_query_partial_arguments(test_cache):
             return x + y + z
 
         call_obj = QueryCall.from_call(bar, y=5)
-        assert call_obj.arguments == {"x": None, "y": 5, "z": 10}
+        # Unspecified z is None (wildcard), default is NOT applied
+        assert call_obj.arguments == {"x": None, "y": 5, "z": None}
 
         # Test that .query uses partial binding
         bar(1, 5, 10)
         bar(2, 5, 20)
         bar(1, 6, 10)
 
-        # Querying for y=5 with z=None explicitly restores wildcard behavior
-        # Should return 2 results (x=1, y=5, z=10 and x=2, y=5, z=20)
-        results = list(bar.query(y=5, z=None))
-        assert len(results) == 2
-
-        # Querying for x=1 with z=None explicitly restores wildcard behavior
-        # Should return 2 results (x=1, y=5, z=10 and x=1, y=6, z=10)
-        results = list(bar.query(x=1, z=None))
-        assert len(results) == 2
-
-        # Querying for y=5 should return 1 results (x=1, z=10), since default z=10 is applied
+        # Querying for y=5: z is not specified so it's a wildcard → 2 results
         results = list(bar.query(y=5))
-        assert len(results) == 1
+        assert len(results) == 2
 
-        # Querying for x=1 should return 2 results (y=5, z=10 and y=6, z=10)
+        # Querying for x=1: y and z are not specified so they're wildcards → 2 results
         results = list(bar.query(x=1))
         assert len(results) == 2
 
