@@ -7,6 +7,7 @@ for backward compatibility with `from fleche.storage import ...` imports.
 from .base import (
     SaveError,
     AmbiguousDigestError,
+    KeyManagement,
     StorageBackend,
     ValueStorage,
     ValueMixin,
@@ -24,6 +25,7 @@ from .sql import Sql
 __all__ = [
     "SaveError",
     "AmbiguousDigestError",
+    "KeyManagement",
     "StorageBackend",
     "ValueStorage",
     "ValueMixin",

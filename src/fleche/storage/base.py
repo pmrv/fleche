@@ -19,36 +19,22 @@ class AmbiguousDigestError(ValueError):
     pass
 
 
-class StorageBackend(ABC):
-    """Primitive backend interface for key-value storage.
+class KeyManagement(ABC):
+    """Abstract base providing key-management helpers for any keyed storage.
 
-    Backends implement the low-level ``put``/``get``/``pop``/``list``
-    operations.  Higher-level classes (:class:`ValueMixin`, :class:`CallMixin`)
-    add domain-specific logic on top.
+    Subclasses must implement ``list``, ``_evict``, and ``_contains``.
+    The concrete helpers ``evict``, ``contains``, ``expand``, and ``shrink``
+    are implemented here once and inherited by all storage classes.
     """
-
-    # Primitive operations necessary to implement in new backends
 
     @abstractmethod
     def list(self) -> Iterable[Digest]: ...
 
     @abstractmethod
-    def put(self, value: Any, key: Digest) -> Digest: ...
-
-    @abstractmethod
-    def get(self, key: Digest) -> Any: ...
-
-    @abstractmethod
     def _evict(self, key: Digest) -> None: ...
 
-    def _contains(self, key: Digest) -> bool:
-        try:
-            self.get(key)
-            return True
-        except KeyError:
-            return False
-
-    # public API on top
+    @abstractmethod
+    def _contains(self, key: Digest) -> bool: ...
 
     def evict(self, key: Digest | str) -> None:
         """Removes the entry corresponding to the key from the storage."""
@@ -79,7 +65,6 @@ class StorageBackend(ABC):
         if not matches:
             raise KeyError(key)
         if len(matches) > 1:
-            # find longest common prefix of the first two matches to find where they diverge
             m1, m2 = matches[0], matches[1]
             for i, (c1, c2) in enumerate(zip(m1, m2)):
                 if c1 != c2:
@@ -93,7 +78,7 @@ class StorageBackend(ABC):
         return Digest(matches[0])
 
     def shrink(self, key: Digest | str) -> Digest:
-        """Find the shortest substring that is still an unambigious reference to the same value."""
+        """Find the shortest substring that is still an unambiguous reference to the same value."""
         for ln in range(4, len(key)):
             try:
                 self.expand(key[:ln])
@@ -101,11 +86,33 @@ class StorageBackend(ABC):
             except AmbiguousDigestError:
                 continue
         raise AmbiguousDigestError(
-            f"Digest {key} cannot be shrunk without becoming ambigious!"
+            f"Digest {key} cannot be shrunk without becoming ambiguous!"
         )
 
 
-class ValueStorage(StorageBackend):
+class StorageBackend(KeyManagement):
+    """Primitive backend interface for key-value storage.
+
+    Backends implement the low-level ``put``/``get``/``_evict``/``list``
+    operations.  Higher-level classes (:class:`ValueMixin`, :class:`CallMixin`)
+    add domain-specific logic on top.
+    """
+
+    @abstractmethod
+    def put(self, value: Any, key: Digest) -> Digest: ...
+
+    @abstractmethod
+    def get(self, key: Digest) -> Any: ...
+
+    def _contains(self, key: Digest) -> bool:
+        try:
+            self.get(key)
+            return True
+        except KeyError:
+            return False
+
+
+class ValueStorage(KeyManagement):
     """Abstract domain interface for value storage."""
 
     @abstractmethod
@@ -290,7 +297,7 @@ class DestructuringMixin(StorageBackend):
                 return value
 
 
-class CallStorage(StorageBackend):
+class CallStorage(KeyManagement):
     """Abstract domain interface for call storage."""
 
     @abstractmethod
@@ -301,6 +308,28 @@ class CallStorage(StorageBackend):
 
     @abstractmethod
     def query(self, template: QueryCall) -> Iterable[Call]: ...
+
+    def transform(self, func: Callable[[Call], Call] | None = None) -> None:
+        """Applies a transformation function to all Call objects in the storage.
+
+        Args:
+            func (Callable[[Call], Call] | None): A function that takes a Call
+                and returns a transformed Call.  If None, the identity function
+                is used (useful for re-calculating keys).
+        """
+        for k in list(self.list()):
+            try:
+                call = self.load(k)
+            except KeyError:
+                continue
+
+            new_call = func(call) if func is not None else call
+            new_key = new_call.to_lookup_key()
+            if new_key != k:
+                self.save(new_call)
+                self.evict(k)
+            else:
+                self.save(new_call)
 
 
 class CallMixin(CallStorage, StorageBackend):
@@ -328,28 +357,6 @@ class CallMixin(CallStorage, StorageBackend):
             key = Digest(key)
         logger.debug("Loading call with key %s", key)
         return self.get(key)
-
-    def transform(self, func: Callable[[Call], Call] | None = None) -> None:
-        """
-        Applies a transformation function to all Call objects in the storage.
-
-        Args:
-            func (Callable[[Call], Call] | None): A function that takes a Call and returns a transformed Call.
-                If None, the identity function is used (useful for re-calculating keys).
-        """
-        for k in list(self.list()):
-            try:
-                call = self.load(k)
-            except KeyError:
-                continue
-
-            new_call = func(call) if func is not None else call
-            new_key = new_call.to_lookup_key()
-            if new_key != k:
-                self.save(new_call)
-                self.evict(k)
-            else:
-                self.save(new_call)
 
     def query(self, template: QueryCall) -> Iterable[Call]:
         """Find cached calls that 'match' the template.

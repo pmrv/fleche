@@ -64,6 +64,7 @@ def test_unknown_storage_raises():
         def get(self, key): raise KeyError(key)
         def list(self): return ()
         def _evict(self, key): pass
+        def _contains(self, key): return False
         def save(self, value, key=None): pass
         def load(self, key): raise KeyError(key)
 
