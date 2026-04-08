@@ -3,12 +3,12 @@ from typing import Iterable, Any, List
 from pathlib import Path
 from dataclasses import dataclass, field
 from .base import KeyManagement, CallStorage, AmbiguousDigestError
-
-logger = logging.getLogger("fleche.storage")
 from ..call import Call, QueryCall
 from ..digest import Digest, DIGEST_LENGTH, digest
 
 from pyiron_snippets.import_alarm import ImportAlarm
+
+logger = logging.getLogger("fleche.storage")
 
 with ImportAlarm(
     "Sql requires 'sqlalchemy' to be installed. "
