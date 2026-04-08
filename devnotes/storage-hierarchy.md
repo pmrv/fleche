@@ -72,9 +72,11 @@ CallStorage(ABC)
 └── load(key: Digest | str) : Call
 ```
 
-Neither interface inherits from `StorageBackend`.  This separation keeps
-the domain contracts free of backend concerns and allows them to be
-type-checked in isolation.
+Neither interface inherits from `StorageBackend`; both inherit from
+`KeyManagement` directly.  This keeps the domain contracts free of backend
+concerns, allows them to be type-checked in isolation, and lets
+`SqlBackend` implement `CallStorage` without taking on the `put(value: Any)`
+contract from `StorageBackend`.
 
 ---
 
@@ -156,15 +158,15 @@ with a backend implementation.  The naming convention is `{Value|Call}{Backend}`
 | `ValuePickleFile` | `PickleFileBackend` |
 | `ValueBagOfHoldingH5File` | `BagOfHoldingH5FileBackend` |
 
-### Call storage (inherit from `CallMixin`)
+### Call storage
 
-| Class | Backend | Notes |
-|---|---|---|
-| `CallMemory` | `MemoryBackend` | |
-| `CallVoid` | `VoidBackend` | |
-| `CallPickleFile` | `PickleFileBackend` | |
-| `CallBagOfHoldingH5File` | `BagOfHoldingH5FileBackend` | |
-| `Sql` | `SqlBackend` | Call-only; `query()` pushes filters to SQL |
+| Class | Mixin/Base | Backend | Notes |
+|---|---|---|---|
+| `CallMemory` | `CallMixin` | `MemoryBackend` | |
+| `CallVoid` | `CallMixin` | `VoidBackend` | |
+| `CallPickleFile` | `CallMixin` | `PickleFileBackend` | |
+| `CallBagOfHoldingH5File` | `CallMixin` | `BagOfHoldingH5FileBackend` | |
+| `Sql` | `CallStorage` (direct) | `SqlBackend` | Inherits `CallStorage` directly — no `CallMixin`; `query()` uses SQL |
 
 ---
 
@@ -257,7 +259,7 @@ digraph StorageHierarchy {
         ]
 
         CallStorage [
-            label="{«ABC»\nCallStorage|save(call)\lload(key) → Call\l}"
+            label="{«ABC»\nCallStorage|save(call)\lload(key) → Call\l|transform(func)\l}"
             fillcolor="#C8F5C0"
             color="#33AA33"
         ]
@@ -277,7 +279,7 @@ digraph StorageHierarchy {
         ]
 
         CallMixin [
-            label="{CallMixin|Implements save/load\lusing put/get\ltransform(func)\lquery(template)\l}"
+            label="{CallMixin|Implements save/load\lusing put/get\lquery(template)\l}"
             fillcolor="#FFEEAA"
             color="#AA8800"
         ]
@@ -400,7 +402,7 @@ digraph StorageHierarchy {
     PickleFileBackend -> CallPickleFile     [arrowhead=onormal, style=solid]
     CallMixin -> CallBagOfHoldingH5File    [arrowhead=onormal, style=solid]
     BagOfHoldingH5FileBackend -> CallBagOfHoldingH5File [arrowhead=onormal, style=solid]
-    CallMixin -> Sql                        [arrowhead=onormal, style=solid]
+    CallStorage -> Sql                      [arrowhead=onormal, style=solid]
     SqlBackend -> Sql                       [arrowhead=onormal, style=solid]
 }
 ```

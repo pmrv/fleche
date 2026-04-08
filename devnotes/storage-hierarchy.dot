@@ -61,7 +61,7 @@ digraph StorageHierarchy {
         ]
 
         CallStorage [
-            label="{«ABC»\nCallStorage|save(call)\lload(key) → Call\l}"
+            label="{«ABC»\nCallStorage|save(call)\lload(key) → Call\l|transform(func)\l}"
             fillcolor="#C8F5C0"
             color="#33AA33"
         ]
@@ -81,7 +81,7 @@ digraph StorageHierarchy {
         ]
 
         CallMixin [
-            label="{CallMixin|Implements save/load\lusing put/get\ltransform(func)\lquery(template)\l}"
+            label="{CallMixin|Implements save/load\lusing put/get\lquery(template)\l}"
             fillcolor="#FFEEAA"
             color="#AA8800"
         ]
@@ -204,6 +204,6 @@ digraph StorageHierarchy {
     PickleFileBackend -> CallPickleFile     [arrowhead=onormal, style=solid]
     CallMixin -> CallBagOfHoldingH5File    [arrowhead=onormal, style=solid]
     BagOfHoldingH5FileBackend -> CallBagOfHoldingH5File [arrowhead=onormal, style=solid]
-    CallMixin -> Sql                        [arrowhead=onormal, style=solid]
+    CallStorage -> Sql                      [arrowhead=onormal, style=solid]
     SqlBackend -> Sql                       [arrowhead=onormal, style=solid]
 }
