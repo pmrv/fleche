@@ -164,6 +164,12 @@ class Digested(ABC):
     @abstractmethod
     def sunder(cls, intern: Callable[[Any], tuple[Any, int | float]], value: Any): ...
 
+    @staticmethod
+    def get(storage, key):
+        if isinstance(key, Digest):
+            return storage.get(key)
+        else:
+            return key
 
 @dataclass
 class DigestedIterable(Digested):
@@ -173,7 +179,7 @@ class DigestedIterable(Digested):
         return self.items
 
     def mend(self, storage: 'DestructuringMixin') -> list | tuple:
-        return type(self.items)(map(storage.get, self.items))
+        return type(self.items)(map(lambda v: self.get(storage, v), self.items))
 
     @classmethod
     def sunder(cls, intern: Callable[[Any], tuple[Any, int | float]], value: list | tuple):
@@ -194,7 +200,8 @@ class DigestedDict(Digested):
         return self.items
 
     def mend(self, storage: 'DestructuringMixin') -> dict:
-        return {storage.get(k): storage.get(v) for k, v in self.items.items()}
+        return {self.get(storage, k): self.get(storage, v)
+                    for k, v in self.items.items()}
 
     @classmethod
     def sunder(cls, intern: Callable[[Any], tuple[Any, int | float]], value: dict):
@@ -203,7 +210,7 @@ class DigestedDict(Digested):
         depth = 1 + max(max(k_depths), max(v_depths))
         items = dict(zip(kk, vv))
         if all(not isinstance(r, Digest) for r in (*items.keys(), *items.values())):
-            # intern did do anything to our children because we're out of depth, return them verbatim
+            # intern did not do anything to our children because we're out of depth, return them verbatim
             return items, depth
         return cls(items), depth
 
@@ -228,7 +235,7 @@ class DestructuringMixin(StorageBackend):
 
     remaining_depth: int = 0
 
-    def _intern_rec(self, value: Any) -> tuple[Any, int | float]:
+    def _intern_rec(self, value: Any, key: Digest | None = None) -> tuple[Any, int | float]:
         """Post-order traversal: recurse to leaves, decide inline-vs-store on the way back up.
 
         Returns ``(result, depth)`` where *result* is the plain value when ``depth < remaining_depth``
@@ -236,6 +243,9 @@ class DestructuringMixin(StorageBackend):
         the element was written to storage separately.  Every node in the structure is visited exactly
         once (O(n)), unlike a separate depth-counting pass.
         """
+        if isinstance(value, Digest):
+            return value, -1
+
         depth = float("inf")
         match value:
             case Number() | str() | bytes():
@@ -255,40 +265,27 @@ class DestructuringMixin(StorageBackend):
 
         if depth < self.remaining_depth:
             return value, depth
-        return super().put(value, digest(value)), depth
+        return super().put(value, key or digest(value)), depth
 
     def put(self, value: Any, key: Digest) -> Digest:
-        if isinstance(value, Digest):
-            return value
 
         match value:
-            case list() | tuple() if not value:
+            case list() | tuple() | dict() if not value:
                 return super().put(value, key)
 
-            case list() | tuple():
-                children, _ = zip(*(self._intern_rec(v) for v in value))
-                items = type(value)(children)
-                if not any(isinstance(r, Digest) for r in items):
-                    return super().put(items, key)
-                return super().put(DigestedIterable(items), key)
-
-            case dict() if not value:
-                return super().put(value, key)
-
-            case dict():
-                kk, _ = zip(*(self._intern_rec(k) for k in value))
-                vv, _ = zip(*(self._intern_rec(v) for v in value.values()))
-                items = dict(zip(kk, vv))
-                if not any(isinstance(r, Digest) for r in (*items.keys(), *items.values())):
-                    return super().put(items, key)
-                return super().put(DigestedDict(items), key)
+            case list() | tuple() | dict():
+                value_or_digest, depth = self._intern_rec(value, key)
+                # if given value is nominally not deep enough to be destructured/saved during recursion
+                # we do it here manually as the recursion base case
+                if depth < self.remaining_depth:
+                    return super().put(value_or_digest, key)
+                else:
+                    return value_or_digest
 
             case _:
                 return super().put(value, key)
 
     def get(self, key: Digest | Any) -> Any:
-        if not isinstance(key, Digest):
-            return key  # passing through an actual value from Digested.mend
         value = super().get(key)
 
         match value:
@@ -347,8 +344,8 @@ class CallMixin(CallStorage, StorageBackend):
     def save(self, call: Call) -> Digest:
         key = call.to_lookup_key()
         logger.debug("Saving call %s", key)
-        if self.contains(str(key)):
-            self.evict(str(key))
+        if self.contains(key):
+            self.evict(key)
         return self.put(call, key)
 
     def load(self, key: Digest | str) -> Call:

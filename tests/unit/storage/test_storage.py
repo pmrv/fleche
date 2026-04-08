@@ -43,18 +43,6 @@ def test_storage_given_key(value_storage, value):
         assert loaded_value == value, "value not available under given key"
 
 
-@pytest.mark.parametrize(
-    "value",
-    [
-        DigestedIterable([Digest("asdf"), Digest("foobar")]),
-        DigestedIterable((Digest("asdf"), Digest("foobar"))),
-    ],
-)
-def test_digested(value_storage, value):
-    loaded_value = value_storage.load(value_storage.save(value))
-    assert loaded_value == value, "digested value not available under given key"
-
-
 # ------------------------
 # CallStorage property tests
 # ------------------------

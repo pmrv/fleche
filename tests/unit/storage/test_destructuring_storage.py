@@ -214,13 +214,6 @@ def test_remaining_depth_reduces_storage_slots():
     assert len(list(ds2.list())) < len(list(ds0.list()))
 
 
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-@given(st_base_values)
-def test_load_passthrough_non_digest(ds, value):
-    """get returns non-Digest values as-is (inline values from mend)."""
-    assert ds.get(value) == value
-
-
 @given(
     value=st_nested_values,
     write_depth=st.integers(min_value=0, max_value=5),
