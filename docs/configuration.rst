@@ -84,43 +84,57 @@ Each cache section must define two storage backends: ``values`` and ``calls``. `
 Storage backends
 ~~~~~~~~~~~~~~~~
 
-Each storage backend is configured using a ``type`` key, which specifies the name of the storage class from the ``fleche.storage`` module. Other keys are passed as arguments to the storage class constructor.
+Each storage backend is configured using a ``type`` key. The value is a
+**lowercase** string — see the table below. Other keys in the same dict are
+passed as keyword arguments to the storage constructor.
 
 Example:
 
 .. code-block:: toml
 
    [mycache]
-   values.type = "Memory"
-   calls.type = "Memory"
+   values.type = "memory"
+   calls.type = "memory"
 
 Available storage types
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-* :class:`~fleche.storage.Memory`: Stores data in an in-memory dictionary. It takes no arguments.
-* :class:`~fleche.storage.PickleFile`: Stores data as files on the filesystem, using the standard ``pickle`` module for serialization. It takes a ``root`` argument, which is the path to the directory where the files will be stored.
-* :class:`~fleche.storage.CloudpickleFile`: Stores data as files on the filesystem, using ``cloudpickle`` for serialization. It handles more complex Python objects than standard ``pickle``. It takes a ``root`` argument, which is the path to the directory where the files will be stored.
-* :class:`~fleche.storage.DillFile`: Stores data as files on the filesystem, using ``dill`` for serialization. It takes a ``root`` argument, which is the path to the directory where the files will be stored.
-* :class:`~fleche.storage.BagOfHoldingH5File`: Stores data in an HDF5 file using the ``bagofholding`` library. It takes a ``root`` argument, which is the path to the directory where the files will be stored.
-* :class:`~fleche.storage.Sql`: Stores call metadata in a SQL database using SQLAlchemy. It is intended for use as a ``calls`` storage. It takes a ``url`` argument (e.g., ``sqlite:///calls.db``).
+``"memory"``
+    Stores data in an in-memory dictionary
+    (:class:`~fleche.storage.ValueMemory` / :class:`~fleche.storage.CallMemory`).
+    No extra keys.
 
-Nested storage
-~~~~~~~~~~~~~~
+``"void"``
+    No-op backend — discards all data
+    (:class:`~fleche.storage.ValueVoid` / :class:`~fleche.storage.CallVoid`).
+    No extra keys.
 
-You can also nest storage configurations. For example, :class:`~fleche.storage.DestructuringStorage` wraps another storage backend to recursively break down complex Python objects (lists, tuples, dicts) before storing them.
+``"pickle"``
+    Stores data as files on the filesystem using the standard ``pickle`` module
+    (:class:`~fleche.storage.ValuePickleFile` / :class:`~fleche.storage.CallPickleFile`).
+    Required: ``root`` — path to the storage directory.
 
-To configure a nested storage, use a ``storage`` sub-key containing the configuration for the inner storage.
+``"cloudpickle"``
+    Same filesystem backend as ``"pickle"``, but serialised with ``cloudpickle``.
+    Handles more complex Python objects (lambdas, closures, etc.).
+    Required: ``root``.
 
-Example:
+``"dill"``
+    Same filesystem backend as ``"pickle"``, but serialised with ``dill``.
+    Required: ``root``.
 
-.. code-block:: toml
+``"bagofholding_hdf"``
+    Stores data in HDF5 files using the ``bagofholding`` library
+    (:class:`~fleche.storage.ValueBagOfHoldingH5File` /
+    :class:`~fleche.storage.CallBagOfHoldingH5File`).
+    Required: ``root``.
 
-   [nested]
-   values.type = "DestructuringStorage"
-   values.storage.type = "BagOfHoldingH5File"
-   values.storage.root = "~/.fleche/nested_values"
-   calls.type = "CloudpickleFile"
-   calls.root = "~/.fleche/calls"
+``"sql"``
+    Stores call metadata in a SQL database via SQLAlchemy
+    (:class:`~fleche.storage.Sql`).
+    Intended for **call storage only**.
+    Required: ``url`` — a SQLAlchemy connection URL, e.g.
+    ``"sqlite:///~/.fleche/calls.db"``.
 
 Full Configuration Example
 --------------------------
@@ -134,23 +148,22 @@ Below is an example of a complete configuration file demonstrating several featu
    metadata = ["Runtime"]
 
    [persistent]
-   # Store values in HDF5 files
-   values.type = "BagOfHoldingH5File"
+   # Store values as cloudpickle files
+   values.type = "cloudpickle"
    values.root = "~/.cache/fleche/values"
 
    # Store call details as cloudpickle files
-   calls.type = "CloudpickleFile"
+   calls.type = "cloudpickle"
    calls.root = "~/.cache/fleche/calls"
 
    [fast]
    # Simple in-memory cache
-   values.type = "Memory"
-   calls.type = "Memory"
+   values.type = "memory"
+   calls.type = "memory"
 
-   [destructured]
-   # Example of nested storage with destructuring
-   values.type = "DestructuringStorage"
-   values.storage.type = "BagOfHoldingH5File"
-   values.storage.root = "~/.cache/fleche/destructured_values"
-   calls.type = "CloudpickleFile"
-   calls.root = "~/.cache/fleche/destructured_calls"
+   [hdf5_values]
+   # HDF5 values backend with SQL call index
+   values.type = "bagofholding_hdf"
+   values.root = "~/.cache/fleche/hdf5_values"
+   calls.type = "sql"
+   calls.url = "sqlite:///~/.cache/fleche/calls.db"

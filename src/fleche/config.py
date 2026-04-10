@@ -1,27 +1,70 @@
 """
 Configuration system for fleche.
 
-Example cache.toml:
+Storage type names
+------------------
 
-[default]
-cache = "mycache"
-metadata = ["Runtime", "CallInfo"]
+The ``type`` key in a storage config dict is case-sensitive and uses the
+following **lowercase** identifiers:
 
-[mycache]
-values.type = "Memory"
-calls.type = "Memory"
+``"memory"``
+    In-memory dict (:class:`~fleche.storage.ValueMemory` /
+    :class:`~fleche.storage.CallMemory`).  No extra keys.
 
-[transient]
-values.type = "CloudpickleFile"
-values.root = ".fleche/values"
-calls.type = "CloudpickleFile"
-calls.root = ".fleche/calls"
+``"void"``
+    No-op — discards all data (:class:`~fleche.storage.ValueVoid` /
+    :class:`~fleche.storage.CallVoid`).  No extra keys.
 
-[global]
-values.type = "BagOfHoldingH5File"
-values.root = "~/.fleche/values"
-calls.type = "CloudpickleFile"
-calls.root = "~/.fleche/calls"
+``"pickle"``
+    Filesystem backend serialised with the standard ``pickle`` module
+    (:class:`~fleche.storage.ValuePickleFile` /
+    :class:`~fleche.storage.CallPickleFile`).
+    Required: ``root`` (path to storage directory).
+
+``"cloudpickle"``
+    Filesystem backend serialised with ``cloudpickle`` — handles more
+    complex Python objects than ``pickle``.
+    Required: ``root``.
+
+``"dill"``
+    Filesystem backend serialised with ``dill``.
+    Required: ``root``.
+
+``"bagofholding_hdf"``
+    HDF5-backed storage via the ``bagofholding`` library
+    (:class:`~fleche.storage.ValueBagOfHoldingH5File` /
+    :class:`~fleche.storage.CallBagOfHoldingH5File`).
+    Required: ``root``.
+
+``"sql"``
+    SQL database via SQLAlchemy (:class:`~fleche.storage.Sql`).
+    *Call storage only.*  Required: ``url`` (SQLAlchemy connection URL,
+    e.g. ``"sqlite:///~/.fleche/calls.db"``).
+
+Example fleche.toml
+-------------------
+
+::
+
+    [default]
+    cache = "persistent"
+    metadata = ["Runtime"]
+
+    [persistent]
+    values.type = "cloudpickle"
+    values.root = "~/.fleche/values"
+    calls.type = "cloudpickle"
+    calls.root = "~/.fleche/calls"
+
+    [fast]
+    values.type = "memory"
+    calls.type = "memory"
+
+    [with_sql_calls]
+    values.type = "cloudpickle"
+    values.root = "~/.fleche/values"
+    calls.type = "sql"
+    calls.url = "sqlite:///~/.fleche/calls.db"
 
 """
 
@@ -129,9 +172,21 @@ def storage_from_config(d: dict[str, Any], type: Literal["value"]) -> storage.Va
 def storage_from_config(d: dict[str, Any], type: Literal["call", "value"]) -> storage.ValueStorage | storage.CallStorage:
     """Construct a :class:`~fleche.storage.StorageBackend` from a config dict.
 
-    The dict must contain a ``"type"`` key (case-sensitive) and any additional
-    parameters required by that storage backend.  The input dict is **not**
-    mutated.
+    The dict must contain a ``"type"`` key (case-sensitive, lowercase) and any
+    additional parameters required by that storage backend.  The input dict is
+    **not** mutated.
+
+    Supported type values and their parameters:
+
+    * ``{"type": "memory"}``
+    * ``{"type": "void"}``
+    * ``{"type": "pickle", "root": "<path>"}``
+    * ``{"type": "cloudpickle", "root": "<path>"}``
+    * ``{"type": "dill", "root": "<path>"}``
+    * ``{"type": "bagofholding_hdf", "root": "<path>"}``
+    * ``{"type": "sql", "url": "<sqlalchemy-url>"}``  *(call storage only)*
+
+    See the module docstring for descriptions of each type.
     """
     d = dict(d)
     backend = d.pop("type")
