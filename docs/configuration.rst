@@ -84,8 +84,7 @@ Each cache section must define two storage backends: ``values`` and ``calls``. `
 Storage backends
 ~~~~~~~~~~~~~~~~
 
-Each storage backend is configured using a ``type`` key. The value is a
-**lowercase** string — see the table below. Other keys in the same dict are
+Each storage backend is configured using a ``type`` key, see the table below. Other keys in the same dict are
 passed as keyword arguments to the storage constructor.
 
 Example:
