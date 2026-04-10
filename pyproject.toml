@@ -47,7 +47,7 @@ sqlalchemy = [
     "sqlalchemy",
 ]
 bagofholding = [
-    "bagofholding == 0.1.10",
+    "bagofholding == 0.1.11",
 ]
 tests = [
     "pytest",
@@ -55,7 +55,7 @@ tests = [
     "cloudpickle",
     "dill",
     "sqlalchemy",
-    "bagofholding == 0.1.10",
+    "bagofholding == 0.1.11",
     "nbconvert",
     "ipykernel",
     "tabulate",
