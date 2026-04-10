@@ -1,5 +1,8 @@
 __pycache__/
+.claude/worktrees
 *.egg-info/
 .ipynb_checkpoints/*
 .hypothesis/
+notebooks/.*
+docs/_build
 src/fleche/_version.py

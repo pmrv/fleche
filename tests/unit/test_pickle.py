@@ -10,7 +10,7 @@ import pytest
 from hypothesis import given, settings, HealthCheck
 
 from fleche import fleche
-from fleche.storage import Memory, Void, PickleFile, DestructuringStorage
+from fleche.storage import ValueMemory, CallMemory, ValueVoid, ValuePickleFile
 from fleche.storage.sql import Sql
 from fleche.caches import Cache, ReadOnlyCache, FilteredCache, RefreshingCache, CacheStack, Rejected
 from tests.strategies import st_digested_calls
@@ -38,25 +38,18 @@ def roundtrip(obj):
 def test_value_storage_picklable(value_storage):
     """All value storage backends are picklable."""
     restored = roundtrip(value_storage)
-    assert type(restored) == type(value_storage)
+    assert type(restored) is type(value_storage)
 
 
 def test_call_storage_picklable(call_storage):
     """All call storage backends are picklable."""
     restored = roundtrip(call_storage)
-    assert type(restored) == type(call_storage)
+    assert type(restored) is type(call_storage)
 
 
 def test_void_picklable():
-    assert isinstance(roundtrip(Void()), Void)
+    assert isinstance(roundtrip(ValueVoid()), ValueVoid)
 
-
-def test_destructuring_storage_picklable():
-    ds = DestructuringStorage(Memory({}))
-    restored = roundtrip(ds)
-    assert isinstance(restored, DestructuringStorage)
-    key = restored.save([1, 2, 3])
-    assert restored.load(key) == [1, 2, 3]
 
 
 # ---------------------------------------------------------------------------
@@ -67,7 +60,7 @@ def test_destructuring_storage_picklable():
 @pytest.mark.parametrize("compress", [False, True])
 def test_pickle_file_attributes_preserved(tmp_path, compress):
     """PickleFile roundtrip preserves root, secret_key, and compress."""
-    store = PickleFile.with_pickle(
+    store = ValuePickleFile.with_pickle(
         tmp_path / "store", secret_key=SECRET_KEY, compress=compress
     )
     key = store.save("hello")
@@ -113,7 +106,7 @@ def test_refreshing_cache_picklable(cache):
 
 
 def test_cache_stack_picklable(cache):
-    stack = CacheStack((cache, Cache(Memory({}), Memory({}))))
+    stack = CacheStack((cache, Cache(ValueMemory({}), CallMemory({}))))
     restored = roundtrip(stack)
     assert isinstance(restored, CacheStack)
     assert len(restored.stack) == 2
@@ -160,7 +153,7 @@ def test_cache_stack_functional_roundtrip(value_storage, call_storage, call):
         key = cache.save(call)
     except Rejected:
         return
-    stack = CacheStack((cache, Cache(Memory({}), Memory({}))))
+    stack = CacheStack((cache, Cache(ValueMemory({}), CallMemory({}))))
     restored = roundtrip(stack)
     loaded = restored.load(key, lazy=False)
     assert loaded == call

@@ -1,12 +1,9 @@
 import time
 import sys
-import os
 import json
 import shutil
 import tempfile
 import gc
-from pathlib import Path
-from typing import Any
 
 from fleche.storage import Memory, PickleFile, Sql, BagOfHoldingH5File
 from fleche.digest import digest

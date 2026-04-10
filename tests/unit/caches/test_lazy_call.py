@@ -1,18 +1,18 @@
 import pytest
 from hypothesis import given
-from unittest.mock import Mock, call, patch
+from unittest.mock import Mock, patch
 from fleche.call import Call, LazyCall, LazyArguments
 from fleche.caches import Cache
 from fleche import cache as cache_context
-from fleche.storage import Memory
-from fleche.digest import Digest, digest
+from fleche.storage import ValueMemory, CallMemory
+from fleche.digest import digest
 from tests.strategies import st_nested_values
 
 
 def test_lazy_call_load():
     """Verify that LazyCall defers loading of arguments and results until they are accessed."""
-    values_storage = Memory({})
-    calls_storage = Memory({})
+    values_storage = ValueMemory({})
+    calls_storage = CallMemory({})
     cache = Cache(values_storage, calls_storage)
 
     original = Call(name="test_func", arguments={"a": 1, "b": 2}, result=3)
@@ -55,8 +55,8 @@ def test_lazy_call_load():
 
 def test_lazy_call_to_lookup_key():
     """Verify that LazyCall produces the same lookup key as the original Call."""
-    values_storage = Memory({})
-    calls_storage = Memory({})
+    values_storage = ValueMemory({})
+    calls_storage = CallMemory({})
     cache = Cache(values_storage, calls_storage)
 
     original = Call(name="test_func", arguments={"a": [1, 2]}, result=42)
@@ -68,8 +68,8 @@ def test_lazy_call_to_lookup_key():
 
 def test_lazy_call_digest():
     """Verify that LazyCall has the same digest as the equivalent Call object."""
-    values_storage = Memory({})
-    calls_storage = Memory({})
+    values_storage = ValueMemory({})
+    calls_storage = CallMemory({})
     cache = Cache(values_storage, calls_storage)
 
     # Case 1: Simple values
@@ -94,8 +94,8 @@ def test_lazy_call_digest():
 
 def test_cache_query_lazy():
     """Verify that Cache.query() yields LazyCall instances."""
-    values_storage = Memory({})
-    calls_storage = Memory({})
+    values_storage = ValueMemory({})
+    calls_storage = CallMemory({})
     cache = Cache(values_storage, calls_storage)
 
     cache.save(Call(name="f", arguments={"x": 1}, result=10))
@@ -144,14 +144,14 @@ def test_lazy_call_maintains_cache_reference():
     This ensures that when values are eventually loaded, they come from the correct storage.
     """
     # Set up first cache and save a value
-    cache1 = Cache(Memory({}), Memory({}))
+    cache1 = Cache(ValueMemory({}), CallMemory({}))
     key = cache1.save(Call(name="f", arguments={"x": "val1"}, result="res1"))
 
     # Obtain a lazy call from cache1
     lazy = cache1.load(key, lazy=True)
 
     # Set up second cache
-    cache2 = Cache(Memory({}), Memory({}))
+    cache2 = Cache(ValueMemory({}), CallMemory({}))
 
     # Change active cache context
     with cache_context(cache2):
@@ -165,8 +165,8 @@ def test_lazy_call_maintains_cache_reference():
 
 def test_lazy_call_fetch():
     """Verify that LazyCall.fetch() reconstructs a full Call object."""
-    values_storage = Memory({})
-    calls_storage = Memory({})
+    values_storage = ValueMemory({})
+    calls_storage = CallMemory({})
     cache = Cache(values_storage, calls_storage)
 
     original = Call(name="test_func", arguments={"a": 1, "b": 2}, result=3)
@@ -188,8 +188,8 @@ def test_lazy_call_to_lookup_key_consistency(args):
     original `Call.to_lookup_key()` even when complex nested arguments are
     partially stored as digests.
     """
-    values_storage = Memory({})
-    calls_storage = Memory({})
+    values_storage = ValueMemory({})
+    calls_storage = CallMemory({})
     cache = Cache(values_storage, calls_storage)
 
     # Put our complex args into the Call

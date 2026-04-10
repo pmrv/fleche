@@ -1,4 +1,3 @@
-import pytest
 
 from fleche.storage.sql import Sql
 from fleche.call import Call

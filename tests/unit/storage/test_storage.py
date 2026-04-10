@@ -43,18 +43,6 @@ def test_storage_given_key(value_storage, value):
         assert loaded_value == value, "value not available under given key"
 
 
-@pytest.mark.parametrize(
-    "value",
-    [
-        DigestedIterable([Digest("asdf"), Digest("foobar")]),
-        DigestedIterable((Digest("asdf"), Digest("foobar"))),
-    ],
-)
-def test_digested(value_storage, value):
-    loaded_value = value_storage.load(value_storage.save(value))
-    assert loaded_value == value, "digested value not available under given key"
-
-
 # ------------------------
 # CallStorage property tests
 # ------------------------
@@ -181,22 +169,13 @@ def test_sql_metadata_roundtrip_and_query(tmp_path):
 
 def test_hash_builtin_storages(tmp_path):
     """Test that all storage types (except Memory) respond properly to hash() builtin."""
-    from fleche.storage import (
-        Memory, Void, DestructuringStorage, CallStorageAdapter
-    )
+    from fleche.storage import ValueVoid, ValueMemory
 
     # Storages with only immutable fields should be hashable
-    void = Void()
+    void = ValueVoid()
     assert hash(void) is not None
 
-    # Wrapper storages should also be hashable when wrapping hashable storages
-    dest_storage = DestructuringStorage(void)
-    assert hash(dest_storage) is not None
-
-    call_storage_adapter = CallStorageAdapter(void)
-    assert hash(call_storage_adapter) is not None
-
     # Memory storage should raise TypeError due to mutable dict field
-    memory = Memory({})
+    memory = ValueMemory({})
     with pytest.raises(TypeError):
         hash(memory)

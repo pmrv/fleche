@@ -1,6 +1,5 @@
 from unittest.mock import Mock
 import pytest
-from fleche.call import Call
 from fleche.caches import ReadOnlyCache, Rejected
 
 

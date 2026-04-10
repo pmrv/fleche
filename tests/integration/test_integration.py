@@ -5,12 +5,14 @@ import tempfile
 from fleche import fleche, cache
 from fleche.digest import digest
 from fleche.caches import Cache, ReadOnlyCache, CacheStack
-from fleche.call import Call
-from fleche.storage import Memory, PickleFile
+from fleche.storage import ValueMemory, CallMemory, ValuePickleFile, CallPickleFile
 from fleche.storage.sql import Sql
 
 temp = tempfile.TemporaryDirectory()
-storages = [Memory({}), PickleFile.with_cloudpickle(temp.name)]
+storages = [
+    (ValueMemory({}), CallMemory({})),
+    (ValuePickleFile.with_cloudpickle(temp.name), CallPickleFile.with_cloudpickle(temp.name))
+]
 
 
 @fleche
@@ -29,10 +31,10 @@ def fib_impl(n):
 functions_to_test = [(slow_function_impl, 2), (fib_impl, 15)]
 
 
-@pytest.mark.parametrize("storage", storages)
+@pytest.mark.parametrize("values_storage,calls_storage", storages)
 @pytest.mark.parametrize("func, arg", functions_to_test)
-def test_fleche_performance(storage, func, arg):
-    with cache(Cache(storage, storage)):
+def test_fleche_performance(values_storage, calls_storage, func, arg):
+    with cache(Cache(values_storage, calls_storage)):
 
         start_time = time.time()
         func(arg)
@@ -51,7 +53,7 @@ def test_fleche_readonly_cache():
     def func(x):
         return x
 
-    c = Cache(Memory({}), Memory({}))
+    c = Cache(ValueMemory({}), CallMemory({}))
     ro_cache = ReadOnlyCache(c)
 
     with cache(ro_cache):
@@ -78,8 +80,8 @@ def test_fleche_cache_stack():
     def func(x):
         return x
 
-    cache1 = Cache(Memory({}), Memory({}))
-    cache2 = Cache(Memory({}), Memory({}))
+    cache1 = Cache(ValueMemory({}), CallMemory({}))
+    cache2 = Cache(ValueMemory({}), CallMemory({}))
 
     stack = CacheStack(stack=(cache2, cache1))
 
@@ -114,8 +116,8 @@ def test_fleche_cache_stack_context_manager():
     def func(x):
         return x
 
-    cache1 = Cache(Memory({}), Memory({}))
-    cache2 = Cache(Memory({}), Memory({}))
+    cache1 = Cache(ValueMemory({}), CallMemory({}))
+    cache2 = Cache(ValueMemory({}), CallMemory({}))
 
     with cache(cache1):
         with cache(cache2, stack=True):
@@ -139,16 +141,16 @@ def test_fleche_cache_stack_context_manager():
 @pytest.mark.parametrize(
     "backend",
     [
-        "memory_memory",  # values=Memory, calls=Memory
-        "memory_sql",  # values=Memory, calls=Sql (in-memory SQLite)
+        "memory_memory",  # values=ValueMemory, calls=CallMemory
+        "memory_sql",  # values=ValueMemory, calls=Sql (in-memory SQLite)
     ],
 )
 def test_cache_hit_returns_materialized_value(backend):
     if backend == "memory_memory":
-        values = Memory({})
-        calls = Memory({})
+        values = ValueMemory({})
+        calls = CallMemory({})
     elif backend == "memory_sql":
-        values = Memory({})
+        values = ValueMemory({})
         calls = Sql()  # in-memory SQLite by default
     else:
         raise AssertionError("unknown backend")

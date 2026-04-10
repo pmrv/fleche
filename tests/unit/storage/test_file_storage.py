@@ -4,7 +4,7 @@ import tempfile
 import socket
 from pathlib import Path
 import pytest
-from fleche.storage import PickleFile
+from fleche.storage import ValuePickleFile as PickleFile
 from fleche.storage.file import FileStorage
 from fleche.digest import digest, Digest
 from dataclasses import dataclass

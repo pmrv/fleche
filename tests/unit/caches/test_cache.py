@@ -1,10 +1,9 @@
 import logging
 from unittest.mock import Mock, MagicMock
-import pytest
 from fleche import fleche, cache
 from fleche.call import Call
 from fleche.digest import Digest
-from fleche.caches import Cache, CacheStack, ReadOnlyCache, FilteredCache, RefreshingCache, SizeLimitedCache
+from fleche.caches import Cache, CacheStack
 
 
 def test_cache_save():
@@ -94,10 +93,10 @@ def test_cache_context_manager():
 
 
 def test_base_cache_transfer():
-    from fleche.storage.memory import Memory
+    from fleche.storage.memory import ValueMemory, CallMemory
 
-    c1 = Cache(values=Memory({}), _calls=Memory({}))
-    c2 = Cache(values=Memory({}), _calls=Memory({}))
+    c1 = Cache(values=ValueMemory({}), calls=CallMemory({}))
+    c2 = Cache(values=ValueMemory({}), calls=CallMemory({}))
 
     call1 = Call(
         name="f1",
@@ -126,10 +125,10 @@ def test_base_cache_transfer():
 
 
 def test_base_cache_transfer_overwrite():
-    from fleche.storage.memory import Memory
+    from fleche.storage.memory import ValueMemory, CallMemory
 
-    c1 = Cache(values=Memory({}), _calls=Memory({}))
-    c2 = Cache(values=Memory({}), _calls=Memory({}))
+    c1 = Cache(values=ValueMemory({}), calls=CallMemory({}))
+    c2 = Cache(values=ValueMemory({}), calls=CallMemory({}))
 
     call1 = Call(
         name="f1",
@@ -153,7 +152,7 @@ def test_base_cache_transfer_overwrite():
     c1.save(call1)
 
     # Save conflict to c2
-    key = c2.save(call1_conflict)
+    c2.save(call1_conflict)
 
     c1.transfer(c2, overwrite=True)
 
@@ -164,10 +163,10 @@ def test_base_cache_transfer_overwrite():
 
 
 def test_base_cache_transfer_pop():
-    from fleche.storage.memory import Memory
+    from fleche.storage.memory import ValueMemory, CallMemory
 
-    c1 = Cache(values=Memory({}), _calls=Memory({}))
-    c2 = Cache(values=Memory({}), _calls=Memory({}))
+    c1 = Cache(values=ValueMemory({}), calls=CallMemory({}))
+    c2 = Cache(values=ValueMemory({}), calls=CallMemory({}))
 
     call1 = Call(
         name="f1",
@@ -200,10 +199,10 @@ def test_base_cache_transfer_pop():
 def test_base_cache_transfer_no_overwrite_and_pop(caplog):
     """Transfer with overwrite=False and pop=True: new entries are moved,
     conflicting entries (already in target) are NOT evicted from source and a warning is logged."""
-    from fleche.storage.memory import Memory
+    from fleche.storage.memory import ValueMemory, CallMemory
 
-    c1 = Cache(values=Memory({}), _calls=Memory({}))
-    c2 = Cache(values=Memory({}), _calls=Memory({}))
+    c1 = Cache(values=ValueMemory({}), calls=CallMemory({}))
+    c2 = Cache(values=ValueMemory({}), calls=CallMemory({}))
 
     call1 = Call(
         name="f1",
@@ -256,13 +255,12 @@ def test_cache_query_decodes_values_and_args(monkeypatch):
     so that arguments and result are stored as digests, querying via the Cache
     wrapper must return the call with values decoded back to Python objects.
     """
-    from fleche.storage import Memory
+    from fleche.storage import ValueMemory, CallMemory
     from fleche.call import Call
-    from fleche.digest import Digest
 
-    values = Memory({})
+    values = ValueMemory({})
     # Use a simple in-memory CallStorage via adapter
-    calls = Memory({})
+    calls = CallMemory({})
     cache = Cache(values, calls)
 
     # Prepare a call whose args and result are composite structures so that
@@ -280,7 +278,7 @@ def test_cache_query_decodes_values_and_args(monkeypatch):
     )
 
     # Save via Cache (this will store digests for args and result in call store)
-    key = cache.save(original)
+    cache.save(original)
 
     # Build a template that matches by name only to retrieve the saved call
     tpl = Call(
@@ -303,12 +301,12 @@ def test_cache_query_decodes_values_and_args(monkeypatch):
 
 
 def test_cache_load_restores_complex_arguments_and_result():
-    from fleche.storage import Memory
+    from fleche.storage import ValueMemory, CallMemory
     from fleche.call import Call
 
     # Set up in‑memory storages
-    values_storage = Memory({})
-    calls_storage = Memory({})
+    values_storage = ValueMemory({})
+    calls_storage = CallMemory({})
     cache = Cache(values_storage, calls_storage)
 
     # Create a Call with list arguments and result
@@ -322,7 +320,7 @@ def test_cache_load_restores_complex_arguments_and_result():
 def test_hash_builtin_caches():
     """Test that all cache types respond properly to hash() builtin."""
     from fleche.caches import ReadOnlyCache, FilteredCache, RefreshingCache, SizeLimitedCache
-    from fleche.storage import Void, CallStorageAdapter
+    from fleche.storage import ValueVoid, CallVoid
 
     values = Mock()
     calls = Mock()
@@ -336,7 +334,5 @@ def test_hash_builtin_caches():
     assert hash(CacheStack((base_cache,))) is not None
 
     # SizeLimitedCache with Void storage (no mutable fields)
-    void_value = Void()
-    void_call = CallStorageAdapter(Void())
-    slc = SizeLimitedCache(void_value, void_call, max_size=100)
+    slc = SizeLimitedCache(ValueVoid(), CallVoid(), max_size=100)
     assert hash(slc) is not None

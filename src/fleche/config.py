@@ -27,10 +27,10 @@ calls.root = "~/.fleche/calls"
 
 import tomllib
 import logging
-import types
+from typing import Literal, cast, overload
 from pathlib import Path
 import os
-from typing import Any, cast
+from typing import Any
 
 from . import storage, metadata
 from .caches import BaseCache, Cache, CacheStack, ReadOnlyCache, SizeLimitedCache
@@ -93,85 +93,96 @@ def load_default_metadata():
 
     return tuple(meta_objects)
 
+_STORAGE_NAME_MAPPING = {
+        ("memory", "value"): storage.ValueMemory,
+        ("memory", "call"): storage.CallMemory,
+        ("void", "value"): storage.ValueVoid,
+        ("void", "call"): storage.CallVoid,
+        ("bagofholding_hdf", "value"): storage.ValueBagOfHoldingH5File,
+        ("bagofholding_hdf", "call"): storage.CallBagOfHoldingH5File,
+        ("pickle", "value"): storage.ValuePickleFile.with_pickle,
+        ("pickle", "call"): storage.CallPickleFile.with_pickle,
+        ("dill", "value"): storage.ValuePickleFile.with_dill,
+        ("dill", "call"): storage.CallPickleFile.with_dill,
+        ("cloudpickle", "value"): storage.ValuePickleFile.with_cloudpickle,
+        ("cloudpickle", "call"): storage.CallPickleFile.with_cloudpickle,
+}
 
-def storage_from_config(d: dict[str, Any]) -> storage.Storage:
-    """Construct a :class:`~fleche.storage.Storage` from a config dict.
+_STORAGE_CLASS_TO_NAME: dict[type, str] = {
+    storage.ValueMemory: "memory",
+    storage.CallMemory: "memory",
+    storage.ValueVoid: "void",
+    storage.CallVoid: "void",
+    storage.ValueBagOfHoldingH5File: "bagofholding_hdf",
+    storage.CallBagOfHoldingH5File: "bagofholding_hdf",
+    storage.ValuePickleFile: "pickle",   # serializer determines the actual name
+    storage.CallPickleFile: "pickle",
+}
+
+
+@overload
+def storage_from_config(d: dict[str, Any], type: Literal["call"]) -> storage.CallStorage: ...
+
+@overload
+def storage_from_config(d: dict[str, Any], type: Literal["value"]) -> storage.ValueStorage: ...
+
+def storage_from_config(d: dict[str, Any], type: Literal["call", "value"]) -> storage.ValueStorage | storage.CallStorage:
+    """Construct a :class:`~fleche.storage.StorageBackend` from a config dict.
 
     The dict must contain a ``"type"`` key (case-sensitive) and any additional
     parameters required by that storage backend.  The input dict is **not**
     mutated.
-
-    Supported types: ``"Memory"``, ``"Void"``, ``"DestructuringStorage"``,
-    ``"PickleFile"``, ``"CloudpickleFile"``, ``"DillFile"``,
-    ``"BagOfHoldingH5File"``, ``"Sql"``.
     """
     d = dict(d)
-    storage_type = d.pop("type")
-    match storage_type:
-        case "Memory":
-            return storage.Memory({})
-        case "Void":
-            return storage.Void()
-        case "DestructuringStorage":
-            inner = storage_from_config(d.pop("storage"))
-            return storage.DestructuringStorage(inner)
-        case "PickleFile":
-            return storage.PickleFile.with_pickle(**d)
-        case "CloudpickleFile":
-            return storage.PickleFile.with_cloudpickle(**d)
-        case "DillFile":
-            return storage.PickleFile.with_dill(**d)
-        case "BagOfHoldingH5File" | "Sql":
-            return getattr(storage, storage_type)(**d)
+    backend = d.pop("type")
+    match backend:
+        case "memory":
+            return _STORAGE_NAME_MAPPING[backend, type]({})  # type: ignore
+        case "void":
+            return _STORAGE_NAME_MAPPING[backend, type]()  # type: ignore
+        case "bagofholding_hdf" | "pickle" | "dill" | "cloudpickle":
+            return _STORAGE_NAME_MAPPING[backend, type](**d)
+        case "sql" if type == "call":
+            return storage.Sql(**d)
         case _:
-            available = ["Memory", "Void", "DestructuringStorage", "PickleFile", "CloudpickleFile", "DillFile", "BagOfHoldingH5File", "Sql"]
-            raise ValueError(f"Unknown storage type: {storage_type}, available are {available}")
+            raise ValueError(f"Unknown storage type '{backend}' for {type} storage!")
 
 
-def _get_storage(config: dict[str, Any]) -> storage.Storage:
-    """Deprecated: use :func:`storage_from_config` instead."""
-    return storage_from_config(config)
-
-
-def storage_to_config(s: storage.Storage | storage.CallStorage) -> dict[str, Any]:
-    """Convert a Storage or CallStorage instance to a config dict.
+def storage_to_config(s: storage.ValueStorage | storage.CallStorage) -> dict[str, Any]:
+    """Convert a Storage instance to a config dict (inverse of ``storage_from_config``).
 
     The returned dict contains a ``"type"`` key and any additional parameters
     needed to reconstruct the storage via :func:`storage_from_config`.
-    :class:`~fleche.storage.DestructuringStorage` is handled as a first-class
-    case, producing a nested ``"storage"`` entry for its inner backend.
-
-    Accepts both :class:`~fleche.storage.Storage` and bare
-    :class:`~fleche.storage.CallStorage` instances (e.g. ``Sql``), since ``Sql``
-    implements ``CallStorage`` directly without going through
-    ``CallStorageAdapter``.
     """
-    match s:
-        case storage.DestructuringStorage(storage=inner):
-            return {"type": "DestructuringStorage", "storage": storage_to_config(inner)}
-        case storage.Memory():
-            return {"type": "Memory"}
-        case storage.Void():
-            return {"type": "Void"}
-        case storage.PickleFile():
-            serializer = s.serializer
-            serializer_name = serializer.__name__ if isinstance(serializer, types.ModuleType) else str(serializer)
-            match serializer_name:
-                case "pickle":
-                    type_name = "PickleFile"
-                case "cloudpickle":
-                    type_name = "CloudpickleFile"
-                case "dill":
-                    type_name = "DillFile"
-                case _:
-                    raise ValueError(f"Unknown PickleFile serializer: {serializer_name!r}")
-            return {"type": type_name, "root": str(s.root)}
-        case storage.BagOfHoldingH5File():
-            return {"type": "BagOfHoldingH5File", "root": str(s.root)}
-        case storage.Sql():
-            return {"type": "Sql", "url": s.url}
-        case _:
-            raise ValueError(f"Cannot convert storage of type {type(s).__name__!r} to config")
+    import types
+
+    cls = type(s)
+    if cls not in _STORAGE_CLASS_TO_NAME and not isinstance(s, storage.Sql):
+        raise ValueError(f"Cannot convert storage of type {cls.__name__!r} to config")
+
+    if isinstance(s, (storage.ValueMemory, storage.CallMemory)):
+        return {"type": "memory"}
+    elif isinstance(s, (storage.ValueVoid, storage.CallVoid)):
+        return {"type": "void"}
+    elif isinstance(s, (storage.ValuePickleFile, storage.CallPickleFile)):
+        serializer = s.serializer
+        serializer_name = serializer.__name__ if isinstance(serializer, types.ModuleType) else str(serializer)
+        match serializer_name:
+            case "pickle":
+                type_name = "pickle"
+            case "cloudpickle":
+                type_name = "cloudpickle"
+            case "dill":
+                type_name = "dill"
+            case _:
+                raise ValueError(f"Unknown PickleFile serializer: {serializer_name!r}")
+        return {"type": type_name, "root": str(s.root)}
+    elif isinstance(s, (storage.ValueBagOfHoldingH5File, storage.CallBagOfHoldingH5File)):
+        return {"type": "bagofholding_hdf", "root": str(s.root)}
+    elif isinstance(s, storage.Sql):
+        return {"type": "sql", "url": s.url}
+    else:
+        raise ValueError(f"Cannot convert storage of type {cls.__name__!r} to config")
 
 
 def cache_from_config(d: "dict[str, Any] | list[dict[str, Any]]") -> BaseCache:
@@ -187,36 +198,34 @@ def cache_from_config(d: "dict[str, Any] | list[dict[str, Any]]") -> BaseCache:
       :class:`~fleche.caches.ReadOnlyCache`.
     - Otherwise a plain :class:`~fleche.caches.Cache` is created.
 
-    The ``values`` storage is always wrapped in a
-    :class:`~fleche.storage.DestructuringStorage` if it is not already one.
     The input dict is **not** mutated.
 
     Examples::
 
         # Plain cache with in-memory storage
         cache_from_config({
-            "values": {"type": "Memory"},
-            "calls": {"type": "Memory"},
+            "values": {"type": "memory"},
+            "calls": {"type": "memory"},
         })
 
         # Size-limited cache — presence of max_size selects SizeLimitedCache
         cache_from_config({
-            "values": {"type": "Memory"},
-            "calls": {"type": "Memory"},
+            "values": {"type": "memory"},
+            "calls": {"type": "memory"},
             "max_size": 100,
         })
 
         # Read-only cache — read_only: true wraps the cache in ReadOnlyCache
         cache_from_config({
-            "values": {"type": "Memory"},
-            "calls": {"type": "Memory"},
+            "values": {"type": "memory"},
+            "calls": {"type": "memory"},
             "read_only": True,
         })
 
         # CacheStack — a list of dicts is implicitly treated as a stack
         cache_from_config([
-            {"values": {"type": "Memory"}, "calls": {"type": "Memory"}},
-            {"values": {"type": "Void"}, "calls": {"type": "Void"}},
+            {"values": {"type": "memory"}, "calls": {"type": "memory"}},
+            {"values": {"type": "void"}, "calls": {"type": "void"}},
         ])
     """
     if isinstance(d, list):
@@ -226,15 +235,13 @@ def cache_from_config(d: "dict[str, Any] | list[dict[str, Any]]") -> BaseCache:
     read_only = d.pop("read_only", False)
     max_size = d.pop("max_size", None)
 
-    values_storage = storage_from_config(d["values"])
-    if not isinstance(values_storage, storage.DestructuringMixin):
-        values_storage = storage.DestructuringStorage(values_storage)
-    calls_storage = storage_from_config(d["calls"])
+    values_storage = storage_from_config(d["values"], "value")
+    calls_storage = storage_from_config(d["calls"], "call")
 
     if max_size is not None:
-        cache: BaseCache = SizeLimitedCache(values=values_storage, _calls=calls_storage, max_size=max_size)
+        cache: BaseCache = SizeLimitedCache(values=values_storage, calls=calls_storage, max_size=max_size)
     else:
-        cache = Cache(values=values_storage, _calls=calls_storage)
+        cache = Cache(values=values_storage, calls=calls_storage)
 
     if read_only:
         cache = ReadOnlyCache(cache)
@@ -254,27 +261,21 @@ def cache_to_config(c: BaseCache) -> "dict[str, Any] | list[dict[str, Any]]":
       ``SizeLimitedCache`` → inner cache dict with ``"read_only": True``
     - :class:`~fleche.caches.CacheStack` → list of dicts
 
-    ``values`` is serialised as-is (a ``DestructuringStorage`` wrapper is
-    preserved in the output).  ``calls`` unwraps the
-    :class:`~fleche.storage.CallStorageAdapter`.
-
     Raises:
         ValueError: for unsupported cache types or unsupported
             ``ReadOnlyCache`` inner types.
     """
     match c:
         case SizeLimitedCache():
-            calls_storage = c.calls.storage if isinstance(c.calls, storage.CallStorageAdapter) else c.calls
             return {
                 "values": storage_to_config(c.values),
-                "calls": storage_to_config(calls_storage),
+                "calls": storage_to_config(c.calls),
                 "max_size": c.max_size,
             }
         case Cache():
-            calls_storage = c.calls.storage if isinstance(c.calls, storage.CallStorageAdapter) else c.calls
             return {
                 "values": storage_to_config(c.values),
-                "calls": storage_to_config(calls_storage),
+                "calls": storage_to_config(c.calls),
             }
         case ReadOnlyCache():
             inner = c.cache
@@ -293,9 +294,9 @@ def cache_to_config(c: BaseCache) -> "dict[str, Any] | list[dict[str, Any]]":
 
 
 def _create_cache(cache_config: dict[str, Any]) -> Cache:
-    values = _get_storage(cache_config["values"])
-    calls = _get_storage(cache_config["calls"])
-    return Cache(values=values, _calls=calls)
+    values = storage_from_config(cache_config["values"], "value")
+    calls = storage_from_config(cache_config["calls"], "call")
+    return Cache(values=values, calls=calls)
 
 
 def load_cache_config(name: str | None = None) -> Cache:
@@ -312,12 +313,12 @@ def load_cache_config(name: str | None = None) -> Cache:
         return _live_caches[name]
 
     if name == "memory":
-        cache = Cache(storage.Memory({}), storage.Memory({}))
+        cache = Cache(storage.ValueMemory({}), storage.CallMemory({}))
         _live_caches[name] = cache
         return cache
 
     if name == "void":
-        cache = Cache(storage.Void(), storage.Void())
+        cache = Cache(storage.ValueVoid(), storage.CallVoid())
         _live_caches[name] = cache
         return cache
 
@@ -329,7 +330,7 @@ def load_cache_config(name: str | None = None) -> Cache:
             )
         else:
             logger.warning("No config file found. Using default memory cache.")
-        return Cache(storage.Memory({}), storage.Memory({}))
+        return Cache(storage.ValueMemory({}), storage.CallMemory({}))
 
     config = _load_config(path)
 
@@ -339,7 +340,7 @@ def load_cache_config(name: str | None = None) -> Cache:
     if cache_name is None:
         if "default" not in config or "cache" not in config["default"]:
             logger.warning("No default cache configured. Using default memory cache.")
-            return Cache(storage.Memory({}), storage.Memory({}))
+            return Cache(storage.ValueMemory({}), storage.CallMemory({}))
 
         default_cache = config["default"]["cache"]
         if isinstance(default_cache, str):
@@ -354,7 +355,7 @@ def load_cache_config(name: str | None = None) -> Cache:
                 "Cache '%s' not found in configuration. Using default memory cache.",
                 cache_name,
             )
-            return Cache(storage.Memory({}), storage.Memory({}))
+            return Cache(storage.ValueMemory({}), storage.CallMemory({}))
         cache_config = config[cache_name]
 
     cache = _create_cache(cache_config)

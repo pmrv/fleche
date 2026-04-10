@@ -1,5 +1,4 @@
 from fleche.call import Call
-import pytest
 
 
 def test_code_digest_is_hashed_in_lookup_key():

@@ -1,26 +1,27 @@
 import pytest
+from dataclasses import dataclass
 from hypothesis import given, settings, HealthCheck, strategies as st
-from fleche.storage import Memory, DestructuringStorage
+from fleche.storage import ValueMixin, DestructuringMixin
+from fleche.storage.memory import MemoryBackend
 from fleche.storage.base import DigestedIterable, DigestedDict, Digested
 from fleche.digest import digest, Digest
 
 from tests.strategies import st_base_values, st_nested_values, st_key_values
 
 
-@pytest.fixture
-def mem():
-    return Memory(storage={})
+@dataclass(frozen=True)
+class DestructuringMemory(ValueMixin, DestructuringMixin, MemoryBackend):
+    """Test-only class: DestructuringMixin + MemoryBackend wired through ValueMixin."""
+    remaining_depth: int = 0
 
 
 @pytest.fixture
-def ds(mem):
-    return DestructuringStorage(mem)
+def ds():
+    return DestructuringMemory(storage={})
 
 
 def make_ds(remaining_depth=0):
-    mem = Memory(storage={})
-    ds = DestructuringStorage(mem, remaining_depth=remaining_depth)
-    return mem, ds
+    return DestructuringMemory(storage={}, remaining_depth=remaining_depth)
 
 
 # ---- Roundtrip tests ----
@@ -41,13 +42,13 @@ def test_save_is_deterministic(ds, value):
     assert ds.save(value) == ds.save(value)
 
 
-def test_evict(ds, mem):
+def test_evict(ds):
     data = [1, 2]
     key = ds.save(data)
-    assert key in mem.list()
+    assert key in ds.list()
 
     ds.evict(key)
-    assert key not in mem.list()
+    assert key not in ds.list()
     with pytest.raises(KeyError):
         ds.load(key)
 
@@ -105,19 +106,23 @@ def test_digest_transparency_dict_mixed(d):
 @pytest.mark.parametrize("container", [list, tuple])
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 @given(st.lists(st_base_values, min_size=1, max_size=6))
-def test_digested_iterable_mend_roundtrip(container, ds, mem, items):
+def test_digested_iterable_mend_roundtrip(container, ds, items):
+    """DigestedIterable stored by ds can be re-assembled via mend."""
     c = container(items)
     key = ds.save(c)
-    raw = mem.load(key)
+    # Access the raw stored value directly from the backend dict (bypasses mend)
+    raw = ds.storage[key]
     assert isinstance(raw, DigestedIterable)
     assert raw.mend(ds) == c
 
 
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 @given(st.dictionaries(st.text(), st_base_values, min_size=1, max_size=6))
-def test_digested_dict_mend_roundtrip(ds, mem, d):
+def test_digested_dict_mend_roundtrip(ds, d):
+    """DigestedDict stored by ds can be re-assembled via mend."""
     key = ds.save(d)
-    raw = mem.load(key)
+    # Access the raw stored value directly from the backend dict (bypasses mend)
+    raw = ds.storage[key]
     assert isinstance(raw, DigestedDict)
     assert raw.mend(ds) == d
 
@@ -129,9 +134,9 @@ def test_digested_dict_mend_roundtrip(ds, mem, d):
 @given(st.lists(st_scalars, min_size=1, max_size=6))
 def test_remaining_depth_m1_destructures_everything(container, items):
     """With remaining_depth=-1, every element (including scalars) gets its own storage slot."""
-    mem, ds = make_ds(remaining_depth=-1)
+    ds = make_ds(remaining_depth=-1)
     key = ds.save(container(items))
-    raw = mem.load(key)
+    raw = ds.storage[key]
     assert isinstance(raw, DigestedIterable)
     assert all(isinstance(i, Digest) for i in raw.items)
 
@@ -140,10 +145,10 @@ def test_remaining_depth_m1_destructures_everything(container, items):
 @given(st.lists(st_scalars, min_size=1, max_size=6))
 def test_remaining_depth_1_inlines_scalars(container, items):
     """With remaining_depth=1, scalar elements are inlined; the container is stored as a plain container (req 3)."""
-    mem, ds = make_ds(remaining_depth=1)
+    ds = make_ds(remaining_depth=1)
     c = container(items)
     key = ds.save(c)
-    raw = mem.load(key)
+    raw = ds.storage[key]
     # All scalars inlined → no DigestedIterable wrapper, just the plain container
     assert raw == c
     assert type(raw) is container
@@ -153,10 +158,10 @@ def test_remaining_depth_1_inlines_scalars(container, items):
 @pytest.mark.parametrize("container", [list, tuple])
 def test_remaining_depth_1_still_destructures_nested(container):
     """With remaining_depth=1, nested containers (depth > 1) are still stored separately."""
-    mem, ds = make_ds(remaining_depth=1)
+    ds = make_ds(remaining_depth=1)
     data = container([1, [2, 3]])
     key = ds.save(data)
-    raw = mem.load(key)
+    raw = ds.storage[key]
     assert isinstance(raw, DigestedIterable)
     assert raw.items[0] == 1
     assert isinstance(raw.items[1], Digest)
@@ -166,10 +171,10 @@ def test_remaining_depth_1_still_destructures_nested(container):
 @pytest.mark.parametrize("container", [list, tuple])
 def test_remaining_depth_2_inlines_flat_list(container):
     """With remaining_depth=2, a flat list (depth 1) inside another list is inlined (req 3)."""
-    mem, ds = make_ds(remaining_depth=2)
+    ds = make_ds(remaining_depth=2)
     data = container([1, [2, 3]])
     key = ds.save(data)
-    raw = mem.load(key)
+    raw = ds.storage[key]
     # All children inlined → stored as plain container, no DigestedIterable
     assert raw == data
     assert ds.load(key) == data
@@ -178,10 +183,10 @@ def test_remaining_depth_2_inlines_flat_list(container):
 @pytest.mark.parametrize("container", [list, tuple])
 def test_remaining_depth_2_destructures_deeper(container):
     """With remaining_depth=2, a list nested 3 deep is still stored separately."""
-    mem, ds = make_ds(remaining_depth=2)
+    ds = make_ds(remaining_depth=2)
     data = container([1, [[2]]])
     key = ds.save(data)
-    raw = mem.load(key)
+    raw = ds.storage[key]
     assert isinstance(raw, DigestedIterable)
     assert raw.items[0] == 1
     assert isinstance(raw.items[1], Digest)
@@ -191,7 +196,7 @@ def test_remaining_depth_2_destructures_deeper(container):
 @given(remaining_depth=st.integers(min_value=0, max_value=5))
 def test_remaining_depth_roundtrip_nested(remaining_depth):
     """Any remaining_depth correctly roundtrips nested data."""
-    mem, ds = make_ds(remaining_depth=remaining_depth)
+    ds = make_ds(remaining_depth=remaining_depth)
     data = {"a": 1, "b": [2, [3, 4]], "c": (5,)}
     key = ds.save(data)
     assert ds.load(key) == data
@@ -199,21 +204,14 @@ def test_remaining_depth_roundtrip_nested(remaining_depth):
 
 def test_remaining_depth_reduces_storage_slots():
     """Higher remaining_depth should use fewer storage slots."""
-    mem0, ds0 = make_ds(remaining_depth=0)
-    mem2, ds2 = make_ds(remaining_depth=2)
+    ds0 = make_ds(remaining_depth=0)
+    ds2 = make_ds(remaining_depth=2)
 
     data = [1, 2, [3, 4]]
     ds0.save(data)
     ds2.save(data)
 
-    assert len(list(mem2.list())) < len(list(mem0.list()))
-
-
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-@given(st_base_values)
-def test_load_passthrough_non_digest(ds, value):
-    """_load returns non-Digest values as-is (inline values from mend)."""
-    assert ds._load(value) == value
+    assert len(list(ds2.list())) < len(list(ds0.list()))
 
 
 @given(
@@ -223,9 +221,9 @@ def test_load_passthrough_non_digest(ds, value):
 )
 def test_cross_depth_roundtrip(value, write_depth, read_depth):
     """Data written at one remaining_depth is readable at any other."""
-    mem = Memory(storage={})
-    writer = DestructuringStorage(mem, remaining_depth=write_depth)
-    reader = DestructuringStorage(mem, remaining_depth=read_depth)
+    shared = {}
+    writer = DestructuringMemory(storage=shared, remaining_depth=write_depth)
+    reader = DestructuringMemory(storage=shared, remaining_depth=read_depth)
     key = writer.save(value)
     assert reader.load(key) == value
 
@@ -233,11 +231,11 @@ def test_cross_depth_roundtrip(value, write_depth, read_depth):
 @pytest.mark.parametrize("data", [[], (), {}])
 def test_remaining_depth_empty_containers(data):
     """Empty containers with remaining_depth > 0 round-trip correctly."""
-    _, ds = make_ds(remaining_depth=2)
+    ds = make_ds(remaining_depth=2)
     key = ds.save(data)
     loaded = ds.load(key)
     assert loaded == data
-    assert type(loaded) == type(data)
+    assert type(loaded) is type(data)
 
 
 # ---- Plain-container passthrough (req 3) ----
@@ -246,10 +244,10 @@ def test_remaining_depth_empty_containers(data):
 @pytest.mark.parametrize("container", [list, tuple])
 def test_plain_container_stored_when_all_inline(container):
     """When all elements are inlined, the container is stored without a Digested wrapper."""
-    mem, ds = make_ds(remaining_depth=10)
+    ds = make_ds(remaining_depth=10)
     data = container([1, 2, container([3, 4])])
     key = ds.save(data)
-    raw = mem.load(key)
+    raw = ds.storage[key]
     # Everything fits within remaining_depth → plain container, no DigestedIterable
     assert not isinstance(raw, Digested)
     assert raw == data
@@ -257,9 +255,9 @@ def test_plain_container_stored_when_all_inline(container):
 
 def test_plain_dict_stored_when_all_inline():
     """When all dict entries are inlined, the dict is stored without a DigestedDict wrapper."""
-    mem, ds = make_ds(remaining_depth=10)
+    ds = make_ds(remaining_depth=10)
     data = {"a": 1, "b": [2, 3]}
     key = ds.save(data)
-    raw = mem.load(key)
+    raw = ds.storage[key]
     assert not isinstance(raw, Digested)
     assert raw == data

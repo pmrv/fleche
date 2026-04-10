@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .file import FileStorage
-from ..digest import Digest
+from .base import ValueMixin, CallMixin, DestructuringMixin
 from ..security import get_secret_key, SignedBytes, SignatureError
 
 from pyiron_snippets.import_alarm import ImportAlarm
@@ -84,7 +84,7 @@ with ImportAlarm(
 
 
 @dataclass(frozen=True, kw_only=True)
-class PickleFile(FileStorage):
+class PickleFileBackend(FileStorage):
     """
     Store values as files on the filesystem using a serialization module.
     """
@@ -100,19 +100,19 @@ class PickleFile(FileStorage):
 
     @classmethod
     def with_pickle(cls, *args, **kwargs):
-        """Construct a PickleFile using the standard pickle module."""
+        """Construct a PickleFileBackend using the standard pickle module."""
         return cls(*args, serializer=pickle, **kwargs)
 
     @classmethod
     @cloudpickle_alarm
     def with_cloudpickle(cls, *args, **kwargs):
-        """Construct a PickleFile using the cloudpickle module."""
+        """Construct a PickleFileBackend using the cloudpickle module."""
         return cls(*args, serializer=cloudpickle, **kwargs)
 
     @classmethod
     @dill_alarm
     def with_dill(cls, *args, **kwargs):
-        """Construct a PickleFile using the dill module."""
+        """Construct a PickleFileBackend using the dill module."""
         return cls(*args, serializer=dill, **kwargs)
 
     def __getstate__(self):
@@ -148,3 +148,7 @@ class PickleFile(FileStorage):
             raise KeyError(path) from None
         except SignatureError:
             raise KeyError(path, "Value present but failed signature check.")
+
+
+class ValuePickleFile(ValueMixin, DestructuringMixin, PickleFileBackend): ...
+class CallPickleFile(CallMixin, PickleFileBackend): ...

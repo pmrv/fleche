@@ -1,5 +1,5 @@
 import pytest
-from fleche.storage import Memory, PickleFile, BagOfHoldingH5File, AmbiguousDigestError
+from fleche.storage import AmbiguousDigestError
 from fleche.digest import DIGEST_LENGTH
 
 

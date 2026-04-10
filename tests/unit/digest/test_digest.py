@@ -241,7 +241,7 @@ def test_merkle_tree_property(value, data):
     original_digest = digest(value)
     modified_value = randomly_digest_subvalues(value, data)
     assert digest(modified_value) == original_digest, (
-        f"Merkle property failed: digest changed after replacing sub-values with their digests",
+        "Merkle property failed: digest changed after replacing sub-values with their digests",
         value,
         modified_value,
     )

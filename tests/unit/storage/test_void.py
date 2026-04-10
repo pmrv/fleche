@@ -1,10 +1,10 @@
 import pytest
-from fleche.storage import Void
+from fleche.storage import ValueVoid
 from fleche.digest import digest
 
 
 def test_void_storage_save_and_load():
-    storage = Void()
+    storage = ValueVoid()
     value = "hello"
     key = digest(value)
 
@@ -21,7 +21,7 @@ def test_void_storage_save_and_load():
 
 
 def test_void_storage_evict():
-    storage = Void()
+    storage = ValueVoid()
     key = digest("something")
 
     # Evict should do nothing and not raise
@@ -29,7 +29,7 @@ def test_void_storage_evict():
 
 
 def test_void_storage_expand():
-    storage = Void()
+    storage = ValueVoid()
 
     with pytest.raises(KeyError):
         storage.expand("abcd")

@@ -14,7 +14,10 @@ def dataclasses(draw, field_types, frozen=None, clscache={}):
     fields = draw(
         st.dictionaries(
             st.text(string.ascii_letters, min_size=3, max_size=3).filter(
-                lambda s: not keyword.iskeyword(s)
+                # keywords as field names obviously break
+                # somehow using mro as a field name causes the dataclass to pick up type.mro as a default value
+                # this can then break dataclass creation if non-default fields follow
+                lambda s: not keyword.iskeyword(s) and s != "mro"
             ),
             field_types,
             min_size=1,

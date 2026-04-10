@@ -1,17 +1,16 @@
 import inspect
 from typing import Iterable
 
-import pytest
 
 from fleche import fleche, cache
 from fleche.call import Call
 from fleche.caches import Cache
 from fleche.digest import Digest
-from fleche.storage import Memory
+from fleche.storage import ValueMemory, CallMemory
 
 
 def test_fleche_extra_attributes():
-    c = Cache(Memory({}), Memory({}))
+    c = Cache(ValueMemory({}), CallMemory({}))
     with cache(c):
 
         call_count = 0
@@ -50,7 +49,7 @@ def test_fleche_extra_attributes():
 
 
 def test_hash_settings():
-    c = Cache(Memory({}), Memory({}))
+    c = Cache(ValueMemory({}), CallMemory({}))
     with cache(c):
 
         @fleche(version=1, hash_version=False)
@@ -106,7 +105,7 @@ def test_wrapper_helper_metadata():
     assert "My original docstring." in my_func.contains.__doc__
     sig = inspect.signature(my_func.contains)
     assert str(sig) == "(a: int, b: str = 'default') -> float"
-    assert my_func.contains.__annotations__["return"] == bool
+    assert my_func.contains.__annotations__["return"] is bool
 
     # Test .query
     assert my_func.query.__name__ == "query"

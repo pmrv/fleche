@@ -1,7 +1,6 @@
-import pytest
 from fleche.call import Call
 from fleche.caches import Cache
-from fleche.storage import Memory
+from fleche.storage import ValueMemory, CallMemory
 
 
 def test_call_matches():
@@ -24,8 +23,8 @@ def test_call_matches():
 
 def test_call_matches_lazy():
     """Verify that Call.matches() correctly handles LazyCall objects."""
-    values_storage = Memory({})
-    calls_storage = Memory({})
+    values_storage = ValueMemory({})
+    calls_storage = CallMemory({})
     cache = Cache(values_storage, calls_storage)
 
     original = Call(name="f", arguments={"x": 1}, result=10)

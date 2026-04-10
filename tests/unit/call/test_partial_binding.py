@@ -1,5 +1,3 @@
-import pytest
-from inspect import signature
 from fleche.call import QueryCall
 
 

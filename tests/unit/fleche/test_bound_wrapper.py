@@ -12,11 +12,11 @@ import fleche.state as fleche_state
 from fleche import fleche
 from fleche.caches import Cache
 from fleche.state import cache, meta
-from fleche.storage import Memory
+from fleche.storage import ValueMemory, CallMemory
 
 
 def _make_cache():
-    return Cache(Memory({}), Memory({}))
+    return Cache(ValueMemory({}), CallMemory({}))
 
 
 # Module-level fleche functions are required for pickle tests.
@@ -145,7 +145,7 @@ def test_bound_wrapper_pickle_preserves_cache_identity():
         bound = fleche_state.BoundWrapper.bind(_pickle_func)
 
     restored = pickle.loads(pickle.dumps(bound))
-    assert type(restored.cache) == type(bound.cache)
+    assert type(restored.cache) is type(bound.cache)
 
 
 def test_bound_wrapper_pickle_preserves_meta_tuple():

@@ -1,18 +1,14 @@
-import time
 import sys
-import os
 import json
-import numpy as np
 from statistics import median
 
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays as st_arrays
 
 from fleche.digest import digest
-from utils import st_nested_values, st_base_values, st_nested_values, generate_examples
+from utils import st_nested_values, st_nested_values, generate_examples
 
 import timeit
-from functools import partial
 
 
 def benchmark(name, strategy):

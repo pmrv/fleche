@@ -1,6 +1,5 @@
-import pytest
 
-from fleche.storage import Memory
+from fleche.storage import ValueMemory, CallMemory
 from fleche.caches import Cache
 from fleche.call import Call
 from fleche.digest import Digest
@@ -81,8 +80,8 @@ def make_patched_digest(orig_digest, mode: str):
 
 
 def _make_cache():
-    values = Memory({})
-    calls = Memory({})
+    values = ValueMemory({})
+    calls = CallMemory({})
     return Cache(values, calls)
 
 
@@ -106,7 +105,7 @@ def test_redigest_updates_call_keys_on_call_hash_change(monkeypatch):
     original = _sample_call()
 
     key_before = cache.save(original)
-    calls_before = set(cache.calls.list())
+    set(cache.calls.list())
     values_before = set(cache.values.list())
 
     # Single-site patch: only Calls change

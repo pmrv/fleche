@@ -1,11 +1,14 @@
+import logging
 from typing import Iterable, Any, List
 from pathlib import Path
 from dataclasses import dataclass, field
-from .base import CallStorage, AmbiguousDigestError
+from .base import KeyManagement, CallStorage, AmbiguousDigestError
 from ..call import Call, QueryCall
 from ..digest import Digest, DIGEST_LENGTH, digest
 
 from pyiron_snippets.import_alarm import ImportAlarm
+
+logger = logging.getLogger("fleche.storage")
 
 with ImportAlarm(
     "Sql requires 'sqlalchemy' to be installed. "
@@ -120,7 +123,7 @@ def _enable_sqlite_foreign_keys(engine) -> None:
 
 
 @dataclass(frozen=True)
-class Sql(CallStorage):
+class Sql(CallStorage, KeyManagement):
     """SQLAlchemy-backed CallStorage with JSON metadata and DB-backed expand()."""
 
     url: str | None = None
@@ -153,13 +156,12 @@ class Sql(CallStorage):
         # Re-initialize unpickleable fields
         self.__post_init__()
 
-    def _save(self, call: Call) -> Digest:
-        key = call.to_lookup_key()
+    def put(self, call: Any, key: Digest) -> Digest:
         session = self.session()
         try:
             existing = session.get(CallModel, str(key))
             if existing is not None:
-                if self.load(key) == call:
+                if self.get(key) == call:
                     return key
 
                 session.delete(existing)
@@ -198,7 +200,7 @@ class Sql(CallStorage):
         finally:
             session.close()
 
-    def _load(self, key: Digest) -> Call:
+    def get(self, key: Digest) -> Call:
         session = self.session()
         try:
             call_model = session.execute(
@@ -296,6 +298,21 @@ class Sql(CallStorage):
             raise
         finally:
             session.close()
+
+    def save(self, call: Call) -> Digest:
+        key = call.to_lookup_key()
+        logger.debug("Saving call %s", key)
+        if self.contains(str(key)):
+            self.evict(str(key))
+        return self.put(call, key)
+
+    def load(self, key: Digest | str) -> Call:
+        if len(key) < DIGEST_LENGTH:
+            key = self.expand(key)
+        else:
+            key = Digest(key)
+        logger.debug("Loading call with key %s", key)
+        return self.get(key)
 
     def _normalize_value(self, v: Any) -> str:
         """Return the stored form used in SQL for argument/result matching.
@@ -437,6 +454,6 @@ class Sql(CallStorage):
             return True
 
         for k in keys:
-            c = self.load(k)
+            c = self.get(k)
             if meta_matches(c):
                 yield c

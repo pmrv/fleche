@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import logging
 import random
 import threading
-from dataclasses import dataclass, replace, field, InitVar
+from dataclasses import dataclass, replace, field
 from copy import copy
 from typing import Iterable, Any, Callable, overload
 
@@ -181,18 +181,8 @@ class BaseCache(ABC):
 
 @dataclass(frozen=True)
 class Cache(BaseCache):
-    values: storage.Storage
-    calls: storage.CallStorage = field(init=False)
-
-    _calls: InitVar[storage.CallStorage | storage.Storage]
-
-    def __post_init__(self, _calls):
-        if isinstance(_calls, storage.Storage):
-            _calls = storage.CallStorageAdapter(_calls)
-        object.__setattr__(self, 'calls', _calls)
-
-        if not isinstance(self.values, storage.DestructuringMixin):
-            object.__setattr__(self, 'values', storage.DestructuringStorage(self.values))
+    values: storage.ValueStorage
+    calls: storage.CallStorage
 
     def load_value(self, key):
         if not isinstance(key, Digest):
@@ -616,7 +606,8 @@ class SizeLimitedMixin(BaseCache):
     _keys: set[str] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self, *args, **kwargs):
-        super().__post_init__(*args, **kwargs)  # ty: ignore
+        if hasattr(super(), '__post_init__'):
+            super().__post_init__(*args, **kwargs)  # ty: ignore
         object.__setattr__(self, '_lock', threading.RLock())
         object.__setattr__(self, '_keys', {c.to_lookup_key() for c in self.query(call.QueryCall())})
 

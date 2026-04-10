@@ -8,14 +8,13 @@ from fleche.storage import memory
 from fleche.caches import Cache
 from fleche import fleche, Ignored, Required
 import fleche.state as state
-from fleche.caches import BaseCache
 
 
 @pytest.fixture
 def memory_cache():
-    values_storage = memory.Memory(storage={})
-    calls_storage = memory.Memory(storage={})
-    cache = Cache(values=values_storage, _calls=calls_storage)
+    values_storage = memory.ValueMemory(storage={})
+    calls_storage = memory.CallMemory(storage={})
+    cache = Cache(values=values_storage, calls=calls_storage)
     token = state._CACHE.set(cache)
     yield calls_storage
     state._CACHE.reset(token)
@@ -127,7 +126,6 @@ def test_combined_hints_and_args(memory_cache):
     assert key1 == key2
 
 def test_ignored_not_in_call_arguments(memory_cache):
-    calls_storage = memory_cache
 
     @fleche
     def foo(a, b: Ignored):

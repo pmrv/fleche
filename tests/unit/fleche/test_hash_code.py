@@ -1,7 +1,4 @@
-from fleche import fleche, cache
-from fleche.caches import Cache
-from fleche.storage import Memory
-
+from fleche import fleche
 
 def test_hash_code_invalidates_on_change():
     def func_v1(x):

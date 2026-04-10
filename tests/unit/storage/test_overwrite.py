@@ -1,4 +1,3 @@
-import pytest
 from fleche.call import Call
 from fleche.digest import Digest
 
