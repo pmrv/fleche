@@ -153,6 +153,10 @@ def _digest(value: Any) -> Digest:
         if isinstance(value, h.type):
             return h.digest(value)
 
+    # workaround for numpy removing bool from namespace
+    if hasattr(np, "bool") and isinstance(value, np.bool):
+        return digest(bool(value))
+
     m.update(type(value).__name__.encode())
     match value:
         case Digest():
@@ -184,7 +188,7 @@ def _digest(value: Any) -> Digest:
                 else:
                     m.update(struct.pack("<d", value))
                 # on the other hand the IEEE standard does *not* assign a unique binary representation to NaN, but let's
-                # burn that bridge we someone else tries to cross it.
+                # burn that bridge when someone else tries to cross it.
                 # the good news is that numpy nans seem to map to the same binary and are also detected by cmath.isnan
             else:
                 # rely on python's 'generic' hash semantics for all numbers to translate all of them to an integer
@@ -203,8 +207,6 @@ def _digest(value: Any) -> Digest:
             for k_digest, k, v in sorted_items:
                 m.update(k_digest.encode())
                 m.update(digest(v).encode())
-        case np.bool():
-            return digest(bool(value))
         case np.integer():
             return digest(int(value))
         case np.floating():
