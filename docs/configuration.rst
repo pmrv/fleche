@@ -4,9 +4,11 @@ Configuration
 ``fleche`` looks for a configuration file in the following order:
 
 1. ``fleche.toml`` in the current working directory (local config)
-2. ``$XDG_CONFIG_HOME/fleche/cache.toml`` (if ``$XDG_CONFIG_HOME`` is set)
-3. ``$HOME/.fleche.toml`` (if ``$HOME`` is set)
-4. ``~/.fleche.toml`` (fallback)
+2. A global config file, determined by the first matching rule:
+
+   - If ``$XDG_CONFIG_HOME`` is set: ``$XDG_CONFIG_HOME/fleche/cache.toml``
+   - Otherwise, if ``$HOME`` is set: ``$HOME/.fleche.toml``
+   - Otherwise: ``~/.fleche.toml``
 
 The first file found is used. If no configuration file exists, ``fleche`` falls back to a default in-memory cache.
 
