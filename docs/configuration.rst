@@ -101,32 +101,38 @@ Available storage types
 ``"memory"``
     Stores data in an in-memory dictionary
     (:class:`~fleche.storage.ValueMemory` / :class:`~fleche.storage.CallMemory`).
-    No extra keys.
+    No required keys.
+    Optional (value backend): ``remaining_depth`` — see `Destructuring`_ below.
 
 ``"void"``
     No-op backend — discards all data
     (:class:`~fleche.storage.ValueVoid` / :class:`~fleche.storage.CallVoid`).
-    No extra keys.
+    No required keys.
+    Optional (value backend): ``remaining_depth`` — see `Destructuring`_ below.
 
 ``"pickle"``
     Stores data as files on the filesystem using the standard ``pickle`` module
     (:class:`~fleche.storage.ValuePickleFile` / :class:`~fleche.storage.CallPickleFile`).
     Required: ``root`` — path to the storage directory.
+    Optional (value backend): ``remaining_depth`` — see `Destructuring`_ below.
 
 ``"cloudpickle"``
     Same filesystem backend as ``"pickle"``, but serialised with ``cloudpickle``.
     Handles more complex Python objects (lambdas, closures, etc.).
     Required: ``root``.
+    Optional (value backend): ``remaining_depth`` — see `Destructuring`_ below.
 
 ``"dill"``
     Same filesystem backend as ``"pickle"``, but serialised with ``dill``.
     Required: ``root``.
+    Optional (value backend): ``remaining_depth`` — see `Destructuring`_ below.
 
 ``"bagofholding_hdf"``
     Stores data in HDF5 files using the ``bagofholding`` library
     (:class:`~fleche.storage.ValueBagOfHoldingH5File` /
     :class:`~fleche.storage.CallBagOfHoldingH5File`).
     Required: ``root``.
+    Optional (value backend): ``remaining_depth`` — see `Destructuring`_ below.
 
 ``"sql"``
     Stores call metadata in a SQL database via SQLAlchemy
@@ -134,6 +140,37 @@ Available storage types
     Intended for **call storage only**.
     Required: ``url`` — a SQLAlchemy connection URL, e.g.
     ``"sqlite:///~/.fleche/calls.db"``.
+
+Destructuring
+^^^^^^^^^^^^^
+
+All value backends except ``"sql"`` (which is call-only) store collections
+(:class:`list`, :class:`tuple`, :class:`dict`) by *destructuring* them: each element is
+stored independently under its own cache key, and on load the original structure is
+reassembled.  This avoids redundant storage of shared sub-structures across different
+cached calls.
+
+The optional ``remaining_depth`` key (integer, default ``0``) controls the granularity:
+
+* ``remaining_depth = 0`` — maximum splitting: every element at every nesting level is
+  stored as a separate entry.
+* ``remaining_depth = N`` (positive) — elements at nesting levels shallower than *N* are
+  stored inline within their parent entry rather than as separate entries.
+  For example, ``remaining_depth = 1`` inlines scalars within their parent list or dict
+  so each top-level collection is stored as a single entry.
+
+Higher values mean fewer, larger storage entries and less structural sharing between calls.
+
+Example:
+
+.. code-block:: toml
+
+   [mycache]
+   values.type = "cloudpickle"
+   values.root = "~/.cache/fleche/values"
+   values.remaining_depth = 1   # inline scalars; one entry per top-level collection
+   calls.type = "cloudpickle"
+   calls.root = "~/.cache/fleche/calls"
 
 Full Configuration Example
 --------------------------

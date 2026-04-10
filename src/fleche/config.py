@@ -9,32 +9,38 @@ following **lowercase** identifiers:
 
 ``"memory"``
     In-memory dict (:class:`~fleche.storage.ValueMemory` /
-    :class:`~fleche.storage.CallMemory`).  No extra keys.
+    :class:`~fleche.storage.CallMemory`).  No required keys.
+    Optional (value backend): ``remaining_depth`` (int, default ``0``).
 
 ``"void"``
     No-op — discards all data (:class:`~fleche.storage.ValueVoid` /
-    :class:`~fleche.storage.CallVoid`).  No extra keys.
+    :class:`~fleche.storage.CallVoid`).  No required keys.
+    Optional (value backend): ``remaining_depth`` (int, default ``0``).
 
 ``"pickle"``
     Filesystem backend serialised with the standard ``pickle`` module
     (:class:`~fleche.storage.ValuePickleFile` /
     :class:`~fleche.storage.CallPickleFile`).
     Required: ``root`` (path to storage directory).
+    Optional (value backend): ``remaining_depth`` (int, default ``0``).
 
 ``"cloudpickle"``
     Filesystem backend serialised with ``cloudpickle`` — handles more
     complex Python objects than ``pickle``.
     Required: ``root``.
+    Optional (value backend): ``remaining_depth`` (int, default ``0``).
 
 ``"dill"``
     Filesystem backend serialised with ``dill``.
     Required: ``root``.
+    Optional (value backend): ``remaining_depth`` (int, default ``0``).
 
 ``"bagofholding_hdf"``
     HDF5-backed storage via the ``bagofholding`` library
     (:class:`~fleche.storage.ValueBagOfHoldingH5File` /
     :class:`~fleche.storage.CallBagOfHoldingH5File`).
     Required: ``root``.
+    Optional (value backend): ``remaining_depth`` (int, default ``0``).
 
 ``"sql"``
     SQL database via SQLAlchemy (:class:`~fleche.storage.Sql`).
@@ -186,21 +192,29 @@ def storage_from_config(d: dict[str, Any], type: Literal["call", "value"]) -> st
     * ``{"type": "bagofholding_hdf", "root": "<path>"}``
     * ``{"type": "sql", "url": "<sqlalchemy-url>"}``  *(call storage only)*
 
+    Value storage backends (all except ``"sql"``) also accept an optional
+    ``"remaining_depth"`` key (int, default ``0``) to control destructuring
+    granularity.  See :class:`~fleche.storage.DestructuringMixin` for details.
+
     See the module docstring for descriptions of each type.
     """
     d = dict(d)
     backend = d.pop("type")
+    remaining_depth = d.pop("remaining_depth", None) if type == "value" else None
     match backend:
         case "memory":
-            return _STORAGE_NAME_MAPPING[backend, type]({})  # type: ignore
+            result = _STORAGE_NAME_MAPPING[backend, type]({})  # type: ignore
         case "void":
-            return _STORAGE_NAME_MAPPING[backend, type]()  # type: ignore
+            result = _STORAGE_NAME_MAPPING[backend, type]()  # type: ignore
         case "bagofholding_hdf" | "pickle" | "dill" | "cloudpickle":
-            return _STORAGE_NAME_MAPPING[backend, type](**d)
+            result = _STORAGE_NAME_MAPPING[backend, type](**d)
         case "sql" if type == "call":
-            return storage.Sql(**d)
+            result = storage.Sql(**d)
         case _:
             raise ValueError(f"Unknown storage type '{backend}' for {type} storage!")
+    if remaining_depth is not None:
+        object.__setattr__(result, "remaining_depth", remaining_depth)
+    return result
 
 
 def storage_to_config(s: storage.ValueStorage | storage.CallStorage) -> dict[str, Any]:
@@ -216,9 +230,15 @@ def storage_to_config(s: storage.ValueStorage | storage.CallStorage) -> dict[str
         raise ValueError(f"Cannot convert storage of type {cls.__name__!r} to config")
 
     if isinstance(s, (storage.ValueMemory, storage.CallMemory)):
-        return {"type": "memory"}
+        d: dict[str, Any] = {"type": "memory"}
+        if isinstance(s, storage.ValueMemory) and s.remaining_depth:
+            d["remaining_depth"] = s.remaining_depth
+        return d
     elif isinstance(s, (storage.ValueVoid, storage.CallVoid)):
-        return {"type": "void"}
+        d = {"type": "void"}
+        if isinstance(s, storage.ValueVoid) and s.remaining_depth:
+            d["remaining_depth"] = s.remaining_depth
+        return d
     elif isinstance(s, (storage.ValuePickleFile, storage.CallPickleFile)):
         serializer = s.serializer
         serializer_name = serializer.__name__ if isinstance(serializer, types.ModuleType) else str(serializer)
@@ -231,9 +251,15 @@ def storage_to_config(s: storage.ValueStorage | storage.CallStorage) -> dict[str
                 type_name = "dill"
             case _:
                 raise ValueError(f"Unknown PickleFile serializer: {serializer_name!r}")
-        return {"type": type_name, "root": str(s.root)}
+        d = {"type": type_name, "root": str(s.root)}
+        if isinstance(s, storage.ValuePickleFile) and s.remaining_depth:
+            d["remaining_depth"] = s.remaining_depth
+        return d
     elif isinstance(s, (storage.ValueBagOfHoldingH5File, storage.CallBagOfHoldingH5File)):
-        return {"type": "bagofholding_hdf", "root": str(s.root)}
+        d = {"type": "bagofholding_hdf", "root": str(s.root)}
+        if isinstance(s, storage.ValueBagOfHoldingH5File) and s.remaining_depth:
+            d["remaining_depth"] = s.remaining_depth
+        return d
     elif isinstance(s, storage.Sql):
         return {"type": "sql", "url": s.url}
     else:
