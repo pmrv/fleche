@@ -39,10 +39,7 @@ __all__ = [
     "FileStorage",
     "ValuePickleFile",
     "CallPickleFile",
-    "PickleFile",
     "ValueBagOfHoldingH5File",
     "CallBagOfHoldingH5File",
-    "BagOfHoldingH5File",
-    "CallSql",
     "Sql",
 ]
