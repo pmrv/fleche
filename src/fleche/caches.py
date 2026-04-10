@@ -143,24 +143,41 @@ class BaseCache(ABC):
                 logger.warning("No hash for query argument: %s", e.args[0])
         return query.QueryIterator(_safe_iter())
 
-    def table(self) -> pd.DataFrame:
+    def table(self, arguments: Iterable[str] = (), results=False) -> pd.DataFrame:
         """Return a pandas DataFrame summarizing cached calls via query().
 
         This implementation uses a fully-wildcard Call template to retrieve
         all calls through ``self.query`` and then flattens metadata keys into
         top-level columns for convenience.
 
-        Arguments and results are elided.
+        By default, arguments and results are elided.
 
         The DataFrame index will be the lookup key (digest) of each call.
+        Columns are:
+            - `name`: the function name
+            - `module`: the module name
+            - 'result`: if `results` argument is `True`
+            - metadata fields are flattened and added as columns directly
+
+        If given argument names collide with any of the above columns, they are prefixed by 'a_'.
+        Only requested arguments are loaded from cache.
+
+        Args:
+            arguments (iterable of str): add the given arguments (of the queried calls) as columns to the table
+            results (bool): if True, add results of queried calls to table
 
         Returns:
             :class:`pandas.DataFrame`: table of all calls on cache
         """
-        # Query all calls using a wildcard template; rely on concrete caches to
-        # handle any necessary decoding (e.g., Cache decodes values on query()).
-        tpl = call.QueryCall(name=None, arguments=None, metadata=None, module=None, version=None, result=None)
-        return self.query(tpl).table()
+        tpl = call.QueryCall(
+            name=None,
+            arguments=None,
+            metadata=None,
+            module=None,
+            version=None,
+            result=None,
+        )
+        return self.query(tpl).table(arguments=arguments, results=results)
 
     def filter(self, predicate: Callable[[Call | LazyCall], bool] | Call) -> 'FilteredCache':
         """Create a read-only view of this cache that only exposes calls matching the predicate.
