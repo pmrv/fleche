@@ -1,4 +1,5 @@
 import logging
+import collections
 from dataclasses import dataclass
 from numbers import Number
 
@@ -235,6 +236,10 @@ class DestructuringMixin(StorageBackend):
 
     remaining_depth: int = 0
 
+    @staticmethod
+    def _is_trojan_tuple(value):
+        return hasattr(value, "_fields") and hasattr(value, "_field_defaults")
+
     def _intern_rec(self, value: Any, key: Digest | None = None) -> tuple[Any, int | float]:
         """Post-order traversal: recurse to leaves, decide inline-vs-store on the way back up.
 
@@ -256,6 +261,12 @@ class DestructuringMixin(StorageBackend):
             # destructuring the empty container
             case dict() | list() | tuple() if not value:
                 depth = 0
+
+            # because nothing is ever simple, namedtuple break LSP by not accepting a single iterable
+            # this is considered highly annoying, because e.g. a lot of numpy functions we'd like to wrap return
+            # NamedTuple
+            case tuple() if self._is_trojan_tuple(value):
+                pass
 
             case list() | tuple():
                 value, depth = DigestedIterable.sunder(self._intern_rec, value)
