@@ -10,7 +10,9 @@ import pytest
 from hypothesis import given, settings, HealthCheck
 
 from fleche import fleche
-from fleche.storage import ValueMemory, CallMemory, ValueVoid, ValuePickleFile
+from fleche.call import Call
+from fleche.storage import ValueMemory, CallMemory, ValueVoid, ValuePickleFile, CallPickleFile
+from fleche.storage import ValueBagOfHoldingH5File, CallBagOfHoldingH5File
 from fleche.storage.sql import Sql
 from fleche.caches import Cache, ReadOnlyCache, FilteredCache, RefreshingCache, CacheStack, Rejected
 from tests.strategies import st_digested_calls
@@ -113,28 +115,64 @@ def test_cache_stack_picklable(cache):
 
 
 # ---------------------------------------------------------------------------
-# Functional roundtrip: save → pickle → unpickle → load
+# Fast fixtures for Hypothesis-based functional roundtrip tests
+#
+# HDF5 and SQL backends are excluded here because H5Bag's file-open/write/close
+# cycle per Hypothesis trial (~20-50 ms each) makes the 100-example default
+# unacceptably slow (≈ 80 s for all h5 variants combined).  Those backends are
+# covered by dedicated fixed-example tests below.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(params=["memory", "cloudpickle", "dill", "pickle"])
+def fast_value_storage(request, tmp_path):
+    """Value storage backends for Hypothesis tests (HDF5 excluded)."""
+    if request.param == "memory":
+        return ValueMemory({})
+    elif request.param == "cloudpickle":
+        return ValuePickleFile.with_cloudpickle(tmp_path / "cloudpickle", secret_key=SECRET_KEY)
+    elif request.param == "dill":
+        return ValuePickleFile.with_dill(tmp_path / "dill", secret_key=SECRET_KEY)
+    elif request.param == "pickle":
+        return ValuePickleFile.with_pickle(tmp_path / "pickle", secret_key=SECRET_KEY)
+
+
+@pytest.fixture(params=["memory", "cloudpickle", "dill", "pickle"])
+def fast_call_storage(request, tmp_path):
+    """Call storage backends for Hypothesis tests (HDF5 and SQL excluded)."""
+    if request.param == "memory":
+        return CallMemory({})
+    elif request.param == "cloudpickle":
+        return CallPickleFile.with_cloudpickle(tmp_path / "cloudpickle", secret_key=SECRET_KEY)
+    elif request.param == "dill":
+        return CallPickleFile.with_dill(tmp_path / "dill", secret_key=SECRET_KEY)
+    elif request.param == "pickle":
+        return CallPickleFile.with_pickle(tmp_path / "pickle", secret_key=SECRET_KEY)
+
+
+# ---------------------------------------------------------------------------
+# Functional roundtrip: save → pickle → unpickle → load (fast backends)
 # ---------------------------------------------------------------------------
 
 
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 @given(call=st_digested_calls)
-def test_call_storage_functional_roundtrip(call_storage, call):
+def test_call_storage_functional_roundtrip(fast_call_storage, call):
     """Data saved to a call storage before pickling is accessible after restoring."""
     from fleche.storage import SaveError
     try:
-        key = call_storage.save(call)
+        key = fast_call_storage.save(call)
     except SaveError:
         return
-    restored = roundtrip(call_storage)
+    restored = roundtrip(fast_call_storage)
     assert restored.load(key) == call
 
 
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 @given(call=st_digested_calls)
-def test_cache_functional_roundtrip(value_storage, call_storage, call):
+def test_cache_functional_roundtrip(fast_value_storage, fast_call_storage, call):
     """Data saved to a cache before pickling is accessible after restoring."""
-    cache = Cache(value_storage, call_storage)
+    cache = Cache(fast_value_storage, fast_call_storage)
     try:
         key = cache.save(call)
     except Rejected:
@@ -146,9 +184,9 @@ def test_cache_functional_roundtrip(value_storage, call_storage, call):
 
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 @given(call=st_digested_calls)
-def test_cache_stack_functional_roundtrip(value_storage, call_storage, call):
+def test_cache_stack_functional_roundtrip(fast_value_storage, fast_call_storage, call):
     """CacheStack saves and loads correctly after pickling."""
-    cache = Cache(value_storage, call_storage)
+    cache = Cache(fast_value_storage, fast_call_storage)
     try:
         key = cache.save(call)
     except Rejected:
@@ -157,6 +195,60 @@ def test_cache_stack_functional_roundtrip(value_storage, call_storage, call):
     restored = roundtrip(stack)
     loaded = restored.load(key, lazy=False)
     assert loaded == call
+
+
+# ---------------------------------------------------------------------------
+# Functional roundtrip for HDF5 and SQL backends (fixed examples)
+#
+# Representative Call shapes cover: empty args, populated args, None vs set
+# module/version/result.  Property-based exploration is not needed here because
+# H5Bag/SQL serialization is independent of Call structure variability.
+# ---------------------------------------------------------------------------
+
+_ROUNDTRIP_CALLS = [
+    pytest.param(Call(name="minimal", arguments={}), id="minimal"),
+    pytest.param(
+        Call(name="full", arguments={"x": "a" * 64, "y": "b" * 64}, module="mymod", version=3, result="c" * 64),
+        id="full",
+    ),
+]
+
+
+@pytest.mark.parametrize("call", _ROUNDTRIP_CALLS)
+def test_h5_call_storage_roundtrip(tmp_path, call):
+    """HDF5 call storage: data saved before pickling is accessible after restoring."""
+    storage = CallBagOfHoldingH5File(tmp_path / "h5")
+    key = storage.save(call)
+    assert roundtrip(storage).load(key) == call
+
+
+@pytest.mark.parametrize("call", _ROUNDTRIP_CALLS)
+def test_sql_call_storage_roundtrip(tmp_path, call):
+    """SQL call storage: data saved before pickling is accessible after restoring."""
+    storage = Sql(tmp_path / "calls.db")
+    key = storage.save(call)
+    assert roundtrip(storage).load(key) == call
+
+
+def test_h5_cache_functional_roundtrip(tmp_path):
+    """Cache backed by HDF5 value + call storage survives pickling."""
+    vs = ValueBagOfHoldingH5File(tmp_path / "values")
+    cs = CallBagOfHoldingH5File(tmp_path / "calls")
+    cache = Cache(vs, cs)
+    call = Call(name="f", arguments={"x": "a" * 64}, module="mod", version=1, result="b" * 64)
+    key = cache.save(call)
+    assert roundtrip(cache).load(key, lazy=False) == call
+
+
+def test_h5_cache_stack_functional_roundtrip(tmp_path):
+    """CacheStack with HDF5 base cache survives pickling and serves saved data."""
+    vs = ValueBagOfHoldingH5File(tmp_path / "values")
+    cs = CallBagOfHoldingH5File(tmp_path / "calls")
+    h5_cache = Cache(vs, cs)
+    stack = CacheStack((h5_cache, Cache(ValueMemory({}), CallMemory({}))))
+    call = Call(name="f", arguments={"x": "a" * 64}, module=None, version=None, result="b" * 64)
+    key = h5_cache.save(call)  # CacheStack.save() returns None; use the underlying cache
+    assert roundtrip(stack).load(key, lazy=False) == call
 
 
 # ---------------------------------------------------------------------------
