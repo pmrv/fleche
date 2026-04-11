@@ -4,7 +4,8 @@ from typing import Any
 import logging
 
 from .file import FileStorage
-from .base import SaveError, ValueMixin, CallMixin, DestructuringMixin
+from .base import SaveError, ValueMixin, CallMixin
+from .destructuring import DestructuringMixin
 
 from pyiron_snippets.import_alarm import ImportAlarm
 
@@ -42,5 +43,8 @@ class BagOfHoldingH5FileBackend(FileStorage):
             raise KeyError(path) from e
 
 
+@dataclass(frozen=True)
 class ValueBagOfHoldingH5File(ValueMixin, DestructuringMixin, BagOfHoldingH5FileBackend): ...
+
+@dataclass(frozen=True)
 class CallBagOfHoldingH5File(CallMixin, BagOfHoldingH5FileBackend): ...
