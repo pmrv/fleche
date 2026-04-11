@@ -22,17 +22,29 @@ following **lowercase** identifiers:
     (:class:`~fleche.storage.ValuePickleFile` /
     :class:`~fleche.storage.CallPickleFile`).
     Required: ``root`` (path to storage directory).
+    Optional: ``compress`` (bool, default ``False``) — gzip-compress files.
+    Optional: ``lock_timeout`` (float, default ``1.0``) — write-lock wait timeout (s).
+    Optional: ``lock_wait_start`` (float, default ``0.001``) — initial lock-poll
+    interval for exponential backoff (s).
     Optional (value backend): ``remaining_depth`` (int, default ``0``).
 
 ``"cloudpickle"``
     Filesystem backend serialised with ``cloudpickle`` — handles more
     complex Python objects than ``pickle``.
     Required: ``root``.
+    Optional: ``compress`` (bool, default ``False``) — gzip-compress files.
+    Optional: ``lock_timeout`` (float, default ``1.0``) — write-lock wait timeout (s).
+    Optional: ``lock_wait_start`` (float, default ``0.001``) — initial lock-poll
+    interval for exponential backoff (s).
     Optional (value backend): ``remaining_depth`` (int, default ``0``).
 
 ``"dill"``
     Filesystem backend serialised with ``dill``.
     Required: ``root``.
+    Optional: ``compress`` (bool, default ``False``) — gzip-compress files.
+    Optional: ``lock_timeout`` (float, default ``1.0``) — write-lock wait timeout (s).
+    Optional: ``lock_wait_start`` (float, default ``0.001``) — initial lock-poll
+    interval for exponential backoff (s).
     Optional (value backend): ``remaining_depth`` (int, default ``0``).
 
 ``"bagofholding_hdf"``
@@ -40,12 +52,16 @@ following **lowercase** identifiers:
     (:class:`~fleche.storage.ValueBagOfHoldingH5File` /
     :class:`~fleche.storage.CallBagOfHoldingH5File`).
     Required: ``root``.
+    Optional: ``lock_timeout`` (float, default ``1.0``) — write-lock wait timeout (s).
+    Optional: ``lock_wait_start`` (float, default ``0.001``) — initial lock-poll
+    interval for exponential backoff (s).
     Optional (value backend): ``remaining_depth`` (int, default ``0``).
 
 ``"sql"``
     SQL database via SQLAlchemy (:class:`~fleche.storage.Sql`).
     *Call storage only.*  Required: ``url`` (SQLAlchemy connection URL,
     e.g. ``"sqlite:///~/.fleche/calls.db"``).
+    Optional: ``echo`` (bool, default ``False``) — log SQL statements.
 
 Example fleche.toml
 -------------------
@@ -187,12 +203,19 @@ def storage_from_config(d: dict[str, Any], type: Literal["call", "value"]) -> st
     * ``{"type": "memory"}``
     * ``{"type": "void"}``
     * ``{"type": "pickle", "root": "<path>"}``
+      — optional: ``compress``, ``lock_timeout``, ``lock_wait_start``,
+      ``remaining_depth`` (value only)
     * ``{"type": "cloudpickle", "root": "<path>"}``
+      — same optional keys as ``"pickle"``
     * ``{"type": "dill", "root": "<path>"}``
+      — same optional keys as ``"pickle"``
     * ``{"type": "bagofholding_hdf", "root": "<path>"}``
+      — optional: ``lock_timeout``, ``lock_wait_start``,
+      ``remaining_depth`` (value only)
     * ``{"type": "sql", "url": "<sqlalchemy-url>"}``  *(call storage only)*
+      — optional: ``echo``
 
-    See the module docstring for descriptions of each type.
+    See the module docstring for full descriptions of each key.
     """
     d = dict(d)
     backend = d.pop("type")
@@ -237,11 +260,30 @@ def storage_to_config(s: storage.ValueStorage | storage.CallStorage) -> dict[str
                 type_name = "dill"
             case _:
                 raise ValueError(f"Unknown PickleFile serializer: {serializer_name!r}")
-        return {"type": type_name, "root": str(s.root)}
+        d: dict[str, Any] = {"type": type_name, "root": str(s.root)}
+        if s.compress:
+            d["compress"] = s.compress
+        if s.lock_timeout != 1.0:
+            d["lock_timeout"] = s.lock_timeout
+        if s.lock_wait_start != 0.001:
+            d["lock_wait_start"] = s.lock_wait_start
+        if isinstance(s, storage.ValuePickleFile) and s.remaining_depth != 0:
+            d["remaining_depth"] = s.remaining_depth
+        return d
     elif isinstance(s, (storage.ValueBagOfHoldingH5File, storage.CallBagOfHoldingH5File)):
-        return {"type": "bagofholding_hdf", "root": str(s.root)}
+        d = {"type": "bagofholding_hdf", "root": str(s.root)}
+        if s.lock_timeout != 1.0:
+            d["lock_timeout"] = s.lock_timeout
+        if s.lock_wait_start != 0.001:
+            d["lock_wait_start"] = s.lock_wait_start
+        if isinstance(s, storage.ValueBagOfHoldingH5File) and s.remaining_depth != 0:
+            d["remaining_depth"] = s.remaining_depth
+        return d
     elif isinstance(s, storage.Sql):
-        return {"type": "sql", "url": s.url}
+        d = {"type": "sql", "url": s.url}
+        if s.echo:
+            d["echo"] = s.echo
+        return d
     else:
         raise ValueError(f"Cannot convert storage of type {cls.__name__!r} to config")
 

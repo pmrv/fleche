@@ -114,17 +114,32 @@ Available storage types
     Stores data as files on the filesystem using the standard ``pickle`` module
     (:class:`~fleche.storage.ValuePickleFile` / :class:`~fleche.storage.CallPickleFile`).
     Required: ``root`` — path to the storage directory.
+    Optional: ``compress`` (bool, default ``false``) — gzip-compress each stored file.
+    Optional: ``lock_timeout`` (float, default ``1.0``) — maximum seconds to wait for
+    a concurrent write lock before attempting a read anyway.
+    Optional: ``lock_wait_start`` (float, default ``0.001``) — initial wait interval
+    (seconds) for exponential backoff while polling the write lock.
     Optional (value backend): ``remaining_depth`` — see `Destructuring`_ below.
 
 ``"cloudpickle"``
     Same filesystem backend as ``"pickle"``, but serialised with ``cloudpickle``.
     Handles more complex Python objects (lambdas, closures, etc.).
     Required: ``root``.
+    Optional: ``compress`` (bool, default ``false``) — gzip-compress each stored file.
+    Optional: ``lock_timeout`` (float, default ``1.0``) — maximum seconds to wait for
+    a concurrent write lock before attempting a read anyway.
+    Optional: ``lock_wait_start`` (float, default ``0.001``) — initial wait interval
+    (seconds) for exponential backoff while polling the write lock.
     Optional (value backend): ``remaining_depth`` — see `Destructuring`_ below.
 
 ``"dill"``
     Same filesystem backend as ``"pickle"``, but serialised with ``dill``.
     Required: ``root``.
+    Optional: ``compress`` (bool, default ``false``) — gzip-compress each stored file.
+    Optional: ``lock_timeout`` (float, default ``1.0``) — maximum seconds to wait for
+    a concurrent write lock before attempting a read anyway.
+    Optional: ``lock_wait_start`` (float, default ``0.001``) — initial wait interval
+    (seconds) for exponential backoff while polling the write lock.
     Optional (value backend): ``remaining_depth`` — see `Destructuring`_ below.
 
 ``"bagofholding_hdf"``
@@ -132,6 +147,10 @@ Available storage types
     (:class:`~fleche.storage.ValueBagOfHoldingH5File` /
     :class:`~fleche.storage.CallBagOfHoldingH5File`).
     Required: ``root``.
+    Optional: ``lock_timeout`` (float, default ``1.0``) — maximum seconds to wait for
+    a concurrent write lock before attempting a read anyway.
+    Optional: ``lock_wait_start`` (float, default ``0.001``) — initial wait interval
+    (seconds) for exponential backoff while polling the write lock.
     Optional (value backend): ``remaining_depth`` — see `Destructuring`_ below.
 
 ``"sql"``
@@ -140,6 +159,8 @@ Available storage types
     Intended for **call storage only**.
     Required: ``url`` — a SQLAlchemy connection URL, e.g.
     ``"sqlite:///~/.fleche/calls.db"``.
+    Optional: ``echo`` (bool, default ``false``) — if ``true``, log all SQL statements
+    (useful for debugging).
 
 Destructuring
 ^^^^^^^^^^^^^
