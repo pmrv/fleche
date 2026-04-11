@@ -4,5 +4,6 @@ __pycache__/
 .ipynb_checkpoints/*
 .hypothesis/
 notebooks/.*
+notebooks/*.db
 docs/_build
 src/fleche/_version.py
