@@ -27,9 +27,11 @@ called inside ``load``) do not deadlock.
 
 import contextlib
 import threading
+import weakref
 from dataclasses import dataclass, field
 
 from .base import KeyManagement
+from ..digest import Digest
 
 
 @dataclass(frozen=True)
@@ -69,19 +71,22 @@ class PerKeyLockMixin(KeyManagement):
         class PerKeyValueMemory(PerKeyLockMixin, ValueMemory): ...
     """
 
-    _key_locks: dict = field(
-        default_factory=dict, init=False, repr=False, compare=False
+    _key_locks: weakref.WeakValueDictionary[Digest | str, threading.RLock] = field(
+        default_factory=weakref.WeakValueDictionary, init=False, repr=False, compare=False
     )
     _meta_lock: threading.Lock = field(
         default_factory=threading.Lock, init=False, repr=False, compare=False
     )
 
-    def _get_key_lock(self, key) -> threading.RLock:
-        key_str = str(key)
+    def _get_key_lock(self, key: Digest | str) -> threading.RLock:
         with self._meta_lock:
-            if key_str not in self._key_locks:
-                self._key_locks[key_str] = threading.RLock()
-            return self._key_locks[key_str]
+            # Hold a strong reference so the lock is not collected between
+            # creation and return — WeakValueDictionary only stores a weak ref.
+            lock = self._key_locks.get(key)
+            if lock is None:
+                lock = threading.RLock()
+                self._key_locks[key] = lock
+            return lock
 
     @contextlib.contextmanager
     def _operation_context(self, key):
@@ -89,23 +94,3 @@ class PerKeyLockMixin(KeyManagement):
             with super()._operation_context(key):
                 yield
 
-
-# --- ready-to-use aliases ---
-
-from .memory import ValueMemory, CallMemory  # noqa: E402
-
-
-@dataclass(frozen=True)
-class SerializingValueMemory(SerializingMixin, ValueMemory): ...
-
-
-@dataclass(frozen=True)
-class SerializingCallMemory(SerializingMixin, CallMemory): ...
-
-
-@dataclass(frozen=True)
-class PerKeyValueMemory(PerKeyLockMixin, ValueMemory): ...
-
-
-@dataclass(frozen=True)
-class PerKeyCallMemory(PerKeyLockMixin, CallMemory): ...
