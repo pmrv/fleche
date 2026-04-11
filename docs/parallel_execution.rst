@@ -194,3 +194,38 @@ Quick Reference
      - Yes
      - No (separate process)
      - File/SQL storage + ``BoundWrapper``
+
+Known Limitations
+-----------------
+
+Cache Stampede (Thundering Herd)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Fleche does **not** protect against cache stampedes.  When multiple workers
+(threads or processes) call the same fleche-decorated function with identical
+arguments at the same time and the result is not yet cached, all of them will
+experience a cache miss simultaneously.  Each worker then independently
+computes the function and writes the result — wasting redundant work and
+potentially producing inconsistent call metadata (e.g. ``Runtime`` values will
+differ between the duplicate records).
+
+The root cause is that there is no reservation mechanism between the cache
+miss check and the cache write in ``wrapper.py``.  A correct fix would require
+pre-allocating a "pending" slot in the cache so that other workers can detect
+the in-flight computation and wait, rather than starting their own.
+Implementing this correctly is non-trivial: it requires key-scoped locking,
+timeout handling for stale allocations (e.g. if the computing worker crashes),
+and cross-process coordination for file- and SQL-backed stores.  This is
+currently out of scope.
+
+.. warning::
+
+   If you submit many workers with the same arguments before the first result
+   is cached, all workers will compute the function.  The last writer wins for
+   the stored value, but **no data is lost or corrupted** — subsequent calls
+   will hit the cache normally.
+
+**Practical workarounds:**
+
+- Pre-warm the cache sequentially before launching parallel workers.
+- Partition work so each worker handles a disjoint set of arguments.
