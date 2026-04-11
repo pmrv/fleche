@@ -199,6 +199,9 @@ def randomly_digest_subvalues(value, data):
     # Otherwise, recurse into the structure
     if isinstance(value, list):
         return [randomly_digest_subvalues(v, data) for v in value]
+    elif isinstance(value, tuple) and hasattr(value, "_fields") and hasattr(value, "_field_defaults"):
+        # namedtuple: reconstruct preserving the concrete type, since digest() includes type.__name__
+        return type(value)(*[randomly_digest_subvalues(v, data) for v in value])
     elif isinstance(value, tuple):
         return tuple(randomly_digest_subvalues(v, data) for v in value)
     elif isinstance(value, dict):

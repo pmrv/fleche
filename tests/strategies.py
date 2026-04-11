@@ -1,5 +1,6 @@
 from hypothesis import strategies as st
 from dataclasses import make_dataclass
+import collections
 import string
 import keyword
 import numpy as np
@@ -34,6 +35,26 @@ def dataclasses(draw, field_types, frozen=None, clscache={}):
     return cls(*fields)
 
 
+@st.composite
+def namedtuples(draw, field_types, clscache={}):
+    fields = draw(
+        st.dictionaries(
+            st.text(string.ascii_letters, min_size=3, max_size=3).filter(
+                lambda s: not keyword.iskeyword(s) and s != "mro"
+            ),
+            field_types,
+            min_size=1,
+            max_size=5,
+        )
+    )
+    clsname = 'NT' + digest.digest(list(fields.keys()))
+    if clsname not in clscache:
+        cls = clscache[clsname] = collections.namedtuple(clsname, list(fields.keys()))
+    else:
+        cls = clscache[clsname]
+    return cls(**fields)
+
+
 def calls(value_types):
     """Generate random Call objects using st.builds."""
     return st.builds(
@@ -61,6 +82,7 @@ key_strategies = [
     st.booleans(),
 ]
 key_strategies.append(dataclasses(st.one_of(*key_strategies), frozen=True))
+key_strategies.append(namedtuples(st.one_of(*key_strategies)))
 
 
 # Base values include all key strategies plus unhashable types like Call
@@ -79,6 +101,7 @@ st_nested_values = st.recursive(
         st.composite(lambda draw: tuple(draw(st_l)))(),
         st.dictionaries(st_key_values, children, max_size=6),  # Use only hashable keys
         dataclasses(children, frozen=True),
+        namedtuples(children),
     ),
     max_leaves=10,
 )

@@ -1,4 +1,5 @@
 import pytest
+from collections import namedtuple
 from dataclasses import dataclass
 from hypothesis import given, settings, HealthCheck, strategies as st
 from fleche.storage import ValueMixin, DestructuringMixin
@@ -6,7 +7,7 @@ from fleche.storage.memory import MemoryBackend
 from fleche.storage.base import DigestedIterable, DigestedDict, Digested
 from fleche.digest import digest, Digest
 
-from tests.strategies import st_base_values, st_nested_values, st_key_values
+from tests.strategies import st_base_values, st_nested_values, st_key_values, namedtuples
 
 
 @dataclass(frozen=True)
@@ -261,3 +262,85 @@ def test_plain_dict_stored_when_all_inline():
     raw = ds.storage[key]
     assert not isinstance(raw, Digested)
     assert raw == data
+
+
+# ---- Namedtuple tests ----
+
+Point = namedtuple('Point', ['x', 'y'])
+Triple = namedtuple('Triple', ['a', 'b', 'c'])
+
+
+def test_namedtuple_roundtrip(ds):
+    """A namedtuple survives a save/load roundtrip as the same type."""
+    p = Point(x=1, y=2)
+    key = ds.save(p)
+    loaded = ds.load(key)
+    assert loaded == p
+    assert type(loaded) is Point
+
+
+def test_namedtuple_not_destructured(ds):
+    """Namedtuples are stored atomically, not wrapped in DigestedIterable."""
+    p = Point(x=3, y=4)
+    key = ds.save(p)
+    raw = ds.storage[key]
+    assert not isinstance(raw, DigestedIterable)
+    assert type(raw) is Point
+
+
+def test_namedtuple_in_list_roundtrip(ds):
+    """A namedtuple inside a list is preserved through the roundtrip."""
+    data = [Point(x=1, y=2), 42, "hello"]
+    key = ds.save(data)
+    loaded = ds.load(key)
+    assert loaded == data
+    assert type(loaded[0]) is Point
+
+
+def test_namedtuple_in_dict_roundtrip(ds):
+    """A namedtuple stored as a dict value round-trips correctly."""
+    data = {"point": Point(x=5, y=6), "other": 99}
+    key = ds.save(data)
+    loaded = ds.load(key)
+    assert loaded == data
+    assert type(loaded["point"]) is Point
+
+
+def test_namedtuple_nested_in_list_not_destructured(ds):
+    """Namedtuple nested inside a list is stored atomically (not broken apart)."""
+    p = Point(x=7, y=8)
+    data = [p, 1]
+    key = ds.save(data)
+    raw = ds.storage[key]
+    assert isinstance(raw, DigestedIterable)
+    # The namedtuple child should be stored separately as a Digest reference,
+    # but when retrieved it must still be a Point, not a plain tuple.
+    loaded = ds.load(key)
+    assert type(loaded[0]) is Point
+
+
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@given(namedtuples(st_base_values))
+def test_namedtuple_hypothesis_roundtrip(ds, nt):
+    """Hypothesis-generated namedtuples round-trip with their type preserved."""
+    key = ds.save(nt)
+    loaded = ds.load(key)
+    assert loaded == nt
+    assert type(loaded) is type(nt)
+
+
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@given(namedtuples(st_base_values))
+def test_namedtuple_hypothesis_not_destructured(ds, nt):
+    """Hypothesis-generated namedtuples are never stored as DigestedIterable."""
+    key = ds.save(nt)
+    raw = ds.storage[key]
+    assert not isinstance(raw, DigestedIterable)
+    assert type(raw) is type(nt)
+
+
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@given(namedtuples(st_base_values))
+def test_namedtuple_save_is_deterministic(ds, nt):
+    """Saving the same namedtuple twice yields the same key."""
+    assert ds.save(nt) == ds.save(nt)
