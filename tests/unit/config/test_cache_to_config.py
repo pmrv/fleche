@@ -12,7 +12,7 @@ def test_cache_to_config_memory():
     c = Cache(values=storage.ValueMemory({}), calls=storage.CallMemory({}))
     cfg = cache_to_config(c)
     assert cfg == {
-        "values": {"type": "memory"},
+        "values": {"type": "memory", "remaining_depth": 0},
         "calls": {"type": "memory"},
     }
 
@@ -34,7 +34,7 @@ def test_cache_to_config_size_limited():
     )
     cfg = cache_to_config(c)
     assert cfg == {
-        "values": {"type": "memory"},
+        "values": {"type": "memory", "remaining_depth": 0},
         "calls": {"type": "memory"},
         "max_size": 5,
     }
@@ -45,9 +45,9 @@ def test_cache_to_config_readonly():
     c = ReadOnlyCache(inner)
     cfg = cache_to_config(c)
     assert cfg == {
-        "values": {"type": "memory"},
-        "calls": {"type": "memory"},
-        "read_only": True,
+            "values": {"type": "memory", "remaining_depth": 0},
+            "calls": {"type": "memory"},
+            "read_only": True,
     }
 
 
@@ -60,7 +60,7 @@ def test_cache_to_config_readonly_size_limited():
     c = ReadOnlyCache(inner)
     cfg = cache_to_config(c)
     assert cfg == {
-        "values": {"type": "memory"},
+        "values": {"type": "memory", "remaining_depth": 0},
         "calls": {"type": "memory"},
         "max_size": 7,
         "read_only": True,

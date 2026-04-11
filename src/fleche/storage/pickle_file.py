@@ -1,11 +1,9 @@
-import importlib
 import pickle
 import logging
 import gzip
-import types
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .file import FileStorage
 from .base import ValueMixin, CallMixin
@@ -91,7 +89,8 @@ class PickleFileBackend(FileStorage):
     """
 
     secret_key: list[bytes] = field(default_factory=list)
-    serializer: Any = field(repr=False)
+    dumps: Callable = field(repr=False)
+    loads: Callable = field(repr=False)
     compress: bool = False
 
     def __post_init__(self):
@@ -102,37 +101,23 @@ class PickleFileBackend(FileStorage):
     @classmethod
     def with_pickle(cls, *args, **kwargs):
         """Construct a PickleFileBackend using the standard pickle module."""
-        return cls(*args, serializer=pickle, **kwargs)
+        return cls(*args, dumps=pickle.dumps, loads=pickle.loads, **kwargs)
 
     @classmethod
     @cloudpickle_alarm
     def with_cloudpickle(cls, *args, **kwargs):
         """Construct a PickleFileBackend using the cloudpickle module."""
-        return cls(*args, serializer=cloudpickle, **kwargs)
+        return cls(*args, dumps=cloudpickle.dumps, loads=cloudpickle.loads, **kwargs)
 
     @classmethod
     @dill_alarm
     def with_dill(cls, *args, **kwargs):
         """Construct a PickleFileBackend using the dill module."""
-        return cls(*args, serializer=dill, **kwargs)
-
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        serializer = state.get("serializer")
-        if isinstance(serializer, types.ModuleType):
-            state["serializer"] = serializer.__name__
-        return state
-
-    def __setstate__(self, state):
-        serializer_name = state.get("serializer")
-        if isinstance(serializer_name, str):
-            state = dict(state)
-            state["serializer"] = importlib.import_module(serializer_name)
-        self.__dict__.update(state)
+        return cls(*args, dumps=dill.dumps, loads=dill.loads, **kwargs)
 
     def _to_file(self, value: Any, path: Path) -> None:
         signer = SignedBytes(self.secret_key)
-        data = signer.dumps(self.serializer.dumps(value))
+        data = signer.dumps(self.dumps(value))
         if self.compress:
             data = gzip.compress(data)
         path.write_bytes(data)
@@ -144,7 +129,7 @@ class PickleFileBackend(FileStorage):
                 content = gzip.decompress(content)
             signer = SignedBytes(self.secret_key)
             data = signer.loads(content)
-            return self.serializer.loads(data)
+            return self.loads(data)
         except FileNotFoundError:
             raise KeyError(path) from None
         except SignatureError:

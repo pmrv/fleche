@@ -1,30 +1,96 @@
 """
 Configuration system for fleche.
 
-Example cache.toml:
+Storage type names
+------------------
 
-[default]
-cache = "mycache"
-metadata = ["Runtime", "CallInfo"]
+The ``type`` key in a storage config dict is case-sensitive and uses the
+following **lowercase** identifiers:
 
-[mycache]
-values.type = "Memory"
-calls.type = "Memory"
+``"memory"``
+    In-memory dict (:class:`~fleche.storage.ValueMemory` /
+    :class:`~fleche.storage.CallMemory`).  No required keys.
+    Optional (value backend): ``remaining_depth`` (int, default ``0``).
 
-[transient]
-values.type = "CloudpickleFile"
-values.root = ".fleche/values"
-calls.type = "CloudpickleFile"
-calls.root = ".fleche/calls"
+``"void"``
+    No-op — discards all data (:class:`~fleche.storage.ValueVoid` /
+    :class:`~fleche.storage.CallVoid`).  No required keys.
+    Optional (value backend): ``remaining_depth`` (int, default ``0``).
 
-[global]
-values.type = "BagOfHoldingH5File"
-values.root = "~/.fleche/values"
-calls.type = "CloudpickleFile"
-calls.root = "~/.fleche/calls"
+``"pickle"``
+    Filesystem backend serialised with the standard ``pickle`` module
+    (:class:`~fleche.storage.ValuePickleFile` /
+    :class:`~fleche.storage.CallPickleFile`).
+    Required: ``root`` (path to storage directory).
+    Optional: ``compress`` (bool, default ``False``) — gzip-compress files.
+    Optional: ``lock_timeout`` (float, default ``1.0``) — write-lock wait timeout (s).
+    Optional: ``lock_wait_start`` (float, default ``0.001``) — initial lock-poll
+    interval for exponential backoff (s).
+    Optional (value backend): ``remaining_depth`` (int, default ``0``).
+
+``"cloudpickle"``
+    Filesystem backend serialised with ``cloudpickle`` — handles more
+    complex Python objects than ``pickle``.
+    Required: ``root``.
+    Optional: ``compress`` (bool, default ``False``) — gzip-compress files.
+    Optional: ``lock_timeout`` (float, default ``1.0``) — write-lock wait timeout (s).
+    Optional: ``lock_wait_start`` (float, default ``0.001``) — initial lock-poll
+    interval for exponential backoff (s).
+    Optional (value backend): ``remaining_depth`` (int, default ``0``).
+
+``"dill"``
+    Filesystem backend serialised with ``dill``.
+    Required: ``root``.
+    Optional: ``compress`` (bool, default ``False``) — gzip-compress files.
+    Optional: ``lock_timeout`` (float, default ``1.0``) — write-lock wait timeout (s).
+    Optional: ``lock_wait_start`` (float, default ``0.001``) — initial lock-poll
+    interval for exponential backoff (s).
+    Optional (value backend): ``remaining_depth`` (int, default ``0``).
+
+``"bagofholding_hdf"``
+    HDF5-backed storage via the ``bagofholding`` library
+    (:class:`~fleche.storage.ValueBagOfHoldingH5File` /
+    :class:`~fleche.storage.CallBagOfHoldingH5File`).
+    Required: ``root``.
+    Optional: ``lock_timeout`` (float, default ``1.0``) — write-lock wait timeout (s).
+    Optional: ``lock_wait_start`` (float, default ``0.001``) — initial lock-poll
+    interval for exponential backoff (s).
+    Optional (value backend): ``remaining_depth`` (int, default ``0``).
+
+``"sql"``
+    SQL database via SQLAlchemy (:class:`~fleche.storage.Sql`).
+    *Call storage only.*  Required: ``url`` (SQLAlchemy connection URL,
+    e.g. ``"sqlite:///~/.fleche/calls.db"``).
+    Optional: ``echo`` (bool, default ``False``) — log SQL statements.
+
+Example fleche.toml
+-------------------
+
+::
+
+    [default]
+    cache = "persistent"
+    metadata = ["Runtime"]
+
+    [persistent]
+    values.type = "cloudpickle"
+    values.root = "~/.fleche/values"
+    calls.type = "cloudpickle"
+    calls.root = "~/.fleche/calls"
+
+    [fast]
+    values.type = "memory"
+    calls.type = "memory"
+
+    [with_sql_calls]
+    values.type = "cloudpickle"
+    values.root = "~/.fleche/values"
+    calls.type = "sql"
+    calls.url = "sqlite:///~/.fleche/calls.db"
 
 """
 
+from dataclasses import asdict
 import tomllib
 import logging
 from typing import Literal, cast, overload
@@ -129,9 +195,28 @@ def storage_from_config(d: dict[str, Any], type: Literal["value"]) -> storage.Va
 def storage_from_config(d: dict[str, Any], type: Literal["call", "value"]) -> storage.ValueStorage | storage.CallStorage:
     """Construct a :class:`~fleche.storage.StorageBackend` from a config dict.
 
-    The dict must contain a ``"type"`` key (case-sensitive) and any additional
-    parameters required by that storage backend.  The input dict is **not**
-    mutated.
+    The dict must contain a ``"type"`` key (case-sensitive, lowercase) and any
+    additional parameters required by that storage backend.  The input dict is
+    **not** mutated.
+
+    Supported type values and their parameters:
+
+    * ``{"type": "memory"}``
+    * ``{"type": "void"}``
+    * ``{"type": "pickle", "root": "<path>"}``
+      — optional: ``compress``, ``lock_timeout``, ``lock_wait_start``,
+      ``remaining_depth`` (value only)
+    * ``{"type": "cloudpickle", "root": "<path>"}``
+      — same optional keys as ``"pickle"``
+    * ``{"type": "dill", "root": "<path>"}``
+      — same optional keys as ``"pickle"``
+    * ``{"type": "bagofholding_hdf", "root": "<path>"}``
+      — optional: ``lock_timeout``, ``lock_wait_start``,
+      ``remaining_depth`` (value only)
+    * ``{"type": "sql", "url": "<sqlalchemy-url>"}``  *(call storage only)*
+      — optional: ``echo``
+
+    See the module docstring for full descriptions of each key.
     """
     d = dict(d)
     backend = d.pop("type")
@@ -154,35 +239,37 @@ def storage_to_config(s: storage.ValueStorage | storage.CallStorage) -> dict[str
     The returned dict contains a ``"type"`` key and any additional parameters
     needed to reconstruct the storage via :func:`storage_from_config`.
     """
-    import types
-
     cls = type(s)
     if cls not in _STORAGE_CLASS_TO_NAME and not isinstance(s, storage.Sql):
         raise ValueError(f"Cannot convert storage of type {cls.__name__!r} to config")
 
-    if isinstance(s, (storage.ValueMemory, storage.CallMemory)):
-        return {"type": "memory"}
-    elif isinstance(s, (storage.ValueVoid, storage.CallVoid)):
-        return {"type": "void"}
-    elif isinstance(s, (storage.ValuePickleFile, storage.CallPickleFile)):
-        serializer = s.serializer
-        serializer_name = serializer.__name__ if isinstance(serializer, types.ModuleType) else str(serializer)
-        match serializer_name:
-            case "pickle":
-                type_name = "pickle"
-            case "cloudpickle":
-                type_name = "cloudpickle"
-            case "dill":
-                type_name = "dill"
-            case _:
+    match s:
+        case storage.memory.MemoryBackend():
+            config = asdict(s)  # type: ignore
+            config["type"] = "memory"
+            del config["storage"]
+        case storage.void.VoidBackend():
+            config = asdict(s)  # type: ignore
+            config["type"] = "void"
+        case storage.pickle_file.PickleFileBackend():
+            config = asdict(s)  # type: ignore
+            serializer_name = s.dumps.__module__.split(".")[0].lstrip("_")
+            if serializer_name not in ("pickle", "dill", "cloudpickle"):
                 raise ValueError(f"Unknown PickleFile serializer: {serializer_name!r}")
-        return {"type": type_name, "root": str(s.root)}
-    elif isinstance(s, (storage.ValueBagOfHoldingH5File, storage.CallBagOfHoldingH5File)):
-        return {"type": "bagofholding_hdf", "root": str(s.root)}
-    elif isinstance(s, storage.Sql):
-        return {"type": "sql", "url": s.url}
-    else:
-        raise ValueError(f"Cannot convert storage of type {cls.__name__!r} to config")
+            config["type"] = serializer_name
+            del config["dumps"]
+            del config["loads"]
+            del config["secret_key"]
+            config["root"] = str(config["root"])
+        case storage.bagofholding_file.BagOfHoldingH5FileBackend():
+            config = asdict(s)  # type: ignore
+            config["type"] = "bagofholding_hdf"
+            config["root"] = str(config["root"])
+        case storage.sql.Sql():
+            config = {"type": "sql", "url": s.url, "echo": s.echo}
+        case _:
+            raise ValueError(f"Cannot convert storage of type {cls.__name__!r} to config")
+    return config
 
 
 def cache_from_config(d: "dict[str, Any] | list[dict[str, Any]]") -> BaseCache:
