@@ -7,7 +7,7 @@ from fleche.config import storage_to_config, storage_from_config
 
 def test_memory():
     s = storage.ValueMemory({})
-    assert storage_to_config(s) == {"type": "memory"}
+    assert storage_to_config(s) == {"type": "memory", "remaining_depth": 0}
 
 
 def test_void():
@@ -76,7 +76,7 @@ def test_roundtrip_memory():
     cfg = {"type": "memory"}
     s = storage_from_config(cfg, "value")
     assert isinstance(s, storage.ValueMemory)
-    assert storage_to_config(s) == {"type": "memory"}
+    assert storage_to_config(s) == {"type": "memory", "remaining_depth": 0}
 
 
 def test_roundtrip_void():

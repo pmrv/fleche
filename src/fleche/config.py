@@ -90,6 +90,7 @@ Example fleche.toml
 
 """
 
+from dataclasses import asdict
 import tomllib
 import logging
 from typing import Literal, cast, overload
@@ -238,54 +239,37 @@ def storage_to_config(s: storage.ValueStorage | storage.CallStorage) -> dict[str
     The returned dict contains a ``"type"`` key and any additional parameters
     needed to reconstruct the storage via :func:`storage_from_config`.
     """
-    import types
-
     cls = type(s)
     if cls not in _STORAGE_CLASS_TO_NAME and not isinstance(s, storage.Sql):
         raise ValueError(f"Cannot convert storage of type {cls.__name__!r} to config")
 
-    if isinstance(s, (storage.ValueMemory, storage.CallMemory)):
-        return {"type": "memory"}
-    elif isinstance(s, (storage.ValueVoid, storage.CallVoid)):
-        return {"type": "void"}
-    elif isinstance(s, (storage.ValuePickleFile, storage.CallPickleFile)):
-        serializer = s.serializer
-        serializer_name = serializer.__name__ if isinstance(serializer, types.ModuleType) else str(serializer)
-        match serializer_name:
-            case "pickle":
-                type_name = "pickle"
-            case "cloudpickle":
-                type_name = "cloudpickle"
-            case "dill":
-                type_name = "dill"
-            case _:
+    match s:
+        case storage.memory.MemoryBackend():
+            config = asdict(s)  # type: ignore
+            config["type"] = "memory"
+            del config["storage"]
+        case storage.void.VoidBackend():
+            config = asdict(s)  # type: ignore
+            config["type"] = "void"
+        case storage.pickle_file.PickleFileBackend():
+            config = asdict(s)  # type: ignore
+            serializer_name = s.dumps.__module__.split(".")[0].lstrip("_")
+            if serializer_name not in ("pickle", "dill", "cloudpickle"):
                 raise ValueError(f"Unknown PickleFile serializer: {serializer_name!r}")
-        d: dict[str, Any] = {"type": type_name, "root": str(s.root)}
-        if s.compress:
-            d["compress"] = s.compress
-        if s.lock_timeout != 1.0:
-            d["lock_timeout"] = s.lock_timeout
-        if s.lock_wait_start != 0.001:
-            d["lock_wait_start"] = s.lock_wait_start
-        if isinstance(s, storage.ValuePickleFile) and s.remaining_depth != 0:
-            d["remaining_depth"] = s.remaining_depth
-        return d
-    elif isinstance(s, (storage.ValueBagOfHoldingH5File, storage.CallBagOfHoldingH5File)):
-        d = {"type": "bagofholding_hdf", "root": str(s.root)}
-        if s.lock_timeout != 1.0:
-            d["lock_timeout"] = s.lock_timeout
-        if s.lock_wait_start != 0.001:
-            d["lock_wait_start"] = s.lock_wait_start
-        if isinstance(s, storage.ValueBagOfHoldingH5File) and s.remaining_depth != 0:
-            d["remaining_depth"] = s.remaining_depth
-        return d
-    elif isinstance(s, storage.Sql):
-        d = {"type": "sql", "url": s.url}
-        if s.echo:
-            d["echo"] = s.echo
-        return d
-    else:
-        raise ValueError(f"Cannot convert storage of type {cls.__name__!r} to config")
+            config["type"] = serializer_name
+            del config["dumps"]
+            del config["loads"]
+            del config["secret_key"]
+            config["root"] = str(config["root"])
+        case storage.bagofholding_file.BagOfHoldingH5FileBackend():
+            config = asdict(s)  # type: ignore
+            config["type"] = "bagofholding_hdf"
+            config["root"] = str(config["root"])
+        case storage.sql.Sql():
+            config = {"type": "sql", "url": s.url, "echo": s.echo}
+        case _:
+            raise ValueError(f"Cannot convert storage of type {cls.__name__!r} to config")
+    return config
 
 
 def cache_from_config(d: "dict[str, Any] | list[dict[str, Any]]") -> BaseCache:
