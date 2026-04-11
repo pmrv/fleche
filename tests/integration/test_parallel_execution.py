@@ -8,6 +8,10 @@ In Python, ContextVar values are NOT automatically inherited by threads spawned 
 ThreadPoolExecutor. The tests below document both the failure case and the workaround
 (explicit context propagation via ``contextvars.copy_context()``).
 
+``BoundWrapper.bind(func)`` is the recommended alternative: it captures the current cache
+and metadata state at bind time and restores it on each call, without requiring
+``ctx.run`` at the call site.
+
 Process-based execution (ProcessPoolExecutor / executorlib SingleNodeExecutor)
 -------------------------------------------------------------------------------
 Worker processes are spawned as independent subprocesses with a fresh Python interpreter.
@@ -18,9 +22,11 @@ completely invisible to workers.
   return correct results.
 * However, an in-memory cache set via ``fleche.cache(...)`` in the parent process
   is **not visible** in the worker; results are NOT stored in the parent's cache.
-* To share cached results across processes, use **file- or SQL-backed storage** and
-  pass the shared path to the worker explicitly (see
-  ``test_executorlib_file_backed_cache_shared``).
+* To share cached results across processes use **file- or SQL-backed storage**.
+  ``BoundWrapper.bind(func)`` (called while the file cache is active) embeds the cache
+  configuration into the callable itself, eliminating the need for a separate worker
+  wrapper function (see ``test_process_executor_bound_wrapper`` and
+  ``test_executorlib_bound_wrapper``).
 """
 
 import concurrent.futures
@@ -29,6 +35,7 @@ import tempfile
 import pytest
 
 import fleche
+from fleche import BoundWrapper
 from fleche.caches import Cache
 from fleche.storage.memory import ValueMemory, CallMemory
 from fleche.storage.pickle_file import ValuePickleFile, CallPickleFile
@@ -209,4 +216,90 @@ def test_executorlib_file_backed_cache_shared():
         assert parent_cache.contains(double.digest(21)), (
             "With file-backed storage, results written by the worker process are "
             "visible to the parent via the shared filesystem path."
+        )
+
+
+# ---------------------------------------------------------------------------
+# BoundWrapper tests
+# ---------------------------------------------------------------------------
+# BoundWrapper.bind(func) captures the active cache and metadata at bind time
+# and restores them on every call, even across process boundaries (provided the
+# cache backend is picklable, i.e. file- or SQL-backed).
+
+
+def test_threadpool_bound_wrapper():
+    """
+    BoundWrapper propagates the cache to ThreadPoolExecutor workers without
+    requiring ctx.run at the call site.
+    """
+    cache1 = Cache(ValueMemory({}), CallMemory({}))
+
+    with fleche.cache(cache1):
+        bound = BoundWrapper.bind(my_func)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(bound, 300)
+        future.result()
+
+    assert cache1.contains(my_func.digest(300)), (
+        "BoundWrapper restores the bound cache in the thread so the result is "
+        "stored in the parent's cache object."
+    )
+
+
+def test_process_executor_bound_wrapper():
+    """
+    BoundWrapper with a file-backed cache eliminates the need for a separate
+    worker wrapper function: the bound callable carries the cache configuration
+    and sets it up automatically in the worker process.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        values_dir = f"{tmpdir}/values"
+        calls_dir = f"{tmpdir}/calls"
+
+        file_cache = Cache(
+            ValuePickleFile.with_pickle(root=values_dir),
+            CallPickleFile.with_pickle(root=calls_dir),
+        )
+
+        with fleche.cache(file_cache):
+            bound = BoundWrapper.bind(double)
+
+        with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
+            result = executor.submit(bound, 21).result()
+
+        assert result == 42, f"Expected 42, got {result}"
+        assert file_cache.contains(double.digest(21)), (
+            "BoundWrapper carries the file-backed cache into the worker; results "
+            "written there are visible to the parent via the shared filesystem path."
+        )
+
+
+@_skip_no_executorlib
+def test_executorlib_bound_wrapper():
+    """
+    BoundWrapper with a file-backed cache works the same way with
+    executorlib.SingleNodeExecutor.
+    """
+    from executorlib import SingleNodeExecutor
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        values_dir = f"{tmpdir}/values"
+        calls_dir = f"{tmpdir}/calls"
+
+        file_cache = Cache(
+            ValuePickleFile.with_pickle(root=values_dir),
+            CallPickleFile.with_pickle(root=calls_dir),
+        )
+
+        with fleche.cache(file_cache):
+            bound = BoundWrapper.bind(double)
+
+        with SingleNodeExecutor() as executor:
+            result = executor.submit(bound, 21).result()
+
+        assert result == 42, f"Expected 42, got {result}"
+        assert file_cache.contains(double.digest(21)), (
+            "BoundWrapper carries the file-backed cache into the executorlib worker; "
+            "results are visible to the parent via the shared filesystem path."
         )

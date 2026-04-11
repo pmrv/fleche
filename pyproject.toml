@@ -60,3 +60,6 @@ tests = [
     "ipykernel",
     "tabulate",
 ]
+executorlib = [
+    "executorlib",
+]

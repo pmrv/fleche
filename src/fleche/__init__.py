@@ -11,6 +11,7 @@ from .state import (
         meta,
         tags,
         project,
+        BoundWrapper,
 )
 from .wrapper import fleche, Ignored, Required
 
@@ -49,6 +50,7 @@ __all__ = [
         "meta",
         "tags",
         "project",
+        "BoundWrapper",
         "Ignored",
         "Required",
         "D",
