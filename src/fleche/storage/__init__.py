@@ -13,8 +13,8 @@ from .base import (
     ValueMixin,
     CallStorage,
     CallMixin,
-    DestructuringMixin,
 )
+from .destructuring import DestructuringMixin
 from .memory import ValueMemory, CallMemory
 from .void import ValueVoid, CallVoid
 from .file import FileStorage

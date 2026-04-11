@@ -25,8 +25,8 @@ class Rejected(Exception):
 
 # backwards compat imports
 # from breaking introduced in 0.4.0
-DigestedIterable = storage.base.DigestedIterable
-DigestedDict = storage.base.DigestedDict
+DigestedIterable = storage.destructuring.DigestedIterable
+DigestedDict = storage.destructuring.DigestedDict
 
 
 class BaseCache(ABC):

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from hypothesis import given, settings, HealthCheck, strategies as st
 from fleche.storage import ValueMixin, DestructuringMixin
 from fleche.storage.memory import MemoryBackend
-from fleche.storage.base import DigestedIterable, DigestedDict, Digested
+from fleche.storage.destructuring import DigestedIterable, DigestedDict, Digested
 from fleche.digest import digest, Digest
 
 from tests.strategies import st_base_values, st_nested_values, st_key_values, namedtuples
@@ -13,7 +13,7 @@ from tests.strategies import st_base_values, st_nested_values, st_key_values, na
 @dataclass(frozen=True)
 class DestructuringMemory(ValueMixin, DestructuringMixin, MemoryBackend):
     """Test-only class: DestructuringMixin + MemoryBackend wired through ValueMixin."""
-    remaining_depth: int = 0
+    pass
 
 
 @pytest.fixture

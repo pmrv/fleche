@@ -61,6 +61,39 @@ Cache
 
 Values and calls are stored separately so metadata/call records can be queried without deserializing heavy results.
 
+### Composing storage classes with dataclass mixins
+
+Storage classes are built by composing mixins (`ValueMixin`, `CallMixin`, `DestructuringMixin`) with concrete backends
+(`MemoryBackend`, `PickleFileBackend`, etc.). Most are implemented as dataclasses, some may not.  To ensure the
+concretely constructed class has a correct init, it must be rewrapped
+
+**Intermediate/mixin classes:**
+```python
+@dataclass(frozen=True)
+class DestructuringMixin(StorageBackend):
+    remaining_depth: int = 0
+    # ... methods
+```
+
+**Backend implementations:**
+```python
+@dataclass(frozen=True)
+class MemoryBackend(StorageBackend):
+    storage: dict[Digest, Any]
+```
+
+**Concrete composed classes:** Use `@dataclass(frozen=True)` without `init=False` — Python's dataclass machinery
+automatically collects all fields from parent classes in MRO order and generates a single combined `__init__`
+
+```python
+@dataclass(frozen=True)
+class ValueMemory(ValueMixin, DestructuringMixin, MemoryBackend): ...
+    # Generated __init__(storage, remaining_depth=0)
+```
+
+This way fields stay defined in their logical homes, intermediate classes don't need to know about fields they inherit,
+and concrete classes get a clean, auto-generated init that handles all fields.
+
 ### Cache key control
 
 The `@fleche()` decorator accepts flags to include/exclude from the hash: `hash_version`, `hash_module`, `hash_code` (hashes the function source), plus per-argument `Ignored`/`Required` wrappers. This lets users invalidate caches by bumping a version number without changing code.

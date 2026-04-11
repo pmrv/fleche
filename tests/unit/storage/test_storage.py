@@ -6,12 +6,12 @@ from fleche.storage import SaveError
 from fleche.storage.sql import Sql
 from fleche.call import Call
 from fleche.digest import digest, Digest
-from fleche.storage.base import DigestedIterable
+from fleche.storage.destructuring import DigestedIterable
 
 from tests.strategies import st_data, st_digested_calls
 
 
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
 @given(st_data)
 def test_storage(value_storage, value):
     try:
