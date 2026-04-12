@@ -21,6 +21,7 @@ from .file import FileStorage
 from .pickle_file import ValuePickleFile, CallPickleFile
 from .bagofholding_file import ValueBagOfHoldingH5File, CallBagOfHoldingH5File
 from .sql import Sql
+from .thread_safe import SerializingMixin, PerKeyLockMixin
 
 __all__ = [
     "SaveError",
@@ -42,4 +43,6 @@ __all__ = [
     "ValueBagOfHoldingH5File",
     "CallBagOfHoldingH5File",
     "Sql",
+    "SerializingMixin",
+    "PerKeyLockMixin",
 ]

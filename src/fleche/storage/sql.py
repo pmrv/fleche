@@ -252,38 +252,39 @@ class Sql(CallStorage):
             session.close()
 
     def expand(self, key: Digest | str) -> Digest:
-        if len(key) >= DIGEST_LENGTH:
-            return Digest(str(key))
-        if len(key) < 4:
-            raise KeyError(key)
+        with self._operation_context(key):
+            if len(key) >= DIGEST_LENGTH:
+                return Digest(str(key))
+            if len(key) < 4:
+                raise KeyError(key)
 
-        prefix = str(key)
-        session = self.session()
-        try:
-            rows = session.execute(
-                select(CallModel.key)
-                .where(CallModel.key.like(f"{prefix}%"))
-                .order_by(CallModel.key)
-                .limit(2)
-            ).all()
-        finally:
-            session.close()
+            prefix = str(key)
+            session = self.session()
+            try:
+                rows = session.execute(
+                    select(CallModel.key)
+                    .where(CallModel.key.like(f"{prefix}%"))
+                    .order_by(CallModel.key)
+                    .limit(2)
+                ).all()
+            finally:
+                session.close()
 
-        if not rows:
-            raise KeyError(key)
+            if not rows:
+                raise KeyError(key)
 
-        if len(rows) == 1:
-            return Digest(rows[0][0])
+            if len(rows) == 1:
+                return Digest(rows[0][0])
 
-        m1, m2 = rows[0][0], rows[1][0]
-        for i, (c1, c2) in enumerate(zip(m1, m2)):
-            if c1 != c2:
-                break
-        else:
-            i = min(len(m1), len(m2))
-        raise AmbiguousDigestError(
-            f"Short digest {key} is ambiguous; need at least {i+1} characters."
-        )
+            m1, m2 = rows[0][0], rows[1][0]
+            for i, (c1, c2) in enumerate(zip(m1, m2)):
+                if c1 != c2:
+                    break
+            else:
+                i = min(len(m1), len(m2))
+            raise AmbiguousDigestError(
+                f"Short digest {key} is ambiguous; need at least {i+1} characters."
+            )
 
     def _evict(self, key: Digest) -> None:
         session = self.session()
@@ -301,18 +302,20 @@ class Sql(CallStorage):
 
     def save(self, call: Call) -> Digest:
         key = call.to_lookup_key()
-        logger.debug("Saving call %s", key)
-        if self.contains(str(key)):
-            self.evict(str(key))
-        return self.put(call, key)
+        with self._operation_context(key):
+            logger.debug("Saving call %s", key)
+            if self.contains(str(key)):
+                self.evict(str(key))
+            return self.put(call, key)
 
     def load(self, key: Digest | str) -> Call:
-        if len(key) < DIGEST_LENGTH:
-            key = self.expand(key)
-        else:
-            key = Digest(key)
-        logger.debug("Loading call with key %s", key)
-        return self.get(key)
+        with self._operation_context(key):
+            if len(key) < DIGEST_LENGTH:
+                key = self.expand(key)
+            else:
+                key = Digest(key)
+            logger.debug("Loading call with key %s", key)
+            return self.get(key)
 
     def _normalize_value(self, v: Any) -> str:
         """Return the stored form used in SQL for argument/result matching.
