@@ -49,23 +49,27 @@ You can register your digest hooks in the ``fleche`` entry point group with the 
 .. code-block:: toml
 
    [project.entry-points."fleche"]
-   digest = "my_package.hooks:get_hooks"
+   digest = "my_package.hooks:hooks"
 
-The entry point can point to:
+The entry point must resolve to one of:
+
 * A single ``fleche.digest.Hook`` object.
 * A tuple of ``(Type, Callable)``.
 * A list containing any combination of the above.
+
+These must be **module-level objects**, not callables that return hooks.
+``fleche`` loads the entry point with ``importlib.metadata.EntryPoint.load()``,
+which returns the object at the given path directly — it does **not** call it.
 
 .. code-block:: python
 
    # my_package/hooks.py
    from fleche.digest import Hook
 
-   def get_hooks():
-       return [
-           Hook(TypeA, digest_a),
-           (TypeB, digest_b),
-       ]
+   hooks = [
+       Hook(TypeA, digest_a),
+       (TypeB, digest_b),
+   ]
 
 Lazy Loading and Retries
 ~~~~~~~~~~~~~~~~~~~~~~~~
