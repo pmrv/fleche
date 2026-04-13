@@ -111,9 +111,14 @@ def my_function(x):
 
 ## Storage Backends
 
-### File Storage (Default)
-- Stores cache in filesystem using pickle by default
-- XDG Base Directory Specification compliant
+### In-Memory Storage (Default)
+- Default when no `fleche.toml` configuration file is present
+- Transient: data is lost when the process exits
+
+### File Storage
+- Stores cache in filesystem using pickle (or cloudpickle/dill)
+- Persistent across runs
+- XDG Base Directory Specification compliant when configured
 
 ### SQL Storage
 - Requires `sqlalchemy`
@@ -164,13 +169,14 @@ def fetch_data(user_id, date):
 fetch_data(user_id=123, date='2024-01-01')
 
 # Get all cached results
-all_results = fetch_data.query()
+all_results = list(fetch_data.query())
 
-# Get results matching specific arguments
-results = fetch_data.query(user_id=123)
+# Get results matching specific arguments (None acts as wildcard)
+results = list(fetch_data.query(user_id=123))
 
-# Load results lazily
-results = fetch_data.query(lazy=True)
+# Inspect a result
+for call in fetch_data.query(user_id=123):
+    print(call.arguments, call.result)
 ```
 
 ## Performance
