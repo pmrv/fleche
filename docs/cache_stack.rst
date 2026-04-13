@@ -19,11 +19,11 @@ Example
 
     from fleche import fleche, cache
     from fleche.caches import Cache, CacheStack
-    from fleche.storage import Memory
+    from fleche.storage import ValueMemory, CallMemory
 
     # Define two caches
-    local_cache = Cache(Memory({}), Memory({}))
-    remote_cache = Cache(Memory({}), Memory({}))
+    local_cache = Cache(ValueMemory({}), CallMemory({}))
+    remote_cache = Cache(ValueMemory({}), CallMemory({}))
 
     @fleche
     def my_function(x):
