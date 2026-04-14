@@ -270,6 +270,9 @@ def test_query_iterator_table_timestart_timestop_converted_to_datetime(test_cach
     df = test_cache.query(tpl).table()
     assert pd.api.types.is_datetime64_any_dtype(df["timestart"])
     assert pd.api.types.is_datetime64_any_dtype(df["timestop"])
+    # Timestamps should be timezone-aware (local timezone)
+    assert df["timestart"].dt.tz is not None
+    assert df["timestop"].dt.tz is not None
     # walltime should remain a float
     assert pd.api.types.is_float_dtype(df["walltime"])
 

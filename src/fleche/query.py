@@ -34,8 +34,8 @@ class QueryIterator(Iterable[call.LazyCall]):
         Only requested arguments are loaded from cache.
 
         ``timestart`` and ``timestop`` columns (produced by the :class:`~fleche.metadata.Runtime`
-        metadata) are automatically converted from Unix timestamps (float seconds) to
-        :class:`pandas.Timestamp` for human-readable display.
+        metadata) are automatically converted from UTC Unix timestamps (float seconds) to
+        timezone-aware :class:`pandas.Timestamp` objects in the local timezone.
 
         Args:
             arguments (iterable of str): add the given arguments (of the queried calls) as columns to the table
@@ -71,7 +71,7 @@ class QueryIterator(Iterable[call.LazyCall]):
         df = pd.DataFrame.from_dict(rows, orient="index")
         for col in ("timestart", "timestop"):
             if col in df.columns:
-                df[col] = pd.to_datetime(df[col], unit="s")
+                df[col] = pd.to_datetime(df[col], unit="s", utc=True).dt.tz_convert("localtime")
         return df
 
     def results(self) -> Iterable[Any]:
