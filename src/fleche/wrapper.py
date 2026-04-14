@@ -97,6 +97,17 @@ def process_ignore_required_args(
         require = tuple(require)
     required_args = require + tuple(type_required)
 
+    try:
+        sig = signature(func)
+        for r in required_args:
+            if r in sig.parameters and sig.parameters[r].kind == sig.parameters[r].POSITIONAL_ONLY:
+                logger.warning(
+                    "Argument '%s' is marked as Required but is positional-only. Required only works for keyword arguments.",
+                    r
+                )
+    except (TypeError, ValueError):
+        pass
+
     return ignored_args, required_args
 
 
@@ -279,11 +290,14 @@ def fleche(
                 return func(*args, **kwargs)
 
             if required_args and sig is not None:
-                # Use sig.bind without apply_defaults: only explicitly-provided arguments
-                # appear in bound.arguments, regardless of whether they were positional
-                # or keyword.  This fixes the bug where positional required args were
-                # incorrectly treated as missing.
-                explicit = set(sig.bind(*args, **kwargs).arguments.keys())
+                # Determine which required args were explicitly provided, without
+                # re-binding.  Positional args map to their parameter names by index;
+                # keyword args are in kwargs directly.
+                positional_params = [
+                    name for name, p in sig.parameters.items()
+                    if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+                ]
+                explicit = set(positional_params[:len(args)]) | set(kwargs.keys())
                 missing = [r for r in required_args if r not in explicit]
                 if missing:
                     logger.warning(
