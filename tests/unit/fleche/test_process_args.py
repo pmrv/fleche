@@ -40,16 +40,6 @@ def test_process_type_hints():
     assert "b" in required
 
 
-def test_process_positional_only_required_warning(caplog):
-    def func(a: Required, /):
-        pass
-
-    import logging
-
-    with caplog.at_level(logging.WARNING):
-        process_ignore_required_args(func)
-        assert "is marked as Required but is positional-only" in caplog.text
-
 
 def test_process_merge_hints_and_args():
     def func(a: Ignored, b: Required):

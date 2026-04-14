@@ -97,14 +97,6 @@ def process_ignore_required_args(
         require = tuple(require)
     required_args = require + tuple(type_required)
 
-    try:
-        sig = signature(func)
-        for r in required_args:
-            if r in sig.parameters and sig.parameters[r].kind == sig.parameters[r].POSITIONAL_ONLY:
-                logger.warning("Argument '%s' is marked as Required but is positional-only. Required only works for keyword arguments.", r)
-    except (TypeError, ValueError):
-        pass
-
     return ignored_args, required_args
 
 
@@ -164,6 +156,11 @@ def fleche(
             func.__version__ = version  # ty: ignore
 
         ignored_args, required_args = process_ignore_required_args(func, ignore, require)
+
+        try:
+            sig = signature(func)
+        except (TypeError, ValueError):
+            sig = None
 
         @wraps(func)
         def get_call(*args, **kwargs):
@@ -274,22 +271,30 @@ def fleche(
                 for k, v in kwargs.items()
             }
 
-            missing = [r for r in required_args if r not in kwargs]
-            if missing:
-                logger.warning(
-                    "Missing required keyword arguments for caching: %s", missing
-                )
-                return func(*args, **kwargs)
-
             try:
                 call = get_call(*args, **kwargs)
                 key = call.to_lookup_key()
-                result = cache.load(key).result
-                logger.debug("Cache hit for %s with key %s", call.name, key)
-                return result
             except digest.Unhashable as e:
                 logger.warning("No hash for argument: %s", e.args[0])
                 return func(*args, **kwargs)
+
+            if required_args and sig is not None:
+                # Use sig.bind without apply_defaults: only explicitly-provided arguments
+                # appear in bound.arguments, regardless of whether they were positional
+                # or keyword.  This fixes the bug where positional required args were
+                # incorrectly treated as missing.
+                explicit = set(sig.bind(*args, **kwargs).arguments.keys())
+                missing = [r for r in required_args if r not in explicit]
+                if missing:
+                    logger.warning(
+                        "Missing required keyword arguments for caching: %s", missing
+                    )
+                    return func(*args, **kwargs)
+
+            try:
+                result = cache.load(key).result
+                logger.debug("Cache hit for %s with key %s", call.name, key)
+                return result
             except KeyError:
                 logger.debug("Cache miss for %s with key %s", call.name, key)
 
