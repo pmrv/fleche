@@ -33,6 +33,10 @@ class QueryIterator(Iterable[call.LazyCall]):
         If given argument names collide with any of the above columns, the are prefixed by 'a_'.
         Only requested arguments are loaded from cache.
 
+        ``timestart`` and ``timestop`` columns (produced by the :class:`~fleche.metadata.Runtime`
+        metadata) are automatically converted from Unix timestamps (float seconds) to
+        :class:`pandas.Timestamp` for human-readable display.
+
         Args:
             arguments (iterable of str): add the given arguments (of the queried calls) as columns to the table
             results (bool): if True, add results of queried calls to table
@@ -64,7 +68,11 @@ class QueryIterator(Iterable[call.LazyCall]):
                     row.update(data)
             rows[str(c.to_lookup_key())] = row
 
-        return pd.DataFrame.from_dict(rows, orient="index")
+        df = pd.DataFrame.from_dict(rows, orient="index")
+        for col in ("timestart", "timestop"):
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col], unit="s")
+        return df
 
     def results(self) -> Iterable[Any]:
         """Returns an iterable over the results of queried calls."""

@@ -255,6 +255,25 @@ def test_query_iterator_table_end_to_end_via_wrapper(test_cache):
 # Partial query binding through the wrapper
 # ---------------------------------------------------------------------------
 
+def test_query_iterator_table_timestart_timestop_converted_to_datetime(test_cache):
+    """timestart and timestop metadata columns are automatically converted to datetime."""
+    import time
+    t0 = time.time()
+    call = Call(
+        name="f",
+        arguments={"x": 1},
+        result=42,
+        metadata={"runtime": {"timestart": t0, "timestop": t0 + 1.5, "walltime": 1.5}},
+    )
+    test_cache.save(call)
+    tpl = Call(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    df = test_cache.query(tpl).table()
+    assert pd.api.types.is_datetime64_any_dtype(df["timestart"])
+    assert pd.api.types.is_datetime64_any_dtype(df["timestop"])
+    # walltime should remain a float
+    assert pd.api.types.is_float_dtype(df["walltime"])
+
+
 def test_query_partial_arguments(test_cache):
     with cache(test_cache):
 
