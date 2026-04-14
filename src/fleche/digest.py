@@ -215,6 +215,8 @@ def _digest(value: Any) -> Digest:
             m.update(digest(value.dtype.str).encode())
             m.update(digest(value.shape).encode())
             m.update(value.tobytes())
+        case types.FunctionType():
+            return digest(value.__code__)
         case types.CodeType():
             # captured properties for behavior stability
             props = [
