@@ -346,3 +346,67 @@ def test_numpy_explicit_cases():
     assert c.tobytes() == d.tobytes()
     assert c.shape != d.shape
     assert digest(c) != digest(d)
+
+
+def test_lambda_can_be_digested():
+    """Test that lambda functions can be digested without raising Unhashable."""
+    f = lambda x: x + 1
+    result = digest(f)
+    assert isinstance(result, Digest)
+
+
+def test_locally_defined_function_can_be_digested():
+    """Test that locally defined functions can be digested without raising Unhashable."""
+    def local_func(x):
+        return x * 2
+
+    result = digest(local_func)
+    assert isinstance(result, Digest)
+
+
+def test_nested_function_can_be_digested():
+    """Test that functions nested inside other functions can be digested."""
+    def outer():
+        def inner(x):
+            return x + 1
+        return inner
+
+    result = digest(outer())
+    assert isinstance(result, Digest)
+
+
+def test_function_digest_is_stable():
+    """Test that digesting the same function repeatedly returns the same value."""
+    def local_func(x):
+        return x * 2
+
+    assert digest(local_func) == digest(local_func)
+
+
+def test_functions_with_different_bodies_have_different_digests():
+    """Test that functions with distinct bodies hash differently."""
+    f = lambda x: x + 1
+    g = lambda x: x + 2
+    assert digest(f) != digest(g)
+
+
+def test_functions_with_identical_bodies_have_same_digest():
+    """Test that two locally defined functions with identical code objects hash the same."""
+    def f(x):
+        return x + 1
+
+    def g(x):
+        return x + 1
+
+    assert digest(f) == digest(g)
+
+
+def test_local_function_digests_same_as_module_level():
+    """Test that a local function with identical code digests the same as a module-level equivalent."""
+    def local_add_one(x):
+        return x + 1
+
+    def _module_level_add_one(x):
+        return x + 1
+
+    assert digest(local_add_one) == digest(_module_level_add_one)
