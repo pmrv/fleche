@@ -1,3 +1,4 @@
+import datetime
 from dataclasses import dataclass
 from typing import Iterable, Iterator, Any
 
@@ -69,9 +70,10 @@ class QueryIterator(Iterable[call.LazyCall]):
             rows[str(c.to_lookup_key())] = row
 
         df = pd.DataFrame.from_dict(rows, orient="index")
+        local_tz = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
         for col in ("timestart", "timestop"):
             if col in df.columns:
-                df[col] = pd.to_datetime(df[col], unit="s", utc=True).dt.tz_convert("localtime")
+                df[col] = pd.to_datetime(df[col], unit="s", utc=True).dt.tz_convert(local_tz)
         return df
 
     def results(self) -> Iterable[Any]:
