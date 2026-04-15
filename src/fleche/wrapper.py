@@ -168,11 +168,6 @@ def fleche(
 
         ignored_args, required_args = process_ignore_required_args(func, ignore, require)
 
-        try:
-            sig = signature(func)
-        except (TypeError, ValueError):
-            sig = None
-
         @wraps(func)
         def get_call(*args, **kwargs):
             call = Call.from_call(func, *args, **kwargs)
@@ -289,7 +284,7 @@ def fleche(
                 logger.warning("No hash for argument: %s", e.args[0])
                 return func(*args, **kwargs)
 
-            if required_args and sig is not None:
+            if required_args:
                 explicit = set(bind(func, args, kwargs).keys())
                 missing = [r for r in required_args if r not in explicit]
                 if missing:
