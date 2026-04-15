@@ -11,7 +11,7 @@ from collections import defaultdict
 from . import digest
 from . import state
 from . import metadata
-from .call import Call, AnyCall, QueryCall
+from .call import Call, AnyCall, QueryCall, bind
 from .caches import Rejected, BaseCache, RefreshingCache
 
 
@@ -101,7 +101,10 @@ def process_ignore_required_args(
         sig = signature(func)
         for r in required_args:
             if r in sig.parameters and sig.parameters[r].kind == sig.parameters[r].POSITIONAL_ONLY:
-                logger.warning("Argument '%s' is marked as Required but is positional-only. Required only works for keyword arguments.", r)
+                logger.warning(
+                    "Argument '%s' is marked as Required but is positional-only. Required only works for keyword arguments.",
+                    r
+                )
     except (TypeError, ValueError):
         pass
 
@@ -274,22 +277,26 @@ def fleche(
                 for k, v in kwargs.items()
             }
 
-            missing = [r for r in required_args if r not in kwargs]
-            if missing:
-                logger.warning(
-                    "Missing required keyword arguments for caching: %s", missing
-                )
-                return func(*args, **kwargs)
-
             try:
                 call = get_call(*args, **kwargs)
                 key = call.to_lookup_key()
-                result = cache.load(key).result
-                logger.debug("Cache hit for %s with key %s", call.name, key)
-                return result
             except digest.Unhashable as e:
                 logger.warning("No hash for argument: %s", e.args[0])
                 return func(*args, **kwargs)
+
+            if required_args:
+                explicit = set(bind(func, args, kwargs).keys())
+                missing = [r for r in required_args if r not in explicit]
+                if missing:
+                    logger.warning(
+                        "Missing required keyword arguments for caching: %s", missing
+                    )
+                    return func(*args, **kwargs)
+
+            try:
+                result = cache.load(key).result
+                logger.debug("Cache hit for %s with key %s", call.name, key)
+                return result
             except KeyError:
                 logger.debug("Cache miss for %s with key %s", call.name, key)
 

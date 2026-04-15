@@ -79,15 +79,8 @@ def test_ignored_hint_generic(memory_cache):
     # FIXME: how to get load count?
     # assert memory_cache.load_count >= 1
 
-def test_required_hint_positional_warning(memory_cache, caplog):
-    caplog.clear()
-    with caplog.at_level(logging.WARNING):
-        @fleche
-        def foo(a: Required, /):
-            return a
-        assert "is marked as Required but is positional-only" in caplog.text
-
-def test_required_hint_positional_skip(memory_cache, caplog):
+def test_required_positional_caches(memory_cache, caplog):
+    """Required args provided positionally are treated as explicitly provided (#297)."""
     calls_storage = memory_cache
 
     @fleche
@@ -96,9 +89,10 @@ def test_required_hint_positional_skip(memory_cache, caplog):
 
     caplog.clear()
     with caplog.at_level(logging.WARNING):
-        foo(2) # Positional a, should NOT cache
-        assert len(calls_storage.storage) == 0
-        assert "Missing required keyword arguments" in caplog.text
+        foo(2)  # a provided positionally — should cache
+        assert len(calls_storage.storage) == 1
+        assert "Missing required keyword arguments" not in caplog.text
+
 
 def test_combined_hints_and_args(memory_cache):
     calls_storage = memory_cache

@@ -6,6 +6,32 @@ from collections.abc import Mapping
 from . import digest
 
 
+def bind(func, args, kwargs, apply_defaults=False, partial=False):
+    """Thin wrapper around :meth:`inspect.Signature.bind` / :meth:`~inspect.Signature.bind_partial`.
+
+    Args:
+        func: The callable whose signature to bind against.
+        args: Positional arguments.
+        kwargs: Keyword arguments.
+        apply_defaults: If ``True``, fill in default values for parameters
+            that were not explicitly supplied.
+        partial: If ``True``, use :meth:`~inspect.Signature.bind_partial`,
+            which allows required arguments to be omitted (treated as wildcards).
+
+    Returns:
+        :attr:`inspect.BoundArguments.arguments` — an ``OrderedDict``
+        containing the supplied (and, when requested, defaulted) values.
+    """
+    sig = signature(func)
+    if partial:
+        bound = sig.bind_partial(*args, **kwargs)
+    else:
+        bound = sig.bind(*args, **kwargs)
+    if apply_defaults:
+        bound.apply_defaults()
+    return bound.arguments
+
+
 @dataclass
 class Call:
     """
@@ -25,13 +51,7 @@ class Call:
 
     @classmethod
     def from_call(cls, func, *args, **kwargs):
-        # Normalize arguments using function signature
-        sig = signature(func)
-        bound = sig.bind(*args, **kwargs)
-        bound.apply_defaults()
-        arguments = dict(bound.arguments)
-
-        # Preserve declared parameter order via bound.arguments (OrderedDict)
+        arguments = dict(bind(func, args, kwargs, apply_defaults=True))
         call = cls(func.__name__, arguments)
         if hasattr(func, "__version__"):
             call.version = func.__version__
@@ -183,12 +203,9 @@ class QueryCall:
 
     @classmethod
     def from_call(cls, func, *args, **kwargs):
-        # Normalize arguments using function signature
-        sig = signature(func)
-        bound = sig.bind_partial(*args, **kwargs)
-        # Do NOT apply defaults: unspecified arguments are treated as None (wildcard)
-        arguments = {name: bound.arguments.get(name) for name in sig.parameters}
-
+        bound_args = bind(func, args, kwargs, partial=True)
+        # Unspecified arguments default to None (wildcard)
+        arguments = {name: bound_args.get(name) for name in signature(func).parameters}
         call = cls(func.__name__, arguments)
         if hasattr(func, "__version__"):
             call.version = func.__version__
@@ -241,6 +258,7 @@ AnyCall = Call | LazyCall
 
 
 __all__ = [
+        "bind",
         "Call",
         "LazyCall",
         "QueryCall",
