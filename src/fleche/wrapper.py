@@ -11,7 +11,7 @@ from collections import defaultdict
 from . import digest
 from . import state
 from . import metadata
-from .call import Call, AnyCall, QueryCall
+from .call import Call, AnyCall, QueryCall, bind
 from .caches import Rejected, BaseCache, RefreshingCache
 
 
@@ -290,14 +290,7 @@ def fleche(
                 return func(*args, **kwargs)
 
             if required_args and sig is not None:
-                # Determine which required args were explicitly provided, without
-                # re-binding.  Positional args map to their parameter names by index;
-                # keyword args are in kwargs directly.
-                positional_params = [
-                    name for name, p in sig.parameters.items()
-                    if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
-                ]
-                explicit = set(positional_params[:len(args)]) | set(kwargs.keys())
+                explicit = set(bind(func, args, kwargs).keys())
                 missing = [r for r in required_args if r not in explicit]
                 if missing:
                     logger.warning(
