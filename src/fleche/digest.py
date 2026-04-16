@@ -153,8 +153,8 @@ def _digest(value: Any) -> Digest:
         if isinstance(value, h.type):
             return h.digest(value)
 
-    # workaround for numpy removing bool from namespace
-    if hasattr(np, "bool") and isinstance(value, np.bool):
+    # np.bool_ is the numpy boolean scalar type (np.bool was removed in numpy 2.0)
+    if isinstance(value, np.bool_):
         return digest(bool(value))
 
     m.update(type(value).__name__.encode())
