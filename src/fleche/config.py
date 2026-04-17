@@ -98,12 +98,11 @@ from pathlib import Path
 import os
 from typing import Any
 
-from . import storage, metadata
-from .caches import BaseCache, Cache, CacheStack, ReadOnlyCache, SizeLimitedCache
+from . import storage, metadata, caches
 
 logger = logging.getLogger("fleche.config")
 
-_live_caches: dict[str, Cache] = {}
+_live_caches: dict[str, caches.Cache] = {}
 
 
 def _load_config(path: Path) -> dict[str, Any]:
@@ -272,7 +271,7 @@ def storage_to_config(s: storage.ValueStorage | storage.CallStorage) -> dict[str
     return config
 
 
-def cache_from_config(d: "dict[str, Any] | list[dict[str, Any]]") -> BaseCache:
+def cache_from_config(d: "dict[str, Any] | list[dict[str, Any]]") -> caches.BaseCache:
     """Construct a :class:`~fleche.caches.BaseCache` from a config dict or list.
 
     The cache type is determined **implicitly** from the shape of the input:
@@ -316,7 +315,7 @@ def cache_from_config(d: "dict[str, Any] | list[dict[str, Any]]") -> BaseCache:
         ])
     """
     if isinstance(d, list):
-        return CacheStack(tuple(cache_from_config(c) for c in d))
+        return caches.CacheStack(tuple(cache_from_config(c) for c in d))
 
     d = dict(d)
     read_only = d.pop("read_only", False)
@@ -326,17 +325,17 @@ def cache_from_config(d: "dict[str, Any] | list[dict[str, Any]]") -> BaseCache:
     calls_storage = storage_from_config(d["calls"], "call")
 
     if max_size is not None:
-        cache: BaseCache = SizeLimitedCache(values=values_storage, calls=calls_storage, max_size=max_size)
+        cache: caches.BaseCache = caches.SizeLimitedCache(values=values_storage, calls=calls_storage, max_size=max_size)
     else:
-        cache = Cache(values=values_storage, calls=calls_storage)
+        cache = caches.Cache(values=values_storage, calls=calls_storage)
 
     if read_only:
-        cache = ReadOnlyCache(cache)
+        cache = caches.ReadOnlyCache(cache)
 
     return cache
 
 
-def cache_to_config(c: BaseCache) -> "dict[str, Any] | list[dict[str, Any]]":
+def cache_to_config(c: caches.BaseCache) -> "dict[str, Any] | list[dict[str, Any]]":
     """Convert a :class:`~fleche.caches.BaseCache` to a config dict or list.
 
     This is the inverse of :func:`cache_from_config`.  The output can be
@@ -353,20 +352,20 @@ def cache_to_config(c: BaseCache) -> "dict[str, Any] | list[dict[str, Any]]":
             ``ReadOnlyCache`` inner types.
     """
     match c:
-        case SizeLimitedCache():
+        case caches.SizeLimitedCache():
             return {
                 "values": storage_to_config(c.values),
                 "calls": storage_to_config(c.calls),
                 "max_size": c.max_size,
             }
-        case Cache():
+        case caches.Cache():
             return {
                 "values": storage_to_config(c.values),
                 "calls": storage_to_config(c.calls),
             }
-        case ReadOnlyCache():
+        case caches.ReadOnlyCache():
             inner = c.cache
-            if not isinstance(inner, (Cache, SizeLimitedCache)):
+            if not isinstance(inner, (caches.Cache, caches.SizeLimitedCache)):
                 raise ValueError(
                     f"ReadOnlyCache wrapping {type(inner).__name__!r} cannot be serialised to config"
                 )
@@ -374,19 +373,19 @@ def cache_to_config(c: BaseCache) -> "dict[str, Any] | list[dict[str, Any]]":
             assert isinstance(d, dict)
             d["read_only"] = True
             return d
-        case CacheStack():
+        case caches.CacheStack():
             return cast("list[dict[str, Any]]", [cache_to_config(s) for s in c.stack])
         case _:
             raise ValueError(f"Cannot convert cache of type {type(c).__name__!r} to config")
 
 
-def _create_cache(cache_config: dict[str, Any]) -> Cache:
+def _create_cache(cache_config: dict[str, Any]) -> caches.Cache:
     values = storage_from_config(cache_config["values"], "value")
     calls = storage_from_config(cache_config["calls"], "call")
-    return Cache(values=values, calls=calls)
+    return caches.Cache(values=values, calls=calls)
 
 
-def load_cache_config(name: str | None = None) -> Cache:
+def load_cache_config(name: str | None = None) -> caches.Cache:
     """
     Load a cache from the configuration file.
 
@@ -400,12 +399,12 @@ def load_cache_config(name: str | None = None) -> Cache:
         return _live_caches[name]
 
     if name == "memory":
-        cache = Cache(storage.ValueMemory({}), storage.CallMemory({}))
+        cache = caches.Cache(storage.ValueMemory({}), storage.CallMemory({}))
         _live_caches[name] = cache
         return cache
 
     if name == "void":
-        cache = Cache(storage.ValueVoid(), storage.CallVoid())
+        cache = caches.Cache(storage.ValueVoid(), storage.CallVoid())
         _live_caches[name] = cache
         return cache
 
@@ -417,7 +416,7 @@ def load_cache_config(name: str | None = None) -> Cache:
             )
         else:
             logger.warning("No config file found. Using default memory cache.")
-        return Cache(storage.ValueMemory({}), storage.CallMemory({}))
+        return caches.Cache(storage.ValueMemory({}), storage.CallMemory({}))
 
     config = _load_config(path)
 
@@ -427,7 +426,7 @@ def load_cache_config(name: str | None = None) -> Cache:
     if cache_name is None:
         if "default" not in config or "cache" not in config["default"]:
             logger.warning("No default cache configured. Using default memory cache.")
-            return Cache(storage.ValueMemory({}), storage.CallMemory({}))
+            return caches.Cache(storage.ValueMemory({}), storage.CallMemory({}))
 
         default_cache = config["default"]["cache"]
         if isinstance(default_cache, str):
@@ -442,7 +441,7 @@ def load_cache_config(name: str | None = None) -> Cache:
                 "Cache '%s' not found in configuration. Using default memory cache.",
                 cache_name,
             )
-            return Cache(storage.ValueMemory({}), storage.CallMemory({}))
+            return caches.Cache(storage.ValueMemory({}), storage.CallMemory({}))
         cache_config = config[cache_name]
 
     cache = _create_cache(cache_config)
