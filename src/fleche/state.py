@@ -3,26 +3,24 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import overload, Iterator, Callable
 
-from .caches import BaseCache
-from .config import load_cache_config, load_default_metadata
-from .metadata import MetaData, Tags
+from . import caches, config, metadata
 
-_CACHE: ContextVar[BaseCache] = ContextVar("fleche.CACHE", default=load_cache_config())
+_CACHE: ContextVar[caches.BaseCache] = ContextVar("fleche.CACHE", default=config.load_cache_config())
 
 
 @overload
-def cache(new_cache: None = None, stack: bool = False) -> BaseCache: ...
+def cache(new_cache: None = None, stack: bool = False) -> caches.BaseCache: ...
 
 
 @overload
 def cache(
-    new_cache: BaseCache | str, stack: bool = False
+    new_cache: caches.BaseCache | str, stack: bool = False
 ) -> AbstractContextManager[None]: ...
 
 
 def cache(
-    new_cache: BaseCache | str | None = None, stack: bool = False
-) -> BaseCache | AbstractContextManager[None]:
+    new_cache: caches.BaseCache | str | None = None, stack: bool = False
+) -> caches.BaseCache | AbstractContextManager[None]:
     """
     Manages the active cache for Fleche. If `new_cache` is provided, it returns a context manager
     that sets the cache for the duration of the context. If `new_cache` is None, it returns
@@ -40,8 +38,8 @@ def cache(
         return _CACHE.get()
 
     if isinstance(new_cache, str):
-        new_cache = load_cache_config(new_cache)
-    if not isinstance(new_cache, BaseCache):
+        new_cache = config.load_cache_config(new_cache)
+    if not isinstance(new_cache, caches.BaseCache):
         raise ValueError(new_cache)
 
     @contextmanager
@@ -59,13 +57,13 @@ def cache(
     return cache_manager()
 
 
-_METADATA: ContextVar[tuple[MetaData, ...]] = ContextVar(
-    "fleche.METADATA", default=load_default_metadata()
+_METADATA: ContextVar[tuple[metadata.MetaData, ...]] = ContextVar(
+    "fleche.METADATA", default=config.load_default_metadata()
 )
 
 
 @contextmanager
-def meta(*new_metadata: MetaData, stack=False):
+def meta(*new_metadata: metadata.MetaData, stack=False):
     new_metadata = tuple(new_metadata)
     if stack:
         new_metadata = _METADATA.get() + new_metadata
@@ -83,7 +81,7 @@ def tags(**kwargs):
     Args:
         **kwargs: The tags to add to the results.
     """
-    return meta(Tags(kwargs), stack=True)
+    return meta(metadata.Tags(kwargs), stack=True)
 
 
 def project(name):
@@ -105,8 +103,8 @@ class BoundWrapper:
     pickle on request."""
 
     func: Callable
-    cache: BaseCache
-    meta: tuple[MetaData, ...]
+    cache: caches.BaseCache
+    meta: tuple[metadata.MetaData, ...]
 
     @classmethod
     def bind(cls, func):
