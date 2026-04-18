@@ -121,6 +121,18 @@ class PerKeyLockMixin(KeyManagement):
         default_factory=_PicklableLock, init=False, repr=False, compare=False
     )
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        # WeakValueDictionary stores an unpicklable closure (_remove); drop it
+        # and recreate fresh on load.
+        del state['_key_locks']
+        return state
+
+    def __setstate__(self, state):
+        # Bypass frozen __setattr__ to restore fields, then add a fresh lock table.
+        self.__dict__.update(state)
+        self.__dict__['_key_locks'] = weakref.WeakValueDictionary()
+
     def _get_key_lock(self, key: Digest | str) -> threading.RLock:
         with self._meta_lock:
             # Hold a strong reference so the lock is not collected between
