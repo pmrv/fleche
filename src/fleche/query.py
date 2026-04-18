@@ -1,6 +1,6 @@
 import datetime
 from dataclasses import dataclass
-from typing import Iterable, Iterator, Any
+from typing import Iterable, Iterator, Any, Literal
 
 import pandas as pd
 
@@ -19,7 +19,7 @@ class QueryIterator(Iterable[call.LazyCall]):
     def __iter__(self) -> Iterator[call.LazyCall]:
         yield from self.calls
 
-    def table(self, arguments: Iterable[str] | str | bool = (), results=False) -> pd.DataFrame:
+    def table(self, arguments: Iterable[str] | str | Literal[True] = (), results=False) -> pd.DataFrame:
         """Return a pandas DataFrame summarizing queried calls.
 
         Arguments and results are elided.
@@ -48,9 +48,11 @@ class QueryIterator(Iterable[call.LazyCall]):
             :class:`pandas.DataFrame`: table of all calls on cache
         """
 
-        if isinstance(arguments, str):
+        if arguments is True:
+            pass
+        elif isinstance(arguments, str):
             arguments = (arguments,)
-        elif arguments is not True:
+        else:
             arguments = tuple(arguments)
 
         rows: dict[str, dict[str, Any]] = {}
