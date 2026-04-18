@@ -34,6 +34,49 @@ from .base import KeyManagement
 from ..digest import Digest
 
 
+class _PicklableLock:
+    """A ``threading.Lock`` wrapper that survives pickle round-trips.
+
+    The lock is re-initialised fresh on unpickle — its acquired/released state
+    is **not** preserved.  This is intentionally an in-process pickling aid
+    (e.g. for ``multiprocessing`` spawn or ``joblib``), **not** an
+    inter-process synchronisation primitive: each process gets its own
+    independent lock that shares no state with locks in other processes.
+    """
+
+    def __init__(self):
+        self._lock = threading.Lock()
+
+    def __reduce__(self):
+        return (type(self), ())
+
+    def __enter__(self):
+        return self._lock.__enter__()
+
+    def __exit__(self, *args):
+        return self._lock.__exit__(*args)
+
+
+class _PicklableRLock:
+    """A ``threading.RLock`` wrapper that survives pickle round-trips.
+
+    Same in-process-only semantics as :class:`_PicklableLock`; reentrant so
+    that nested acquisitions (e.g. ``expand`` inside ``load``) do not deadlock.
+    """
+
+    def __init__(self):
+        self._lock = threading.RLock()
+
+    def __reduce__(self):
+        return (type(self), ())
+
+    def __enter__(self):
+        return self._lock.__enter__()
+
+    def __exit__(self, *args):
+        return self._lock.__exit__(*args)
+
+
 @dataclass(frozen=True)
 class SerializingMixin(KeyManagement):
     """Mixin that serializes all storage operations behind a single reentrant lock.
@@ -44,8 +87,8 @@ class SerializingMixin(KeyManagement):
         class SerializingValueMemory(SerializingMixin, ValueMemory): ...
     """
 
-    _lock: threading.RLock = field(
-        default_factory=threading.RLock, init=False, repr=False, compare=False
+    _lock: _PicklableRLock = field(
+        default_factory=_PicklableRLock, init=False, repr=False, compare=False
     )
 
     @contextlib.contextmanager
@@ -74,8 +117,8 @@ class PerKeyLockMixin(KeyManagement):
     _key_locks: weakref.WeakValueDictionary[Digest | str, threading.RLock] = field(
         default_factory=weakref.WeakValueDictionary, init=False, repr=False, compare=False
     )
-    _meta_lock: threading.Lock = field(
-        default_factory=threading.Lock, init=False, repr=False, compare=False
+    _meta_lock: _PicklableLock = field(
+        default_factory=_PicklableLock, init=False, repr=False, compare=False
     )
 
     def _get_key_lock(self, key: Digest | str) -> threading.RLock:

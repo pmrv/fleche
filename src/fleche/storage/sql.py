@@ -3,6 +3,7 @@ from typing import Iterable, Any, List
 from pathlib import Path
 from dataclasses import dataclass, field
 from .base import KeyManagement, CallStorage, AmbiguousDigestError
+from .thread_safe import PerKeyLockMixin
 from ..call import Call, QueryCall
 from ..digest import Digest, DIGEST_LENGTH, digest
 
@@ -123,7 +124,7 @@ def _enable_sqlite_foreign_keys(engine) -> None:
 
 
 @dataclass(frozen=True)
-class Sql(CallStorage):
+class Sql(PerKeyLockMixin, CallStorage):
     """SQLAlchemy-backed CallStorage with JSON metadata and DB-backed expand()."""
 
     url: str | None = None
@@ -137,7 +138,8 @@ class Sql(CallStorage):
         coerced_url = _coerce_sqlite_url(self.url)
         assert coerced_url is not None
         object.__setattr__(self, "url", coerced_url)
-        engine = create_engine(coerced_url, echo=self.echo, future=True)
+        connect_args = {"check_same_thread": False} if coerced_url.startswith("sqlite:") else {}
+        engine = create_engine(coerced_url, echo=self.echo, future=True, connect_args=connect_args)
         _enable_sqlite_foreign_keys(engine)
         Base.metadata.create_all(engine)
         object.__setattr__(self, "engine", engine)
@@ -145,16 +147,10 @@ class Sql(CallStorage):
             bind=engine, expire_on_commit=False, future=True
         ))
 
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state.pop("engine", None)
-        state.pop("session", None)
-        return state
-
-    def __setstate__(self, state):
-        self.__dict__.update(state)
-        # Re-initialize unpickleable fields
-        self.__post_init__()
+    def __reduce__(self):
+        # Constructor args are the complete durable state; __post_init__ rebuilds
+        # engine/session and the mixin's lock fields are self-contained picklable types.
+        return (type(self), (self.url, self.echo))
 
     def put(self, call: Any, key: Digest) -> Digest:
         session = self.session()
