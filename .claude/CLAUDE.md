@@ -2,6 +2,30 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Quick Reference
+
+**What:** Persistent function cache (`@fleche()` decorator) — like `lru_cache` but survives restarts. SHA256 content-based keys, pluggable backends.
+
+**Entry points:** `wrapper.py` (decorator) → `call.py` (key building) → `digest.py` (hashing) → `caches.py` (cache objects) → `storage/` (backends)
+
+**Active cache:** `ContextVar` in `state.py`; switch with `with cache(my_cache):`. Config auto-loaded from `fleche.toml` / `~/.fleche.toml` by `config.py`.
+
+**Backends:** `memory`, `pickle_file`, `sql` (SQLAlchemy), `bagofholding_file` (HDF5), `void`. Values and calls stored separately — call records queryable via `query.py` → pandas DataFrame.
+
+**Key files to know:**
+| File | Role |
+|------|------|
+| `wrapper.py` | `@fleche()` decorator, per-arg `Ignored`/`Required` markers |
+| `digest.py` | `Digest(str)` + SHA256 over arbitrary Python objects |
+| `call.py` | `Call` dataclass; `LazyCall`, `QueryCall` |
+| `caches.py` | `Cache`, `CacheStack`, `ReadOnlyCache`, `FilteredCache` |
+| `state.py` | `cache()`, `meta()`, `tags()`, `project()` context managers |
+| `storage/base.py` | `StorageBackend` ABC: `save/load/_contains/list/expand/shrink` |
+
+**Storage class pattern:** Compose `ValueMixin`/`CallMixin`/`DestructuringMixin` + a `*Backend` using `@dataclass(frozen=True)` — Python's MRO collects all fields into one generated `__init__`.
+
+---
+
 ## What is fleche?
 
 A persistent caching library for Python functions — like `lru_cache` but persisted across runs. The `@fleche()` decorator wraps functions, generates content-based cache keys via SHA256 hashing, and stores results in configurable backends (file, SQL, memory, HDF5).
@@ -55,8 +79,8 @@ Linting: flake8 with max-line-length=120 (see `.flake8`).
 
 ```
 Cache
-├── values: DestructuringStorage → (Memory | PickleFile | BagOfHoldingH5File | Sql | Void)
-└── calls: CallStorageAdapter   → (same backends)
+├── values: ValueStorage  → (ValueMemory | ValuePickleFile | ValueBagOfHoldingH5File | Void)
+└── calls: CallStorage    → (CallMemory | CallPickleFile | CallBagOfHoldingH5File | Sql | Void)
 ```
 
 Values and calls are stored separately so metadata/call records can be queried without deserializing heavy results.
@@ -107,9 +131,9 @@ cache = "mycache"
 metadata = ["Runtime"]
 
 [mycache]
-values.type = "CloudpickleFile"
+values.type = "cloudpickle"
 values.root = ".fleche/values"
-calls.type = "CloudpickleFile"
+calls.type = "cloudpickle"
 calls.root = ".fleche/calls"
 ```
 
@@ -119,6 +143,7 @@ calls.root = ".fleche/calls"
 tests/
 ├── unit/          # Per-module unit tests (digest/, call/, caches/, storage/, ...)
 ├── integration/   # Cross-module tests (notebooks, SQL constraints, threading, executors)
+├── regression/    # Bug-specific regression tests (e.g. test_issue_297.py)
 ├── fixtures.py    # Shared pytest fixtures
 └── strategies.py  # Hypothesis strategies
 ```
