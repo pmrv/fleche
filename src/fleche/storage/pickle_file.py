@@ -7,6 +7,7 @@ from typing import Any, Callable
 
 from .file import FileStorage
 from .base import ValueMixin, CallMixin
+from .thread_safe import PerKeyLockMixin
 from .destructuring import DestructuringMixin
 from ..security import get_secret_key, normalize_secret_key, SignedBytes, SignatureError
 
@@ -84,7 +85,7 @@ class PickleFileBackend(FileStorage):
 
 
 @dataclass(frozen=True)
-class ValuePickleFile(ValueMixin, DestructuringMixin, PickleFileBackend): ...
+class ValuePickleFile(PerKeyLockMixin, ValueMixin, DestructuringMixin, PickleFileBackend): ...
 
 @dataclass(frozen=True)
-class CallPickleFile(CallMixin, PickleFileBackend): ...
+class CallPickleFile(PerKeyLockMixin, CallMixin, PickleFileBackend): ...

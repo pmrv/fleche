@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Iterable, Any, Generator
 
 from .base import StorageBackend
-from .thread_safe import PerKeyLockMixin
 from ..digest import Digest
 
 logger = logging.getLogger("fleche.storage")
@@ -71,7 +70,7 @@ def file_read_lock(
 
 
 @dataclass(frozen=True)
-class FileStorage(PerKeyLockMixin, StorageBackend):
+class FileStorage(StorageBackend):
     """File-based storage backend using pickle.
 
     Stores objects on the filesystem.

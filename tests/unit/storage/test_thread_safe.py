@@ -43,8 +43,6 @@ class PerKeyCallMemory(PerKeyLockMixin, PlainCallMemory): ...
 
 # PickleFile-backed variants exercise a backend where dict-access GIL
 # protection does not hide concurrency bugs in the locking code.
-# Note: PickleFileBackend already inherits PerKeyLockMixin via FileStorage,
-# so PerKeyValuePickle is redundant and omitted.
 
 @dataclass(frozen=True)
 class PlainValuePickle(ValueMixin, PickleFileBackend): ...
@@ -120,7 +118,7 @@ def test_concurrent_saves_pickle(tmp_path, cls):
 
 
 def test_value_pickle_file_concurrent_saves(tmp_path):
-    """ValuePickleFile is thread-safe via PerKeyLockMixin in FileStorage."""
+    """ValuePickleFile is thread-safe via PerKeyLockMixin."""
     store = ValuePickleFile.with_pickle(root=tmp_path / "values")
     _run_concurrent_save_load(store)
 
