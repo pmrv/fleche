@@ -47,11 +47,8 @@ class _PicklableLock:
     def __init__(self):
         self._lock = threading.Lock()
 
-    def __getstate__(self):
-        return {}
-
-    def __setstate__(self, state):
-        self.__init__()
+    def __reduce__(self):
+        return (type(self), ())
 
     def __enter__(self):
         return self._lock.__enter__()
@@ -70,11 +67,8 @@ class _PicklableRLock:
     def __init__(self):
         self._lock = threading.RLock()
 
-    def __getstate__(self):
-        return {}
-
-    def __setstate__(self, state):
-        self.__init__()
+    def __reduce__(self):
+        return (type(self), ())
 
     def __enter__(self):
         return self._lock.__enter__()
