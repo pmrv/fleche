@@ -1,4 +1,6 @@
+import contextlib
 import logging
+import threading
 from typing import Iterable, Any, List
 from pathlib import Path
 from dataclasses import dataclass, field
@@ -100,7 +102,7 @@ def _coerce_sqlite_url(path_or_url: str | None) -> str:
         url = f"sqlite:///{abs_path}"
 
     if url.startswith("sqlite:///"):
-        db_path = url[len("sqlite:///") :]
+        db_path = url[len("sqlite:///"):]
         if db_path and db_path != ":memory:":
             Path(db_path).parent.mkdir(parents=True, exist_ok=True)
 
@@ -132,6 +134,7 @@ class Sql(PerKeyLockMixin, CallStorage):
 
     engine: Any = field(init=False, repr=False, compare=False)
     session: Any = field(init=False, repr=False, compare=False)
+    _local: threading.local = field(default_factory=threading.local, init=False, repr=False, compare=False)
 
     @sqlalchemy_alarm
     def __post_init__(self) -> None:
@@ -152,100 +155,104 @@ class Sql(PerKeyLockMixin, CallStorage):
         # engine/session and the mixin's lock fields are self-contained picklable types.
         return (type(self), (self.url, self.echo))
 
-    def put(self, call: Any, key: Digest) -> Digest:
+    @contextlib.contextmanager
+    def _session_context(self):
+        if getattr(self._local, "session", None) is not None:
+            yield
+            return
         session = self.session()
+        self._local.session = session
         try:
-            existing = session.get(CallModel, str(key))
-            if existing is not None:
-                if self.get(key) == call:
-                    return key
-
-                session.delete(existing)
-                session.flush()
-
-            call_model = CallModel(
-                key=str(key),
-                name=call.name,
-                module=call.module,
-                version=call.version,
-                code_digest=call.code_digest,
-                result=call.result if call.result is None else str(call.result),
-            )
-            session.add(call_model)
-
-            for i, (k, v) in enumerate(call.arguments.items()):
-                session.add(
-                    ArgumentModel(
-                        call_key=str(key), position=i, name=str(k), value=str(v)
-                    )
-                )
-
-            if call.metadata:
-                session.add_all(
-                    [
-                        MetaModel(call_key=str(key), name=name, data=data)
-                        for name, data in call.metadata.items()
-                    ]
-                )
-            session.commit()
-            # Always return a Digest instance, not a plain str
-            return key
+            yield
         except Exception:
             session.rollback()
             raise
         finally:
             session.close()
+            self._local.session = None
+
+    @contextlib.contextmanager
+    def _operation_context(self, key):
+        with self._session_context():
+            with super()._operation_context(key):
+                yield
+
+    def put(self, call: Any, key: Digest) -> Digest:
+        session = self._local.session
+        existing = session.get(CallModel, str(key))
+        if existing is not None:
+            if self.get(key) == call:
+                return key
+
+            session.delete(existing)
+            session.flush()
+
+        call_model = CallModel(
+            key=str(key),
+            name=call.name,
+            module=call.module,
+            version=call.version,
+            code_digest=call.code_digest,
+            result=call.result if call.result is None else str(call.result),
+        )
+        session.add(call_model)
+
+        for i, (k, v) in enumerate(call.arguments.items()):
+            session.add(
+                ArgumentModel(
+                    call_key=str(key), position=i, name=str(k), value=str(v)
+                )
+            )
+
+        if call.metadata:
+            session.add_all(
+                [
+                    MetaModel(call_key=str(key), name=name, data=data)
+                    for name, data in call.metadata.items()
+                ]
+            )
+        session.commit()
+        # Always return a Digest instance, not a plain str
+        return key
 
     def get(self, key: Digest) -> Call:
-        session = self.session()
-        try:
-            call_model = session.execute(
-                select(CallModel).where(CallModel.key == str(key))
-            ).scalar_one_or_none()
-            if call_model is None:
-                raise KeyError(key)
+        session = self._local.session
+        call_model = session.execute(
+            select(CallModel).where(CallModel.key == str(key))
+        ).scalar_one_or_none()
+        if call_model is None:
+            raise KeyError(key)
 
-            arguments = {arg.name: Digest(arg.value) for arg in call_model.arguments}
+        arguments = {arg.name: Digest(arg.value) for arg in call_model.arguments}
 
-            meta_rows = (
-                session.execute(select(MetaModel).where(MetaModel.call_key == str(key)))
-                .scalars()
-                .all()
-            )
-            call = Call(
-                name=call_model.name,
-                arguments=arguments,
-                metadata={row.name: (row.data or {}) for row in meta_rows},
-                module=call_model.module,
-                version=call_model.version,
-                code_digest=call_model.code_digest,
-                result=(
-                    Digest(call_model.result) if call_model.result is not None else None
-                ),
-            )
-            return call
-        finally:
-            session.close()
+        meta_rows = (
+            session.execute(select(MetaModel).where(MetaModel.call_key == str(key)))
+            .scalars()
+            .all()
+        )
+        return Call(
+            name=call_model.name,
+            arguments=arguments,
+            metadata={row.name: (row.data or {}) for row in meta_rows},
+            module=call_model.module,
+            version=call_model.version,
+            code_digest=call_model.code_digest,
+            result=(
+                Digest(call_model.result) if call_model.result is not None else None
+            ),
+        )
 
     def _contains(self, key: Digest) -> bool:
-        session = self.session()
-        try:
-            return (
-                session.execute(
-                    select(CallModel.key).where(CallModel.key == str(key))
-                ).first()
-                is not None
-            )
-        finally:
-            session.close()
+        return (
+            self._local.session.execute(
+                select(CallModel.key).where(CallModel.key == str(key))
+            ).first()
+            is not None
+        )
 
     def list(self) -> Iterable[Digest]:
-        session = self.session()
-        try:
-            # Return Digest instances for keys
-            return [Digest(row[0]) for row in session.execute(select(CallModel.key))]
-        finally:
-            session.close()
+        with self._session_context():
+            return [Digest(row[0]) for row in self._local.session.execute(select(CallModel.key))]
 
     def expand(self, key: Digest | str) -> Digest:
         with self._operation_context(key):
@@ -255,16 +262,12 @@ class Sql(PerKeyLockMixin, CallStorage):
                 raise KeyError(key)
 
             prefix = str(key)
-            session = self.session()
-            try:
-                rows = session.execute(
-                    select(CallModel.key)
-                    .where(CallModel.key.like(f"{prefix}%"))
-                    .order_by(CallModel.key)
-                    .limit(2)
-                ).all()
-            finally:
-                session.close()
+            rows = self._local.session.execute(
+                select(CallModel.key)
+                .where(CallModel.key.like(f"{prefix}%"))
+                .order_by(CallModel.key)
+                .limit(2)
+            ).all()
 
             if not rows:
                 raise KeyError(key)
@@ -283,18 +286,12 @@ class Sql(PerKeyLockMixin, CallStorage):
             )
 
     def _evict(self, key: Digest) -> None:
-        session = self.session()
-        try:
-            instance = session.get(CallModel, str(key))
-            if instance is None:
-                return
-            session.delete(instance)
-            session.commit()
-        except Exception:
-            session.rollback()
-            raise
-        finally:
-            session.close()
+        session = self._local.session
+        instance = session.get(CallModel, str(key))
+        if instance is None:
+            return
+        session.delete(instance)
+        session.commit()
 
     def save(self, call: Call) -> Digest:
         key = call.to_lookup_key()
@@ -413,8 +410,7 @@ class Sql(PerKeyLockMixin, CallStorage):
         Yields:
             Call: Matching calls including their decoded metadata.
         """
-        session = self.session()
-        try:
+        with self._session_context():
             stmt = select(CallModel.key).select_from(CallModel)
 
             conditions = self._build_call_conditions(template)
@@ -427,9 +423,7 @@ class Sql(PerKeyLockMixin, CallStorage):
             # Distinct to avoid duplicate keys if multiple argument joins could overlap
             stmt = stmt.distinct()
 
-            keys = [Digest(k) for (k,) in session.execute(stmt).all()]
-        finally:
-            session.close()
+            keys = [Digest(k) for (k,) in self._local.session.execute(stmt).all()]
 
         # Yield loaded calls using existing loader (ensures metadata returned too)
         def meta_matches(call: Call) -> bool:
@@ -450,6 +444,6 @@ class Sql(PerKeyLockMixin, CallStorage):
             return True
 
         for k in keys:
-            c = self.get(k)
+            c = self.load(k)
             if meta_matches(c):
                 yield c
