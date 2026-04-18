@@ -156,23 +156,26 @@ class Sql(PerKeyLockMixin, CallStorage):
         return (type(self), (self.url, self.echo))
 
     @contextlib.contextmanager
-    def _operation_context(self, key):
+    def _session_context(self):
         if getattr(self._local, "session", None) is not None:
-            # Re-entrant call on the same thread: reuse the active session.
-            with super()._operation_context(key):
-                yield
+            yield
             return
         session = self.session()
         self._local.session = session
         try:
-            with super()._operation_context(key):
-                yield
+            yield
         except Exception:
             session.rollback()
             raise
         finally:
             session.close()
             self._local.session = None
+
+    @contextlib.contextmanager
+    def _operation_context(self, key):
+        with self._session_context():
+            with super()._operation_context(key):
+                yield
 
     def put(self, call: Any, key: Digest) -> Digest:
         session = self._local.session
@@ -248,7 +251,7 @@ class Sql(PerKeyLockMixin, CallStorage):
         )
 
     def list(self) -> Iterable[Digest]:
-        with self._operation_context(""):
+        with self._session_context():
             return [Digest(row[0]) for row in self._local.session.execute(select(CallModel.key))]
 
     def expand(self, key: Digest | str) -> Digest:
@@ -407,7 +410,7 @@ class Sql(PerKeyLockMixin, CallStorage):
         Yields:
             Call: Matching calls including their decoded metadata.
         """
-        with self._operation_context(""):
+        with self._session_context():
             stmt = select(CallModel.key).select_from(CallModel)
 
             conditions = self._build_call_conditions(template)
