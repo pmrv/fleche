@@ -98,7 +98,19 @@ class SerializingMixin(KeyManagement):
                 yield
 
 
-@dataclass(frozen=True)
+# Module-level storage for per-instance key-lock tables.  Keyed by id(instance)
+# so instances need not be hashable (frozen dataclasses with list fields are not).
+# Entries are evicted via weakref.finalize when the owning instance is GC'd,
+# so nothing is stored on the instance itself and pickle works transparently.
+_per_key_lock_tables: dict[int, tuple] = {}
+_per_key_tables_lock: threading.Lock = threading.Lock()
+
+
+def _evict_lock_table(inst_id: int) -> None:
+    with _per_key_tables_lock:
+        _per_key_lock_tables.pop(inst_id, None)
+
+
 class PerKeyLockMixin(KeyManagement):
     """Mixin that locks per-key so concurrent ops on different keys proceed in parallel.
 
@@ -114,33 +126,23 @@ class PerKeyLockMixin(KeyManagement):
         class PerKeyValueMemory(PerKeyLockMixin, ValueMemory): ...
     """
 
-    _key_locks: weakref.WeakValueDictionary[Digest | str, threading.RLock] = field(
-        default_factory=weakref.WeakValueDictionary, init=False, repr=False, compare=False
-    )
-    _meta_lock: _PicklableLock = field(
-        default_factory=_PicklableLock, init=False, repr=False, compare=False
-    )
-
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        # WeakValueDictionary stores an unpicklable closure (_remove); drop it
-        # and recreate fresh on load.
-        del state['_key_locks']
-        return state
-
-    def __setstate__(self, state):
-        # Bypass frozen __setattr__ to restore fields, then add a fresh lock table.
-        self.__dict__.update(state)
-        self.__dict__['_key_locks'] = weakref.WeakValueDictionary()
-
     def _get_key_lock(self, key: Digest | str) -> threading.RLock:
-        with self._meta_lock:
+        inst_id = id(self)
+        try:
+            key_locks, meta_lock = _per_key_lock_tables[inst_id]
+        except KeyError:
+            with _per_key_tables_lock:
+                if inst_id not in _per_key_lock_tables:
+                    _per_key_lock_tables[inst_id] = (weakref.WeakValueDictionary(), _PicklableLock())
+                    weakref.finalize(self, _evict_lock_table, inst_id)
+                key_locks, meta_lock = _per_key_lock_tables[inst_id]
+        with meta_lock:
             # Hold a strong reference so the lock is not collected between
             # creation and return — WeakValueDictionary only stores a weak ref.
-            lock = self._key_locks.get(key)
+            lock = key_locks.get(key)
             if lock is None:
                 lock = threading.RLock()
-                self._key_locks[key] = lock
+                key_locks[key] = lock
             return lock
 
     @contextlib.contextmanager
