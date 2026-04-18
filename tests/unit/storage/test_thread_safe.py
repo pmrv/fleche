@@ -7,9 +7,11 @@ import pytest
 
 from fleche.storage import (
     CallMixin,
+    CallPickleFile,
     PerKeyLockMixin,
     SerializingMixin,
     ValueMixin,
+    ValuePickleFile,
 )
 from fleche.storage.memory import MemoryBackend
 from fleche.storage.pickle_file import PickleFileBackend
@@ -41,15 +43,14 @@ class PerKeyCallMemory(PerKeyLockMixin, PlainCallMemory): ...
 
 # PickleFile-backed variants exercise a backend where dict-access GIL
 # protection does not hide concurrency bugs in the locking code.
+# Note: PickleFileBackend already inherits PerKeyLockMixin via FileStorage,
+# so PerKeyValuePickle is redundant and omitted.
 
 @dataclass(frozen=True)
 class PlainValuePickle(ValueMixin, PickleFileBackend): ...
 
 @dataclass(frozen=True)
 class SerializingValuePickle(SerializingMixin, PlainValuePickle): ...
-
-@dataclass(frozen=True)
-class PerKeyValuePickle(PerKeyLockMixin, PlainValuePickle): ...
 
 
 # ---------------------------------------------------------------------------
@@ -112,9 +113,15 @@ def test_concurrent_saves_memory(cls):
     _run_concurrent_save_load(cls(storage={}))
 
 
-@pytest.mark.parametrize("cls", [SerializingValuePickle, PerKeyValuePickle])
+@pytest.mark.parametrize("cls", [SerializingValuePickle, PlainValuePickle])
 def test_concurrent_saves_pickle(tmp_path, cls):
     store = cls.with_pickle(root=tmp_path / cls.__name__)
+    _run_concurrent_save_load(store)
+
+
+def test_value_pickle_file_concurrent_saves(tmp_path):
+    """ValuePickleFile is thread-safe via PerKeyLockMixin in FileStorage."""
+    store = ValuePickleFile.with_pickle(root=tmp_path / "values")
     _run_concurrent_save_load(store)
 
 

@@ -77,6 +77,27 @@ class _PicklableRLock:
         return self._lock.__exit__(*args)
 
 
+class _PicklableWeakValueDictionary:
+    """A ``weakref.WeakValueDictionary`` wrapper that survives pickle round-trips.
+
+    Re-initialised empty on unpickle — its contents are not preserved.  This is
+    intentionally an in-process aid: each process gets its own independent lock
+    table with no shared state across processes.
+    """
+
+    def __init__(self):
+        self._dict: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
+
+    def __reduce__(self):
+        return (type(self), ())
+
+    def get(self, key, default=None):
+        return self._dict.get(key, default)
+
+    def __setitem__(self, key, value):
+        self._dict[key] = value
+
+
 @dataclass(frozen=True)
 class SerializingMixin(KeyManagement):
     """Mixin that serializes all storage operations behind a single reentrant lock.
@@ -114,8 +135,8 @@ class PerKeyLockMixin(KeyManagement):
         class PerKeyValueMemory(PerKeyLockMixin, ValueMemory): ...
     """
 
-    _key_locks: weakref.WeakValueDictionary[Digest | str, threading.RLock] = field(
-        default_factory=weakref.WeakValueDictionary, init=False, repr=False, compare=False
+    _key_locks: _PicklableWeakValueDictionary = field(
+        default_factory=_PicklableWeakValueDictionary, init=False, repr=False, compare=False
     )
     _meta_lock: _PicklableLock = field(
         default_factory=_PicklableLock, init=False, repr=False, compare=False

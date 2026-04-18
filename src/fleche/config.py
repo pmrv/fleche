@@ -95,6 +95,7 @@ Example fleche.toml
 
 """
 
+import dataclasses
 from dataclasses import asdict
 import tomllib
 import logging
@@ -237,6 +238,16 @@ def storage_from_config(d: dict[str, Any], type: Literal["call", "value"]) -> st
             raise ValueError(f"Unknown storage type '{backend}' for {type} storage!")
 
 
+def _asdict_init_only(obj) -> dict[str, Any]:
+    """Like ``dataclasses.asdict()`` but restricted to ``init=True`` fields.
+
+    ``init=False`` fields are internal state (locks, caches) that must not
+    appear in serialised config.
+    """
+    non_init = {f.name for f in dataclasses.fields(obj) if not f.init}
+    return {k: v for k, v in asdict(obj).items() if k not in non_init}  # type: ignore
+
+
 def storage_to_config(s: storage.ValueStorage | storage.CallStorage) -> dict[str, Any]:
     """Convert a Storage instance to a config dict (inverse of ``storage_from_config``).
 
@@ -249,14 +260,14 @@ def storage_to_config(s: storage.ValueStorage | storage.CallStorage) -> dict[str
 
     match s:
         case storage.memory.MemoryBackend():
-            config = asdict(s)  # type: ignore
+            config = _asdict_init_only(s)
             config["type"] = "memory"
             del config["storage"]
         case storage.void.VoidBackend():
-            config = asdict(s)  # type: ignore
+            config = _asdict_init_only(s)
             config["type"] = "void"
         case storage.pickle_file.PickleFileBackend():
-            config = asdict(s)  # type: ignore
+            config = _asdict_init_only(s)
             serializer_name = s.dumps.__module__.split(".")[0].lstrip("_")
             if serializer_name not in ("pickle", "dill", "cloudpickle"):
                 raise ValueError(f"Unknown PickleFile serializer: {serializer_name!r}")
@@ -269,7 +280,7 @@ def storage_to_config(s: storage.ValueStorage | storage.CallStorage) -> dict[str
                 del config["secret_key"]
             config["root"] = str(config["root"])
         case storage.bagofholding_file.BagOfHoldingH5FileBackend():
-            config = asdict(s)  # type: ignore
+            config = _asdict_init_only(s)
             config["type"] = "bagofholding_hdf"
             config["root"] = str(config["root"])
         case storage.sql.Sql():
