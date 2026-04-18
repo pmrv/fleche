@@ -1,6 +1,4 @@
 import logging
-import threading
-import weakref
 from typing import Iterable, Any, List
 from pathlib import Path
 from dataclasses import dataclass, field
@@ -149,20 +147,10 @@ class Sql(PerKeyLockMixin, CallStorage):
             bind=engine, expire_on_commit=False, future=True
         ))
 
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state.pop("engine", None)
-        state.pop("session", None)
-        state.pop("_key_locks", None)
-        state.pop("_meta_lock", None)
-        return state
-
-    def __setstate__(self, state):
-        self.__dict__.update(state)
-        # Re-initialize unpickleable fields
-        self.__post_init__()
-        self.__dict__["_key_locks"] = weakref.WeakValueDictionary()
-        self.__dict__["_meta_lock"] = threading.Lock()
+    def __reduce__(self):
+        # Constructor args are the complete durable state; __post_init__ rebuilds
+        # engine/session and the mixin's lock fields are self-contained picklable types.
+        return (type(self), (self.url, self.echo))
 
     def put(self, call: Any, key: Digest) -> Digest:
         session = self.session()

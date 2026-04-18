@@ -13,6 +13,7 @@ from fleche.storage import (
 )
 from fleche.storage.memory import MemoryBackend
 from fleche.storage.pickle_file import PickleFileBackend
+from fleche.storage.thread_safe import _PicklableRLock
 
 
 # ---------------------------------------------------------------------------
@@ -153,7 +154,7 @@ def test_concurrent_load_while_writing(cls):
 
 def test_serializing_uses_single_rlock():
     store = SerializingValueMemory(storage={})
-    assert isinstance(store._lock, type(threading.RLock()))
+    assert isinstance(store._lock, _PicklableRLock)
 
 
 def test_per_key_creates_distinct_locks_per_key():
