@@ -121,6 +121,12 @@ class KeyManagement(ABC):
                 f"Digest {key} cannot be shrunk without becoming ambiguous!"
             )
 
+    def _normalize_key(self, key: Digest | str) -> Digest:
+        """Expand a short digest prefix to a full key, or wrap a full key as Digest."""
+        if len(key) < DIGEST_LENGTH:
+            return self.expand(key)
+        return Digest(key)
+
 
 class StorageBackend(KeyManagement):
     """Primitive backend interface for key-value storage.
@@ -172,10 +178,7 @@ class ValueMixin(ValueStorage, StorageBackend):
 
     def load(self, key: Digest | str) -> Any:
         with self._operation_context(key):
-            if len(key) < DIGEST_LENGTH:
-                key = self.expand(key)
-            else:
-                key = Digest(key)
+            key = self._normalize_key(key)
             logger.debug("Loading value with key %s", key)
             return self.get(key)
 
@@ -236,10 +239,7 @@ class CallMixin(CallStorage, StorageBackend):
 
     def load(self, key: Digest | str) -> Call:
         with self._operation_context(key):
-            if len(key) < DIGEST_LENGTH:
-                key = self.expand(key)
-            else:
-                key = Digest(key)
+            key = self._normalize_key(key)
             logger.debug("Loading call with key %s", key)
             return self.get(key)
 
