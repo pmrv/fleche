@@ -119,6 +119,9 @@ Available storage types
     a concurrent write lock before attempting a read anyway.
     Optional: ``lock_wait_start`` (float, default ``0.001``) — initial wait interval
     (seconds) for exponential backoff while polling the write lock.
+    Optional: ``secret_key`` (list of hex strings) — HMAC-SHA256 signing keys for
+    tamper detection; see :doc:`security` for details.  If omitted, falls back to the
+    ``FLECHE_SECRET_KEY`` environment variable.
     Optional (value backend): ``remaining_depth`` — see `Destructuring`_ below.
 
 ``"cloudpickle"``
@@ -130,6 +133,7 @@ Available storage types
     a concurrent write lock before attempting a read anyway.
     Optional: ``lock_wait_start`` (float, default ``0.001``) — initial wait interval
     (seconds) for exponential backoff while polling the write lock.
+    Optional: ``secret_key`` (list of hex strings) — same as ``"pickle"``.
     Optional (value backend): ``remaining_depth`` — see `Destructuring`_ below.
 
 ``"dill"``
@@ -140,6 +144,7 @@ Available storage types
     a concurrent write lock before attempting a read anyway.
     Optional: ``lock_wait_start`` (float, default ``0.001``) — initial wait interval
     (seconds) for exponential backoff while polling the write lock.
+    Optional: ``secret_key`` (list of hex strings) — same as ``"pickle"``.
     Optional (value backend): ``remaining_depth`` — see `Destructuring`_ below.
 
 ``"bagofholding_hdf"``

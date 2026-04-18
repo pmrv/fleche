@@ -51,23 +51,16 @@ def test_post_init_bytes_key(tmp_path):
 
 
 def test_post_init_str_key(tmp_path):
-    key = "A" * 32
+    key = "ab" * 32  # valid 64-char hex string
     storage = PickleFile.with_pickle(root=tmp_path, secret_key=key)
-    assert storage.secret_key == [key.encode("utf-8")]
+    assert storage.secret_key == [bytes.fromhex(key)]
 
 
 def test_post_init_str_key_with_delimiter(tmp_path):
-    key = "A" * 32 + ":" + "B" * 32
+    k1, k2 = "ab" * 16, "cd" * 16
+    key = k1 + ":" + k2
     storage = PickleFile.with_pickle(root=tmp_path, secret_key=key)
-    assert storage.secret_key == [
-        ("A" * 32).encode("utf-8"),
-        ("B" * 32).encode("utf-8"),
-    ]
-
-
-def test_post_init_short_key_raises(tmp_path):
-    with pytest.raises(ValueError, match="at least 32 bytes"):
-        PickleFile.with_pickle(root=tmp_path, secret_key=b"tooshort")
+    assert storage.secret_key == [bytes.fromhex(k1), bytes.fromhex(k2)]
 
 
 def test_post_init_wrong_key_type_raises(tmp_path):
@@ -76,7 +69,7 @@ def test_post_init_wrong_key_type_raises(tmp_path):
 
 
 def test_post_init_str_key_roundtrip(tmp_path):
-    key = "A" * 32
+    key = "ab" * 32  # valid 64-char hex string
     storage = PickleFile.with_pickle(root=tmp_path, secret_key=key)
     value = {"hello": "world"}
     digest_key = storage.save(value)

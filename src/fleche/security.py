@@ -11,21 +11,68 @@ class SignatureError(Exception):
     """Exception raised when signature verification fails."""
     pass
 
+
+def normalize_secret_key(key) -> list[bytes]:
+    """
+    Normalize a secret key value to ``list[bytes]``.
+
+    Accepts:
+    - ``bytes``: wrapped in a list
+    - ``str``: interpreted as a hex-encoded key; colon (``:``) separates multiple keys
+    - ``list[bytes]``: each element used as-is
+    - ``list[str]``: each element interpreted as hex-encoded; colon-delimited parts
+      within an element are treated as separate keys
+
+    This is the single normalization path used by both the ``FLECHE_SECRET_KEY``
+    environment variable and programmatic ``secret_key`` arguments — so any key
+    that can be expressed in the environment variable can also be passed directly,
+    and vice-versa.
+
+    Raises:
+        TypeError: if ``key`` or any list element is not ``bytes`` or ``str``
+        ValueError: if any string part is not valid hex
+    """
+    if isinstance(key, (bytes, str)):
+        key = [key]
+
+    if not isinstance(key, list):
+        raise TypeError(
+            f"secret_key must be bytes, str, or list, got {type(key).__name__}"
+        )
+
+    result = []
+    for k in key:
+        if isinstance(k, str):
+            for part in k.split(":"):
+                result.append(bytes.fromhex(part))
+        elif isinstance(k, bytes):
+            result.append(k)
+        else:
+            raise TypeError(
+                f"Each element of secret_key must be bytes or str, "
+                f"got {type(k).__name__}"
+            )
+
+    return result
+
+
 def get_secret_key() -> list[bytes]:
     """
-    Retrieve the secret key(s) for signing cache entries.
+    Retrieve the secret key(s) from the ``FLECHE_SECRET_KEY`` environment variable.
 
-    Only supports FLECHE_SECRET_KEY environment variable.
-    If multiple keys are present, they should be colon-separated.
-    Each key must be a hex-encoded string which is decoded to bytes.
-    If no key is found, returns an empty list (security is disabled).
+    The value must be a colon-separated list of hex-encoded byte strings.
+    Returns an empty list if the environment variable is not set (security disabled).
+
+    Uses the same :func:`normalize_secret_key` logic as the programmatic API,
+    so any value valid here is also valid as a ``secret_key`` argument and
+    vice-versa.
 
     Returns:
         list[bytes]: A list of secret keys as bytes.
     """
     env_key = os.environ.get("FLECHE_SECRET_KEY")
     if env_key:
-        return [bytes.fromhex(k) for k in env_key.split(":")]
+        return normalize_secret_key(env_key)
     return []
 
 @dataclass(slots=True, frozen=True)

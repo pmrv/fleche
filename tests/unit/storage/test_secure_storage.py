@@ -1,6 +1,7 @@
 import pickle
 import pytest
-from fleche.storage.pickle_file import ValuePickleFile as PickleFile, _normalize_secret_key
+from fleche.storage.pickle_file import ValuePickleFile as PickleFile
+from fleche.security import normalize_secret_key
 
 
 def test_secure_storage_tampering(tmp_path):
@@ -126,64 +127,60 @@ def test_secure_storage_multiple_keys(tmp_path):
         storage_auth1.load(digest_key_multi)
 
 
-# --- _normalize_secret_key tests ---
+# --- normalize_secret_key tests ---
 
 def test_normalize_bytes_wrapped_in_list():
     key = b"A" * 32
-    assert _normalize_secret_key(key) == [key]
+    assert normalize_secret_key(key) == [key]
 
 
-def test_normalize_str_encoded_to_bytes():
-    key = "A" * 32
-    assert _normalize_secret_key(key) == [key.encode("utf-8")]
+def test_normalize_str_hex_decoded():
+    key = "ab" * 32  # valid 64-char hex string
+    assert normalize_secret_key(key) == [bytes.fromhex(key)]
 
 
 def test_normalize_str_with_colon_delimiter():
-    key = "A" * 32 + ":" + "B" * 32
-    assert _normalize_secret_key(key) == [
-        ("A" * 32).encode("utf-8"),
-        ("B" * 32).encode("utf-8"),
-    ]
+    k1, k2 = "ab" * 16, "cd" * 16
+    key = k1 + ":" + k2
+    assert normalize_secret_key(key) == [bytes.fromhex(k1), bytes.fromhex(k2)]
 
 
 def test_normalize_list_of_str():
-    keys = ["A" * 32, "B" * 32]
-    assert _normalize_secret_key(keys) == [k.encode("utf-8") for k in keys]
+    keys = ["ab" * 32, "cd" * 32]
+    assert normalize_secret_key(keys) == [bytes.fromhex(k) for k in keys]
 
 
 def test_normalize_list_of_bytes():
     keys = [b"A" * 32, b"B" * 32]
-    assert _normalize_secret_key(keys) == keys
+    assert normalize_secret_key(keys) == keys
 
 
 def test_normalize_list_str_with_delimiter():
-    keys = ["A" * 32 + ":" + "B" * 32]
-    assert _normalize_secret_key(keys) == [
-        ("A" * 32).encode("utf-8"),
-        ("B" * 32).encode("utf-8"),
-    ]
+    k1, k2 = "ab" * 16, "cd" * 16
+    keys = [k1 + ":" + k2]
+    assert normalize_secret_key(keys) == [bytes.fromhex(k1), bytes.fromhex(k2)]
 
 
-def test_normalize_bytes_too_short_raises():
-    with pytest.raises(ValueError, match="at least 32 bytes"):
-        _normalize_secret_key(b"short")
-
-
-def test_normalize_str_too_short_raises():
-    with pytest.raises(ValueError, match="at least 32 bytes"):
-        _normalize_secret_key("short")
+def test_normalize_str_invalid_hex_raises():
+    with pytest.raises(ValueError):
+        normalize_secret_key("not-valid-hex!")
 
 
 def test_normalize_wrong_type_raises():
     with pytest.raises(TypeError, match="secret_key must be bytes, str, or list"):
-        _normalize_secret_key(12345)
+        normalize_secret_key(12345)
 
 
 def test_normalize_list_wrong_element_type_raises():
     with pytest.raises(TypeError, match="Each element of secret_key must be bytes or str"):
-        _normalize_secret_key([12345])
+        normalize_secret_key([12345])
 
 
 def test_normalize_empty_list_returns_empty():
     # Empty list means security disabled — no normalization needed
-    assert _normalize_secret_key([]) == []
+    assert normalize_secret_key([]) == []
+
+
+def test_normalize_short_bytes_allowed():
+    # HMAC has no minimum key length requirement
+    assert normalize_secret_key(b"short") == [b"short"]
