@@ -103,7 +103,7 @@ def test_roundtrip_pickle_file_with_secret_key(tmp_path):
     assert cfg["secret_key"] == [("ab" * 32)]
     reconstructed = storage_from_config(cfg, "value")
     assert isinstance(reconstructed, storage.ValuePickleFile)
-    assert reconstructed.secret_key == [key]
+    assert reconstructed.secret_key == (key,)
 
 
 def test_pickle_file_no_secret_key_omitted_from_config(tmp_path):

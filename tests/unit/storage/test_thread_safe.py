@@ -36,10 +36,14 @@ class SerializingValueMemory(SerializingMixin, PlainValueMemory): ...
 class SerializingCallMemory(SerializingMixin, PlainCallMemory): ...
 
 @dataclass(frozen=True)
-class PerKeyValueMemory(PerKeyLockMixin, PlainValueMemory): ...
+class PerKeyValueMemory(PerKeyLockMixin, PlainValueMemory):
+    # storage: dict makes this unhashable by default; use identity hash so
+    # instances can serve as WeakKeyDictionary keys in PerKeyLockMixin.
+    __hash__ = object.__hash__
 
 @dataclass(frozen=True)
-class PerKeyCallMemory(PerKeyLockMixin, PlainCallMemory): ...
+class PerKeyCallMemory(PerKeyLockMixin, PlainCallMemory):
+    __hash__ = object.__hash__
 
 # PickleFile-backed variants exercise a backend where dict-access GIL
 # protection does not hide concurrency bugs in the locking code.

@@ -98,17 +98,13 @@ class SerializingMixin(KeyManagement):
                 yield
 
 
-# Module-level storage for per-instance key-lock tables.  Keyed by id(instance)
-# so instances need not be hashable (frozen dataclasses with list fields are not).
-# Entries are evicted via weakref.finalize when the owning instance is GC'd,
-# so nothing is stored on the instance itself and pickle works transparently.
-_per_key_lock_tables: dict[int, tuple] = {}
-_per_key_tables_lock: threading.Lock = threading.Lock()
-
-
-def _evict_lock_table(inst_id: int) -> None:
-    with _per_key_tables_lock:
-        _per_key_lock_tables.pop(inst_id, None)
+# Module-level storage for per-instance key-lock tables.  WeakKeyDictionary so
+# entries are evicted automatically when the owning instance is GC'd.  Instances
+# must be hashable; concrete file-backed storage classes are frozen dataclasses
+# with only hashable fields (secret_key is stored as tuple[bytes, ...]).
+# Nothing is stored on the instance itself, so pickle works transparently.
+_per_instance_locks: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+_instances_lock: threading.Lock = threading.Lock()
 
 
 class PerKeyLockMixin(KeyManagement):
@@ -120,22 +116,21 @@ class PerKeyLockMixin(KeyManagement):
     *same* key are serialized by the per-key lock, which is reentrant to
     allow nested calls (e.g. ``expand`` inside ``load``).
 
-    Place before the concrete storage class in the MRO::
+    Instances must be hashable.  Place before the concrete storage class in the
+    MRO::
 
         @dataclass(frozen=True)
-        class PerKeyValueMemory(PerKeyLockMixin, ValueMemory): ...
+        class PerKeyValuePickle(PerKeyLockMixin, ValuePickleFile): ...
     """
 
     def _get_key_lock(self, key: Digest | str) -> threading.RLock:
-        inst_id = id(self)
         try:
-            key_locks, meta_lock = _per_key_lock_tables[inst_id]
+            key_locks, meta_lock = _per_instance_locks[self]
         except KeyError:
-            with _per_key_tables_lock:
-                if inst_id not in _per_key_lock_tables:
-                    _per_key_lock_tables[inst_id] = (weakref.WeakValueDictionary(), _PicklableLock())
-                    weakref.finalize(self, _evict_lock_table, inst_id)
-                key_locks, meta_lock = _per_key_lock_tables[inst_id]
+            with _instances_lock:
+                if self not in _per_instance_locks:
+                    _per_instance_locks[self] = (weakref.WeakValueDictionary(), _PicklableLock())
+                key_locks, meta_lock = _per_instance_locks[self]
         with meta_lock:
             # Hold a strong reference so the lock is not collected between
             # creation and return — WeakValueDictionary only stores a weak ref.

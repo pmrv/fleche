@@ -36,15 +36,15 @@ class PickleFileBackend(FileStorage):
     Store values as files on the filesystem using a serialization module.
     """
 
-    secret_key: list[bytes] = field(default_factory=list)
+    secret_key: tuple[bytes, ...] = field(default_factory=tuple)
     dumps: Callable = field(repr=False)
     loads: Callable = field(repr=False)
     compress: bool = False
 
     def __post_init__(self):
         super().__post_init__()
-        normalized_key = get_secret_key() if not self.secret_key else normalize_secret_key(self.secret_key)
-        object.__setattr__(self, "secret_key", normalized_key)
+        raw = get_secret_key() if not self.secret_key else normalize_secret_key(self.secret_key)
+        object.__setattr__(self, "secret_key", tuple(raw))
 
     @classmethod
     def with_pickle(cls, *args, **kwargs):
