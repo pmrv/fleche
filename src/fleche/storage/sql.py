@@ -236,7 +236,7 @@ class Sql(PerKeyLockMixin, CallStorage):
             metadata={row.name: (row.data or {}) for row in meta_rows},
             module=call_model.module,
             version=call_model.version,
-            code_digest=call_model.code_digest,
+            code_digest=Digest(call_model.code_digest) if call_model.code_digest is not None else None,
             result=(
                 Digest(call_model.result) if call_model.result is not None else None
             ),

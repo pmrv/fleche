@@ -265,7 +265,7 @@ def test_sql_call_digest_persistence(store):
         metadata={"m": {"k": "v"}},
         module="mod",
         version=42,
-        code_digest="some_code_digest",
+        code_digest=Digest("some_code_digest"),
         result=digest(3)
     )
 
