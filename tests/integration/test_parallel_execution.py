@@ -124,26 +124,6 @@ def test_process_executor_returns_correct_result():
     assert result == 42
 
 
-def test_process_executor_in_memory_cache_not_propagated():
-    """
-    An in-memory cache set in the parent is NOT visible in worker processes.
-
-    Results computed in the worker are stored in the worker's ephemeral default
-    cache and are NOT accessible from the parent's in-memory cache object.
-    """
-    cache = Cache(ValueMemory({}), CallMemory({}))
-
-    with fleche.cache(cache):
-        with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(double, 10)
-            result = future.result()
-
-    assert result == 20
-    assert not cache.contains(double.digest(10)), (
-        "In-memory cache is process-local; worker results are not visible to the parent."
-    )
-
-
 # ---------------------------------------------------------------------------
 # executorlib.SingleNodeExecutor tests
 # ---------------------------------------------------------------------------

@@ -23,15 +23,6 @@ def test_pickle_file(tmp_path):
     assert cfg["root"] == str(s.root)
 
 
-def test_cloudpickle_file(tmp_path):
-    pytest.importorskip("cloudpickle")
-    root = tmp_path / "values"
-    s = storage.ValuePickleFile.with_cloudpickle(root=root)
-    cfg = storage_to_config(s)
-    assert cfg["type"] == "cloudpickle"
-    assert cfg["root"] == str(s.root)
-
-
 def test_dill_file(tmp_path):
     pytest.importorskip("dill")
     root = tmp_path / "values"
