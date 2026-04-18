@@ -310,10 +310,7 @@ class Sql(CallStorage):
 
     def load(self, key: Digest | str) -> Call:
         with self._operation_context(key):
-            if len(key) < DIGEST_LENGTH:
-                key = self.expand(key)
-            else:
-                key = Digest(key)
+            key = self._normalize_key(key)
             logger.debug("Loading call with key %s", key)
             return self.get(key)
 
