@@ -256,9 +256,6 @@ class CallMixin(CallStorage, StorageBackend):
             Iterable[Call]: an iterable over all matching call objects
         """
 
-        def none_or_equal(a, b):
-            return a is None or digest(a) == digest(b)
-
         for key in self.list():
             call = self.load(key)
             if template.matches(call):
