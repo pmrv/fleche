@@ -1,20 +1,40 @@
 Security
 ========
 
-``fleche`` provides a built-in cryptographic security layer for filesystem-based storage backends (``PickleFile``, ``CloudpickleFile``, and ``DillFile``) to protect against insecure deserialization vulnerabilities. This prevents arbitrary code execution if an attacker manages to tamper with or replace the cache files.
+``fleche`` provides a built-in cryptographic security layer for filesystem-based storage backends (``pickle``, ``cloudpickle``, and ``dill``) to protect against insecure deserialization vulnerabilities. This prevents arbitrary code execution if an attacker manages to tamper with or replace the cache files.
 
 Enabling Security
 -----------------
 
-Security is controlled solely via the ``FLECHE_SECRET_KEY`` environment variable. By default, if this variable is not set, the security features are **turned off**, and caches are read and written as plain serialized files.
+By default, if no secret key is configured, security is **turned off** and caches are read and written as plain serialized files.
 
-To enable security, export a hex-encoded secret key before running your application:
+Security can be enabled in two ways:
+
+**Via environment variable** (recommended — keeps secrets out of config files):
 
 .. code-block:: bash
 
     export FLECHE_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_hex(32))')"
 
-The value must be a hex-encoded string (``[0-9a-f]+``) of any length. ``fleche`` decodes it to raw bytes before use.
+The value must be a colon-separated list of hex-encoded byte strings (``[0-9a-f]+``).
+``fleche`` decodes each segment to raw bytes before use.
+
+**Via config file** (``fleche.toml``):
+
+.. code-block:: toml
+
+    [mycache]
+    values.type = "cloudpickle"
+    values.root = "~/.fleche/values"
+    values.secret_key = ["<hex-encoded-key>"]
+
+The ``secret_key`` value is a list of hex-encoded strings using the same format as ``FLECHE_SECRET_KEY``.
+
+.. warning::
+    Storing secrets in config files risks accidentally committing them to version control.
+    Prefer the environment variable approach for sensitive deployments.
+
+Both sources use the same key format and normalization logic: any ``bytes`` value is used as-is, and any ``str`` value is interpreted as a hex-encoded byte string. HMAC-SHA256 imposes no minimum key length, though using at least 32 random bytes (256 bits) is strongly recommended.
 
 When enabled, ``fleche`` will compute an HMAC-SHA256 signature for all newly cached data and append it to the file as a 64-byte hex string. Upon loading, ``fleche`` separates the signature and verifies the integrity of the data. If the signature is invalid or missing entirely from a modified file, a ``KeyError`` is raised, effectively treating the entry as a cache miss.
 
@@ -29,11 +49,17 @@ The signing implementation is designed to be partially backward compatible. Sign
 Key Rotation and Distributed Trust
 ----------------------------------
 
-You can specify multiple hex-encoded keys separated by colons in the environment variable.
+You can specify multiple hex-encoded keys separated by colons, in both the environment variable and the config file:
 
 .. code-block:: bash
 
     export FLECHE_SECRET_KEY="aabbccdd01:eeff009988:1122334455"
+
+Or in ``fleche.toml``:
+
+.. code-block:: toml
+
+    values.secret_key = ["aabbccdd01", "eeff009988", "1122334455"]
 
 When multiple keys are provided:
 * **Writing:** The *first* key in the list (``aabbccdd01``) is always used to sign new cache entries.

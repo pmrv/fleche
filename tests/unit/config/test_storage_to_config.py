@@ -95,6 +95,24 @@ def test_roundtrip_pickle_file(tmp_path):
     assert reconstructed.root == original.root
 
 
+def test_roundtrip_pickle_file_with_secret_key(tmp_path):
+    root = tmp_path / "values"
+    key = bytes.fromhex("ab" * 32)
+    original = storage.ValuePickleFile.with_pickle(root=root, secret_key=[key])
+    cfg = storage_to_config(original)
+    assert cfg["secret_key"] == [("ab" * 32)]
+    reconstructed = storage_from_config(cfg, "value")
+    assert isinstance(reconstructed, storage.ValuePickleFile)
+    assert reconstructed.secret_key == [key]
+
+
+def test_pickle_file_no_secret_key_omitted_from_config(tmp_path):
+    root = tmp_path / "values"
+    original = storage.ValuePickleFile.with_pickle(root=root, secret_key=[])
+    cfg = storage_to_config(original)
+    assert "secret_key" not in cfg
+
+
 def test_storage_from_config_does_not_mutate():
     cfg = {"type": "memory"}
     storage_from_config(cfg, "value")

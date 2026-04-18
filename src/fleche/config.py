@@ -26,6 +26,9 @@ following **lowercase** identifiers:
     Optional: ``lock_timeout`` (float, default ``1.0``) — write-lock wait timeout (s).
     Optional: ``lock_wait_start`` (float, default ``0.001``) — initial lock-poll
     interval for exponential backoff (s).
+    Optional: ``secret_key`` (list of hex strings) — HMAC-SHA256 signing keys;
+    each element is a hex-encoded byte string (same format as ``FLECHE_SECRET_KEY``).
+    If omitted, falls back to the ``FLECHE_SECRET_KEY`` environment variable.
     Optional (value backend): ``remaining_depth`` (int, default ``0``).
 
 ``"cloudpickle"``
@@ -36,6 +39,7 @@ following **lowercase** identifiers:
     Optional: ``lock_timeout`` (float, default ``1.0``) — write-lock wait timeout (s).
     Optional: ``lock_wait_start`` (float, default ``0.001``) — initial lock-poll
     interval for exponential backoff (s).
+    Optional: ``secret_key`` (list of hex strings) — same as ``"pickle"``.
     Optional (value backend): ``remaining_depth`` (int, default ``0``).
 
 ``"dill"``
@@ -45,6 +49,7 @@ following **lowercase** identifiers:
     Optional: ``lock_timeout`` (float, default ``1.0``) — write-lock wait timeout (s).
     Optional: ``lock_wait_start`` (float, default ``0.001``) — initial lock-poll
     interval for exponential backoff (s).
+    Optional: ``secret_key`` (list of hex strings) — same as ``"pickle"``.
     Optional (value backend): ``remaining_depth`` (int, default ``0``).
 
 ``"bagofholding_hdf"``
@@ -204,7 +209,7 @@ def storage_from_config(d: dict[str, Any], type: Literal["call", "value"]) -> st
     * ``{"type": "void"}``
     * ``{"type": "pickle", "root": "<path>"}``
       — optional: ``compress``, ``lock_timeout``, ``lock_wait_start``,
-      ``remaining_depth`` (value only)
+      ``secret_key`` (list of hex strings), ``remaining_depth`` (value only)
     * ``{"type": "cloudpickle", "root": "<path>"}``
       — same optional keys as ``"pickle"``
     * ``{"type": "dill", "root": "<path>"}``
@@ -258,7 +263,10 @@ def storage_to_config(s: storage.ValueStorage | storage.CallStorage) -> dict[str
             config["type"] = serializer_name
             del config["dumps"]
             del config["loads"]
-            del config["secret_key"]
+            if config["secret_key"]:
+                config["secret_key"] = [k.hex() for k in config["secret_key"]]
+            else:
+                del config["secret_key"]
             config["root"] = str(config["root"])
         case storage.bagofholding_file.BagOfHoldingH5FileBackend():
             config = asdict(s)  # type: ignore
