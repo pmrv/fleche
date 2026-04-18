@@ -1,11 +1,35 @@
-from contextlib import contextmanager, AbstractContextManager
-from contextvars import ContextVar
+from contextlib import AbstractContextManager
+from contextvars import ContextVar, Token
 from dataclasses import dataclass
-from typing import overload, Iterator, Callable
+from typing import overload, Callable
 
 from . import caches, config, metadata
 
 _CACHE: ContextVar[caches.BaseCache] = ContextVar("fleche.CACHE", default=config.load_cache_config())
+
+
+class _StickyContext:
+    """Context manager for sticky ContextVar state.
+
+    The value is set immediately on construction; entering the ``with``-block is a
+    no-op, and exiting restores the previous value via the stored token.
+
+    In Python 3.14+, ``Token`` objects returned by ``ContextVar.set()`` support the
+    context manager protocol natively, making this class unnecessary.  It serves as
+    a backport for earlier Python versions.
+    """
+
+    __slots__ = ("_var", "_token")
+
+    def __init__(self, var: ContextVar, token: Token) -> None:
+        self._var = var
+        self._token = token
+
+    def __enter__(self) -> None:
+        return None
+
+    def __exit__(self, *args: object) -> None:
+        self._var.reset(self._token)
 
 
 @overload
@@ -20,19 +44,23 @@ def cache(
 
 def cache(
     new_cache: caches.BaseCache | str | None = None, stack: bool = False
-) -> caches.BaseCache | AbstractContextManager[None]:
+) -> "caches.BaseCache | AbstractContextManager[None]":
     """
-    Manages the active cache for Fleche. If `new_cache` is provided, it returns a context manager
-    that sets the cache for the duration of the context. If `new_cache` is None, it returns
-    the currently active cache.
+    Manages the active cache for Fleche.
+
+    If ``new_cache`` is ``None``, returns the currently active cache.
+
+    Otherwise, immediately sets ``new_cache`` as the active cache and returns a context manager.
+    When used in a ``with`` statement the previous cache is restored on exit; when the returned
+    context manager is discarded the new cache remains active (sticky behaviour).
 
     Args:
-        new_cache (Optional[BaseCache]): An optional Cache object to set as the active cache.
-        stack (bool, default False): if True, construct a CacheStack, with new_cache at the bottom
+        new_cache: Cache object or named cache string to activate, or ``None`` to query.
+        stack: If ``True``, wrap ``new_cache`` in a :class:`.CacheStack` on top of the current cache.
 
     Returns:
-        Union[:class:`.BaseCache`, AbstractContextManager[None]]:
-            The current cache object if `new_cache` is `None`, otherwise a context manager to set a new cache.
+        The current :class:`.BaseCache` when called without arguments, otherwise a
+        :class:`._StickyContext` context manager.
     """
     if new_cache is None:
         return _CACHE.get()
@@ -42,19 +70,11 @@ def cache(
     if not isinstance(new_cache, caches.BaseCache):
         raise ValueError(new_cache)
 
-    @contextmanager
-    def cache_manager() -> Iterator[None]:
-        if stack:
-            cache = _CACHE.get().push(new_cache)
-        else:
-            cache = new_cache
-        token = _CACHE.set(cache)
-        try:
-            yield
-        finally:
-            _CACHE.reset(token)
+    if stack:
+        new_cache = _CACHE.get().push(new_cache)
 
-    return cache_manager()
+    token = _CACHE.set(new_cache)
+    return _StickyContext(_CACHE, token)
 
 
 _METADATA: ContextVar[tuple[metadata.MetaData, ...]] = ContextVar(
@@ -62,17 +82,29 @@ _METADATA: ContextVar[tuple[metadata.MetaData, ...]] = ContextVar(
 )
 
 
-@contextmanager
-def meta(*new_metadata: metadata.MetaData, stack=False):
+def meta(
+    *new_metadata: metadata.MetaData, stack=False
+) -> AbstractContextManager[None]:
+    """
+    Manages the active metadata for Fleche.
+
+    Immediately sets ``new_metadata`` as the active metadata and returns a context manager.
+    When used in a ``with`` statement the previous metadata is restored on exit; when the
+    returned context manager is discarded the new metadata remains active (sticky behaviour).
+
+    Args:
+        *new_metadata: :class:`.MetaData` instances to activate.
+        stack: If ``True``, prepend the current metadata tuple before the new entries.
+
+    Returns:
+        A :class:`._StickyContext` context manager.
+    """
     new_metadata = tuple(new_metadata)
     if stack:
         new_metadata = _METADATA.get() + new_metadata
 
     token = _METADATA.set(new_metadata)
-    try:
-        yield
-    finally:
-        _METADATA.reset(token)
+    return _StickyContext(_METADATA, token)
 
 
 def tags(**kwargs):
