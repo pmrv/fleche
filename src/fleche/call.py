@@ -67,45 +67,6 @@ class Call:
         call = replace(self, arguments=arg_pairs, metadata=None, result=None)
         return digest.digest(call)
 
-    def matches(self, other: 'Call | LazyCall') -> bool:
-        """Check if this call matches another call, treating None as a wildcard in this object."""
-        def none_or_equal(a, b):
-            if a is None:
-                return True
-            # Use digest to handle both raw values and Digest objects consistently
-            return digest.digest(a) == digest.digest(b)
-
-        if not none_or_equal(self.name, other.name):
-            return False
-        if not none_or_equal(self.module, other.module):
-            return False
-        if not none_or_equal(self.version, other.version):
-            return False
-        if not none_or_equal(self.result, other.result):
-            return False
-
-        if self.arguments is not None:
-            for k, v in self.arguments.items():
-                if k not in other.arguments:
-                    return False
-                if not none_or_equal(v, other.arguments[k]):
-                    return False
-
-        if self.metadata:
-            for mname, filters in self.metadata.items():
-                data = other.metadata.get(mname)
-                if data is None:
-                    return False
-                for kk, vv in (filters or {}).items():
-                    if vv is None:
-                        if kk not in data:
-                            return False
-                    else:
-                        if data.get(kk) != vv:
-                            return False
-        return True
-
-
 class LazyArguments(Mapping):
     def __init__(self, cache, arg_digests):
         self._cache = cache

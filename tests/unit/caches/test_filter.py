@@ -1,7 +1,7 @@
 import pytest
 from fleche.storage import ValueMemory, CallMemory
 from fleche.caches import Cache, FilteredCache, Rejected
-from fleche.call import Call
+from fleche.call import Call, QueryCall
 from fleche import fleche, cache
 
 
@@ -25,8 +25,8 @@ def test_filter_by_name():
     c_foo = c.filter(lambda call: call.name == "foo")
     assert isinstance(c_foo, FilteredCache)
 
-    assert len(list(c_foo.query(Call(name="foo", arguments=None)))) == 2
-    assert len(list(c_foo.query(Call(name="bar", arguments=None)))) == 0
+    assert len(list(c_foo.query(QueryCall(name="foo", arguments=None)))) == 2
+    assert len(list(c_foo.query(QueryCall(name="bar", arguments=None)))) == 0
 
     # Check values
     assert c_foo.load(foo.digest(1)).result == 2
@@ -67,10 +67,10 @@ def test_filter_with_template():
         foo(2)
         bar(3)
 
-    # Filter using a Call object as a template
-    c_filtered = c.filter(Call(name="foo", arguments=None))
+    # Filter using a QueryCall object as a template
+    c_filtered = c.filter(QueryCall(name="foo", arguments=None))
 
-    assert len(list(c_filtered.query(Call(name=None, arguments=None)))) == 2
+    assert len(list(c_filtered.query(QueryCall(name=None, arguments=None)))) == 2
     assert c_filtered.load(foo.digest(1)).result == 2
     with pytest.raises(KeyError):
         c_filtered.load(bar.digest(3))

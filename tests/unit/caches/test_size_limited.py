@@ -1,7 +1,7 @@
 """Tests for SizeLimitedCache."""
 import threading
 
-from fleche.call import Call
+from fleche.call import Call, QueryCall
 from fleche.caches import Cache, SizeLimitedCache
 from fleche.storage.memory import ValueMemory, CallMemory
 
@@ -115,7 +115,7 @@ def test_query_delegates():
     cache.save(make_call("myf", 2, 20))
     cache.save(make_call("other", 3, 30))
 
-    tpl = Call(name="myf", arguments=None, metadata=None, module=None, version=None, result=None)
+    tpl = QueryCall(name="myf", arguments=None, metadata=None, module=None, version=None, result=None)
     results = list(cache.query(tpl))
     assert len(results) == 2
     assert all(r.name == "myf" for r in results)

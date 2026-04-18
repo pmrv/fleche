@@ -11,7 +11,7 @@ import pandas as pd
 from . import digest as _digest
 from .digest import Digest  # type hint convenience
 from . import storage
-from .call import Call, LazyCall
+from .call import Call, LazyCall, QueryCall
 from . import call
 from . import query
 
@@ -179,18 +179,18 @@ class BaseCache(ABC):
         )
         return self.query(tpl).table(arguments=arguments, results=results)
 
-    def filter(self, predicate: Callable[[Call | LazyCall], bool] | Call) -> 'FilteredCache':
+    def filter(self, predicate: Callable[[Call | LazyCall], bool] | QueryCall) -> 'FilteredCache':
         """Create a read-only view of this cache that only exposes calls matching the predicate.
 
         Args:
             predicate: A function that takes a Call or LazyCall and returns True
-                if it should be included in the new cache, or a Call object to
+                if it should be included in the new cache, or a QueryCall object to
                 use as a template.
 
         Returns:
             FilteredCache: A read-only view of the cache.
         """
-        if isinstance(predicate, Call):
+        if isinstance(predicate, QueryCall):
             predicate = predicate.matches
 
         return FilteredCache(self, predicate)

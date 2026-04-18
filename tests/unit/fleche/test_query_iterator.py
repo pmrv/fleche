@@ -30,7 +30,7 @@ def test_query_iterator_is_iterable(test_cache):
     test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
     test_cache.save(Call(name="f", arguments={"x": 2}, result=20))
 
-    tpl = Call(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
     it = test_cache.query(tpl)
 
     assert isinstance(it, QueryIterator)
@@ -71,7 +71,7 @@ def test_query_iterator_results(test_cache):
     test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
     test_cache.save(Call(name="f", arguments={"x": 2}, result=20))
 
-    tpl = Call(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
     results = list(test_cache.query(tpl).results())
     assert sorted(results) == [10, 20]
 
@@ -102,7 +102,7 @@ def test_query_iterator_results_from_wrapper(test_cache):
 def test_query_iterator_table_returns_dataframe(test_cache):
     """table() returns a pandas DataFrame."""
     test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
-    tpl = Call(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
     df = test_cache.query(tpl).table()
     assert isinstance(df, pd.DataFrame)
 
@@ -110,7 +110,7 @@ def test_query_iterator_table_returns_dataframe(test_cache):
 def test_query_iterator_table_basic_columns(test_cache):
     """table() always has 'name' and 'module' columns."""
     test_cache.save(Call(name="my_func", arguments={"a": 1}, result=42, module="mymod"))
-    tpl = Call(name="my_func", arguments=None, metadata=None, module=None, version=None, result=None)
+    tpl = QueryCall(name="my_func", arguments=None, metadata=None, module=None, version=None, result=None)
     df = test_cache.query(tpl).table()
     assert "name" in df.columns
     assert "module" in df.columns
@@ -123,7 +123,7 @@ def test_query_iterator_table_index_is_lookup_key(test_cache):
     test_cache.save(call1)
     test_cache.save(call2)
 
-    tpl = Call(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
     df = test_cache.query(tpl).table()
 
     expected_keys = {str(call1.to_lookup_key()), str(call2.to_lookup_key())}
@@ -133,7 +133,7 @@ def test_query_iterator_table_index_is_lookup_key(test_cache):
 def test_query_iterator_table_no_result_by_default(test_cache):
     """result column is not present unless results=True is passed."""
     test_cache.save(Call(name="f", arguments={"x": 1}, result=99))
-    tpl = Call(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
     df = test_cache.query(tpl).table()
     assert "result" not in df.columns
 
@@ -152,7 +152,7 @@ def test_query_iterator_table_empty():
 def test_query_iterator_table_with_arguments(test_cache):
     """Requested argument names appear as columns in the DataFrame."""
     test_cache.save(Call(name="f", arguments={"x": 3, "y": 7}, result=10))
-    tpl = Call(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
     df = test_cache.query(tpl).table(arguments=["x", "y"])
     assert "x" in df.columns
     assert "y" in df.columns
@@ -163,7 +163,7 @@ def test_query_iterator_table_with_arguments(test_cache):
 def test_query_iterator_table_missing_argument_is_none(test_cache):
     """If a requested argument name does not exist on a call, the value is None."""
     test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
-    tpl = Call(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
     df = test_cache.query(tpl).table(arguments=["nonexistent"])
     assert "nonexistent" in df.columns
     assert df["nonexistent"].iloc[0] is None
@@ -173,7 +173,7 @@ def test_query_iterator_table_argument_column_clash_prefixed(test_cache):
     """Arguments whose names clash with reserved columns are prefixed with 'a_'."""
     # 'name' and 'module' are reserved columns in the table
     test_cache.save(Call(name="f", arguments={"name": "clash_value"}, result=1))
-    tpl = Call(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
     df = test_cache.query(tpl).table(arguments=["name"])
     # Original 'name' column should still hold the function name
     assert df["name"].iloc[0] == "f"
@@ -189,7 +189,7 @@ def test_query_iterator_table_argument_column_clash_prefixed(test_cache):
 def test_query_iterator_table_with_results(test_cache):
     """results=True adds a 'result' column to the DataFrame."""
     test_cache.save(Call(name="f", arguments={"x": 5}, result=25))
-    tpl = Call(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
     df = test_cache.query(tpl).table(results=True)
     assert "result" in df.columns
     assert df["result"].iloc[0] == 25
@@ -199,7 +199,7 @@ def test_query_iterator_table_results_multiple_calls(test_cache):
     """results=True works correctly when there are multiple calls."""
     test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
     test_cache.save(Call(name="f", arguments={"x": 2}, result=20))
-    tpl = Call(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
     df = test_cache.query(tpl).table(results=True)
     assert set(df["result"]) == {10, 20}
 
@@ -217,7 +217,7 @@ def test_query_iterator_table_metadata_flattened(test_cache):
         metadata={"timing": {"elapsed": 1.5, "unit": "s"}},
     )
     test_cache.save(call)
-    tpl = Call(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
     df = test_cache.query(tpl).table()
     assert "elapsed" in df.columns
     assert df["elapsed"].iloc[0] == 1.5
@@ -228,7 +228,7 @@ def test_query_iterator_table_metadata_flattened(test_cache):
 def test_query_iterator_table_no_metadata(test_cache):
     """Calls without metadata produce no extra columns."""
     test_cache.save(Call(name="f", arguments={"x": 1}, result=10, metadata={}))
-    tpl = Call(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
     df = test_cache.query(tpl).table()
     # Only standard columns expected
     assert set(df.columns) == {"name", "module"}
@@ -266,7 +266,7 @@ def test_query_iterator_table_timestart_timestop_converted_to_datetime(test_cach
         metadata={"runtime": {"timestart": t0, "timestop": t0 + 1.5, "walltime": 1.5}},
     )
     test_cache.save(call)
-    tpl = Call(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
     df = test_cache.query(tpl).table()
     assert pd.api.types.is_datetime64_any_dtype(df["timestart"])
     assert pd.api.types.is_datetime64_any_dtype(df["timestop"])

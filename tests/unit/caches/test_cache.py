@@ -1,7 +1,7 @@
 import logging
 from unittest.mock import Mock, MagicMock
 from fleche import fleche, cache
-from fleche.call import Call
+from fleche.call import Call, QueryCall
 from fleche.digest import Digest
 from fleche.caches import Cache, CacheStack
 
@@ -281,7 +281,7 @@ def test_cache_query_decodes_values_and_args(monkeypatch):
     cache.save(original)
 
     # Build a template that matches by name only to retrieve the saved call
-    tpl = Call(
+    tpl = QueryCall(
         name="f", arguments=None, metadata=None, module=None, version=None, result=None
     )
     got = list(cache.query(tpl))

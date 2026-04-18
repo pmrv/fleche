@@ -5,7 +5,7 @@ from hypothesis import given, strategies as st
 from fleche.storage.sql import Sql
 from fleche.storage import ValueMemory
 from fleche.caches import Cache
-from fleche.call import Call
+from fleche.call import Call, QueryCall
 from fleche.digest import Digest, digest
 
 
@@ -278,7 +278,7 @@ def test_sql_call_digest_persistence(store):
 
 
 # ---------------------------------------------------------------------------
-# Consistency: SQL query vs Call.matches()
+# Consistency: SQL query vs QueryCall.matches()
 # ---------------------------------------------------------------------------
 
 
@@ -310,7 +310,7 @@ def test_sql_call_digest_persistence(store):
     ),
 )
 def test_sql_query_matches_call_matches(call_data, template_data):
-    """Verify that Sql storage query results are consistent with Call.matches()."""
+    """Verify that Sql storage query results are consistent with QueryCall.matches()."""
     values = ValueMemory({})
     sql_calls = Sql()  # in-memory sqlite
     cache = Cache(values, sql_calls)
@@ -335,7 +335,7 @@ def test_sql_query_matches_call_matches(call_data, template_data):
     if template_data["y"] is not None:
         template_args["y"] = template_data["y"]
 
-    template = Call(
+    template = QueryCall(
         name=template_data["name"],
         arguments=template_args if template_args else None,
         module=template_data["module"],
