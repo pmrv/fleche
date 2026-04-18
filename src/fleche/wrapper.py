@@ -3,7 +3,7 @@ from pathlib import Path
 from functools import wraps
 from inspect import signature
 from typing import Any, Callable, Dict, Iterable, TypeVar, Annotated, get_type_hints, get_origin, get_args
-from dataclasses import replace
+from dataclasses import dataclass, replace
 import tempfile
 import contextlib
 from collections import defaultdict
@@ -52,11 +52,31 @@ class Required:
         return Annotated[item, cls]
 
 
+@dataclass(frozen=True)
+class ArgumentPolicy:
+    """Encapsulates the ignored/required argument policy for a cached function."""
+
+    ignored: frozenset[str]
+    required: frozenset[str]
+
+    def strip_for_key(self, bound: dict) -> None:
+        """Remove ignored arguments from a bound arguments dict in-place."""
+        for ign in self.ignored:
+            del bound[ign]
+
+    def check_required(self, func, args: tuple, kwargs: dict) -> list[str]:
+        """Return names of required args not explicitly provided as keyword arguments."""
+        if not self.required:
+            return []
+        explicit = set(bind(func, args, kwargs).keys())
+        return [r for r in self.required if r not in explicit]
+
+
 def process_ignore_required_args(
         func,
         ignore: None | str | Iterable[str] = None,
         require: None | str | Iterable[str] = None,
-) -> tuple[tuple[str, ...], tuple[str, ...]]:
+) -> "ArgumentPolicy":
     """Collates arguments that should be ignored/required for caching from explicit arguments and annotations."""
 
     try:
@@ -108,7 +128,7 @@ def process_ignore_required_args(
     except (TypeError, ValueError):
         pass
 
-    return ignored_args, required_args
+    return ArgumentPolicy(ignored=frozenset(ignored_args), required=frozenset(required_args))
 
 
 def _get_working_directory_root() -> Path:
@@ -166,7 +186,7 @@ def fleche(
         if version is not None:
             func.__version__ = version  # ty: ignore
 
-        ignored_args, required_args = process_ignore_required_args(func, ignore, require)
+        policy = process_ignore_required_args(func, ignore, require)
 
         @wraps(func)
         def get_call(*args, **kwargs):
@@ -176,8 +196,7 @@ def fleche(
             # generation, but then we'd also have to save it somehow and that just seems bothersome in particular for
             # Sql Callstorage.  We could add a new table there connecting unique functions and their ignored args, but
             # meh.
-            for ign in ignored_args:
-                del call.arguments[ign]
+            policy.strip_for_key(call.arguments)
             if not hash_version:
                 call.version = None
             if not hash_module:
@@ -207,8 +226,7 @@ def fleche(
                 iterable of matching :class:`.Call`
             """
             call = QueryCall.from_call(func, *args, **kwargs)
-            for ign in ignored_args:
-                del call.arguments[ign]
+            policy.strip_for_key(call.arguments)
             if "metadata" in call.arguments:
                 logger.warning(
                     "Function argument 'metadata' shadowed by query argument"
@@ -284,14 +302,12 @@ def fleche(
                 logger.warning("No hash for argument: %s", e.args[0])
                 return func(*args, **kwargs)
 
-            if required_args:
-                explicit = set(bind(func, args, kwargs).keys())
-                missing = [r for r in required_args if r not in explicit]
-                if missing:
-                    logger.warning(
-                        "Missing required keyword arguments for caching: %s", missing
-                    )
-                    return func(*args, **kwargs)
+            missing = policy.check_required(func, args, kwargs)
+            if missing:
+                logger.warning(
+                    "Missing required keyword arguments for caching: %s", missing
+                )
+                return func(*args, **kwargs)
 
             try:
                 result = cache.load(key).result
@@ -347,6 +363,7 @@ def fleche(
 
 
 __all__ = [
+        "ArgumentPolicy",
         "Ignored",
         "Required",
         "fleche",
