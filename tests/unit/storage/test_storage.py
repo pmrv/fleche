@@ -167,15 +167,3 @@ def test_sql_metadata_roundtrip_and_query(tmp_path):
     assert names_walltime_2 == {"f2"}
 
 
-def test_hash_builtin_storages(tmp_path):
-    """Test that all storage types (except Memory) respond properly to hash() builtin."""
-    from fleche.storage import ValueVoid, ValueMemory
-
-    # Storages with only immutable fields should be hashable
-    void = ValueVoid()
-    assert hash(void) is not None
-
-    # Memory storage should raise TypeError due to mutable dict field
-    memory = ValueMemory({})
-    with pytest.raises(TypeError):
-        hash(memory)

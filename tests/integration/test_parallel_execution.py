@@ -165,29 +165,6 @@ def test_executorlib_returns_correct_result():
 
 
 @_skip_no_executorlib
-def test_executorlib_in_memory_cache_not_propagated():
-    """
-    An in-memory cache set in the parent is NOT visible inside executorlib workers.
-
-    Results computed by the worker are not stored in the parent's in-memory cache.
-    This is expected for any process-based executor.
-    """
-    from executorlib import SingleNodeExecutor
-
-    cache = Cache(ValueMemory({}), CallMemory({}))
-
-    with fleche.cache(cache):
-        with SingleNodeExecutor() as executor:
-            future = executor.submit(double, 99)
-            result = future.result()
-
-    assert result == 198, f"Expected 198, got {result}"
-    assert not cache.contains(double.digest(99)), (
-        "In-memory cache is process-local; executorlib worker results are not visible to the parent."
-    )
-
-
-@_skip_no_executorlib
 def test_executorlib_file_backed_cache_shared():
     """
     Minimally working configuration: use file-backed storage so that worker

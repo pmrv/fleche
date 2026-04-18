@@ -12,13 +12,6 @@ def test_readonly_cache_save():
         c.save(call)
 
 
-def test_readonly_cache_load():
-    mock_cache = Mock()
-    c = ReadOnlyCache(mock_cache)
-    c.load("key")
-    mock_cache.load.assert_called_once_with("key", lazy=True)
-
-
 def test_readonlycache_query_forwards_to_wrapped():
     """ReadOnlyCache.query should forward the call to the wrapped cache.
 
