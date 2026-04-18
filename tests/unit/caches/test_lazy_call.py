@@ -1,7 +1,7 @@
 import pytest
 from hypothesis import given
 from unittest.mock import Mock, patch
-from fleche.call import Call, LazyCall, LazyArguments
+from fleche.call import Call, LazyCall, LazyArguments, QueryCall
 from fleche.caches import Cache
 from fleche import cache as cache_context
 from fleche.storage import ValueMemory, CallMemory
@@ -101,7 +101,7 @@ def test_cache_query_lazy():
     cache.save(Call(name="f", arguments={"x": 1}, result=10))
     cache.save(Call(name="f", arguments={"x": 2}, result=20))
 
-    tpl = Call(
+    tpl = QueryCall(
         name="f", arguments=None, metadata=None, module=None, version=None, result=None
     )
 
