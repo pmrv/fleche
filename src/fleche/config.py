@@ -275,8 +275,6 @@ def storage_to_config(s: storage.ValueStorage | storage.CallStorage) -> dict[str
             config = asdict(s)  # type: ignore
             config["type"] = "bagofholding_hdf"
             config["root"] = str(config["root"])
-            if config.get("version_validator") is None:
-                config.pop("version_validator", None)
         case storage.sql.Sql():
             config = {"type": "sql", "url": s.url, "echo": s.echo}
         case _:

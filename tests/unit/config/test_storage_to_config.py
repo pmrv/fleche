@@ -39,7 +39,7 @@ def test_bagofholding_h5file(tmp_path):
     cfg = storage_to_config(s)
     assert cfg["type"] == "bagofholding_hdf"
     assert cfg["root"] == str(s.root)
-    assert "version_validator" not in cfg
+    assert cfg["version_validator"] is None
 
 
 def test_bagofholding_h5file_with_version_validator(tmp_path):
