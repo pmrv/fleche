@@ -163,7 +163,7 @@ def test_query_iterator_table_with_arguments(test_cache):
 def test_query_iterator_table_arguments_single_string(test_cache):
     """A single string passed to arguments is treated as a one-element tuple."""
     test_cache.save(Call(name="f", arguments={"x": 3, "y": 7}, result=10))
-    tpl = Call(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
     df = test_cache.query(tpl).table(arguments="x")
     assert "x" in df.columns
     assert df["x"].iloc[0] == 3
@@ -173,7 +173,7 @@ def test_query_iterator_table_arguments_single_string(test_cache):
 def test_query_iterator_table_arguments_true(test_cache):
     """arguments=True adds all arguments as columns."""
     test_cache.save(Call(name="f", arguments={"x": 3, "y": 7}, result=10))
-    tpl = Call(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
     df = test_cache.query(tpl).table(arguments=True)
     assert "x" in df.columns
     assert "y" in df.columns
@@ -185,7 +185,7 @@ def test_query_iterator_table_arguments_true_multiple_calls(test_cache):
     """arguments=True collects the union of argument names across all calls."""
     test_cache.save(Call(name="f", arguments={"x": 1, "y": 2}, result=10))
     test_cache.save(Call(name="f", arguments={"x": 3, "z": 4}, result=20))
-    tpl = Call(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
     df = test_cache.query(tpl).table(arguments=True)
     assert "x" in df.columns
     assert "y" in df.columns
