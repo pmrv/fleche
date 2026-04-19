@@ -196,6 +196,41 @@ class BaseCache(ABC):
         return FilteredCache(self, predicate)
 
 
+def _combine_expand(key: "Digest | str", results: "Iterable[Digest]") -> "Digest":
+    """Reduce sub-storage expand results to a single resolved digest.
+
+    Raises:
+        KeyError: if no results were found.
+        AmbiguousDigestError: if results disagree on the full digest.
+    """
+    unique = sorted(set(results))
+    if not unique:
+        raise KeyError(key)
+    if len(unique) == 1:
+        return unique[0]
+    m1, m2 = unique[0], unique[1]
+    for i, (c1, c2) in enumerate(zip(m1, m2)):
+        if c1 != c2:
+            break
+    else:
+        i = min(len(m1), len(m2))
+    raise storage.AmbiguousDigestError(
+        f"Short digest {key} is ambiguous; expands to: {unique}; need at least {i + 1} characters."
+    )
+
+
+def _combine_shrink(key: "Digest | str", results: "Iterable[Digest]") -> "Digest":
+    """Reduce sub-storage shrink results to the longest (safest) prefix.
+
+    Raises:
+        KeyError: if no results were found.
+    """
+    all_results = list(results)
+    if not all_results:
+        raise KeyError(key)
+    return max(all_results, key=len)  # type: ignore
+
+
 @dataclass(frozen=True)
 class Cache(BaseCache):
     values: storage.ValueStorage
@@ -275,56 +310,22 @@ class Cache(BaseCache):
         return self.calls.contains(key)
 
     def expand(self, key: Digest | str) -> Digest:
-        calls_result = None
-        values_result = None
-
-        try:
-            calls_result = self.calls.expand(key)
-        except KeyError:
-            pass
-        # AmbiguousDigestError propagates directly
-
-        try:
-            values_result = self.values.expand(key)
-        except KeyError:
-            pass
-        # AmbiguousDigestError propagates directly
-
-        if calls_result is not None and values_result is not None:
-            if calls_result != values_result:
-                raise storage.AmbiguousDigestError(
-                    f"Short digest {key} expands to different full digests in calls and values storages."
-                )
-            return calls_result
-        elif calls_result is not None:
-            return calls_result
-        elif values_result is not None:
-            return values_result
-        raise KeyError(key)
+        results = []
+        for sub in (self.calls, self.values):
+            try:
+                results.append(sub.expand(key))
+            except KeyError:
+                pass
+        return _combine_expand(key, results)
 
     def shrink(self, key: Digest | str) -> Digest:
-        calls_result = None
-        values_result = None
-
-        try:
-            calls_result = self.calls.shrink(key)
-        except KeyError:
-            pass
-        # AmbiguousDigestError propagates directly
-
-        try:
-            values_result = self.values.shrink(key)
-        except KeyError:
-            pass
-        # AmbiguousDigestError propagates directly
-
-        if calls_result is not None and values_result is not None:
-            return max(calls_result, values_result, key=len)  # type: ignore
-        elif calls_result is not None:
-            return calls_result
-        elif values_result is not None:
-            return values_result
-        raise KeyError(key)
+        results = []
+        for sub in (self.calls, self.values):
+            try:
+                results.append(sub.shrink(key))
+            except KeyError:
+                pass
+        return _combine_shrink(key, results)
 
     def _query(self, call: call.QueryCall) -> Iterable[LazyCall]:
         """Query for cached calls that match a template and return decoded results.
@@ -542,28 +543,13 @@ class CacheStack(BaseCache):
                 continue
 
     def expand(self, key: Digest | str) -> Digest:
-        result = None
+        results = []
         for c in self.stack:
             try:
-                r = c.expand(key)
+                results.append(c.expand(key))
             except KeyError:
-                continue
-            # AmbiguousDigestError from a single cache propagates directly
-            if result is None:
-                result = r
-            elif result != r:
-                m1, m2 = sorted({result, r})
-                for i, (c1, c2) in enumerate(zip(m1, m2)):
-                    if c1 != c2:
-                        break
-                else:
-                    i = min(len(m1), len(m2))
-                raise storage.AmbiguousDigestError(
-                    f"Short digest {key} is ambiguous across caches; expands to: {[m1, m2]}; need at least {i+1} characters."
-                )
-        if result is None:
-            raise KeyError(key)
-        return result
+                pass
+        return _combine_expand(key, results)
 
     def shrink(self, key: Digest | str) -> Digest:
         results = []
@@ -571,11 +557,8 @@ class CacheStack(BaseCache):
             try:
                 results.append(c.shrink(key))
             except KeyError:
-                continue
-            # AmbiguousDigestError propagates directly
-        if not results:
-            raise KeyError(key)
-        return max(results, key=len)  # type: ignore
+                pass
+        return _combine_shrink(key, results)
 
     def _query(self, call: call.QueryCall) -> Iterable[LazyCall]:
         """Aggregate query results across the stack, avoiding duplicates.
