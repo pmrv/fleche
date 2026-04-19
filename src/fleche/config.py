@@ -60,6 +60,9 @@ following **lowercase** identifiers:
     Optional: ``lock_timeout`` (float, default ``1.0``) — write-lock wait timeout (s).
     Optional: ``lock_wait_start`` (float, default ``0.001``) — initial lock-poll
     interval for exponential backoff (s).
+    Optional: ``version_validator`` (str, default omitted) — version validation
+    strategy passed to :meth:`bagofholding:bagofholding.h5.bag.H5Bag.load`.  One of ``"exact"``, ``"semantic-minor"``,
+    ``"semantic-major"``, ``"none"``.  When omitted, bagofholding's default applies.
     Optional (value backend): ``remaining_depth`` (int, default ``0``).
 
 ``"sql"``
@@ -216,7 +219,7 @@ def storage_from_config(d: dict[str, Any], type: Literal["call", "value"]) -> st
       — same optional keys as ``"pickle"``
     * ``{"type": "bagofholding_hdf", "root": "<path>"}``
       — optional: ``lock_timeout``, ``lock_wait_start``,
-      ``remaining_depth`` (value only)
+      ``version_validator``, ``remaining_depth`` (value only)
     * ``{"type": "sql", "url": "<sqlalchemy-url>"}``  *(call storage only)*
       — optional: ``echo``
 

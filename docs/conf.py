@@ -10,10 +10,15 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
     'sphinx.ext.viewcode',
+    'sphinx.ext.intersphinx',
     'autoapi.extension',
     'sphinx_rtd_theme',
     'nbsphinx',
 ]
+
+intersphinx_mapping = {
+    'bagofholding': ('https://bagofholding.readthedocs.io/en/latest/', None),
+}
 
 nbsphinx_execute = 'never'
 
