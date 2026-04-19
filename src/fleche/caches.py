@@ -4,7 +4,7 @@ import random
 import threading
 from dataclasses import dataclass, replace, field
 from copy import copy
-from typing import Iterable, Any, Callable, overload
+from typing import Iterable, Any, Callable, Literal, overload
 
 import pandas as pd
 
@@ -143,7 +143,7 @@ class BaseCache(ABC):
                 logger.warning("No hash for query argument: %s", e.args[0])
         return query.QueryIterator(_safe_iter())
 
-    def table(self, arguments: Iterable[str] = (), results=False) -> pd.DataFrame:
+    def table(self, arguments: Iterable[str] | str | Literal[True] = (), results=False) -> pd.DataFrame:
         """Return a pandas DataFrame summarizing cached calls via query().
 
         This implementation uses a fully-wildcard Call template to retrieve
@@ -163,7 +163,9 @@ class BaseCache(ABC):
         Only requested arguments are loaded from cache.
 
         Args:
-            arguments (iterable of str): add the given arguments (of the queried calls) as columns to the table
+            arguments: add the given arguments (of the queried calls) as columns to the table.
+                Pass ``True`` to add all arguments, or a single string as a shortcut for a
+                one-element tuple.
             results (bool): if True, add results of queried calls to table
 
         Returns:

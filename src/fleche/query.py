@@ -1,6 +1,6 @@
 import datetime
 from dataclasses import dataclass
-from typing import Iterable, Iterator, Any
+from typing import Iterable, Iterator, Any, Literal
 
 import pandas as pd
 
@@ -19,7 +19,7 @@ class QueryIterator(Iterable[call.LazyCall]):
     def __iter__(self) -> Iterator[call.LazyCall]:
         yield from self.calls
 
-    def table(self, arguments: Iterable[str] = (), results=False) -> pd.DataFrame:
+    def table(self, arguments: Iterable[str] | str | Literal[True] = (), results=False) -> pd.DataFrame:
         """Return a pandas DataFrame summarizing queried calls.
 
         Arguments and results are elided.
@@ -39,14 +39,21 @@ class QueryIterator(Iterable[call.LazyCall]):
         timezone-aware :class:`pandas.Timestamp` objects in the local timezone.
 
         Args:
-            arguments (iterable of str): add the given arguments (of the queried calls) as columns to the table
+            arguments: add the given arguments (of the queried calls) as columns to the table.
+                Pass ``True`` to add all arguments, or a single string as a shortcut for a
+                one-element tuple.
             results (bool): if True, add results of queried calls to table
 
         Returns:
             :class:`pandas.DataFrame`: table of all calls on cache
         """
 
-        arguments = tuple(arguments)
+        if arguments is True:
+            pass
+        elif isinstance(arguments, str):
+            arguments = (arguments,)
+        else:
+            arguments = tuple(arguments)
 
         rows: dict[str, dict[str, Any]] = {}
         for c in self.calls:
@@ -55,7 +62,7 @@ class QueryIterator(Iterable[call.LazyCall]):
             }
             if results:
                 row["result"] = c.result
-            for a in arguments:
+            for a in (c.arguments.keys() if arguments is True else arguments):
                 # TODO: quick and easy strategy to avoid name clashes, alternative would be to use multicolumns, but
                 # those are a bit annoying
                 if a not in row:
