@@ -1,6 +1,6 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 import logging
 
 from .file import FileStorage
@@ -18,9 +18,12 @@ with ImportAlarm(
 ) as bagofholding_alarm:
     from bagofholding import H5Bag
 
+VersionValidator = Literal["exact", "semantic-minor", "semantic-major", "none"]
+
 
 @dataclass(frozen=True)
 class BagOfHoldingH5FileBackend(FileStorage):
+    version_validator: VersionValidator | None = None
 
     @bagofholding_alarm
     def __post_init__(self):
@@ -35,7 +38,10 @@ class BagOfHoldingH5FileBackend(FileStorage):
 
     def _from_file(self, path: Path) -> Any:
         try:
-            return H5Bag(path).load()
+            kwargs = {}
+            if self.version_validator is not None:
+                kwargs["version_validator"] = self.version_validator
+            return H5Bag(path).load(**kwargs)
         except FileNotFoundError:
             raise KeyError(path) from None
         except OSError as e:
