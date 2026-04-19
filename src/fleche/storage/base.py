@@ -18,6 +18,28 @@ class AmbiguousDigestError(ValueError):
     pass
 
 
+def _resolve_prefix(key: str, candidates: list[str]) -> Digest:
+    """Return the unique Digest for *key* prefix, or raise KeyError / AmbiguousDigestError.
+
+    *candidates* must contain at most two entries (the two lexicographically
+    smallest keys that start with *key*); callers are responsible for fetching
+    them efficiently (e.g. via a ``LIKE … LIMIT 2`` query for SQL backends).
+    """
+    if not candidates:
+        raise KeyError(key)
+    if len(candidates) == 1:
+        return Digest(candidates[0])
+    m1, m2 = candidates[0], candidates[1]
+    for i, (c1, c2) in enumerate(zip(m1, m2)):
+        if c1 != c2:
+            break
+    else:
+        i = min(len(m1), len(m2))
+    raise AmbiguousDigestError(
+        f"Short digest {key} is ambiguous; need at least {i+1} characters."
+    )
+
+
 class KeyManagement(ABC):
     """Abstract base providing key-management helpers for any keyed storage.
 
@@ -91,22 +113,8 @@ class KeyManagement(ABC):
             if len(key) < 4:
                 raise KeyError(key)
 
-            matches = sorted([k for k in self.list() if k.startswith(key)])
-            if not matches:
-                raise KeyError(key)
-            if len(matches) > 1:
-                # find longest common prefix of the first two matches to find where they diverge
-                m1, m2 = matches[0], matches[1]
-                for i, (c1, c2) in enumerate(zip(m1, m2)):
-                    if c1 != c2:
-                        break
-                else:
-                    i = min(len(m1), len(m2))
-
-                raise AmbiguousDigestError(
-                    f"Short digest {key} is ambiguous; need at least {i+1} characters."
-                )
-            return Digest(matches[0])
+            candidates = sorted(k for k in self.list() if k.startswith(key))
+            return _resolve_prefix(str(key), candidates[:2])
 
     def shrink(self, key: Digest | str) -> Digest:
         """Find the shortest substring that is still an unambiguous reference to the same value."""

@@ -4,7 +4,7 @@ import threading
 from typing import Iterable, Any, List
 from pathlib import Path
 from dataclasses import dataclass, field
-from .base import KeyManagement, CallStorage, AmbiguousDigestError
+from .base import KeyManagement, CallStorage, _resolve_prefix
 from .thread_safe import PerKeyLockMixin
 from ..call import Call, QueryCall
 from ..digest import Digest, DIGEST_LENGTH, digest
@@ -268,22 +268,7 @@ class Sql(PerKeyLockMixin, CallStorage):
                 .order_by(CallModel.key)
                 .limit(2)
             ).all()
-
-            if not rows:
-                raise KeyError(key)
-
-            if len(rows) == 1:
-                return Digest(rows[0][0])
-
-            m1, m2 = rows[0][0], rows[1][0]
-            for i, (c1, c2) in enumerate(zip(m1, m2)):
-                if c1 != c2:
-                    break
-            else:
-                i = min(len(m1), len(m2))
-            raise AmbiguousDigestError(
-                f"Short digest {key} is ambiguous; need at least {i+1} characters."
-            )
+            return _resolve_prefix(prefix, [r[0] for r in rows])
 
     def _evict(self, key: Digest) -> None:
         session = self._local.session
