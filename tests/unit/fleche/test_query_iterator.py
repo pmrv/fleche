@@ -343,3 +343,302 @@ def test_query_preserves_order_with_partial():
     # The order of arguments should follow the function signature
     assert list(call_obj.arguments.keys()) == ["a", "b", "c"]
     assert call_obj.arguments == {"a": 1, "b": None, "c": 3}
+
+
+# ---------------------------------------------------------------------------
+# .first() / .last() / .only()
+# ---------------------------------------------------------------------------
+
+def test_first_returns_first_call(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    test_cache.save(Call(name="f", arguments={"x": 2}, result=20))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    calls = list(test_cache.query(tpl))
+    qi = QueryIterator(iter(calls))
+    assert qi.first() == calls[0]
+
+
+def test_first_raises_on_empty():
+    with pytest.raises(IndexError):
+        QueryIterator([]).first()
+
+
+def test_last_returns_last_call(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    test_cache.save(Call(name="f", arguments={"x": 2}, result=20))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    calls = list(test_cache.query(tpl))
+    qi = QueryIterator(iter(calls))
+    assert qi.last() == calls[-1]
+
+
+def test_last_raises_on_empty():
+    with pytest.raises(IndexError):
+        QueryIterator([]).last()
+
+
+def test_only_returns_single_call(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    c = test_cache.query(tpl).only()
+    assert c.name == "f"
+
+
+def test_only_raises_on_empty():
+    with pytest.raises(IndexError):
+        QueryIterator([]).only()
+
+
+def test_only_raises_on_multiple(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    test_cache.save(Call(name="f", arguments={"x": 2}, result=20))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    with pytest.raises(ValueError):
+        test_cache.query(tpl).only()
+
+
+# ---------------------------------------------------------------------------
+# .count() / .any() / .is_empty()
+# ---------------------------------------------------------------------------
+
+def test_count_returns_correct_number(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    test_cache.save(Call(name="f", arguments={"x": 2}, result=20))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    assert test_cache.query(tpl).count() == 2
+
+
+def test_count_empty():
+    assert QueryIterator([]).count() == 0
+
+
+def test_any_true(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    assert test_cache.query(tpl).any() is True
+
+
+def test_any_false():
+    assert QueryIterator([]).any() is False
+
+
+def test_is_empty_true():
+    assert QueryIterator([]).is_empty() is True
+
+
+def test_is_empty_false(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    assert test_cache.query(tpl).is_empty() is False
+
+
+# ---------------------------------------------------------------------------
+# .take() / .skip()
+# ---------------------------------------------------------------------------
+
+def test_take_returns_first_n(test_cache):
+    for i in range(5):
+        test_cache.save(Call(name="f", arguments={"x": i}, result=i * 10))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    calls = list(test_cache.query(tpl))
+    qi = QueryIterator(iter(calls))
+    assert list(qi.take(3)) == calls[:3]
+
+
+def test_take_more_than_available(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    assert len(list(test_cache.query(tpl).take(10))) == 1
+
+
+def test_take_zero():
+    assert list(QueryIterator([]).take(0)) == []
+
+
+def test_skip_drops_first_n(test_cache):
+    for i in range(5):
+        test_cache.save(Call(name="f", arguments={"x": i}, result=i * 10))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    calls = list(test_cache.query(tpl))
+    qi = QueryIterator(iter(calls))
+    assert list(qi.skip(2)) == calls[2:]
+
+
+def test_skip_more_than_available():
+    assert list(QueryIterator([]).skip(100)) == []
+
+
+# ---------------------------------------------------------------------------
+# .filter()
+# ---------------------------------------------------------------------------
+
+def test_filter_keeps_matching(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    test_cache.save(Call(name="f", arguments={"x": 2}, result=20))
+    test_cache.save(Call(name="f", arguments={"x": 3}, result=30))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    results = list(test_cache.query(tpl).filter(lambda c: c.arguments["x"] > 1))
+    assert len(results) == 2
+    for c in results:
+        assert c.arguments["x"] > 1
+
+
+def test_filter_returns_query_iterator(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    assert isinstance(test_cache.query(tpl).filter(lambda c: True), QueryIterator)
+
+
+def test_filter_all_excluded():
+    assert list(QueryIterator([]).filter(lambda c: False)) == []
+
+
+# ---------------------------------------------------------------------------
+# .sorted()
+# ---------------------------------------------------------------------------
+
+def test_sorted_by_argument_name(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 3}, result=30))
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    test_cache.save(Call(name="f", arguments={"x": 2}, result=20))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    xs = [c.arguments["x"] for c in test_cache.query(tpl).sorted("x")]
+    assert xs == [1, 2, 3]
+
+
+def test_sorted_by_callable(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 3}, result=30))
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    xs = [c.arguments["x"] for c in test_cache.query(tpl).sorted(key=lambda c: c.arguments["x"])]
+    assert xs == [1, 3]
+
+
+def test_sorted_reverse(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    test_cache.save(Call(name="f", arguments={"x": 2}, result=20))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    xs = [c.arguments["x"] for c in test_cache.query(tpl).sorted("x", reverse=True)]
+    assert xs == [2, 1]
+
+
+def test_sorted_returns_query_iterator(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    assert isinstance(test_cache.query(tpl).sorted("x"), QueryIterator)
+
+
+# ---------------------------------------------------------------------------
+# .unique_by()
+# ---------------------------------------------------------------------------
+
+def test_unique_by_argument_name(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1, "y": 1}, result=10))
+    test_cache.save(Call(name="f", arguments={"x": 1, "y": 2}, result=20))
+    test_cache.save(Call(name="f", arguments={"x": 2, "y": 3}, result=30))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    unique = list(test_cache.query(tpl).unique_by("x"))
+    xs = [c.arguments["x"] for c in unique]
+    assert len(unique) == 2
+    assert set(xs) == {1, 2}
+
+
+def test_unique_by_callable(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    test_cache.save(Call(name="f", arguments={"x": 2}, result=20))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    unique = list(test_cache.query(tpl).unique_by(lambda c: c.arguments["x"]))
+    assert len(unique) == 2
+
+
+def test_unique_by_returns_query_iterator(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    assert isinstance(test_cache.query(tpl).unique_by("x"), QueryIterator)
+
+
+# ---------------------------------------------------------------------------
+# .groupby()
+# ---------------------------------------------------------------------------
+
+def test_groupby_argument_name(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1, "y": 1}, result=10))
+    test_cache.save(Call(name="f", arguments={"x": 1, "y": 2}, result=20))
+    test_cache.save(Call(name="f", arguments={"x": 2, "y": 3}, result=30))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    groups = test_cache.query(tpl).groupby("x")
+    assert set(groups.keys()) == {1, 2}
+    assert len(list(groups[1])) == 2
+    assert len(list(groups[2])) == 1
+
+
+def test_groupby_callable(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    test_cache.save(Call(name="f", arguments={"x": 2}, result=20))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    groups = test_cache.query(tpl).groupby(lambda c: c.arguments["x"] % 2)
+    assert set(groups.keys()) == {0, 1}
+
+
+def test_groupby_returns_query_iterators(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    groups = test_cache.query(tpl).groupby("x")
+    for v in groups.values():
+        assert isinstance(v, QueryIterator)
+
+
+# ---------------------------------------------------------------------------
+# .latest() / .oldest()
+# ---------------------------------------------------------------------------
+
+def test_latest_returns_most_recent(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10, metadata={"runtime": {"timestart": 100.0}}))
+    test_cache.save(Call(name="f", arguments={"x": 2}, result=20, metadata={"runtime": {"timestart": 200.0}}))
+    test_cache.save(Call(name="f", arguments={"x": 3}, result=30, metadata={"runtime": {"timestart": 50.0}}))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    c = test_cache.query(tpl).latest()
+    assert c.arguments["x"] == 2
+
+
+def test_oldest_returns_earliest(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10, metadata={"runtime": {"timestart": 100.0}}))
+    test_cache.save(Call(name="f", arguments={"x": 2}, result=20, metadata={"runtime": {"timestart": 200.0}}))
+    test_cache.save(Call(name="f", arguments={"x": 3}, result=30, metadata={"runtime": {"timestart": 50.0}}))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    c = test_cache.query(tpl).oldest()
+    assert c.arguments["x"] == 3
+
+
+def test_latest_raises_on_empty():
+    with pytest.raises(IndexError):
+        QueryIterator([]).latest()
+
+
+def test_oldest_raises_on_empty():
+    with pytest.raises(IndexError):
+        QueryIterator([]).oldest()
+
+
+# ---------------------------------------------------------------------------
+# .delete_all()
+# ---------------------------------------------------------------------------
+
+def test_delete_all_removes_calls(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    test_cache.save(Call(name="f", arguments={"x": 2}, result=20))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    assert test_cache.query(tpl).count() == 2
+    test_cache.query(tpl).delete_all()
+    assert test_cache.query(tpl).count() == 0
+
+
+def test_delete_all_only_removes_matched(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    test_cache.save(Call(name="g", arguments={"x": 1}, result=10))
+    tpl_f = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    tpl_g = QueryCall(name="g", arguments=None, metadata=None, module=None, version=None, result=None)
+    test_cache.query(tpl_f).delete_all()
+    assert test_cache.query(tpl_f).count() == 0
+    assert test_cache.query(tpl_g).count() == 1
