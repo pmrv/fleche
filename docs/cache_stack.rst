@@ -33,7 +33,7 @@ Example
     with cache(remote_cache):
         my_function(10)
 
-    # Create a stack with an empty local_cache on top
+    # Create a stack: local_cache is the base cache (checked first), remote_cache is the fallback
     stack = CacheStack((local_cache, remote_cache))
 
     with cache(stack):
