@@ -74,3 +74,89 @@ def test_post_init_str_key_roundtrip(tmp_path):
     value = {"hello": "world"}
     digest_key = storage.save(value)
     assert storage.load(digest_key) == value
+
+
+def test_read_compressed_file_with_compress_false(tmp_path):
+    """A storage with compress=False can still read files written with compress=True."""
+    writer = PickleFile.with_pickle(root=tmp_path, compress=True)
+    reader = PickleFile.with_pickle(root=tmp_path, compress=False)
+    value = {"x": 42}
+    key = writer.save(value)
+    assert reader.load(key) == value
+
+
+def test_read_uncompressed_file_with_compress_true(tmp_path):
+    """A storage with compress=True can still read files written with compress=False."""
+    writer = PickleFile.with_pickle(root=tmp_path, compress=False)
+    reader = PickleFile.with_pickle(root=tmp_path, compress=True)
+    value = {"x": 42}
+    key = writer.save(value)
+    assert reader.load(key) == value
+
+
+def test_compress_all(tmp_path):
+    """compress_all() rewrites uncompressed files as gzip-compressed."""
+    storage = PickleFile.with_pickle(root=tmp_path, compress=False)
+    value = {"a": 1}
+    key = storage.save(value)
+
+    raw = (tmp_path / str(key)).read_bytes()
+    assert raw[:2] != b"\x1f\x8b"
+
+    storage.compress_all()
+
+    raw = (tmp_path / str(key)).read_bytes()
+    assert raw[:2] == b"\x1f\x8b"
+    assert storage.load(key) == value
+
+
+def test_compress_all_idempotent(tmp_path):
+    """compress_all() on already-compressed files leaves them unchanged."""
+    storage = PickleFile.with_pickle(root=tmp_path, compress=True)
+    value = {"a": 1}
+    key = storage.save(value)
+
+    storage.compress_all()
+    storage.compress_all()
+
+    assert storage.load(key) == value
+
+
+def test_decompress_all(tmp_path):
+    """decompress_all() rewrites gzip-compressed files as uncompressed."""
+    storage = PickleFile.with_pickle(root=tmp_path, compress=True)
+    value = {"a": 1}
+    key = storage.save(value)
+
+    raw = (tmp_path / str(key)).read_bytes()
+    assert raw[:2] == b"\x1f\x8b"
+
+    storage.decompress_all()
+
+    raw = (tmp_path / str(key)).read_bytes()
+    assert raw[:2] != b"\x1f\x8b"
+    assert storage.load(key) == value
+
+
+def test_decompress_all_idempotent(tmp_path):
+    """decompress_all() on already-uncompressed files leaves them unchanged."""
+    storage = PickleFile.with_pickle(root=tmp_path, compress=False)
+    value = {"a": 1}
+    key = storage.save(value)
+
+    storage.decompress_all()
+    storage.decompress_all()
+
+    assert storage.load(key) == value
+
+
+def test_compress_then_decompress_roundtrip(tmp_path):
+    """compress_all() followed by decompress_all() preserves values."""
+    storage = PickleFile.with_pickle(root=tmp_path, compress=False)
+    values = {storage.save({"n": i}): {"n": i} for i in range(5)}
+
+    storage.compress_all()
+    storage.decompress_all()
+
+    for key, value in values.items():
+        assert storage.load(key) == value
