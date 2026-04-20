@@ -268,7 +268,7 @@ class Sql(PerKeyLockMixin, CallStorage):
                 .order_by(CallModel.key)
                 .limit(2)
             ).all()
-            return _resolve_prefix(prefix, [r[0] for r in rows])
+            return _resolve_prefix(prefix, [Digest(r[0]) for r in rows])
 
     def _evict(self, key: Digest) -> None:
         session = self._local.session

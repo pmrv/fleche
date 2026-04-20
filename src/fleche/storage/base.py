@@ -18,7 +18,7 @@ class AmbiguousDigestError(ValueError):
     pass
 
 
-def _resolve_prefix(key: str, candidates: list[str]) -> Digest:
+def _resolve_prefix(key: str, candidates: list[Digest]) -> Digest:
     """Return the unique Digest for *key* prefix, or raise KeyError / AmbiguousDigestError.
 
     *candidates* must contain at most two entries (the two lexicographically
@@ -28,7 +28,7 @@ def _resolve_prefix(key: str, candidates: list[str]) -> Digest:
     if not candidates:
         raise KeyError(key)
     if len(candidates) == 1:
-        return Digest(candidates[0])
+        return candidates[0]
     m1, m2 = candidates[0], candidates[1]
     for i, (c1, c2) in enumerate(zip(m1, m2)):
         if c1 != c2:
