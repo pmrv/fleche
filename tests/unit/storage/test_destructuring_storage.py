@@ -344,3 +344,89 @@ def test_namedtuple_hypothesis_not_destructured(ds, nt):
 def test_namedtuple_save_is_deterministic(ds, nt):
     """Saving the same namedtuple twice yields the same key."""
     assert ds.save(nt) == ds.save(nt)
+
+
+# ---- count_reuses ----
+
+
+def test_count_reuses_empty_storage():
+    """Empty storage produces an empty counter."""
+    ds = make_ds()
+    assert ds.count_reuses() == {}
+
+
+def test_count_reuses_scalar():
+    """A scalar stored directly has no sub-references; its count is 0."""
+    ds = make_ds()
+    key = ds.save(42)
+    hits = ds.count_reuses()
+    assert hits[key] == 0
+    assert set(hits.keys()) == {key}
+
+
+def test_count_reuses_flat_list_children_referenced_once():
+    """Elements of a flat list (remaining_depth=0) are each referenced once by the parent."""
+    ds = make_ds(remaining_depth=0)
+    data = [1, 2, 3]
+    outer_key = ds.save(data)
+    sub_keys = {digest(v) for v in data}
+
+    hits = ds.count_reuses()
+
+    assert hits[outer_key] == 0
+    for k in sub_keys:
+        assert hits[k] == 1
+
+
+def test_count_reuses_shared_sub_list():
+    """When two outer lists share the same inner list, that inner list's count is 2."""
+    ds = make_ds(remaining_depth=0)
+    inner = [2, 3]
+    k1 = ds.save([1, inner])
+    k2 = ds.save([4, inner])
+    inner_key = digest(inner)
+
+    hits = ds.count_reuses()
+
+    assert hits[inner_key] == 2
+    assert hits[k1] == 0
+    assert hits[k2] == 0
+
+
+def test_count_reuses_all_keys_present():
+    """count_reuses always includes every key returned by list(), even if count is 0."""
+    ds = make_ds(remaining_depth=0)
+    ds.save([10, 20])
+    all_storage_keys = set(ds.list())
+    hits = ds.count_reuses()
+    assert set(hits.keys()) == all_storage_keys
+
+
+def test_count_reuses_dict_keys_and_values_counted():
+    """Digest references in both dict keys and values are counted."""
+    ds = make_ds(remaining_depth=0)
+    data = {1: [2, 3]}
+    ds.save(data)
+
+    inner_key = digest([2, 3])
+    hits = ds.count_reuses()
+
+    assert hits[inner_key] == 1
+
+
+def test_count_reuses_inlined_scalars_not_double_counted():
+    """With remaining_depth=1 scalars are inlined; no sub-keys are created, all counts are 0."""
+    ds = make_ds(remaining_depth=1)
+    ds.save([1, 2, 3])
+    hits = ds.count_reuses()
+    assert len(hits) == 1
+    assert list(hits.values()) == [0]
+
+
+@given(st_nested_values)
+def test_count_reuses_nonnegative(value):
+    """All reuse counts are non-negative for any stored value."""
+    ds = make_ds(remaining_depth=0)
+    ds.save(value)
+    hits = ds.count_reuses()
+    assert all(v >= 0 for v in hits.values())
