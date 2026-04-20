@@ -8,144 +8,102 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Entry points:** `wrapper.py` (decorator) → `call.py` (key building) → `digest.py` (hashing) → `caches.py` (cache objects) → `storage/` (backends)
 
-**Active cache:** `ContextVar` in `state.py`; switch with `with cache(my_cache):`. Config auto-loaded from `fleche.toml` / `~/.fleche.toml` by `config.py`.
+**Active cache:** `ContextVar` in `state.py`; switch with `with cache(my_cache):`. Config auto-loaded from `./fleche.toml`, `$XDG_CONFIG_HOME/fleche/cache.toml`, or `~/.fleche.toml` by `config.py`.
 
-**Backends:** `memory`, `pickle_file`, `sql` (SQLAlchemy), `bagofholding_file` (HDF5), `void`. Values and calls stored separately — call records queryable via `query.py` → pandas DataFrame.
+**Backends (config `type` strings):** `"memory"`, `"void"`, `"pickle"` / `"cloudpickle"` / `"dill"` (filesystem with chosen serializer), `"bagofholding_hdf"` (HDF5), `"sql"` (SQLAlchemy, **calls only**). Values and calls are stored separately so call records are queryable without deserializing heavy values.
 
-**Key files to know:**
+**Key files:**
 | File | Role |
 |------|------|
-| `wrapper.py` | `@fleche()` decorator, per-arg `Ignored`/`Required` markers |
-| `digest.py` | `Digest(str)` + SHA256 over arbitrary Python objects |
-| `call.py` | `Call` dataclass; `LazyCall`, `QueryCall` |
-| `caches.py` | `Cache`, `CacheStack`, `ReadOnlyCache`, `FilteredCache` |
-| `state.py` | `cache()`, `meta()`, `tags()`, `project()` context managers |
-| `storage/base.py` | `StorageBackend` ABC: `save/load/_contains/list/expand/shrink` |
+| `wrapper.py` | `@fleche()` decorator; `Ignored`/`Required` arg markers; attaches `.call/.digest/.load/.contains/.query/.rerun` helpers |
+| `digest.py` | `Digest(str)` + `digest()` function; SHA256 over arbitrary objects; pluggable hooks for numpy/complex/etc. |
+| `call.py` | `Call` dataclass; `LazyCall` (deferred deser), `QueryCall` (wildcard match) |
+| `caches.py` | `BaseCache`, `Cache`, `CacheStack`, `ReadOnlyCache`, `FilteredCache`, `RefreshingCache`, `SizeLimitedCache` |
+| `state.py` | `cache()`, `meta()`, `tags()`, `project()` context managers; `BoundWrapper` |
+| `query.py` | `QueryIterator.table()` → pandas DataFrame; `.results()` for values |
+| `metadata.py` | `MetaData` ABC (`pre`/`post`); built-ins `Runtime`, `Tags` |
+| `config.py` | TOML loader; resolves named caches; see docstring for full type reference |
+| `security.py` | `SignedBytes` HMAC-SHA256 wrapper for pickle backends; `FLECHE_SECRET_KEY` env var / `secret_key` config key |
 
-**Storage class pattern:** Compose `ValueMixin`/`CallMixin`/`DestructuringMixin` + a `*Backend` using `@dataclass(frozen=True)` — Python's MRO collects all fields into one generated `__init__`.
+**Storage layout (`storage/`):**
+- `base.py` — `KeyManagement` (list/_evict/_contains/expand/shrink) → `StorageBackend` (adds `put`/`get`) → domain ABCs `ValueStorage`/`CallStorage` (`save`/`load`[/`query`]) → **bridge mixins** `ValueMixin`/`CallMixin` that implement `save`/`load` on top of `put`/`get`
+- `memory.py`, `void.py`, `pickle_file.py`, `bagofholding_file.py`, `sql.py` — concrete backends (each exposes `Value*` and/or `Call*` classes; `sql.py` only has `Sql` for calls)
+- `file.py` — shared `FileStorage` base for disk-backed backends (locking, root dir, compress)
+- `destructuring.py` — `DestructuringMixin` for recursive value splitting + `DigestedIterable`/`DigestedDict` markers
+- `thread_safe.py` — `SerializingMixin`, `PerKeyLockMixin` (wrap backends via `_operation_context`)
+
+**Storage class composition:** Concrete classes like `ValueMemory(ValueMixin, DestructuringMixin, MemoryBackend)` are `@dataclass(frozen=True)`. Each mixin/backend declares its own fields; Python's dataclass machinery merges them into one generated `__init__` via MRO — **do not pass `init=False`**.
 
 ---
-
-## What is fleche?
-
-A persistent caching library for Python functions — like `lru_cache` but persisted across runs. The `@fleche()` decorator wraps functions, generates content-based cache keys via SHA256 hashing, and stores results in configurable backends (file, SQL, memory, HDF5).
 
 ## Commands
 
 ```bash
-# Install with test dependencies
-pip install -e ".[tests]"
-
-# Run all tests
-pytest tests/
-
-# Run a single test file
-pytest tests/unit/digest/test_digest.py
-
-# Run a single test
-pytest tests/unit/digest/test_digest.py::test_name
-
-# Type checking
-ty check src/
-
-# Run benchmarks
-python -m benchmarks.run_benchmarks
+pip install -e ".[tests]"                              # install with test deps
+pytest tests/                                          # all tests
+pytest tests/unit/digest/test_digest.py::test_name     # single test
+ty check src/                                          # type check
+python -m benchmarks.run_benchmarks                    # benchmarks
 ```
 
-Linting: flake8 with max-line-length=120 (see `.flake8`).
+Lint: flake8, `max-line-length=120` (`.flake8`).
 
-## Architecture
+## Architecture notes
 
 ### Core data flow
 
-1. `@fleche()` wraps a function
-2. On call: args/kwargs → `Call.from_call()` → `.to_lookup_key()` → `digest.digest()` (SHA256 hex string)
-3. Cache hit → return stored result; cache miss → execute, collect metadata, store `Call` + result
-4. Active cache is a context variable in `state.py` — thread-safe, switchable via `with cache(my_cache):`
+1. `@fleche()` wraps a function.
+2. On call: args/kwargs → `Call.from_call()` → `.to_lookup_key()` → `digest()` (SHA256 hex).
+3. Hit → return stored result. Miss → execute, run post-hooks (metadata), save `Call` + result.
+4. Active cache is a `ContextVar` — thread-safe, switchable via `with cache(my_cache):`.
 
-### Key modules
+### Cache key control
 
-- **`wrapper.py`** — `fleche()` decorator; attaches helpers (`.call()`, `.digest()`, `.load()`, `.contains()`, `.query()`, `.rerun()`) to the wrapped function; handles `Ignored`/`Required` argument markers and versioning
-- **`digest.py`** — `Digest` (subclass of `str`) and `digest()` function; SHA256 over arbitrary Python objects; extensible hook system for custom types; handles numpy, pandas, complex numbers
-- **`call.py`** — `Call` dataclass holding function name, arguments dict, metadata, module/version/code_digest; `LazyCall` for deferred deserialization; `QueryCall` for wildcard searches
-- **`caches.py`** — `BaseCache` abstract base; `Cache` (main, wraps value + call storage); `CacheStack` (layered hierarchy); `ReadOnlyCache`, `FilteredCache`, `RefreshingCache`
-- **`storage/`** — Backend implementations all implement `save/load/_contains/list/expand/shrink`: `memory.py` (dict), `void.py` (no-op), `pickle_file.py` (filesystem), `sql.py` (SQLAlchemy), `bagofholding_file.py` (HDF5)
-- **`state.py`** — `ContextVar`-based global state; `cache()`, `meta()`, `tags()`, `project()` context managers
-- **`config.py`** — TOML config loader; looks for `fleche.toml` (local) or `~/.fleche.toml` (XDG global); defines named caches and metadata defaults
-- **`metadata.py`** — Pre/post execution hooks producing JSON-serializable values; built-ins: `Runtime`, `Tags`
-- **`query.py`** — `QueryIterator` with `.table()` → pandas DataFrame
+Decorator kwargs (`wrapper.py`): `version`, `meta`, `hash_version`, `hash_module`, `hash_code` (hashes function source), `require`/`ignore` (arg name lists), `isolate`. Plus per-argument markers `Ignored[T]` / `Required[T]` via `__class_getitem__`. Bump `version=` to invalidate without changing code.
 
 ### Storage hierarchy
 
 ```
 Cache
-├── values: ValueStorage  → (ValueMemory | ValuePickleFile | ValueBagOfHoldingH5File | Void)
-└── calls: CallStorage    → (CallMemory | CallPickleFile | CallBagOfHoldingH5File | Sql | Void)
+├── values: ValueStorage  → ValueMemory | ValuePickleFile | ValueBagOfHoldingH5File | ValueVoid
+└── calls:  CallStorage   → CallMemory  | CallPickleFile  | CallBagOfHoldingH5File  | CallVoid | Sql
 ```
 
-Values and calls are stored separately so metadata/call records can be queried without deserializing heavy results.
+### Config
 
-### Composing storage classes with dataclass mixins
-
-Storage classes are built by composing mixins (`ValueMixin`, `CallMixin`, `DestructuringMixin`) with concrete backends
-(`MemoryBackend`, `PickleFileBackend`, etc.). Most are implemented as dataclasses, some may not.  To ensure the
-concretely constructed class has a correct init, it must be rewrapped
-
-**Intermediate/mixin classes:**
-```python
-@dataclass(frozen=True)
-class DestructuringMixin(StorageBackend):
-    remaining_depth: int = 0
-    # ... methods
-```
-
-**Backend implementations:**
-```python
-@dataclass(frozen=True)
-class MemoryBackend(StorageBackend):
-    storage: dict[Digest, Any]
-```
-
-**Concrete composed classes:** Use `@dataclass(frozen=True)` without `init=False` — Python's dataclass machinery
-automatically collects all fields from parent classes in MRO order and generates a single combined `__init__`
-
-```python
-@dataclass(frozen=True)
-class ValueMemory(ValueMixin, DestructuringMixin, MemoryBackend): ...
-    # Generated __init__(storage, remaining_depth=0)
-```
-
-This way fields stay defined in their logical homes, intermediate classes don't need to know about fields they inherit,
-and concrete classes get a clean, auto-generated init that handles all fields.
-
-### Cache key control
-
-The `@fleche()` decorator accepts flags to include/exclude from the hash: `hash_version`, `hash_module`, `hash_code` (hashes the function source), plus per-argument `Ignored`/`Required` wrappers. This lets users invalidate caches by bumping a version number without changing code.
-
-### Configuration
-
-`fleche.toml` example:
+See `config.py` module docstring for the authoritative type-string reference. Example `fleche.toml`:
 ```toml
 [default]
-cache = "mycache"
+cache = "persistent"
 metadata = ["Runtime"]
 
-[mycache]
+[persistent]
 values.type = "cloudpickle"
-values.root = ".fleche/values"
-calls.type = "cloudpickle"
-calls.root = ".fleche/calls"
+values.root = "~/.fleche/values"
+calls.type  = "cloudpickle"
+calls.root  = "~/.fleche/calls"
 ```
+
+### Security (optional)
+
+Pickle-family backends accept `secret_key` (list of hex strings) or fall back to `FLECHE_SECRET_KEY` env var (colon-separated hex). `SignedBytes` in `security.py` signs payloads with HMAC-SHA256; hex encoding avoids the pickle STOP opcode. Supports key rotation (first key signs, all keys verify).
 
 ## Test layout
 
 ```
 tests/
-├── unit/          # Per-module unit tests (digest/, call/, caches/, storage/, ...)
-├── integration/   # Cross-module tests (notebooks, SQL constraints, threading, executors)
-├── regression/    # Bug-specific regression tests (e.g. test_issue_297.py)
-├── fixtures.py    # Shared pytest fixtures
-└── strategies.py  # Hypothesis strategies
+├── unit/
+│   ├── caches/      # cache/stack/filter/readonly/size_limited/lazy_call/redigest/expand_shrink
+│   ├── call/        # partial binding, code digest, matches
+│   ├── config/
+│   ├── digest/
+│   ├── fleche/      # decorator, hash_code, ignore/required, processpool, rerun, bound_wrapper, ...
+│   ├── metadata/
+│   └── storage/     # pickle_file, bagofholding_file, sql_*, destructuring, thread_safe, secure, void, short_digest, operation_context, optional_deps, overwrite, transform
+├── integration/     # notebooks, parallel execution, methods, wrapper+query, hash_code
+├── regression/      # test_issue_297, test_issue_319, test_sql_concurrent_save, test_sql_table_uniqueness
+├── fixtures.py      # shared pytest fixtures
+└── strategies.py    # hypothesis strategies
 ```
 
 ## PR and Issue notes
