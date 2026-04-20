@@ -156,6 +156,66 @@ processes, the same rules as ``ProcessPoolExecutor`` apply:
                       for i in range(4)]
            results = [f.result() for f in futures]
 
+Future Pass-Through — Caching Async-style Results
+--------------------------------------------------
+
+As an alternative to :class:`~fleche.BoundWrapper`, you can write a
+fleche-decorated function that itself submits work to an executor and returns
+the resulting :class:`~concurrent.futures.Future`.  Fleche detects the
+``Future`` return value, passes it through to the caller unchanged, and
+automatically caches the result once the future completes:
+
+.. code-block:: python
+
+   import concurrent.futures
+   import fleche
+   from fleche.caches import Cache
+   from fleche.storage.memory import ValueMemory, CallMemory
+
+   _executor = concurrent.futures.ThreadPoolExecutor()
+
+   @fleche.fleche
+   def compute(x):
+       """Submits work and returns a Future — fleche caches on completion."""
+       return _executor.submit(lambda: x ** 2)
+
+   my_cache = Cache(ValueMemory({}), CallMemory({}))
+
+   with fleche.cache(my_cache):
+       future = compute(4)   # returns the Future immediately
+       result = future.result()   # 16, and the result is now cached
+
+On the next call, ``compute(4)`` returns the cached value directly (no
+``Future`` is created).
+
+When to prefer each pattern
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. list-table::
+   :header-rows: 1
+   :widths: 45 55
+
+   * - Future pass-through
+     - :class:`~fleche.BoundWrapper`
+   * - The decorated function owns its own executor and naturally returns a
+       ``Future``
+     - You submit a fleche-decorated function to an *external* executor
+   * - No need to change the call site — callers already handle ``Future``
+       objects
+     - You want to fan out many calls to the same decorated function across a
+       pool
+   * - Works with ``ThreadPoolExecutor``; for ``ProcessPoolExecutor`` the
+       cache context must still be available in the worker (use file/SQL
+       storage)
+     - Works with both thread- and process-based executors; the cache is
+       embedded in the callable
+
+.. note::
+
+   When a decorated function with future pass-through is called and a cached
+   value already exists, the function is **not** invoked and no ``Future`` is
+   created — the cached result is returned directly.
+
 The ``isolate`` Flag
 --------------------
 
@@ -185,7 +245,7 @@ Quick Reference
    * - ``ThreadPoolExecutor``
      - Yes
      - No (manual)
-     - ``BoundWrapper.bind(func)``
+     - ``BoundWrapper.bind(func)`` or future pass-through
    * - ``ProcessPoolExecutor``
      - Yes
      - No (separate process)
@@ -194,6 +254,10 @@ Quick Reference
      - Yes
      - No (separate process)
      - File/SQL storage + ``BoundWrapper``
+   * - Function returns ``Future`` directly
+     - Yes
+     - Yes (same thread/context)
+     - Future pass-through (function returns its own ``Future``)
 
 Known Limitations
 -----------------
