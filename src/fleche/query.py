@@ -21,31 +21,6 @@ class QueryIterator(Iterable[call.LazyCall]):
     def __iter__(self) -> Iterator[call.LazyCall]:
         yield from self.calls
 
-    def first(self) -> call.LazyCall:
-        """Return the first matching call.
-
-        Raises:
-            IndexError: if there are no matching calls
-        """
-        for c in self:
-            return c
-        raise IndexError("QueryIterator is empty")
-
-    def last(self) -> call.LazyCall:
-        """Return the last matching call.
-
-        Raises:
-            IndexError: if there are no matching calls
-        """
-        result = None
-        found = False
-        for c in self:
-            result = c
-            found = True
-        if not found:
-            raise IndexError("QueryIterator is empty")
-        return result  # type: ignore[return-value]
-
     def only(self) -> call.LazyCall:
         """Return the single matching call.
 
@@ -68,15 +43,20 @@ class QueryIterator(Iterable[call.LazyCall]):
         """Return the total number of matching calls."""
         return builtins.sum(1 for _ in self)
 
-    def any(self) -> bool:
-        """Return True if at least one matching call exists (short-circuits)."""
-        for _ in self:
-            return True
-        return False
+    def any(self) -> "call.LazyCall | None":
+        """Return the first matching call, or None if there are no matching calls.
+
+        Use `.sorted(reverse=...)` to control which call is returned when ordering matters.
+        """
+        for c in self:
+            return c
+        return None
 
     def empty(self) -> bool:
         """Return True if there are no matching calls."""
-        return not self.any()
+        for _ in self:
+            return False
+        return True
 
     def take(self, n: int) -> "QueryIterator":
         """Return first n results as a new QueryIterator (lazy)."""
