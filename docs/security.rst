@@ -39,7 +39,7 @@ Both sources use the same key format and normalization logic: any ``bytes`` valu
 When enabled, ``fleche`` will compute an HMAC-SHA256 signature for all newly cached data and append it to the file as a 64-byte hex string. Upon loading, ``fleche`` separates the signature and verifies the integrity of the data. If the signature is invalid or missing entirely from a modified file, a ``KeyError`` is raised, effectively treating the entry as a cache miss.
 
 Backward Compatibility
---------------------
+----------------------
 
 The signing implementation is designed to be partially backward compatible. Signatures are appended to the *end* of the ``pickle`` byte stream.
 

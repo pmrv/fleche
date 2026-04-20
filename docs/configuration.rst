@@ -98,78 +98,90 @@ Example:
 Available storage types
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-``"memory"``
-    Stores data in an in-memory dictionary
-    (:class:`~fleche.storage.ValueMemory` / :class:`~fleche.storage.CallMemory`).
-    No required keys.
-    Optional (value backend): ``remaining_depth`` — see `Destructuring`_ below.
+.. list-table::
+   :header-rows: 1
+   :widths: 20 35 15 30
 
-``"void"``
-    No-op backend — discards all data
-    (:class:`~fleche.storage.ValueVoid` / :class:`~fleche.storage.CallVoid`).
-    No required keys.
-    Optional (value backend): ``remaining_depth`` — see `Destructuring`_ below.
+   * - Type
+     - Description
+     - Required
+     - Optional
+   * - ``"memory"``
+     - In-memory dictionary
+       (:class:`~fleche.storage.ValueMemory` / :class:`~fleche.storage.CallMemory`)
+     - —
+     - ``remaining_depth`` *(value only)*
+   * - ``"void"``
+     - No-op; discards all data
+       (:class:`~fleche.storage.ValueVoid` / :class:`~fleche.storage.CallVoid`)
+     - —
+     - —
+   * - ``"pickle"``
+     - Filesystem backend, standard ``pickle``
+       (:class:`~fleche.storage.ValuePickleFile` / :class:`~fleche.storage.CallPickleFile`)
+     - ``root``
+     - ``compress``, ``lock_timeout``, ``lock_wait_start``,
+       ``secret_key``, ``remaining_depth`` *(value only)*
+   * - ``"cloudpickle"``
+     - Filesystem backend, ``cloudpickle``; handles lambdas, closures, etc.
+       (same classes as ``"pickle"``)
+     - ``root``
+     - same as ``"pickle"``
+   * - ``"dill"``
+     - Filesystem backend, ``dill``
+       (same classes as ``"pickle"``)
+     - ``root``
+     - same as ``"pickle"``
+   * - ``"bagofholding_hdf"``
+     - HDF5 files via ``bagofholding``
+       (:class:`~fleche.storage.ValueBagOfHoldingH5File` /
+       :class:`~fleche.storage.CallBagOfHoldingH5File`)
+     - ``root``
+     - ``lock_timeout``, ``lock_wait_start``,
+       ``version_validator``, ``remaining_depth`` *(value only)*
+   * - ``"sql"``
+     - SQL via SQLAlchemy (:class:`~fleche.storage.Sql`).
+       *Call storage only.*
+     - ``url``
+     - ``echo``
 
-``"pickle"``
-    Stores data as files on the filesystem using the standard ``pickle`` module
-    (:class:`~fleche.storage.ValuePickleFile` / :class:`~fleche.storage.CallPickleFile`).
-    Required: ``root`` — path to the storage directory.
-    Optional: ``compress`` (bool, default ``false``) — gzip-compress each stored file.
-    Optional: ``lock_timeout`` (float, default ``1.0``) — maximum seconds to wait for
-    a concurrent write lock before attempting a read anyway.
-    Optional: ``lock_wait_start`` (float, default ``0.001``) — initial wait interval
-    (seconds) for exponential backoff while polling the write lock.
-    Optional: ``secret_key`` (list of hex strings) — HMAC-SHA256 signing keys for
-    tamper detection; see :doc:`security` for details.  If omitted, falls back to the
+Key descriptions
+^^^^^^^^^^^^^^^^
+
+``root``
+    Path to the storage directory (string; ``~`` is expanded).
+
+``compress``
+    (bool, default ``false``) — gzip-compress each stored file.
+
+``lock_timeout``
+    (float, default ``1.0``) — maximum seconds to wait for a concurrent write lock
+    before attempting a read anyway.
+
+``lock_wait_start``
+    (float, default ``0.001``) — initial poll interval (seconds) for exponential
+    backoff while waiting for the write lock.
+
+``secret_key``
+    (list of hex strings) — HMAC-SHA256 signing keys for tamper detection;
+    see :doc:`security` for details.  If omitted, falls back to the
     ``FLECHE_SECRET_KEY`` environment variable.
-    Optional (value backend): ``remaining_depth`` — see `Destructuring`_ below.
 
-``"cloudpickle"``
-    Same filesystem backend as ``"pickle"``, but serialised with ``cloudpickle``.
-    Handles more complex Python objects (lambdas, closures, etc.).
-    Required: ``root``.
-    Optional: ``compress`` (bool, default ``false``) — gzip-compress each stored file.
-    Optional: ``lock_timeout`` (float, default ``1.0``) — maximum seconds to wait for
-    a concurrent write lock before attempting a read anyway.
-    Optional: ``lock_wait_start`` (float, default ``0.001``) — initial wait interval
-    (seconds) for exponential backoff while polling the write lock.
-    Optional: ``secret_key`` (list of hex strings) — same as ``"pickle"``.
-    Optional (value backend): ``remaining_depth`` — see `Destructuring`_ below.
+``url``
+    SQLAlchemy connection URL, e.g. ``"sqlite:///~/.fleche/calls.db"``.
 
-``"dill"``
-    Same filesystem backend as ``"pickle"``, but serialised with ``dill``.
-    Required: ``root``.
-    Optional: ``compress`` (bool, default ``false``) — gzip-compress each stored file.
-    Optional: ``lock_timeout`` (float, default ``1.0``) — maximum seconds to wait for
-    a concurrent write lock before attempting a read anyway.
-    Optional: ``lock_wait_start`` (float, default ``0.001``) — initial wait interval
-    (seconds) for exponential backoff while polling the write lock.
-    Optional: ``secret_key`` (list of hex strings) — same as ``"pickle"``.
-    Optional (value backend): ``remaining_depth`` — see `Destructuring`_ below.
+``echo``
+    (bool, default ``false``) — log all SQL statements to stderr (useful for
+    debugging).
 
-``"bagofholding_hdf"``
-    Stores data in HDF5 files using the ``bagofholding`` library
-    (:class:`~fleche.storage.ValueBagOfHoldingH5File` /
-    :class:`~fleche.storage.CallBagOfHoldingH5File`).
-    Required: ``root``.
-    Optional: ``lock_timeout`` (float, default ``1.0``) — maximum seconds to wait for
-    a concurrent write lock before attempting a read anyway.
-    Optional: ``lock_wait_start`` (float, default ``0.001``) — initial wait interval
-    (seconds) for exponential backoff while polling the write lock.
-    Optional: ``version_validator`` (str, default omitted) — version validation
-    strategy passed to ``bagofholding``'s ``H5Bag.load``.  One of ``"exact"``,
+``version_validator``
+    (str, default omitted) — version validation strategy passed to
+    ``bagofholding``'s ``H5Bag.load``.  One of ``"exact"``,
     ``"semantic-minor"``, ``"semantic-major"``, or ``"none"``.  When omitted,
     ``bagofholding``'s own default applies.
-    Optional (value backend): ``remaining_depth`` — see `Destructuring`_ below.
 
-``"sql"``
-    Stores call metadata in a SQL database via SQLAlchemy
-    (:class:`~fleche.storage.Sql`).
-    Intended for **call storage only**.
-    Required: ``url`` — a SQLAlchemy connection URL, e.g.
-    ``"sqlite:///~/.fleche/calls.db"``.
-    Optional: ``echo`` (bool, default ``false``) — if ``true``, log all SQL statements
-    (useful for debugging).
+``remaining_depth``
+    (int, default ``0``) — destructuring depth; see `Destructuring`_ below.
 
 Destructuring
 ^^^^^^^^^^^^^

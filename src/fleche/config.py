@@ -15,7 +15,6 @@ following **lowercase** identifiers:
 ``"void"``
     No-op — discards all data (:class:`~fleche.storage.ValueVoid` /
     :class:`~fleche.storage.CallVoid`).  No required keys.
-    Optional (value backend): ``remaining_depth`` (int, default ``0``).
 
 ``"pickle"``
     Filesystem backend serialised with the standard ``pickle`` module
@@ -230,7 +229,7 @@ def storage_from_config(d: dict[str, Any], type: Literal["call", "value"]) -> st
     backend = d.pop("type")
     match backend:
         case "memory":
-            return _STORAGE_NAME_MAPPING[backend, type]({})  # type: ignore
+            return _STORAGE_NAME_MAPPING[backend, type]({}, **d)  # type: ignore
         case "void":
             return _STORAGE_NAME_MAPPING[backend, type]()  # type: ignore
         case "bagofholding_hdf" | "pickle" | "dill" | "cloudpickle":
