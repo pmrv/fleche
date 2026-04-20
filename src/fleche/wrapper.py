@@ -141,6 +141,20 @@ def _get_working_directory_root() -> Path:
     return root
 
 
+def _attach(wrapper, fn, *, name, doc_prefix, ret=None, extra_doc=""):
+    fn.__name__ = name
+    fn.__qualname__ = f"{wrapper.__qualname__}.{name}"
+    _doc = f"{doc_prefix} {wrapper.__name__}."
+    if extra_doc:
+        _doc += f"\n\n{extra_doc}"
+    _doc += f"\n\n{wrapper.__doc__ or ''}"
+    fn.__doc__ = _doc
+    fn.__annotations__ = dict(fn.__annotations__)
+    if ret is not None:
+        fn.__annotations__["return"] = ret
+    setattr(wrapper, name, fn)
+
+
 _T = TypeVar("_T")
 
 def fleche(
@@ -235,7 +249,7 @@ def fleche(
             return state._CACHE.get().query(call)
 
         _query_doc = _query_func.__doc__
-        _query_func = wraps(func)(_query_func)  # ty: ignore
+        wraps(func)(_query_func)  # ty: ignore
 
         @wraps(func)
         def _load_func(*args, **kwargs):
@@ -247,39 +261,9 @@ def fleche(
 
         @wraps(func)
         def _rerun_func(*args, **kwargs):
-            """Force execution even if calls (or *any* nested ones) are already present in the cache and overwrite previously saved results."""
             cache: BaseCache = state._CACHE.get()
             with state.cache(RefreshingCache(cache)):
                 return wrapper(*args, **kwargs)
-
-        for name, helper, doc_prefix, ret in [
-            ("call", get_call, "Get the Call object for", Call),
-            ("digest", _digest_func, "Get the cache key for", digest.Digest),
-            (
-                "query",
-                _query_func,
-                "Return matching results from current cache for",
-                Iterable[Call],
-            ),
-            ("load", _load_func, "Load result from cache for", None),
-            ("contains", _contains_func, "Check if result is in cache for", bool),
-            (
-                "rerun",
-                _rerun_func,
-                "Force reevaluation recursively for",
-                None,
-            ),
-        ]:
-            helper.__name__ = name
-            helper.__qualname__ = f"{helper.__qualname__}.{name}"
-            _doc = f"{doc_prefix} {getattr(func, '__name__', 'unknown')}."
-            if name == "query":
-                _doc += f"\n\n{_query_doc}"
-            _doc += f"\n\n{getattr(func, '__doc__', '') or ''}"
-            helper.__doc__ = _doc
-            helper.__annotations__ = dict(helper.__annotations__)
-            if ret:
-                helper.__annotations__["return"] = ret
 
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> _T:
@@ -348,12 +332,13 @@ def fleche(
             else:
                 return _run_and_cache()
 
-        wrapper.call = get_call             # ty: ignore
-        wrapper.digest = _digest_func       # ty: ignore
-        wrapper.query = _query_func         # ty: ignore
-        wrapper.load = _load_func           # ty: ignore
-        wrapper.contains = _contains_func   # ty: ignore
-        wrapper.rerun = _rerun_func          # ty: ignore
+        _attach(wrapper, get_call, name="call", doc_prefix="Get the Call object for", ret=Call)
+        _attach(wrapper, _digest_func, name="digest", doc_prefix="Get the cache key for", ret=digest.Digest)
+        _attach(wrapper, _query_func, name="query", doc_prefix="Return matching results from current cache for",
+                ret=Iterable[Call], extra_doc=_query_doc)
+        _attach(wrapper, _load_func, name="load", doc_prefix="Load result from cache for")
+        _attach(wrapper, _contains_func, name="contains", doc_prefix="Check if result is in cache for", ret=bool)
+        _attach(wrapper, _rerun_func, name="rerun", doc_prefix="Force reevaluation recursively for")
         return wrapper
 
     if callable(_func):
