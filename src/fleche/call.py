@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field, replace
-from typing import Any
+from typing import Any, Callable
 from inspect import signature
 from collections.abc import Mapping
 
@@ -30,37 +30,6 @@ def bind(func, args, kwargs, apply_defaults=False, partial=False):
     if apply_defaults:
         bound.apply_defaults()
     return bound.arguments
-
-
-@dataclass
-class DigestedCall:
-    """A Call where arguments and result are :class:`~fleche.digest.Digest` pointers into a value store.
-
-    Produced by :meth:`Call.dehydrate`; represents a call whose values have been
-    persisted so only their content-addressed keys remain.
-    """
-
-    name: str
-    arguments: dict[str, "digest.Digest"]
-    result: "digest.Digest"
-    metadata: dict[str, dict[str, Any]] = field(default_factory=dict)
-    module: str | None = None
-    version: int | None = None
-    code_digest: str | None = None
-
-    def to_lookup_key(self) -> str:
-        # Delegate to Call so the key is identical to the pre-dehydration Call's key.
-        # This works because digest(Digest(x)) == x, so digested argument values
-        # hash identically to their originals.
-        return Call(
-            name=self.name,
-            arguments=self.arguments,
-            metadata=None,
-            module=self.module,
-            version=self.version,
-            code_digest=self.code_digest,
-            result=None,
-        ).to_lookup_key()
 
 
 @dataclass
@@ -98,7 +67,29 @@ class Call:
         call = replace(self, arguments=arg_pairs, metadata=None, result=None)
         return digest.digest(call)
 
-    def dehydrate(self, values) -> "DigestedCall":
+    def _to_digested(self, save_fn: Callable[[Any], "digest.Digest"]) -> "DigestedCall":
+        """Generic conversion to DigestedCall using *save_fn* to handle each value."""
+        result = save_fn(self.result)
+        arguments: dict[str, digest.Digest] = {}
+        for k, v in self.arguments.items():
+            if isinstance(v, digest.Digest):
+                arguments[k] = v
+            else:
+                try:
+                    arguments[k] = save_fn(v)
+                except Exception:
+                    arguments[k] = digest.digest(v)
+        return DigestedCall(
+            name=self.name,
+            arguments=arguments,
+            result=result,
+            metadata=self.metadata,
+            module=self.module,
+            version=self.version,
+            code_digest=self.code_digest,
+        )
+
+    def stash(self, values) -> "DigestedCall":
         """Save arguments and result into *values*, returning a :class:`DigestedCall`.
 
         Result save errors propagate to the caller.  Argument save errors fall back
@@ -112,25 +103,59 @@ class Call:
             A :class:`DigestedCall` with all argument values and the result replaced by
             their :class:`~fleche.digest.Digest` keys.
         """
-        result = values.save(self.result)
-        arguments: dict[str, digest.Digest] = {}
-        for k, v in self.arguments.items():
-            if isinstance(v, digest.Digest):
-                arguments[k] = v
-            else:
-                try:
-                    arguments[k] = values.save(v)
-                except Exception:
-                    arguments[k] = digest.digest(v)
-        return DigestedCall(
+        return self._to_digested(values.save)
+
+    def freeze(self) -> "DigestedCall":
+        """Digest arguments and result without saving to storage, returning a :class:`DigestedCall`.
+
+        Equivalent to :meth:`stash` but uses :func:`~fleche.digest.digest` instead of
+        ``values.save``, so no data is written anywhere.
+        """
+        return self._to_digested(digest.digest)
+
+
+@dataclass
+class DigestedCall:
+    """A Call where arguments and result are :class:`~fleche.digest.Digest` pointers into a value store.
+
+    Produced by :meth:`Call.stash` or :meth:`Call.freeze`; represents a call whose values have been
+    replaced by their content-addressed keys.
+    """
+
+    name: str
+    arguments: dict[str, "digest.Digest"]
+    result: "digest.Digest | None" = None
+    metadata: dict[str, dict[str, Any]] = field(default_factory=dict)
+    module: str | None = None
+    version: int | None = None
+    code_digest: str | None = None
+
+    def to_lookup_key(self) -> str:
+        # Independent implementation: build a Call directly without calling Call.to_lookup_key.
+        # digest(Digest(x)) == x, so digested argument values hash identically to their originals.
+        arg_pairs = tuple(self.arguments.items())
+        c = Call(name=self.name, arguments={}, module=self.module, version=self.version, code_digest=self.code_digest)
+        return digest.digest(replace(c, arguments=arg_pairs, result=None, metadata=None))
+
+    def fetch(self, values) -> "Call":
+        """Reconstruct a full :class:`Call` by loading all values from *values*.
+
+        Args:
+            values: A :class:`~fleche.storage.ValueStorage` instance to load values from.
+
+        Returns:
+            A :class:`Call` with all argument and result digests replaced by their stored values.
+        """
+        return Call(
             name=self.name,
-            arguments=arguments,
-            result=result,
+            arguments={k: values.load(v) for k, v in self.arguments.items()},
+            result=values.load(self.result) if self.result is not None else None,
             metadata=self.metadata,
             module=self.module,
             version=self.version,
             code_digest=self.code_digest,
         )
+
 
 class LazyArguments(Mapping):
     def __init__(self, cache, arg_digests):
@@ -176,17 +201,13 @@ class LazyCall:
         return self._cache.load_value(self._result)
 
     def to_lookup_key(self) -> str:
-        # Reconstruct a Call object to ensure identical key calculation
-        c = Call(
+        return DigestedCall(
             name=self.name,
             arguments=self._arguments,
-            metadata=self.metadata,
             module=self.module,
             version=self.version,
             code_digest=self.code_digest,
-            result=None
-        )
-        return c.to_lookup_key()
+        ).to_lookup_key()
 
     def fetch(self) -> Call:
         """Reconstruct a full Call object by loading all values from the cache."""
