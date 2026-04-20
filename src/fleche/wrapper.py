@@ -7,6 +7,7 @@ from dataclasses import dataclass, replace
 import tempfile
 import contextlib
 from collections import defaultdict
+from concurrent.futures import Future
 
 from . import digest
 from . import state
@@ -289,21 +290,33 @@ def make_wrapper(func, policy, meta, isolate, get_call):
             for m in active_meta:
                 metadata[m.name] |= m.pre(replace(call, metadata={}))
 
-            call.result: _T = func(*args, **kwargs)
-            if call.result is None:
-                logger.warning("Function returned None, not caching")
-                return None
-            for m in active_meta:
-                metadata[m.name] |= m.post(
-                    metadata[m.name], replace(call, metadata={})
-                )
-            try:
-                call.metadata = metadata
-                logger.debug("Saving result for %s with key %s", call.name, key)
-                cache.save(call)
-            except Rejected as e:
-                logger.warning("Cache rejected save: %s", e.args)
-            return call.result
+            result: _T = func(*args, **kwargs)
+
+            def _cache(future = None):
+                if future is None:
+                    call.result = result
+                else:
+                    call.result = future.result()
+                if call.result is None:
+                    logger.warning("Function returned None, not caching")
+                    return None
+                for m in active_meta:
+                    metadata[m.name] |= m.post(
+                        metadata[m.name], replace(call, metadata={})
+                    )
+                try:
+                    call.metadata = metadata
+                    logger.debug("Saving result for %s with key %s", call.name, key)
+                    cache.save(call)
+                except Rejected as e:
+                    logger.warning("Cache rejected save: %s", e.args)
+                return call.result
+
+            if not isinstance(result, Future):
+                return _cache()
+            else:
+                result.add_done_callback(_cache)
+                return result
 
         if isolate:
             root = _get_working_directory_root()
