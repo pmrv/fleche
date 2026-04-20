@@ -5,71 +5,53 @@ import numpy as np
 from fleche.storage import SaveError
 from fleche.storage.sql import Sql
 from fleche.call import Call
-from fleche.digest import digest, Digest
-from fleche.storage.destructuring import DigestedIterable
+from fleche.digest import digest
 
 from tests.strategies import st_data, st_digested_calls
 
 
+# ------------------------
+# StorageBackend property tests
+# ------------------------
+
+
 @settings(deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
-@given(st_data)
-def test_storage(value_storage, value):
+@given(value=st_data)
+def test_backend_put_get_roundtrip(storage_backend, value):
+    key = digest(value)
     try:
-        key = value_storage.save(value)
+        returned_key = storage_backend.put(value, key)
     except SaveError:
-        return  # not everyone can save everyone and that's ok, too
-    loaded_value = value_storage.load(key)
+        return
+    assert returned_key == key
+    loaded = storage_backend.get(key)
     if isinstance(value, np.ndarray):
-        np.testing.assert_array_equal(loaded_value, value)
+        np.testing.assert_array_equal(loaded, value)
     else:
-        assert loaded_value == value
-
-
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-@given(st_data)
-def test_storage_given_key(value_storage, value):
-    # make up a unique key by hashing hash
-    given_key = digest(str(digest(value)))
-    try:
-        key = value_storage.save(value, key=given_key)
-    except SaveError:
-        return  # not everyone can save everyone and that's ok, too
-    assert key == given_key, "When forcing a key, storage must return the same key"
-
-    loaded_value = value_storage.load(given_key)
-    if isinstance(value, np.ndarray):
-        np.testing.assert_array_equal(loaded_value, value)
-    else:
-        assert loaded_value == value, "value not available under given key"
-
-
-# ------------------------
-# CallStorage property tests
-# ------------------------
+        assert loaded == value
 
 
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 @given(call=st_digested_calls)
-def test_callstorages_random_calls_roundtrip(call_storage, call):
+def test_backend_stores_call_objects(storage_backend, call):
+    key = call.to_lookup_key()
     try:
-        key = call_storage.save(call)
+        storage_backend.put(call, key)
     except SaveError:
-        # Some backends may not support serializing arbitrary dataclasses; skip in that case
         return
-    loaded = call_storage.load(key)
+    loaded = storage_backend.get(key)
     assert loaded == call
 
 
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-@given(call=st_digested_calls)
-def test_callstorages_short_prefix_load(call_storage, call):
+@given(value=st_data)
+def test_backend_short_prefix_expand(storage_backend, value):
+    key = digest(value)
     try:
-        key = call_storage.save(call)
+        storage_backend.put(value, key)
     except SaveError:
         return
-    short = key[:8]
-    loaded = call_storage.load(short)
-    assert loaded == call
+    assert storage_backend.expand(key[:8]) == key
 
 
 def test_callstorages_evict(call_storage):
