@@ -11,7 +11,7 @@ import pandas as pd
 from . import digest as _digest
 from .digest import Digest  # type hint convenience
 from . import storage
-from .call import Call, LazyCall, QueryCall
+from .call import Call, DigestedCall, LazyCall, QueryCall
 from . import call
 from . import query
 
@@ -276,27 +276,33 @@ class Cache(BaseCache):
         return self.calls.save(call)
 
     @overload
-    def _decode_call(self, call: Call, lazy: bool = False) -> Call: ...
+    def _decode_call(self, dc: DigestedCall, lazy: bool = False) -> Call: ...
 
     @overload
-    def _decode_call(self, call: Call, lazy: bool = True) -> LazyCall: ...
+    def _decode_call(self, dc: DigestedCall, lazy: bool = True) -> LazyCall: ...
 
-    def _decode_call(self, call: Call, lazy: bool) -> Call | LazyCall:
+    def _decode_call(self, dc: DigestedCall, lazy: bool) -> Call | LazyCall:
         if lazy:
             return LazyCall(
-                name=call.name,
-                _arguments=call.arguments,
-                _result=call.result,
+                name=dc.name,
+                _arguments=dc.arguments,
+                _result=dc.result,
                 _cache=self,
-                metadata=call.metadata,
-                module=call.module,
-                version=call.version,
-                code_digest=call.code_digest,
+                metadata=dc.metadata,
+                module=dc.module,
+                version=dc.version,
+                code_digest=dc.code_digest,
             )
 
-        call.arguments = {k: self._handle_args_load(v) for k, v in call.arguments.items()}
-        call.result = self.load_value(call.result)
-        return call
+        return Call(
+            name=dc.name,
+            arguments={k: self._handle_args_load(v) for k, v in dc.arguments.items()},
+            result=self.load_value(dc.result) if isinstance(dc.result, Digest) else dc.result,
+            metadata=dc.metadata,
+            module=dc.module,
+            version=dc.version,
+            code_digest=dc.code_digest,
+        )
 
     @overload
     def load(self, key: str, lazy: bool = False) -> Call: ...
@@ -305,8 +311,8 @@ class Cache(BaseCache):
     def load(self, key: str, lazy: bool = True) -> LazyCall: ...
 
     def load(self, key: str, lazy: bool = True) -> Call | LazyCall:
-        call = self.calls.load(key)
-        return self._decode_call(call, lazy)
+        stored = self.calls.load(key)
+        return self._decode_call(DigestedCall.from_call(stored), lazy)
 
     def contains(self, key: str) -> bool:
         return self.calls.contains(key)
@@ -363,7 +369,7 @@ class Cache(BaseCache):
         )
         for c in self.calls.query(call):
             try:
-                yield self._decode_call(c, lazy=True)
+                yield self._decode_call(DigestedCall.from_call(c), lazy=True)
             except Exception as err:
                 logger.error(
                         f"Failed to load matching call {c.to_lookup_key()} with {err}! Indicates corrupt cache."

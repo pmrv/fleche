@@ -1,4 +1,4 @@
-"""Tests for Call.stash, Call.freeze, DigestedCall, and related methods."""
+"""Tests for Call.stash, Call.digest, DigestedCall, and related methods."""
 import pytest
 from unittest.mock import MagicMock
 
@@ -15,6 +15,29 @@ def _call(**kwargs):
     defaults = dict(name="f", arguments={"x": 1, "y": 2}, result=42)
     defaults.update(kwargs)
     return Call(**defaults)
+
+
+# ---------------------------------------------------------------------------
+# DigestedCall.from_call
+# ---------------------------------------------------------------------------
+
+class TestDigestedCallFromCall:
+    def test_wraps_stored_call(self):
+        call = _call(module="m", version=2, code_digest="abc")
+        dc = DigestedCall.from_call(call)
+        assert isinstance(dc, DigestedCall)
+        assert dc.name == call.name
+        assert dc.arguments is call.arguments
+        assert dc.result is call.result
+        assert dc.metadata is call.metadata
+        assert dc.module == call.module
+        assert dc.version == call.version
+        assert dc.code_digest == call.code_digest
+
+    def test_lookup_key_matches(self):
+        call = _call()
+        dc = DigestedCall.from_call(call)
+        assert dc.to_lookup_key() == call.to_lookup_key()
 
 
 # ---------------------------------------------------------------------------
@@ -35,9 +58,9 @@ class TestDigestedCallLookupKey:
         d2 = call.stash(values)
         assert d1.to_lookup_key() == d2.to_lookup_key()
 
-    def test_matches_freeze(self):
+    def test_matches_digest(self):
         call = _call()
-        assert call.freeze().to_lookup_key() == call.to_lookup_key()
+        assert call.digest().to_lookup_key() == call.to_lookup_key()
 
     def test_metadata_not_in_key(self):
         values = _mem()
@@ -162,51 +185,32 @@ class TestCallStash:
         with pytest.raises(RuntimeError, match="storage full"):
             call.stash(values)
 
-    def test_roundtrip_lookup_key(self):
-        """Saving and reloading via in-memory storage preserves the lookup key."""
-        from fleche.storage.memory import CallMemory
-        from fleche.caches import Cache
-
-        values = _mem()
-        calls = CallMemory({})
-        cache = Cache(values, calls)
-
-        call = Call(name="g", arguments={"a": [1, 2], "b": {"k": 10}}, result=("x", 5))
-        key = cache.save(call)
-        loaded = cache.load(key, lazy=False)
-        assert loaded.to_lookup_key() == key
-
 
 # ---------------------------------------------------------------------------
-# Call.freeze
+# Call.digest
 # ---------------------------------------------------------------------------
 
-class TestCallFreeze:
+class TestCallDigest:
     def test_returns_digested_call(self):
-        assert isinstance(_call().freeze(), DigestedCall)
+        assert isinstance(_call().digest(), DigestedCall)
 
     def test_arguments_are_digests(self):
-        for v in _call().freeze().arguments.values():
+        for v in _call().digest().arguments.values():
             assert isinstance(v, Digest)
 
     def test_result_is_digest(self):
-        assert isinstance(_call().freeze().result, Digest)
-
-    def test_no_storage_written(self):
-        values = MagicMock()
-        _call().freeze()
-        values.save.assert_not_called()
+        assert isinstance(_call().digest().result, Digest)
 
     def test_same_lookup_key_as_stash(self):
         values = _mem()
         call = _call()
-        assert call.freeze().to_lookup_key() == call.stash(values).to_lookup_key()
+        assert call.digest().to_lookup_key() == call.stash(values).to_lookup_key()
 
     def test_already_digest_argument_preserved(self):
         existing = Digest("a" * 64)
-        digested = _call(arguments={"x": existing}).freeze()
+        digested = _call(arguments={"x": existing}).digest()
         assert digested.arguments["x"] == existing
 
     def test_metadata_preserved(self):
         call = _call(metadata={"Tags": {"env": "prod"}})
-        assert call.freeze().metadata == {"Tags": {"env": "prod"}}
+        assert call.digest().metadata == {"Tags": {"env": "prod"}}

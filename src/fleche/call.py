@@ -93,8 +93,7 @@ class Call:
         """Save arguments and result into *values*, returning a :class:`DigestedCall`.
 
         Result save errors propagate to the caller.  Argument save errors fall back
-        to a digest-only reference (the value is hashed but not stored), mirroring the
-        behaviour of :meth:`Cache._handle_args_save`.
+        to a digest-only reference (the value is hashed but not stored).
 
         Args:
             values: A :class:`~fleche.storage.ValueStorage` instance to persist values into.
@@ -102,10 +101,13 @@ class Call:
         Returns:
             A :class:`DigestedCall` with all argument values and the result replaced by
             their :class:`~fleche.digest.Digest` keys.
+
+        See Also:
+            :meth:`digest` for a variant that does not write to storage.
         """
         return self._to_digested(values.save)
 
-    def freeze(self) -> "DigestedCall":
+    def digest(self) -> "DigestedCall":
         """Digest arguments and result without saving to storage, returning a :class:`DigestedCall`.
 
         Equivalent to :meth:`stash` but uses :func:`~fleche.digest.digest` instead of
@@ -118,7 +120,7 @@ class Call:
 class DigestedCall:
     """A Call where arguments and result are :class:`~fleche.digest.Digest` pointers into a value store.
 
-    Produced by :meth:`Call.stash` or :meth:`Call.freeze`; represents a call whose values have been
+    Produced by :meth:`Call.stash` or :meth:`Call.digest`; represents a call whose values have been
     replaced by their content-addressed keys.
     """
 
@@ -129,6 +131,28 @@ class DigestedCall:
     module: str | None = None
     version: int | None = None
     code_digest: str | None = None
+
+    @classmethod
+    def from_call(cls, call: "Call") -> "DigestedCall":
+        """Wrap a stored :class:`Call` whose argument and result fields are already :class:`~fleche.digest.Digest`
+        pointers as a typed :class:`DigestedCall`.
+
+        Args:
+            call: A :class:`Call` loaded from :class:`~fleche.storage.CallStorage`, where
+                ``arguments`` and ``result`` hold :class:`~fleche.digest.Digest` values.
+
+        Returns:
+            A :class:`DigestedCall` with the same field values as *call*.
+        """
+        return cls(
+            name=call.name,
+            arguments=call.arguments,
+            result=call.result,
+            metadata=call.metadata,
+            module=call.module,
+            version=call.version,
+            code_digest=call.code_digest,
+        )
 
     def to_lookup_key(self) -> str:
         # Independent implementation: build a Call directly without calling Call.to_lookup_key.
