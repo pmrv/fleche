@@ -308,33 +308,23 @@ def cache_from_config(d: "dict[str, Any] | list[dict[str, Any]]") -> caches.Base
 
     The input dict is **not** mutated.
 
-    Examples::
+    Examples:
 
-        # Plain cache with in-memory storage
-        cache_from_config({
-            "values": {"type": "memory"},
-            "calls": {"type": "memory"},
-        })
+        >>> c = cache_from_config({"values": {"type": "memory"}, "calls": {"type": "memory"}})
+        >>> type(c).__name__
+        'Cache'
 
-        # Size-limited cache — presence of max_size selects SizeLimitedCache
-        cache_from_config({
-            "values": {"type": "memory"},
-            "calls": {"type": "memory"},
-            "max_size": 100,
-        })
+        >>> c = cache_from_config({"values": {"type": "memory"}, "calls": {"type": "memory"}, "max_size": 100})
+        >>> isinstance(c, caches.SizeLimitedCache)
+        True
 
-        # Read-only cache — read_only: true wraps the cache in ReadOnlyCache
-        cache_from_config({
-            "values": {"type": "memory"},
-            "calls": {"type": "memory"},
-            "read_only": True,
-        })
+        >>> c = cache_from_config({"values": {"type": "memory"}, "calls": {"type": "memory"}, "read_only": True})
+        >>> isinstance(c, caches.ReadOnlyCache)
+        True
 
-        # CacheStack — a list of dicts is implicitly treated as a stack
-        cache_from_config([
-            {"values": {"type": "memory"}, "calls": {"type": "memory"}},
-            {"values": {"type": "void"}, "calls": {"type": "void"}},
-        ])
+        >>> c = cache_from_config([{"values": {"type": "memory"}, "calls": {"type": "memory"}}, {"values": {"type": "void"}, "calls": {"type": "void"}}])
+        >>> isinstance(c, caches.CacheStack)
+        True
     """
     if isinstance(d, list):
         return caches.CacheStack(tuple(cache_from_config(c) for c in d))
