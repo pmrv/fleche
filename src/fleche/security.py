@@ -3,6 +3,7 @@ import hmac
 import hashlib
 import logging
 import pickle
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 logger = logging.getLogger("fleche.security")
@@ -12,7 +13,7 @@ class SignatureError(Exception):
     pass
 
 
-def normalize_secret_key(key) -> list[bytes]:
+def normalize_secret_key(key: bytes | str | Sequence[bytes | str]) -> list[bytes]:
     """
     Normalize a secret key value to ``list[bytes]``.
 
@@ -35,9 +36,9 @@ def normalize_secret_key(key) -> list[bytes]:
     if isinstance(key, (bytes, str)):
         key = [key]
 
-    if not isinstance(key, list):
+    if not isinstance(key, (list, tuple)):
         raise TypeError(
-            f"secret_key must be bytes, str, or list, got {type(key).__name__}"
+            f"secret_key must be bytes, str, or sequence, got {type(key).__name__}"
         )
 
     result = []
@@ -85,7 +86,7 @@ class SignedBytes:
         keys (list[bytes]): A list of secret keys. The first key is used for signing,
                             and all keys are attempted during verification.
     """
-    keys: list[bytes]
+    keys: Sequence[bytes]
 
     def _sign(self, data: bytes, key: bytes) -> bytes:
         """

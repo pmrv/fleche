@@ -103,7 +103,10 @@ class SerializingMixin(KeyManagement):
 # must be hashable; concrete file-backed storage classes are frozen dataclasses
 # with only hashable fields (secret_key is stored as tuple[bytes, ...]).
 # Nothing is stored on the instance itself, so pickle works transparently.
-_per_instance_locks: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+_per_instance_locks: weakref.WeakKeyDictionary[
+    "PerKeyLockMixin",
+    tuple[weakref.WeakValueDictionary[Digest | str, threading.RLock], _PicklableLock],
+] = weakref.WeakKeyDictionary()
 _instances_lock: threading.Lock = threading.Lock()
 
 
