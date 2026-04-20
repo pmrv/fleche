@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections import Counter
 from dataclasses import dataclass
 from numbers import Number
 from typing import Any, Callable
@@ -165,3 +166,40 @@ class DestructuringMixin(base.StorageBackend):
                 return value.mend(self)
             case _:
                 return value
+
+    def count_reuses(self) -> Counter[digest.Digest]:
+        """Return a counter of how many times each stored key is referenced as a sub-component.
+
+        Scans every raw entry and tallies ``Digest`` back-references found inside
+        :class:`DigestedIterable` and :class:`DigestedDict` wrappers.  A count of ``0``
+        means the key is not pointed to by any other stored value (i.e. a top-level entry).
+        A count greater than ``1`` indicates a sub-value shared between multiple parent containers.
+
+        Returns:
+            A :class:`~collections.Counter` mapping each :class:`~fleche.digest.Digest` key
+            to the number of times it is referenced by other stored entries.
+
+        Example::
+
+            ds = ValueMemory(storage={})
+            shared = [2, 3]
+            ds.save([1, shared])
+            ds.save([4, shared])
+            hits = ds.count_reuses()
+            # The key for [2, 3] will have count 2; the two outer lists will have count 0.
+        """
+        counts: Counter[digest.Digest] = Counter({key: 0 for key in self.list()})
+        for key in list(counts):
+            raw = super().get(key)
+            match raw:
+                case DigestedIterable():
+                    for item in raw.items:
+                        if isinstance(item, digest.Digest) and item in counts:
+                            counts[item] += 1
+                case DigestedDict():
+                    for k, v in raw.items.items():
+                        if isinstance(k, digest.Digest) and k in counts:
+                            counts[k] += 1
+                        if isinstance(v, digest.Digest) and v in counts:
+                            counts[v] += 1
+        return counts
