@@ -346,6 +346,26 @@ def test_namedtuple_save_is_deterministic(ds, nt):
     assert ds.save(nt) == ds.save(nt)
 
 
+# ---- Digest element in container (_intern_rec early-return, destructuring.py:116) ----
+
+
+def test_digest_element_in_list_as_reference(ds):
+    """A Digest inside a list is treated as a back-reference to a stored value.
+
+    Exercises the ``if isinstance(value, digest.Digest): return value, -1``
+    guard in _intern_rec (destructuring.py line 116), which fires when the
+    recursive traversal encounters an already-digested sub-value.
+    """
+    inner = "inner_value"
+    inner_key = ds.save(inner)  # stores "inner_value" under digest("inner_value")
+    # Save a list whose first element is an existing Digest reference.
+    outer_key = ds.save([inner_key, 1])
+    loaded = ds.load(outer_key)
+    # The Digest is resolved back to its stored value via back-reference.
+    assert loaded[0] == inner
+    assert loaded[1] == 1
+
+
 # ---- count_reuses ----
 
 
