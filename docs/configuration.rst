@@ -156,6 +156,10 @@ Available storage types
     a concurrent write lock before attempting a read anyway.
     Optional: ``lock_wait_start`` (float, default ``0.001``) — initial wait interval
     (seconds) for exponential backoff while polling the write lock.
+    Optional: ``version_validator`` (str, default omitted) — version validation
+    strategy passed to ``bagofholding``'s ``H5Bag.load``.  One of ``"exact"``,
+    ``"semantic-minor"``, ``"semantic-major"``, or ``"none"``.  When omitted,
+    ``bagofholding``'s own default applies.
     Optional (value backend): ``remaining_depth`` — see `Destructuring`_ below.
 
 ``"sql"``
