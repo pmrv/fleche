@@ -167,7 +167,7 @@ def test_normalize_str_invalid_hex_raises():
 
 
 def test_normalize_wrong_type_raises():
-    with pytest.raises(TypeError, match="secret_key must be bytes, str, or list"):
+    with pytest.raises(TypeError, match="secret_key must be bytes, str, or sequence"):
         normalize_secret_key(12345)
 
 

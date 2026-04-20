@@ -98,7 +98,18 @@ class SerializingMixin(KeyManagement):
                 yield
 
 
-@dataclass(frozen=True)
+# Module-level storage for per-instance key-lock tables.  WeakKeyDictionary so
+# entries are evicted automatically when the owning instance is GC'd.  Instances
+# must be hashable; concrete file-backed storage classes are frozen dataclasses
+# with only hashable fields (secret_key is stored as tuple[bytes, ...]).
+# Nothing is stored on the instance itself, so pickle works transparently.
+_per_instance_locks: weakref.WeakKeyDictionary[
+    "PerKeyLockMixin",
+    tuple[weakref.WeakValueDictionary[Digest | str, threading.RLock], _PicklableLock],
+] = weakref.WeakKeyDictionary()
+_instances_lock: threading.Lock = threading.Lock()
+
+
 class PerKeyLockMixin(KeyManagement):
     """Mixin that locks per-key so concurrent ops on different keys proceed in parallel.
 
@@ -108,27 +119,28 @@ class PerKeyLockMixin(KeyManagement):
     *same* key are serialized by the per-key lock, which is reentrant to
     allow nested calls (e.g. ``expand`` inside ``load``).
 
-    Place before the concrete storage class in the MRO::
+    Instances must be hashable.  Place before the concrete storage class in the
+    MRO::
 
         @dataclass(frozen=True)
-        class PerKeyValueMemory(PerKeyLockMixin, ValueMemory): ...
+        class PerKeyValuePickle(PerKeyLockMixin, ValuePickleFile): ...
     """
 
-    _key_locks: weakref.WeakValueDictionary[Digest | str, threading.RLock] = field(
-        default_factory=weakref.WeakValueDictionary, init=False, repr=False, compare=False
-    )
-    _meta_lock: _PicklableLock = field(
-        default_factory=_PicklableLock, init=False, repr=False, compare=False
-    )
-
     def _get_key_lock(self, key: Digest | str) -> threading.RLock:
-        with self._meta_lock:
+        try:
+            key_locks, meta_lock = _per_instance_locks[self]
+        except KeyError:
+            with _instances_lock:
+                if self not in _per_instance_locks:
+                    _per_instance_locks[self] = (weakref.WeakValueDictionary(), _PicklableLock())
+                key_locks, meta_lock = _per_instance_locks[self]
+        with meta_lock:
             # Hold a strong reference so the lock is not collected between
             # creation and return — WeakValueDictionary only stores a weak ref.
-            lock = self._key_locks.get(key)
+            lock = key_locks.get(key)
             if lock is None:
                 lock = threading.RLock()
-                self._key_locks[key] = lock
+                key_locks[key] = lock
             return lock
 
     @contextlib.contextmanager

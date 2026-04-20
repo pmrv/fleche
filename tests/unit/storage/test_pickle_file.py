@@ -47,20 +47,20 @@ def test_compression(tmp_path):
 def test_post_init_bytes_key(tmp_path):
     key = b"A" * 32
     storage = PickleFile.with_pickle(root=tmp_path, secret_key=key)
-    assert storage.secret_key == [key]
+    assert storage.secret_key == (key,)
 
 
 def test_post_init_str_key(tmp_path):
     key = "ab" * 32  # valid 64-char hex string
     storage = PickleFile.with_pickle(root=tmp_path, secret_key=key)
-    assert storage.secret_key == [bytes.fromhex(key)]
+    assert storage.secret_key == (bytes.fromhex(key),)
 
 
 def test_post_init_str_key_with_delimiter(tmp_path):
     k1, k2 = "ab" * 16, "cd" * 16
     key = k1 + ":" + k2
     storage = PickleFile.with_pickle(root=tmp_path, secret_key=key)
-    assert storage.secret_key == [bytes.fromhex(k1), bytes.fromhex(k2)]
+    assert storage.secret_key == (bytes.fromhex(k1), bytes.fromhex(k2))
 
 
 def test_post_init_wrong_key_type_raises(tmp_path):

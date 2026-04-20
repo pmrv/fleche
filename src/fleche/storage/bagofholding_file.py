@@ -5,6 +5,7 @@ import logging
 
 from .file import FileStorage
 from .base import SaveError, ValueMixin, CallMixin
+from .thread_safe import PerKeyLockMixin
 from .destructuring import DestructuringMixin
 
 from pyiron_snippets.import_alarm import ImportAlarm
@@ -50,7 +51,7 @@ class BagOfHoldingH5FileBackend(FileStorage):
 
 
 @dataclass(frozen=True)
-class ValueBagOfHoldingH5File(ValueMixin, DestructuringMixin, BagOfHoldingH5FileBackend): ...
+class ValueBagOfHoldingH5File(PerKeyLockMixin, ValueMixin, DestructuringMixin, BagOfHoldingH5FileBackend): ...
 
 @dataclass(frozen=True)
-class CallBagOfHoldingH5File(CallMixin, BagOfHoldingH5FileBackend): ...
+class CallBagOfHoldingH5File(PerKeyLockMixin, CallMixin, BagOfHoldingH5FileBackend): ...

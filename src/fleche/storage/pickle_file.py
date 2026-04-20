@@ -7,6 +7,7 @@ from typing import Any, Callable
 
 from .file import FileStorage
 from .base import ValueMixin, CallMixin
+from .thread_safe import PerKeyLockMixin
 from .destructuring import DestructuringMixin
 from ..security import get_secret_key, normalize_secret_key, SignedBytes, SignatureError
 
@@ -35,15 +36,15 @@ class PickleFileBackend(FileStorage):
     Store values as files on the filesystem using a serialization module.
     """
 
-    secret_key: list[bytes] = field(default_factory=list)
+    secret_key: tuple[bytes, ...] = field(default_factory=tuple)
     dumps: Callable = field(repr=False)
     loads: Callable = field(repr=False)
     compress: bool = False
 
     def __post_init__(self):
         super().__post_init__()
-        normalized_key = get_secret_key() if not self.secret_key else normalize_secret_key(self.secret_key)
-        object.__setattr__(self, "secret_key", normalized_key)
+        raw = get_secret_key() if not self.secret_key else normalize_secret_key(self.secret_key)
+        object.__setattr__(self, "secret_key", tuple(raw))
 
     @classmethod
     def with_pickle(cls, *args, **kwargs):
@@ -84,7 +85,7 @@ class PickleFileBackend(FileStorage):
 
 
 @dataclass(frozen=True)
-class ValuePickleFile(ValueMixin, DestructuringMixin, PickleFileBackend): ...
+class ValuePickleFile(PerKeyLockMixin, ValueMixin, DestructuringMixin, PickleFileBackend): ...
 
 @dataclass(frozen=True)
-class CallPickleFile(CallMixin, PickleFileBackend): ...
+class CallPickleFile(PerKeyLockMixin, CallMixin, PickleFileBackend): ...
