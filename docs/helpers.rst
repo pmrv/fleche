@@ -28,8 +28,8 @@ Attempts to load the result of a specific call from the cache. If the result is 
 
 Returns ``True`` if the result for the given call is already present in the cache, ``False`` otherwise.
 
-``.query(*args, **kwargs, metadata={})``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+``.query(*args, metadata={}, **kwargs)``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Returns matching cached calls from the active cache. Any argument passed as ``None`` acts as a wildcard, matching any stored value for that parameter. The ``metadata`` keyword argument accepts a dictionary of metadata tags to further filter results (e.g., ``metadata={"tags": {"project": "alpha"}}``).
 
