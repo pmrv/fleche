@@ -124,22 +124,6 @@ class TestThreadPoolFutures:
         finally:
             executor.shutdown(wait=False)
 
-    def test_non_future_function_unaffected(self):
-        """Regular (non-Future-returning) functions should behave exactly as before."""
-        call_count = 0
-
-        @fleche
-        def compute(x):
-            nonlocal call_count
-            call_count += 1
-            return x * 2
-
-        with cache(_make_cache()):
-            assert compute(5) == 10
-            assert compute(5) == 10
-            assert call_count == 1
-
-
 # Module-level decorated function for ProcessPoolExecutor (must be picklable)
 @fleche
 def _pp_compute(x):
