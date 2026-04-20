@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from .file import FileStorage
+from .file import FileStorage, file_write_lock
 from .base import ValueMixin, CallMixin
 from .destructuring import DestructuringMixin
 from ..security import get_secret_key, normalize_secret_key, SignedBytes, SignatureError
@@ -72,7 +72,7 @@ class PickleFileBackend(FileStorage):
     def _from_file(self, path: Path) -> Any:
         try:
             content = path.read_bytes()
-            if self.compress:
+            if content[:2] == b"\x1f\x8b":
                 content = gzip.decompress(content)
             signer = SignedBytes(self.secret_key)
             data = signer.loads(content)
@@ -81,6 +81,32 @@ class PickleFileBackend(FileStorage):
             raise KeyError(path) from None
         except SignatureError:
             raise KeyError(path, "Value present but failed signature check.")
+
+    def compress_all(self) -> None:
+        """Rewrite all stored files in gzip-compressed form."""
+        for key in list(self.list()):
+            path = self._path(key)
+            lock_path = self._path(f"{key}.lock")
+            with file_write_lock(lock_path):
+                try:
+                    content = path.read_bytes()
+                except FileNotFoundError:
+                    continue
+                if content[:2] != b"\x1f\x8b":
+                    path.write_bytes(gzip.compress(content))
+
+    def decompress_all(self) -> None:
+        """Rewrite all stored files in uncompressed form."""
+        for key in list(self.list()):
+            path = self._path(key)
+            lock_path = self._path(f"{key}.lock")
+            with file_write_lock(lock_path):
+                try:
+                    content = path.read_bytes()
+                except FileNotFoundError:
+                    continue
+                if content[:2] == b"\x1f\x8b":
+                    path.write_bytes(gzip.decompress(content))
 
 
 @dataclass(frozen=True)
