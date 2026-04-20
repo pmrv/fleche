@@ -62,6 +62,12 @@ class QueryIterator(Iterable[call.LazyCall]):
             }
             if results:
                 row["result"] = c.result
+            md = row.pop("metadata", {}) or {}
+            # Flatten each metadata name's dict into the row first, so argument
+            # clash detection below also catches metadata-produced keys.
+            for data in md.values():
+                if isinstance(data, dict):
+                    row.update(data)
             for a in (c.arguments.keys() if arguments is True else arguments):
                 # TODO: quick and easy strategy to avoid name clashes, alternative would be to use multicolumns, but
                 # those are a bit annoying
@@ -69,11 +75,6 @@ class QueryIterator(Iterable[call.LazyCall]):
                     row[a] = c.arguments.get(a, None)
                 else:
                     row[f"a_{a}"] = c.arguments.get(a, None)
-            md = row.pop("metadata", {}) or {}
-            # Flatten each metadata name's dict into the row
-            for data in md.values():
-                if isinstance(data, dict):
-                    row.update(data)
             rows[str(c.to_lookup_key())] = row
 
         df = pd.DataFrame.from_dict(rows, orient="index")
