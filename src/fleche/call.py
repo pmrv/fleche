@@ -1,9 +1,13 @@
+import logging
 from dataclasses import dataclass, field, replace
 from typing import Any, Callable
 from inspect import signature
 from collections.abc import Mapping
 
 from . import digest
+from .digest import Digest
+
+logger = logging.getLogger("fleche.call")
 
 
 def bind(func, args, kwargs, apply_defaults=False, partial=False):
@@ -67,17 +71,21 @@ class Call:
         call = replace(self, arguments=arg_pairs, metadata=None, result=None)
         return digest.digest(call)
 
-    def _to_digested(self, save_fn: Callable[[Any], "digest.Digest"]) -> "DigestedCall":
+    def _to_digested(self, save_fn: Callable[[Any], Digest]) -> "DigestedCall":
         """Generic conversion to DigestedCall using *save_fn* to handle each value."""
         result = save_fn(self.result)
-        arguments: dict[str, digest.Digest] = {}
+        arguments: dict[str, Digest] = {}
         for k, v in self.arguments.items():
-            if isinstance(v, digest.Digest):
+            if isinstance(v, Digest):
                 arguments[k] = v
             else:
                 try:
                     arguments[k] = save_fn(v)
-                except Exception:
+                except Exception as exc:
+                    from .storage.base import SaveError  # lazy import: storage.base depends on call
+                    if not isinstance(exc, SaveError):
+                        raise
+                    logger.warning("Failed to save argument %r: falling back to digest-only reference", k)
                     arguments[k] = digest.digest(v)
         return DigestedCall(
             name=self.name,

@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 from fleche.call import Call, DigestedCall
 from fleche.digest import Digest
+from fleche.storage.base import SaveError
 from fleche.storage.memory import ValueMemory
 
 
@@ -173,10 +174,18 @@ class TestCallStash:
     def test_arg_save_failure_falls_back_to_digest(self):
         values = MagicMock()
         result_digest = Digest("r" * 64)
-        values.save.side_effect = [result_digest, Exception("cannot save")]
+        values.save.side_effect = [result_digest, SaveError("cannot save")]
         call = _call(arguments={"x": 99})
         digested = call.stash(values)
         assert isinstance(digested.arguments["x"], Digest)
+
+    def test_arg_save_non_save_error_propagates(self):
+        values = MagicMock()
+        result_digest = Digest("r" * 64)
+        values.save.side_effect = [result_digest, RuntimeError("unexpected")]
+        call = _call(arguments={"x": 99})
+        with pytest.raises(RuntimeError, match="unexpected"):
+            call.stash(values)
 
     def test_result_save_failure_propagates(self):
         values = MagicMock()
