@@ -398,7 +398,7 @@ def test_only_raises_on_multiple(test_cache):
 
 
 # ---------------------------------------------------------------------------
-# .count() / .any() / .is_empty()
+# .count() / .any() / .empty()
 # ---------------------------------------------------------------------------
 
 def test_count_returns_correct_number(test_cache):
@@ -422,14 +422,14 @@ def test_any_false():
     assert QueryIterator([]).any() is False
 
 
-def test_is_empty_true():
-    assert QueryIterator([]).is_empty() is True
+def test_empty_true():
+    assert QueryIterator([]).empty() is True
 
 
-def test_is_empty_false(test_cache):
+def test_empty_false(test_cache):
     test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
     tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
-    assert test_cache.query(tpl).is_empty() is False
+    assert test_cache.query(tpl).empty() is False
 
 
 # ---------------------------------------------------------------------------
@@ -529,7 +529,7 @@ def test_sorted_returns_query_iterator(test_cache):
 
 
 # ---------------------------------------------------------------------------
-# .unique_by()
+# .unique()
 # ---------------------------------------------------------------------------
 
 def test_unique_by_argument_name(test_cache):
@@ -537,7 +537,7 @@ def test_unique_by_argument_name(test_cache):
     test_cache.save(Call(name="f", arguments={"x": 1, "y": 2}, result=20))
     test_cache.save(Call(name="f", arguments={"x": 2, "y": 3}, result=30))
     tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
-    unique = list(test_cache.query(tpl).unique_by("x"))
+    unique = list(test_cache.query(tpl).unique("x"))
     xs = [c.arguments["x"] for c in unique]
     assert len(unique) == 2
     assert set(xs) == {1, 2}
@@ -548,14 +548,14 @@ def test_unique_by_callable(test_cache):
     test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
     test_cache.save(Call(name="f", arguments={"x": 2}, result=20))
     tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
-    unique = list(test_cache.query(tpl).unique_by(lambda c: c.arguments["x"]))
+    unique = list(test_cache.query(tpl).unique(lambda c: c.arguments["x"]))
     assert len(unique) == 2
 
 
-def test_unique_by_returns_query_iterator(test_cache):
+def test_unique_returns_query_iterator(test_cache):
     test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
     tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
-    assert isinstance(test_cache.query(tpl).unique_by("x"), QueryIterator)
+    assert isinstance(test_cache.query(tpl).unique("x"), QueryIterator)
 
 
 # ---------------------------------------------------------------------------
@@ -622,23 +622,23 @@ def test_oldest_raises_on_empty():
 
 
 # ---------------------------------------------------------------------------
-# .delete_all()
+# .evict()
 # ---------------------------------------------------------------------------
 
-def test_delete_all_removes_calls(test_cache):
+def test_evict_removes_calls(test_cache):
     test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
     test_cache.save(Call(name="f", arguments={"x": 2}, result=20))
     tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
     assert test_cache.query(tpl).count() == 2
-    test_cache.query(tpl).delete_all()
+    test_cache.query(tpl).evict()
     assert test_cache.query(tpl).count() == 0
 
 
-def test_delete_all_only_removes_matched(test_cache):
+def test_evict_only_removes_matched(test_cache):
     test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
     test_cache.save(Call(name="g", arguments={"x": 1}, result=10))
     tpl_f = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
     tpl_g = QueryCall(name="g", arguments=None, metadata=None, module=None, version=None, result=None)
-    test_cache.query(tpl_f).delete_all()
+    test_cache.query(tpl_f).evict()
     assert test_cache.query(tpl_f).count() == 0
     assert test_cache.query(tpl_g).count() == 1

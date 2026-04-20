@@ -74,7 +74,7 @@ class QueryIterator(Iterable[call.LazyCall]):
             return True
         return False
 
-    def is_empty(self) -> bool:
+    def empty(self) -> bool:
         """Return True if there are no matching calls."""
         return not self.any()
 
@@ -106,7 +106,7 @@ class QueryIterator(Iterable[call.LazyCall]):
             key = lambda c: c.arguments[arg_name]
         return QueryIterator(builtins.sorted(self, key=key, reverse=reverse))
 
-    def unique_by(self, key: "str | Callable[[call.LazyCall], Any]") -> "QueryIterator":
+    def unique(self, key: "str | Callable[[call.LazyCall], Any]") -> "QueryIterator":
         """Return a new QueryIterator with duplicates removed, keeping the first per group (lazy).
 
         Args:
@@ -165,7 +165,7 @@ class QueryIterator(Iterable[call.LazyCall]):
             raise IndexError("QueryIterator is empty")
         return builtins.min(calls, key=lambda c: c.metadata.get("runtime", {}).get("timestart", float("inf")))
 
-    def delete_all(self) -> None:
+    def evict(self) -> None:
         """Remove all matched calls from the cache."""
         for c in self:
             c._cache.evict(c.to_lookup_key())
