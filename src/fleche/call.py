@@ -33,6 +33,37 @@ def bind(func, args, kwargs, apply_defaults=False, partial=False):
 
 
 @dataclass
+class DigestedCall:
+    """A Call where arguments and result are :class:`~fleche.digest.Digest` pointers into a value store.
+
+    Produced by :meth:`Call.dehydrate`; represents a call whose values have been
+    persisted so only their content-addressed keys remain.
+    """
+
+    name: str
+    arguments: dict[str, "digest.Digest"]
+    result: "digest.Digest"
+    metadata: dict[str, dict[str, Any]] = field(default_factory=dict)
+    module: str | None = None
+    version: int | None = None
+    code_digest: str | None = None
+
+    def to_lookup_key(self) -> str:
+        # Delegate to Call so the key is identical to the pre-dehydration Call's key.
+        # This works because digest(Digest(x)) == x, so digested argument values
+        # hash identically to their originals.
+        return Call(
+            name=self.name,
+            arguments=self.arguments,
+            metadata=None,
+            module=self.module,
+            version=self.version,
+            code_digest=self.code_digest,
+            result=None,
+        ).to_lookup_key()
+
+
+@dataclass
 class Call:
     """
     Represents a function call, capturing its name, arguments, and keyword arguments.
@@ -66,6 +97,40 @@ class Call:
         arg_pairs = tuple(self.arguments.items())
         call = replace(self, arguments=arg_pairs, metadata=None, result=None)
         return digest.digest(call)
+
+    def dehydrate(self, values) -> "DigestedCall":
+        """Save arguments and result into *values*, returning a :class:`DigestedCall`.
+
+        Result save errors propagate to the caller.  Argument save errors fall back
+        to a digest-only reference (the value is hashed but not stored), mirroring the
+        behaviour of :meth:`Cache._handle_args_save`.
+
+        Args:
+            values: A :class:`~fleche.storage.ValueStorage` instance to persist values into.
+
+        Returns:
+            A :class:`DigestedCall` with all argument values and the result replaced by
+            their :class:`~fleche.digest.Digest` keys.
+        """
+        result = values.save(self.result)
+        arguments: dict[str, digest.Digest] = {}
+        for k, v in self.arguments.items():
+            if isinstance(v, digest.Digest):
+                arguments[k] = v
+            else:
+                try:
+                    arguments[k] = values.save(v)
+                except Exception:
+                    arguments[k] = digest.digest(v)
+        return DigestedCall(
+            name=self.name,
+            arguments=arguments,
+            result=result,
+            metadata=self.metadata,
+            module=self.module,
+            version=self.version,
+            code_digest=self.code_digest,
+        )
 
 class LazyArguments(Mapping):
     def __init__(self, cache, arg_digests):
@@ -221,6 +286,7 @@ AnyCall = Call | LazyCall
 __all__ = [
         "bind",
         "Call",
+        "DigestedCall",
         "LazyCall",
         "QueryCall",
         "AnyCall"
