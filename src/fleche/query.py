@@ -1,6 +1,8 @@
+import builtins
 import datetime
+import itertools
 from dataclasses import dataclass
-from typing import Iterable, Iterator, Any, Literal
+from typing import Iterable, Iterator, Any, Literal, Callable
 
 import pandas as pd
 
@@ -18,6 +20,135 @@ class QueryIterator(Iterable[call.LazyCall]):
 
     def __iter__(self) -> Iterator[call.LazyCall]:
         yield from self.calls
+
+    def only(self) -> call.LazyCall:
+        """Return the single matching call.
+
+        Raises:
+            IndexError: if there are no matching calls
+            ValueError: if there is more than one matching call
+        """
+        it = iter(self)
+        try:
+            c = builtins.next(it)
+        except StopIteration:
+            raise IndexError("QueryIterator is empty")
+        try:
+            builtins.next(it)
+            raise ValueError("QueryIterator has more than one result")
+        except StopIteration:
+            return c
+
+    def count(self) -> int:
+        """Return the total number of matching calls."""
+        return builtins.sum(1 for _ in self)
+
+    def any(self) -> "call.LazyCall | None":
+        """Return the first matching call, or None if there are no matching calls.
+
+        Use `.sorted(reverse=...)` to control which call is returned when ordering matters.
+        """
+        for c in self:
+            return c
+        return None
+
+    def empty(self) -> bool:
+        """Return True if there are no matching calls."""
+        for _ in self:
+            return False
+        return True
+
+    def take(self, n: int) -> "QueryIterator":
+        """Return first n results as a new QueryIterator (lazy)."""
+        return QueryIterator(itertools.islice(iter(self), n))
+
+    def skip(self, n: int) -> "QueryIterator":
+        """Skip first n results and return the rest as a new QueryIterator (lazy)."""
+        return QueryIterator(itertools.islice(iter(self), n, None))
+
+    def filter(self, predicate: Callable[[call.LazyCall], bool]) -> "QueryIterator":
+        """Return a new QueryIterator keeping only calls where predicate(call) is truthy (lazy)."""
+        return QueryIterator(c for c in self.calls if predicate(c))
+
+    def sorted(
+        self,
+        key: "str | Callable[[call.LazyCall], Any] | None" = None,
+        reverse: bool = False,
+    ) -> "QueryIterator":
+        """Return a new QueryIterator with calls sorted by key.
+
+        Args:
+            key: a callable taking a LazyCall, or a string argument name to sort by
+            reverse: if True, sort in descending order
+        """
+        if isinstance(key, str):
+            arg_name = key
+            key = lambda c: c.arguments[arg_name]
+        return QueryIterator(builtins.sorted(self, key=key, reverse=reverse))
+
+    def unique(self, key: "str | Callable[[call.LazyCall], Any]") -> "QueryIterator":
+        """Return a new QueryIterator with duplicates removed, keeping the first per group (lazy).
+
+        Args:
+            key: a callable taking a LazyCall, or a string argument name to deduplicate by
+        """
+        if isinstance(key, str):
+            arg_name = key
+            key = lambda c: c.arguments[arg_name]
+
+        def _unique(calls, k):
+            seen: set = set()
+            for c in calls:
+                v = k(c)
+                if v not in seen:
+                    seen.add(v)
+                    yield c
+
+        return QueryIterator(_unique(self.calls, key))
+
+    def groupby(self, key: "str | Callable[[call.LazyCall], Any]") -> "dict[Any, QueryIterator]":
+        """Partition calls into a dict of QueryIterators keyed by group value.
+
+        Args:
+            key: a callable taking a LazyCall, or a string argument name to group by
+        """
+        if isinstance(key, str):
+            arg_name = key
+            key = lambda c: c.arguments[arg_name]
+        groups: dict[Any, list] = {}
+        for c in self:
+            k = key(c)
+            if k not in groups:
+                groups[k] = []
+            groups[k].append(c)
+        return {k: QueryIterator(v) for k, v in groups.items()}
+
+    def latest(self) -> call.LazyCall:
+        """Return the call with the most recent timestart (requires Runtime metadata).
+
+        Raises:
+            IndexError: if there are no matching calls
+        """
+        calls = builtins.list(self)
+        if not calls:
+            raise IndexError("QueryIterator is empty")
+        return builtins.max(calls, key=lambda c: c.metadata.get("runtime", {}).get("timestart", float("-inf")))
+
+    def oldest(self) -> call.LazyCall:
+        """Return the call with the oldest timestart (requires Runtime metadata).
+
+        Raises:
+            IndexError: if there are no matching calls
+        """
+        calls = builtins.list(self)
+        if not calls:
+            raise IndexError("QueryIterator is empty")
+        return builtins.min(calls, key=lambda c: c.metadata.get("runtime", {}).get("timestart", float("inf")))
+
+    def evict(self) -> None:
+        """Remove all matched calls from the cache."""
+        for c in self:
+            c._cache.evict(c.to_lookup_key())
 
     def table(self, arguments: Iterable[str] | str | Literal[True] = (), results=False) -> pd.DataFrame:
         """Return a pandas DataFrame summarizing queried calls.
@@ -84,7 +215,7 @@ class QueryIterator(Iterable[call.LazyCall]):
                 df[col] = pd.to_datetime(df[col], unit="s", utc=True).dt.tz_convert(local_tz)
         return df
 
-    def results(self) -> Iterable[Any]:
-        """Returns an iterable over the results of queried calls."""
+    def results(self) -> Iterator[Any]:
+        """Returns an iterator over the results of queried calls."""
         for c in self.calls:
             yield c.result
