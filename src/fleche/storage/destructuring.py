@@ -86,14 +86,16 @@ class DestructuringMixin(base.StorageBackend):
     element is stored independently; on load the original structure is
     reassembled.
 
-    Example::
+    Example:
 
-        @dataclass(frozen=True)
-        class ValueMemory(ValueMixin, DestructuringMixin, MemoryBackend): ...
-
-        vm = ValueMemory(storage={})
-        key = vm.save([1, [2, 3]])
-        assert vm.load(key) == [1, [2, 3]]
+        >>> from fleche.storage.base import ValueMixin
+        >>> from fleche.storage.memory import MemoryBackend
+        >>> @dataclass(frozen=True)
+        ... class MyValueStorage(ValueMixin, DestructuringMixin, MemoryBackend): ...
+        >>> vm = MyValueStorage(storage={})
+        >>> key = vm.save([1, [2, 3]])
+        >>> vm.load(key) == [1, [2, 3]]
+        True
     """
 
     remaining_depth: int = 0
@@ -179,14 +181,16 @@ class DestructuringMixin(base.StorageBackend):
             A :class:`~collections.Counter` mapping each :class:`~fleche.digest.Digest` key
             to the number of times it is referenced by other stored entries.
 
-        Example::
+        Example:
 
-            ds = ValueMemory(storage={})
-            shared = [2, 3]
-            ds.save([1, shared])
-            ds.save([4, shared])
-            hits = ds.count_reuses()
-            # The key for [2, 3] will have count 2; the two outer lists will have count 0.
+            >>> from fleche.storage.memory import ValueMemory
+            >>> ds = ValueMemory(storage={})
+            >>> shared = [2, 3]
+            >>> _ = ds.save([1, shared])
+            >>> _ = ds.save([4, shared])
+            >>> hits = ds.count_reuses()
+            >>> hits[ds.save(shared)]  # [2, 3] is referenced by both outer lists
+            2
         """
         counts: Counter[digest.Digest] = Counter({key: 0 for key in self.list()})
         for key in list(counts):
