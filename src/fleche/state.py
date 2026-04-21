@@ -1,6 +1,8 @@
 from contextlib import AbstractContextManager
+import contextvars
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import overload, Callable
 
 from . import caches, config, metadata
@@ -125,33 +127,6 @@ def project(name):
     return tags(project=name)
 
 
-class _BoundFlecheNamespace:
-    """Wraps a .fleche SimpleNamespace so every helper activates the bound cache/meta state."""
-
-    __slots__ = ('_ns', '_cache', '_meta')
-
-    def __init__(self, ns, bound_cache, bound_meta):
-        self._ns = ns
-        self._cache = bound_cache
-        self._meta = bound_meta
-
-    def __getattr__(self, name):
-        helper = getattr(self._ns, name)
-        bound_cache = self._cache
-        bound_meta = self._meta
-
-        def _bound(*args, **kwargs):
-            token_cache = _CACHE.set(bound_cache)
-            token_meta = _METADATA.set(bound_meta)
-            try:
-                return helper(*args, **kwargs)
-            finally:
-                _METADATA.reset(token_meta)
-                _CACHE.reset(token_cache)
-
-        return _bound
-
-
 @dataclass(frozen=True, eq=True)
 class BoundWrapper:
     """Utility class that freezes global state for the cache and metadata config.
@@ -181,14 +156,16 @@ class BoundWrapper:
 
     @property
     def fleche(self):
-        """Return a .fleche namespace whose helpers activate the bound cache/meta state."""
-        return _BoundFlecheNamespace(self.func.fleche, self.cache, self.meta)
+        """Return a .fleche namespace whose helpers run in the bound cache/meta context."""
+        ns = self.func.fleche  # ty: ignore[unresolved-attribute]
+        return SimpleNamespace(**{
+            name: BoundWrapper(helper, self.cache, self.meta)
+            for name, helper in vars(ns).items()
+        })
 
     def __call__(self, *args, **kwargs):
-        token_cache = _CACHE.set(self.cache)
-        token_meta = _METADATA.set(self.meta)
-        try:
+        def _call():
+            _CACHE.set(self.cache)
+            _METADATA.set(self.meta)
             return self.func(*args, **kwargs)
-        finally:
-            _METADATA.reset(token_meta)
-            _CACHE.reset(token_cache)
+        return contextvars.copy_context().run(_call)
