@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from functools import wraps
+from functools import wraps, partial
 from inspect import signature
 from types import SimpleNamespace
 from typing import Any, Callable, Dict, Iterable, TypeVar, Annotated, get_type_hints, get_origin, get_args
@@ -249,6 +249,14 @@ def make_rerun(func, wrapper):
     return _rerun_func
 
 
+def make_bind(wrapper):
+    """Build the `.bind` helper that creates a :class:`.BoundWrapper` with optionally pre-applied arguments."""
+    def _bind_func(*args, **kwargs):
+        target = partial(wrapper, *args, **kwargs) if (args or kwargs) else wrapper
+        return state.BoundWrapper.bind(target)
+    return _bind_func
+
+
 def make_wrapper(func, policy, meta, isolate, get_call):
     """Build the cached wrapper returned by :func:`fleche`."""
     @wraps(func)
@@ -357,6 +365,8 @@ def fleche(
     - .contains(*args, **kwargs): Check if result is in cache.
     - .query(*args, **kwargs): Return matching calls from the active cache.
     - .rerun(*args, **kwargs): Forces reevaluation recursively.
+    - .bind(*args, **kwargs): Create a :class:`.BoundWrapper` that freezes the current cache/metadata state.
+      Optionally pre-applies *args*/*kwargs* via :func:`functools.partial`.
     The original function is available via .__wrapped__.
 
     .. warning::
@@ -388,6 +398,7 @@ def fleche(
         contains_func = make_contains(func, digest_func)
         wrapper = make_wrapper(func, policy, meta, isolate, get_call)
         rerun_func = make_rerun(func, wrapper)
+        bind_func = make_bind(wrapper)
 
         wrapper.fleche = SimpleNamespace()
 
@@ -398,6 +409,8 @@ def fleche(
         _attach(wrapper, load_func, name="load", doc_prefix="Load result from cache for")
         _attach(wrapper, contains_func, name="contains", doc_prefix="Check if result is in cache for", ret=bool)
         _attach(wrapper, rerun_func, name="rerun", doc_prefix="Force reevaluation recursively for")
+        _attach(wrapper, bind_func, name="bind", doc_prefix="Create a BoundWrapper for",
+                ret=state.BoundWrapper)
         return wrapper
 
     if callable(_func):
