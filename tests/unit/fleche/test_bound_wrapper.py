@@ -239,3 +239,28 @@ def test_bound_wrapper_pickle_nested_fleche_in_plain():
 
     with cache(restored.cache):
         assert _pickle_inner.contains(3)
+
+
+# ---------------------------------------------------------------------------
+# 4. .fleche namespace proxy
+# ---------------------------------------------------------------------------
+
+
+def test_bound_wrapper_proxies_fleche_namespace():
+    """bound.fleche should forward to the wrapped function's .fleche namespace."""
+    bound_cache = _make_cache()
+
+    @fleche
+    def my_func(x):
+        return x + 1
+
+    with cache(bound_cache):
+        bound = fleche_state.BoundWrapper.bind(my_func)
+        bound(5)
+
+    assert bound.fleche is my_func.fleche
+
+    with cache(bound_cache):
+        assert bound.fleche.contains(5)
+        key = bound.fleche.digest(5)
+        assert key == my_func.fleche.digest(5)

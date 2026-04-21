@@ -152,6 +152,11 @@ class BoundWrapper:
             :class:`.BoundWrapper`: instance with the bound cache and metadata state"""
         return cls(func, _CACHE.get(), _METADATA.get())
 
+    @property
+    def fleche(self):
+        """Proxy the ``.fleche`` helper namespace from the wrapped function."""
+        return self.func.fleche
+
     def __call__(self, *args, **kwargs):
         token_cache = _CACHE.set(self.cache)
         token_meta = _METADATA.set(self.meta)
