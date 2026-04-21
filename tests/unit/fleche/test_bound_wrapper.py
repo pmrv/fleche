@@ -8,6 +8,8 @@ Covers:
 import pickle
 from unittest.mock import MagicMock
 
+import pytest
+
 import fleche.state as fleche_state
 from fleche import fleche
 from fleche.caches import Cache
@@ -342,3 +344,85 @@ def test_bind_helper_accessible_via_fleche_namespace():
         return x
 
     assert my_func.bind is my_func.fleche.bind
+
+
+# ---------------------------------------------------------------------------
+# 5. BoundWrapper.fleche namespace proxy
+# ---------------------------------------------------------------------------
+
+
+def test_bound_wrapper_fleche_uses_bound_cache():
+    """bound.fleche helpers should activate the bound cache outside any cache context manager."""
+    bound_cache = _make_cache()
+    outer_cache = _make_cache()
+
+    @fleche
+    def my_func(x):
+        return x + 1
+
+    with cache(bound_cache):
+        bound = fleche_state.BoundWrapper.bind(my_func)
+        bound(5)
+
+    assert bound.fleche.digest(5) == my_func.fleche.digest(5)
+
+    with cache(outer_cache):
+        assert bound.fleche.contains(5)
+        assert not my_func.contains(5)
+
+
+def test_bound_wrapper_fleche_raises_for_plain_function():
+    """BoundWrapper.fleche raises AttributeError when func has no .fleche namespace."""
+    def plain(x):
+        return x
+
+    bound_cache = _make_cache()
+    with cache(bound_cache):
+        bound = fleche_state.BoundWrapper.bind(plain)
+
+    with pytest.raises(AttributeError, match="fleche-decorated"):
+        _ = bound.fleche
+
+
+def test_bound_wrapper_fleche_with_method_binding():
+    """BoundWrapper.fleche works when created from obj.method.bind()."""
+    from fleche.digest import Digest
+
+    class MyClass:
+        def __init__(self, val):
+            self.val = val
+
+        def __digest__(self):
+            return Digest(str(self.val))
+
+        @fleche
+        def compute(self, x):
+            return self.val + x
+
+    obj = MyClass(10)
+    bound_cache = _make_cache()
+    outer_cache = _make_cache()
+
+    with cache(bound_cache):
+        bound = obj.compute.bind()
+        bound(5)
+
+    with cache(outer_cache):
+        assert bound.fleche.contains(5)
+        assert not MyClass.compute.contains(obj, 5)
+
+
+def test_bound_wrapper_fleche_helpers_are_not_recursive():
+    """Helpers exposed via bound.fleche should not themselves expose .fleche."""
+    bound_cache = _make_cache()
+
+    @fleche
+    def my_func(x):
+        return x + 1
+
+    with cache(bound_cache):
+        bound = fleche_state.BoundWrapper.bind(my_func)
+        bound(5)
+
+    with pytest.raises(AttributeError):
+        _ = bound.fleche.contains.fleche

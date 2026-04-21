@@ -1,9 +1,13 @@
 from dataclasses import dataclass
 from unittest.mock import Mock
 
+import pytest
 
 from fleche import fleche
+from fleche.caches import Cache
 from fleche.digest import Digest
+from fleche.state import cache
+from fleche.storage import ValueMemory, CallMemory
 
 
 class DigestibleClass:
@@ -83,3 +87,89 @@ def test_method_on_dataclass():
     obj.val = 400
     assert obj.method(5) == 405
     assert digestible_dataclass_mock.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# Helper auto-binding: obj.method.helper() without explicit self=obj
+# ---------------------------------------------------------------------------
+
+
+class _HelperBindClass:
+    def __init__(self, val):
+        self.val = val
+
+    def __digest__(self):
+        return Digest(str(self.val))
+
+    @fleche
+    def compute(self, x):
+        return self.val + x
+
+
+def test_method_helpers_auto_bind_self_contains():
+    """obj.method.contains(x) should not require self=obj."""
+    c = Cache(ValueMemory({}), CallMemory({}))
+    obj = _HelperBindClass(42)
+    with cache(c):
+        obj.compute(5)
+        assert obj.compute.contains(5)
+
+
+def test_method_fleche_namespace_auto_binds():
+    """obj.method.fleche.contains(x) should not require self=obj."""
+    c = Cache(ValueMemory({}), CallMemory({}))
+    obj = _HelperBindClass(42)
+    with cache(c):
+        obj.compute(5)
+        assert obj.compute.fleche.contains(5)
+
+
+def test_method_helpers_digest_auto_bind_self():
+    """obj.method.digest(x) produces the same key as Klass.method.digest(obj, x)."""
+    obj = _HelperBindClass(42)
+    assert obj.compute.digest(5) == _HelperBindClass.compute.digest(obj, 5)
+
+
+def test_method_helpers_load_auto_bind_self():
+    """obj.method.load(x) retrieves the cached result without explicit self."""
+    c = Cache(ValueMemory({}), CallMemory({}))
+    obj = _HelperBindClass(42)
+    with cache(c):
+        obj.compute(5)
+        assert obj.compute.load(5) == 47
+
+
+def test_method_helpers_query_auto_bind_self():
+    """obj.method.query(x) returns matching calls without explicit self."""
+    c = Cache(ValueMemory({}), CallMemory({}))
+    obj = _HelperBindClass(42)
+    with cache(c):
+        obj.compute(5)
+        results = list(obj.compute.query(5))
+    assert len(results) == 1
+    assert results[0].result == 47
+
+
+def test_class_access_returns_fleche_wrapper():
+    """Accessing @fleche method on the class (not instance) returns FlecheWrapper itself."""
+    from fleche.wrapper import FlecheWrapper
+    assert isinstance(_HelperBindClass.compute, FlecheWrapper)
+
+
+def test_instance_access_returns_bound_method():
+    """Accessing @fleche method on an instance returns a bound view, not FlecheWrapper."""
+    from fleche.wrapper import FlecheWrapper
+    obj = _HelperBindClass(42)
+    assert not isinstance(obj.compute, FlecheWrapper)
+    assert obj.compute is not _HelperBindClass.compute
+
+
+def test_different_instances_get_independent_bound_methods():
+    """Each instance gets its own bound method view (helpers pre-apply the correct obj)."""
+    c = Cache(ValueMemory({}), CallMemory({}))
+    obj_a = _HelperBindClass(10)
+    obj_b = _HelperBindClass(20)
+    with cache(c):
+        obj_a.compute(5)
+        assert obj_a.compute.contains(5)
+        assert not obj_b.compute.contains(5)

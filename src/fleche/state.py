@@ -1,6 +1,9 @@
+import contextvars
 from contextlib import AbstractContextManager
 from contextvars import ContextVar, Token
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from functools import partial
+from types import SimpleNamespace
 from typing import overload, Callable
 
 from . import caches, config, metadata
@@ -125,6 +128,16 @@ def project(name):
     return tags(project=name)
 
 
+def _reconstruct_bound_wrapper(func, bound_cache, bound_meta):
+    """Module-level factory used by BoundWrapper.__reduce__ (contextvars.Context is not picklable)."""
+    def _setup():
+        _CACHE.set(bound_cache)
+        _METADATA.set(bound_meta)
+    ctx = contextvars.copy_context()
+    ctx.run(_setup)
+    return BoundWrapper(func, bound_cache, bound_meta, ctx)
+
+
 @dataclass(frozen=True, eq=True)
 class BoundWrapper:
     """Utility class that freezes global state for the cache and metadata config.
@@ -137,6 +150,7 @@ class BoundWrapper:
     func: Callable
     cache: caches.BaseCache
     meta: tuple[metadata.MetaData, ...]
+    ctx: contextvars.Context = field(compare=False, repr=False)
 
     @classmethod
     def bind(cls, func):
@@ -150,13 +164,45 @@ class BoundWrapper:
 
         Returns:
             :class:`.BoundWrapper`: instance with the bound cache and metadata state"""
-        return cls(func, _CACHE.get(), _METADATA.get())
+        return cls(func, _CACHE.get(), _METADATA.get(), contextvars.copy_context())
+
+    @property
+    def fleche(self):
+        """Return a .fleche namespace whose helpers run in the bound cache/meta context.
+
+        Also handles method-bound wrappers where ``self.func`` is ``partial(wrapper, obj, ...)``:
+        unwraps the partial chain to find the underlying fleche namespace and pre-applies the
+        captured positional/keyword prefix to each helper.
+        """
+        func = self.func
+        positional_prefix: tuple = ()
+        keyword_prefix: dict = {}
+        while isinstance(func, partial):
+            positional_prefix = func.args + positional_prefix
+            keyword_prefix = {**keyword_prefix, **func.keywords}
+            func = func.func
+
+        if not hasattr(func, 'fleche'):
+            raise AttributeError(
+                f"BoundWrapper.fleche requires a fleche-decorated function; "
+                f"{self.func!r} has no .fleche namespace"
+            )
+
+        ns = func.fleche
+
+        def _bind_helpers():
+            result = {}
+            for name in vars(ns):
+                helper = getattr(ns, name)
+                if positional_prefix or keyword_prefix:
+                    helper = partial(helper, *positional_prefix, **keyword_prefix)
+                result[name] = BoundWrapper.bind(helper)
+            return result
+
+        return SimpleNamespace(**self.ctx.run(_bind_helpers))
 
     def __call__(self, *args, **kwargs):
-        token_cache = _CACHE.set(self.cache)
-        token_meta = _METADATA.set(self.meta)
-        try:
-            return self.func(*args, **kwargs)
-        finally:
-            _METADATA.reset(token_meta)
-            _CACHE.reset(token_cache)
+        return self.ctx.run(self.func, *args, **kwargs)
+
+    def __reduce__(self):
+        return (_reconstruct_bound_wrapper, (self.func, self.cache, self.meta))

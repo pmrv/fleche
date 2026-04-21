@@ -1,3 +1,5 @@
+import functools
+import importlib
 import os
 from pathlib import Path
 from functools import wraps, partial
@@ -160,6 +162,70 @@ def _attach(wrapper, fn, *, name, doc_prefix, ret=None, extra_doc=""):
 
 _T = TypeVar("_T")
 
+_HELPER_NAMES = frozenset(('call', 'digest', 'query', 'load', 'contains', 'rerun', 'bind'))
+
+
+def _lookup_by_qualname(module_name, qualname):
+    """Reconstruct a FlecheWrapper by importing its module and following its qualname."""
+    obj = importlib.import_module(module_name)
+    for attr in qualname.split('.'):
+        obj = getattr(obj, attr)
+    return obj
+
+
+class _BoundFlecheMethod:
+    """Returned by FlecheWrapper.__get__; pre-applies obj as first arg to __call__ and helpers."""
+
+    __slots__ = ('_wrapper', '_obj')
+
+    def __init__(self, wrapper, obj):
+        self._wrapper = wrapper
+        self._obj = obj
+
+    def __call__(self, *args, **kwargs):
+        return self._wrapper(self._obj, *args, **kwargs)
+
+    def __getattr__(self, name):
+        attr = getattr(self._wrapper, name)
+        if name in _HELPER_NAMES:
+            return partial(attr, self._obj)
+        return attr
+
+    @property
+    def fleche(self):
+        ns = self._wrapper.fleche
+        obj = self._obj
+        return SimpleNamespace(**{name: partial(getattr(ns, name), obj) for name in vars(ns)})
+
+    def __repr__(self):
+        return f"<bound fleche method {self._wrapper.__qualname__} of {self._obj!r}>"
+
+
+class FlecheWrapper:
+    """Callable class returned by @fleche; implements the descriptor protocol for method binding."""
+
+    def __init__(self, call_impl, func):
+        functools.update_wrapper(self, func)
+        # update_wrapper skips attributes absent on func (e.g. Mock objects lack __qualname__);
+        # ensure a sensible fallback so _attach's qualname formatting never fails.
+        if '__qualname__' not in self.__dict__:
+            self.__qualname__ = self.__dict__.get('__name__', repr(func))
+        self._call_impl = call_impl
+
+    def __call__(self, *args, **kwargs):
+        return self._call_impl(*args, **kwargs)
+
+    def __get__(self, obj, objtype=None):
+        if obj is None:
+            return self
+        return _BoundFlecheMethod(self, obj)
+
+    def __reduce__(self):
+        return (_lookup_by_qualname, (self.__module__, self.__qualname__))
+
+    def __repr__(self):
+        return f"<fleche function {self.__qualname__}>"
+
 
 _QUERY_DOC = """Return matching results from current cache.
 
@@ -259,8 +325,7 @@ def make_bind(wrapper):
 
 def make_wrapper(func, policy, meta, isolate, get_call):
     """Build the cached wrapper returned by :func:`fleche`."""
-    @wraps(func)
-    def wrapper(*args: Any, **kwargs: Any) -> _T:
+    def _call_impl(*args: Any, **kwargs: Any) -> _T:
         cache: BaseCache = state._CACHE.get()
 
         # expand args passed as digest early so that everything else below sees the real values
@@ -337,7 +402,8 @@ def make_wrapper(func, policy, meta, isolate, get_call):
                     return _run_and_cache()
         else:
             return _run_and_cache()
-    return wrapper
+
+    return FlecheWrapper(_call_impl, func)
 
 
 def fleche(
