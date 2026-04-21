@@ -16,7 +16,7 @@ def test_hash_code_invalidates_on_change():
     wrapped_v1 = fleche(hash_code=True)(func_v1)
     wrapped_v2 = fleche(hash_code=True)(func_v2)
 
-    assert wrapped_v1.digest(10) != wrapped_v2.digest(10)
+    assert wrapped_v1.fleche.digest(10) != wrapped_v2.fleche.digest(10)
 
 
 def test_hash_code_default_ignores_change():
@@ -34,4 +34,4 @@ def test_hash_code_default_ignores_change():
     wrapped_v1 = fleche(hash_code=False)(func_v1)
     wrapped_v2 = fleche(hash_code=False)(func_v2)
 
-    assert wrapped_v1.digest(10) == wrapped_v2.digest(10)
+    assert wrapped_v1.fleche.digest(10) == wrapped_v2.fleche.digest(10)

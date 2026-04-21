@@ -25,7 +25,7 @@ def test_fleche_decorator_default_metadata(cache_it: Cache):
         time.sleep(0.1)
         my_function(1, 2)  # cache hit, no new entry
 
-        key = my_function.digest(1, 2)
+        key = my_function.fleche.digest(1, 2)
         call = cache().calls.load(key)
 
     assert "runtime" in call.metadata
@@ -46,7 +46,7 @@ def test_fleche_decorator_custom_metadata(cache_it: Cache):
 
     with cache(cache_it):
         my_function(1, 2)
-        key = my_function.digest(1, 2)
+        key = my_function.fleche.digest(1, 2)
         call = cache().calls.load(key)
 
     assert call.metadata.get("my_meta", {}).get("my_key") == "my_value"
@@ -67,7 +67,7 @@ def test_metadata_context_manager(cache_it: Cache):
     with cache(cache_it):
         with meta(MyMetadata()):
             my_function(1, 2)
-        key = my_function.digest(1, 2)
+        key = my_function.fleche.digest(1, 2)
         call = cache().calls.load(key)
 
     assert call.metadata.get("my_meta", {}).get("my_key") == "my_value"
@@ -96,7 +96,7 @@ def test_metadata_context_manager_stacking(cache_it: Cache):
         with meta(MyMetadata1()):
             with meta(MyMetadata2(), stack=True):
                 my_function(1, 2)
-        key = my_function.digest(1, 2)
+        key = my_function.fleche.digest(1, 2)
         call = cache().calls.load(key)
 
     assert call.metadata.get("my_meta1", {}).get("my_key1") == "my_value1"
@@ -121,8 +121,8 @@ def test_metadb_table_filtering(cache_it: Cache):
         my_function(a=1, b=2)
         my_function(a=2, b=3)
 
-        key1 = my_function.digest(a=1, b=2)
-        key2 = my_function.digest(a=2, b=3)
+        key1 = my_function.fleche.digest(a=1, b=2)
+        key2 = my_function.fleche.digest(a=2, b=3)
         call1 = cache().calls.load(key1)
         call2 = cache().calls.load(key2)
 
@@ -155,7 +155,7 @@ def test_fleche_decorator_and_context_manager(cache_it: Cache):
     with cache(cache_it):
         with meta(MyMetadata2()):
             my_function(1, 2)
-        key = my_function.digest(1, 2)
+        key = my_function.fleche.digest(1, 2)
         call = cache().calls.load(key)
 
     assert call.metadata.get("my_meta1", {}).get("my_key1") == "my_value1"
@@ -174,14 +174,14 @@ def test_tags():
 
         with tags(user="test", project="fleche"):
             my_func(1, 2)
-            key1 = my_func.digest(1, 2)
+            key1 = my_func.fleche.digest(1, 2)
             call1 = cache().calls.load(key1)
             assert call1.metadata.get("tags", {}).get("user") == "test"
             assert call1.metadata.get("tags", {}).get("project") == "fleche"
 
         with project("example"):
             my_func(2, 1)
-            key2 = my_func.digest(2, 1)
+            key2 = my_func.fleche.digest(2, 1)
             call2 = cache().calls.load(key2)
             assert call2.metadata.get("tags", {}).get("project") == "example"
 

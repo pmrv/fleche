@@ -38,7 +38,7 @@ def _call_square_with_memory_cache(x):
 def _get_digest(args):
     """Worker that calls the .digest helper attribute."""
     x, y = args
-    return _add.digest(x, y)
+    return _add.fleche.digest(x, y)
 
 
 def _call_add_no_cache_setup(args):
@@ -75,8 +75,8 @@ class TestProcessPool:
         # Verify digests are non-empty strings
         assert all(isinstance(d, str) and len(d) > 0 for d in digests)
         # Same inputs should yield the same digest in worker as in main process
-        assert digests[0] == _add.digest(1, 2)
-        assert digests[1] == _add.digest(3, 4)
+        assert digests[0] == _add.fleche.digest(1, 2)
+        assert digests[1] == _add.fleche.digest(3, 4)
 
     def test_result_consistency_across_processes(self):
         """Results computed in workers should match direct calls."""

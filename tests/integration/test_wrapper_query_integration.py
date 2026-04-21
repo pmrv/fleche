@@ -57,7 +57,7 @@ def test_wrapper_query_integration(tmp_path):
         samekw(1, 1)
 
         calls_alpha = list(
-            add.query(a=None, b=None, metadata={"tags": {"project": "alpha"}})
+            add.fleche.query(a=None, b=None, metadata={"tags": {"project": "alpha"}})
         )
         assert (
             len(calls_alpha) >= 1
@@ -77,13 +77,13 @@ def test_wrapper_query_integration(tmp_path):
                 c.result, (int, float)
             ), "Result should be decoded from value store"
 
-        calls_train = add.query(a=None, b=None, metadata={"tags": {"project": "beta"}})
+        calls_train = add.fleche.query(a=None, b=None, metadata={"tags": {"project": "beta"}})
         assert any(
             c.arguments.get("a") == 10 and c.arguments.get("b") == 4
             for c in calls_train
         ), "Should retrieve the (3,4) call when filtering by tags.phase == 'eval'"
 
-        calls_4 = add.query(a=None, b=4)
+        calls_4 = add.fleche.query(a=None, b=4)
         for c in calls_4:
             assert (
                 c.name == "add"
@@ -92,8 +92,8 @@ def test_wrapper_query_integration(tmp_path):
                 c.arguments.get("b") == 4
             ), "Query should only return calls where arguments match"
 
-        assert len(list(same.query())) == 1
-        assert len(list(samekw.query())) == 1
+        assert len(list(same.fleche.query())) == 1
+        assert len(list(samekw.fleche.query())) == 1
 
 def test_query_by_result_integration(tmp_path):
     """Integration: query by result value using a Call template via cache().query.

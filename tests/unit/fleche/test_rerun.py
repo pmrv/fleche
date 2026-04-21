@@ -21,7 +21,7 @@ def test_rerun_basic():
         assert mock_func.call_count == 1
 
         # Rerun: re-execute and overwrite
-        assert func.rerun(1) == 2
+        assert func.fleche.rerun(1) == 2
         assert mock_func.call_count == 2
 
         # Fourth call: cache hit with NEW value
@@ -53,7 +53,7 @@ def test_rerun_nested():
         assert mock_inner.call_count == 1
 
         # Rerun: both should re-execute because of RefreshingCache
-        assert outer.rerun(1) == 20
+        assert outer.fleche.rerun(1) == 20
         assert mock_outer.call_count == 2
         assert mock_inner.call_count == 2
 
@@ -85,11 +85,11 @@ def test_rerun_nested_multiple_levels():
         assert mock_l3.call_count == 1
 
         # rerun l1 should rerun everything down the line
-        assert l1.rerun(0) == 2
+        assert l1.fleche.rerun(0) == 2
         assert mock_l3.call_count == 2
 
         # rerun l2 should rerun l3, but l1 will still be hit if called normally
-        assert l2.rerun(0) == 3
+        assert l2.fleche.rerun(0) == 3
         assert mock_l3.call_count == 3
 
         assert l1(0) == 2 # l1 still has the value from its last run

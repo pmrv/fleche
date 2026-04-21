@@ -29,10 +29,10 @@ def test_filter_by_name():
     assert len(list(c_foo.query(QueryCall(name="bar", arguments=None)))) == 0
 
     # Check values
-    assert c_foo.load(foo.digest(1)).result == 2
-    assert c_foo.load(foo.digest(2)).result == 3
+    assert c_foo.load(foo.fleche.digest(1)).result == 2
+    assert c_foo.load(foo.fleche.digest(2)).result == 3
     with pytest.raises(KeyError):
-        c_foo.load(bar.digest(3))
+        c_foo.load(bar.fleche.digest(3))
 
 
 def test_filter_reflects_changes():
@@ -48,7 +48,7 @@ def test_filter_reflects_changes():
         foo(1)
 
     # View should reflect changes in original cache
-    assert c_foo.load(foo.digest(1)).result == 2
+    assert c_foo.load(foo.fleche.digest(1)).result == 2
 
 
 def test_filter_with_template():
@@ -71,9 +71,9 @@ def test_filter_with_template():
     c_filtered = c.filter(QueryCall(name="foo", arguments=None))
 
     assert len(list(c_filtered.query(QueryCall(name=None, arguments=None)))) == 2
-    assert c_filtered.load(foo.digest(1)).result == 2
+    assert c_filtered.load(foo.fleche.digest(1)).result == 2
     with pytest.raises(KeyError):
-        c_filtered.load(bar.digest(3))
+        c_filtered.load(bar.fleche.digest(3))
 
 
 def test_filtered_cache_is_readonly():
