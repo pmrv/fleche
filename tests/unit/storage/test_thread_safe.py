@@ -199,8 +199,9 @@ def test_picklable_lock_pickle_roundtrip():
     restored = pickle.loads(pickle.dumps(lock))
     assert isinstance(restored, _PicklableLock)
     # Restored lock must be acquirable (not stuck in acquired state).
-    with restored:
-        pass
+    # Use blocking=False so a stuck lock raises AssertionError instead of deadlocking.
+    assert restored._lock.acquire(blocking=False), "lock should be free after unpickle"
+    restored._lock.release()
 
 
 def test_picklable_rlock_pickle_roundtrip():
@@ -209,5 +210,6 @@ def test_picklable_rlock_pickle_roundtrip():
     lock = _PicklableRLock()
     restored = pickle.loads(pickle.dumps(lock))
     assert isinstance(restored, _PicklableRLock)
-    with restored:
-        pass
+    # Use blocking=False so a stuck lock raises AssertionError instead of deadlocking.
+    assert restored._lock.acquire(blocking=False), "lock should be free after unpickle"
+    restored._lock.release()
