@@ -1,7 +1,7 @@
 from contextlib import AbstractContextManager
 import contextvars
 from contextvars import ContextVar, Token
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import overload, Callable
 
@@ -127,6 +127,16 @@ def project(name):
     return tags(project=name)
 
 
+def _reconstruct_bound_wrapper(func, bound_cache, bound_meta):
+    """Module-level factory used by BoundWrapper.__reduce__ (contextvars.Context is not picklable)."""
+    def _setup():
+        _CACHE.set(bound_cache)
+        _METADATA.set(bound_meta)
+    ctx = contextvars.copy_context()
+    ctx.run(_setup)
+    return BoundWrapper(func, bound_cache, bound_meta, ctx)
+
+
 @dataclass(frozen=True, eq=True)
 class BoundWrapper:
     """Utility class that freezes global state for the cache and metadata config.
@@ -139,6 +149,7 @@ class BoundWrapper:
     func: Callable
     cache: caches.BaseCache
     meta: tuple[metadata.MetaData, ...]
+    ctx: contextvars.Context = field(compare=False, repr=False)
 
     @classmethod
     def bind(cls, func):
@@ -152,20 +163,23 @@ class BoundWrapper:
 
         Returns:
             :class:`.BoundWrapper`: instance with the bound cache and metadata state"""
-        return cls(func, _CACHE.get(), _METADATA.get())
+        return cls(func, _CACHE.get(), _METADATA.get(), contextvars.copy_context())
 
     @property
     def fleche(self):
         """Return a .fleche namespace whose helpers run in the bound cache/meta context."""
+        if not hasattr(self.func, 'fleche'):
+            raise AttributeError(
+                f"BoundWrapper.fleche requires a fleche-decorated function; "
+                f"{self.func!r} has no .fleche namespace"
+            )
         ns = self.func.fleche  # ty: ignore[unresolved-attribute]
-        return SimpleNamespace(**{
-            name: BoundWrapper(helper, self.cache, self.meta)
-            for name, helper in vars(ns).items()
-        })
+        def _bind_helpers():
+            return {name: BoundWrapper.bind(helper) for name, helper in vars(ns).items()}
+        return SimpleNamespace(**self.ctx.run(_bind_helpers))
 
     def __call__(self, *args, **kwargs):
-        def _call():
-            _CACHE.set(self.cache)
-            _METADATA.set(self.meta)
-            return self.func(*args, **kwargs)
-        return contextvars.copy_context().run(_call)
+        return self.ctx.run(self.func, *args, **kwargs)
+
+    def __reduce__(self):
+        return (_reconstruct_bound_wrapper, (self.func, self.cache, self.meta))

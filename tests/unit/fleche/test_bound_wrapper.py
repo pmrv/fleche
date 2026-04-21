@@ -266,3 +266,34 @@ def test_bound_wrapper_fleche_uses_bound_cache():
     with cache(outer_cache):
         assert bound.fleche.contains(5)       # bound_cache has the result
         assert not my_func.contains(5)         # outer_cache is empty
+
+
+def test_bound_wrapper_fleche_raises_for_plain_function():
+    """BoundWrapper.fleche raises AttributeError when func is not fleche-decorated."""
+    def plain(x):
+        return x
+
+    bound_cache = _make_cache()
+    with cache(bound_cache):
+        bound = fleche_state.BoundWrapper.bind(plain)
+
+    import pytest
+    with pytest.raises(AttributeError, match="fleche-decorated"):
+        _ = bound.fleche
+
+
+def test_bound_wrapper_fleche_helpers_have_no_fleche():
+    """Helpers exposed via bound.fleche should not recursively expose .fleche."""
+    bound_cache = _make_cache()
+
+    @fleche
+    def my_func(x):
+        return x + 1
+
+    with cache(bound_cache):
+        bound = fleche_state.BoundWrapper.bind(my_func)
+        bound(5)
+
+    import pytest
+    with pytest.raises(AttributeError):
+        _ = bound.fleche.contains.fleche
