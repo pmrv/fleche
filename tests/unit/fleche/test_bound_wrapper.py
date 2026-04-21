@@ -246,9 +246,10 @@ def test_bound_wrapper_pickle_nested_fleche_in_plain():
 # ---------------------------------------------------------------------------
 
 
-def test_bound_wrapper_proxies_fleche_namespace():
-    """bound.fleche should forward to the wrapped function's .fleche namespace."""
+def test_bound_wrapper_fleche_uses_bound_cache():
+    """bound.fleche helpers should activate the bound cache outside any cache context manager."""
     bound_cache = _make_cache()
+    outer_cache = _make_cache()
 
     @fleche
     def my_func(x):
@@ -256,11 +257,12 @@ def test_bound_wrapper_proxies_fleche_namespace():
 
     with cache(bound_cache):
         bound = fleche_state.BoundWrapper.bind(my_func)
-        bound(5)
+        bound(5)  # populate bound_cache
 
-    assert bound.fleche is my_func.fleche
+    # digest is cache-independent; result must match
+    assert bound.fleche.digest(5) == my_func.fleche.digest(5)
 
-    with cache(bound_cache):
-        assert bound.fleche.contains(5)
-        key = bound.fleche.digest(5)
-        assert key == my_func.fleche.digest(5)
+    # helpers activate the bound cache, not the outer cache
+    with cache(outer_cache):
+        assert bound.fleche.contains(5)       # bound_cache has the result
+        assert not my_func.contains(5)         # outer_cache is empty

@@ -125,6 +125,33 @@ def project(name):
     return tags(project=name)
 
 
+class _BoundFlecheNamespace:
+    """Wraps a .fleche SimpleNamespace so every helper activates the bound cache/meta state."""
+
+    __slots__ = ('_ns', '_cache', '_meta')
+
+    def __init__(self, ns, bound_cache, bound_meta):
+        self._ns = ns
+        self._cache = bound_cache
+        self._meta = bound_meta
+
+    def __getattr__(self, name):
+        helper = getattr(self._ns, name)
+        bound_cache = self._cache
+        bound_meta = self._meta
+
+        def _bound(*args, **kwargs):
+            token_cache = _CACHE.set(bound_cache)
+            token_meta = _METADATA.set(bound_meta)
+            try:
+                return helper(*args, **kwargs)
+            finally:
+                _METADATA.reset(token_meta)
+                _CACHE.reset(token_cache)
+
+        return _bound
+
+
 @dataclass(frozen=True, eq=True)
 class BoundWrapper:
     """Utility class that freezes global state for the cache and metadata config.
@@ -154,8 +181,8 @@ class BoundWrapper:
 
     @property
     def fleche(self):
-        """Proxy the ``.fleche`` helper namespace from the wrapped function."""
-        return self.func.fleche
+        """Return a .fleche namespace whose helpers activate the bound cache/meta state."""
+        return _BoundFlecheNamespace(self.func.fleche, self.cache, self.meta)
 
     def __call__(self, *args, **kwargs):
         token_cache = _CACHE.set(self.cache)
