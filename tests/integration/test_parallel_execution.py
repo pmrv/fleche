@@ -383,31 +383,22 @@ def test_wrap_executor_cache_hit_skips_submit():
     assert future.result() == 21
 
 
-def test_process_executor_wrap_executor():
+def test_process_executor_wrap_executor(file_cache):
     """wrap_executor replaces manual BoundWrapper.bind for a ProcessPoolExecutor.
 
     Analogue of test_process_executor_bound_wrapper: the user submits the
     fleche function directly, and the patched submit takes care of binding.
     """
-    with tempfile.TemporaryDirectory() as tmpdir:
-        values_dir = f"{tmpdir}/values"
-        calls_dir = f"{tmpdir}/calls"
+    with fleche.cache(file_cache):
+        with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
+            fleche.wrap_executor(executor)
+            result = executor.submit(double, 21).result()
 
-        file_cache = Cache(
-            ValuePickleFile.with_pickle(root=values_dir),
-            CallPickleFile.with_pickle(root=calls_dir),
-        )
-
-        with fleche.cache(file_cache):
-            with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
-                fleche.wrap_executor(executor)
-                result = executor.submit(double, 21).result()
-
-        assert result == 42, f"Expected 42, got {result}"
-        assert file_cache.contains(double.digest(21)), (
-            "wrap_executor binds the file-backed cache into the worker; "
-            "results are visible to the parent via the shared filesystem path."
-        )
+    assert result == 42, f"Expected 42, got {result}"
+    assert file_cache.contains(double.digest(21)), (
+        "wrap_executor binds the file-backed cache into the worker; "
+        "results are visible to the parent via the shared filesystem path."
+    )
 
 
 def test_wrap_executor_splits_submit_kwargs():
@@ -430,23 +421,14 @@ def test_wrap_executor_splits_submit_kwargs():
 
 
 @_skip_no_executorlib
-def test_executorlib_wrap_executor():
+def test_executorlib_wrap_executor(file_cache):
     """wrap_executor works with executorlib.SingleNodeExecutor."""
     from executorlib import SingleNodeExecutor
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        values_dir = f"{tmpdir}/values"
-        calls_dir = f"{tmpdir}/calls"
+    with fleche.cache(file_cache):
+        with SingleNodeExecutor() as executor:
+            fleche.wrap_executor(executor)
+            result = executor.submit(double, 21).result()
 
-        file_cache = Cache(
-            ValuePickleFile.with_pickle(root=values_dir),
-            CallPickleFile.with_pickle(root=calls_dir),
-        )
-
-        with fleche.cache(file_cache):
-            with SingleNodeExecutor() as executor:
-                fleche.wrap_executor(executor)
-                result = executor.submit(double, 21).result()
-
-        assert result == 42, f"Expected 42, got {result}"
-        assert file_cache.contains(double.digest(21))
+    assert result == 42, f"Expected 42, got {result}"
+    assert file_cache.contains(double.digest(21))

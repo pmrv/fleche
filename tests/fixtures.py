@@ -65,3 +65,11 @@ def storage_backend(request, tmp_path):
 @pytest.fixture
 def clean_cache():
     yield Cache(ValueMemory({}), CallMemory({}))
+
+
+@pytest.fixture
+def file_cache(tmp_path):
+    yield Cache(
+        ValuePickleFile.with_pickle(root=tmp_path / "values"),
+        CallPickleFile.with_pickle(root=tmp_path / "calls"),
+    )
