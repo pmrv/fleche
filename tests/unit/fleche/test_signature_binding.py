@@ -11,11 +11,11 @@ def test_digest_raises_for_missing_required_argument():
 
     with pytest.raises(TypeError):
         # Missing required 'b'
-        f.digest(1)
+        f.fleche.digest(1)
 
     with pytest.raises(TypeError):
         # Missing required 'a'
-        f.digest(b=2)
+        f.fleche.digest(b=2)
 
 
 def test_digest_raises_for_multiple_values_for_argument():
@@ -25,7 +25,7 @@ def test_digest_raises_for_multiple_values_for_argument():
 
     # Providing both positional and keyword for the same param should raise during binding
     with pytest.raises(TypeError):
-        f.digest(1, a=1)
+        f.fleche.digest(1, a=1)
 
 
 def test_call_succeeds_with_defaults():
@@ -35,7 +35,7 @@ def test_call_succeeds_with_defaults():
         return a + b
 
     # Should not raise
-    _ = f.call(1)
+    _ = f.fleche.call(1)
 
 
 def test_digest_positional_and_keyword_equivalence():
@@ -44,8 +44,8 @@ def test_digest_positional_and_keyword_equivalence():
         return a + b
 
     # Same logical call expressed differently should map to the same digest
-    k_pos = f.digest(1, 2)
-    k_kw = f.digest(a=1, b=2)
+    k_pos = f.fleche.digest(1, 2)
+    k_kw = f.fleche.digest(a=1, b=2)
     assert k_pos == k_kw
 
 
@@ -55,8 +55,8 @@ def test_digest_applies_defaults_in_binding():
         return a + b
 
     # Defaulted arguments should be applied so these produce identical digests
-    k_defaulted = f.digest(1)
-    k_explicit = f.digest(1, b=10)
+    k_defaulted = f.fleche.digest(1)
+    k_explicit = f.fleche.digest(1, b=10)
     assert k_defaulted == k_explicit
 
 
@@ -67,6 +67,6 @@ def test_ignore_argument_applies_after_binding():
         return a + b
 
     # Since 'a' is ignored, changing it should not change the digest, even if provided positionally
-    k1 = f.digest(1, b=2)
-    k2 = f.digest(2, b=2)
+    k1 = f.fleche.digest(1, b=2)
+    k2 = f.fleche.digest(2, b=2)
     assert k1 == k2

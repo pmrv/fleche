@@ -33,11 +33,11 @@ def test_ignored_invariant(memory_cache, foo):
 
     foo(1, 2)
     assert len(calls_storage.storage) == 1
-    key1 = foo.digest(1, 2)
+    key1 = foo.fleche.digest(1, 2)
 
     foo(1, 3)
     assert len(calls_storage.storage) == 1
-    key2 = foo.digest(1, 3)
+    key2 = foo.fleche.digest(1, 3)
 
     assert key1 == key2
 
@@ -108,14 +108,14 @@ def test_combined_hints_and_args(memory_cache):
     # All present as keyword args
     foo(a=1, b=2, c=3, d=4)
     assert len(calls_storage.storage) == 1
-    key1 = foo.digest(a=1, b=2, c=3, d=4)
+    key1 = foo.fleche.digest(a=1, b=2, c=3, d=4)
 
     # Change ignored b
     foo(a=1, b=5, c=3, d=4)
     assert len(calls_storage.storage) == 1
     # FIXME: how to get load count?
     # assert memory_cache.load_count >= 1
-    key2 = foo.digest(a=1, b=5, c=3, d=4)
+    key2 = foo.fleche.digest(a=1, b=5, c=3, d=4)
 
     assert key1 == key2
 
@@ -126,6 +126,6 @@ def test_ignored_not_in_call_arguments(memory_cache):
         return a
 
     foo(a=1, b=2)
-    call = state._CACHE.get().load(foo.digest(a=1, b=2))
+    call = state._CACHE.get().load(foo.fleche.digest(a=1, b=2))
     assert 'a' in call.arguments
     assert 'b' not in call.arguments

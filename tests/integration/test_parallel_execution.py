@@ -88,7 +88,7 @@ def test_threadpool_inheritance_failure():
             future = executor.submit(my_func, 100)
             future.result()
 
-            assert not cache1.contains(my_func.digest(100))
+            assert not cache1.contains(my_func.fleche.digest(100))
 
 
 def test_threadpool_explicit_context_propagation():
@@ -103,7 +103,7 @@ def test_threadpool_explicit_context_propagation():
             future = executor.submit(ctx.run, my_func, 200)
             future.result()
 
-            assert cache1.contains(my_func.digest(200))
+            assert cache1.contains(my_func.fleche.digest(200))
 
 
 # ---------------------------------------------------------------------------
@@ -139,7 +139,7 @@ def test_process_executor_in_memory_cache_not_propagated():
             result = future.result()
 
     assert result == 20
-    assert not cache.contains(double.digest(10)), (
+    assert not cache.contains(double.fleche.digest(10)), (
         "In-memory cache is process-local; worker results are not visible to the parent."
     )
 
@@ -190,7 +190,7 @@ def test_executorlib_file_backed_cache_shared():
             result = future.result()
 
         assert result == 42, f"Expected 42, got {result}"
-        assert parent_cache.contains(double.digest(21)), (
+        assert parent_cache.contains(double.fleche.digest(21)), (
             "With file-backed storage, results written by the worker process are "
             "visible to the parent via the shared filesystem path."
         )
@@ -218,7 +218,7 @@ def test_threadpool_bound_wrapper():
         future = executor.submit(bound, 300)
         future.result()
 
-    assert cache1.contains(my_func.digest(300)), (
+    assert cache1.contains(my_func.fleche.digest(300)), (
         "BoundWrapper restores the bound cache in the thread so the result is "
         "stored in the parent's cache object."
     )
@@ -246,7 +246,7 @@ def test_process_executor_bound_wrapper():
             result = executor.submit(bound, 21).result()
 
         assert result == 42, f"Expected 42, got {result}"
-        assert file_cache.contains(double.digest(21)), (
+        assert file_cache.contains(double.fleche.digest(21)), (
             "BoundWrapper carries the file-backed cache into the worker; results "
             "written there are visible to the parent via the shared filesystem path."
         )
@@ -276,7 +276,7 @@ def test_executorlib_bound_wrapper():
             result = executor.submit(bound, 21).result()
 
         assert result == 42, f"Expected 42, got {result}"
-        assert file_cache.contains(double.digest(21)), (
+        assert file_cache.contains(double.fleche.digest(21)), (
             "BoundWrapper carries the file-backed cache into the executorlib worker; "
             "results are visible to the parent via the shared filesystem path."
         )

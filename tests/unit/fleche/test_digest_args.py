@@ -122,8 +122,8 @@ def test_digested_args_are_not_saved():
     with cache(c):
         value_key = c.values.save(4)
         func(value_key)
-        key_with_digest = func.digest(value_key)
-        key_with_value = func.digest(4)
+        key_with_digest = func.fleche.digest(value_key)
+        key_with_value = func.fleche.digest(4)
 
         assert key_with_digest == key_with_value
         assert not isinstance(c.load(key_with_digest).arguments["x"], Digest)

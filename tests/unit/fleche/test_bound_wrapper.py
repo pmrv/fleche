@@ -57,9 +57,9 @@ def test_bound_wrapper_uses_bound_cache_not_outer():
     assert result == 10
     # Result stored in bound_cache, not in outer_cache
     with cache(bound_cache):
-        assert my_func.contains(5)
+        assert my_func.fleche.contains(5)
     with cache(outer_cache):
-        assert not my_func.contains(5)
+        assert not my_func.fleche.contains(5)
 
 
 def test_bound_wrapper_preserves_metadata():
@@ -134,7 +134,7 @@ def test_bound_wrapper_picklable():
     assert result == 11
     # Result should be stored in the bound cache that travelled with the wrapper
     with cache(restored.cache):
-        assert _pickle_func.contains(10)
+        assert _pickle_func.fleche.contains(10)
 
 
 def test_bound_wrapper_pickle_preserves_cache_identity():
@@ -190,13 +190,13 @@ def test_bound_wrapper_nested_fleche_functions():
 
     # Both inner and outer cached in bound_cache
     with cache(bound_cache):
-        assert outer.contains(3)
-        assert inner.contains(3)
+        assert outer.fleche.contains(3)
+        assert inner.fleche.contains(3)
 
     # Neither cached in outer_cache
     with cache(outer_cache):
-        assert not outer.contains(3)
-        assert not inner.contains(3)
+        assert not outer.fleche.contains(3)
+        assert not inner.fleche.contains(3)
 
 
 def test_bound_wrapper_fleche_called_from_plain_function():
@@ -221,9 +221,9 @@ def test_bound_wrapper_fleche_called_from_plain_function():
 
     # cached_func stored in bound_cache, not outer_cache
     with cache(bound_cache):
-        assert cached_func.contains(2)
+        assert cached_func.fleche.contains(2)
     with cache(outer_cache):
-        assert not cached_func.contains(2)
+        assert not cached_func.fleche.contains(2)
 
 
 def test_bound_wrapper_pickle_nested_fleche_in_plain():
@@ -238,7 +238,7 @@ def test_bound_wrapper_pickle_nested_fleche_in_plain():
     assert result == 16  # 3 * 2 + 10
 
     with cache(restored.cache):
-        assert _pickle_inner.contains(3)
+        assert _pickle_inner.fleche.contains(3)
 
 
 # ---------------------------------------------------------------------------
@@ -278,9 +278,9 @@ def test_bind_helper_uses_bound_cache():
 
     assert result == 12
     with cache(bound_cache):
-        assert my_func.contains(4)
+        assert my_func.fleche.contains(4)
     with cache(outer_cache):
-        assert not my_func.contains(4)
+        assert not my_func.fleche.contains(4)
 
 
 def test_bind_helper_partial_args():
@@ -330,9 +330,9 @@ def test_bind_helper_partial_stores_in_bound_cache():
 
     assert result == 10
     with cache(bound_cache):
-        assert add.contains(1, 9)
+        assert add.fleche.contains(1, 9)
     with cache(outer_cache):
-        assert not add.contains(1, 9)
+        assert not add.fleche.contains(1, 9)
 
 
 def test_bind_helper_accessible_via_fleche_namespace():

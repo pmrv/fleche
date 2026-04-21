@@ -275,8 +275,8 @@ def foo(inp, **kwargs):
         ((Input(2),), (digest(Input(2)),)),
         (Other(Input(2)), Other(Input(digest(2)))),
         (Other(Input(2)), Other(digest(Input(2)))),
-        (foo.call(Input(1), a=Input(2)), foo.call(digest(Input(1)), a=Input(2))),
-        (foo.call(Input(1), a=Input(2)), foo.call(Input(1), a=digest(Input(2)))),
+        (foo.fleche.call(Input(1), a=Input(2)), foo.fleche.call(digest(Input(1)), a=Input(2))),
+        (foo.fleche.call(Input(1), a=Input(2)), foo.fleche.call(Input(1), a=digest(Input(2)))),
     ),
 )
 def test_merkle_tree_property_fixed(value, partially_digested_value):
