@@ -63,6 +63,10 @@ def _split_submit_kwargs(submit_method, kwargs):
 def wrap_executor(executor):
     """Monkey-patch ``executor.submit`` to intercept fleche-wrapped functions.
 
+    Calling :func:`wrap_executor` on an executor that is already wrapped is a
+    no-op: the patch is not stacked, and the original ``submit`` continues to
+    refer to the pre-wrap method.
+
     Args:
         executor: any object with a ``submit(func, *args, **kwargs)`` method
             (e.g. :class:`concurrent.futures.Executor` subclass instances).
@@ -71,6 +75,8 @@ def wrap_executor(executor):
         The same ``executor`` instance, with a replaced ``submit`` attribute.
     """
     original_submit = executor.submit
+    if getattr(original_submit, "_fleche_wrapped", False):
+        return executor
 
     def submit(func, *args, **kwargs):
         if not _is_fleche_function(func):
@@ -88,5 +94,6 @@ def wrap_executor(executor):
         bound = func.fleche.bind(*args, **func_kwargs)
         return original_submit(bound, **submit_kwargs)
 
+    submit._fleche_wrapped = True
     executor.submit = submit
     return executor

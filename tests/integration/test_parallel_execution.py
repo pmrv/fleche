@@ -420,6 +420,16 @@ def test_wrap_executor_splits_submit_kwargs():
     assert cache1.contains(my_func.digest(42))
 
 
+def test_wrap_executor_is_idempotent():
+    """Wrapping the same executor twice installs a single interception layer."""
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        fleche.wrap_executor(executor)
+        patched_once = executor.submit
+        fleche.wrap_executor(executor)
+        # The second call must not replace or stack on the first patch.
+        assert executor.submit is patched_once
+
+
 @_skip_no_executorlib
 def test_executorlib_wrap_executor(file_cache):
     """wrap_executor works with executorlib.SingleNodeExecutor."""
