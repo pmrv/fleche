@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from functools import wraps
 from inspect import signature
+from types import SimpleNamespace
 from typing import Any, Callable, Dict, Iterable, TypeVar, Annotated, get_type_hints, get_origin, get_args
 from dataclasses import dataclass, replace
 import tempfile
@@ -154,6 +155,7 @@ def _attach(wrapper, fn, *, name, doc_prefix, ret=None, extra_doc=""):
     if ret is not None:
         fn.__annotations__["return"] = ret
     setattr(wrapper, name, fn)
+    setattr(wrapper.fleche, name, fn)
 
 
 _T = TypeVar("_T")
@@ -345,11 +347,15 @@ def fleche(
     """
     Cache decorator for functions.
 
-    The decorated function is enhanced with helper methods:
-    - .call(*args, **kwargs): Get the :clas:`.Call` object.
+    The decorated function is enhanced with helper methods, accessible either directly
+    on the wrapped function or bundled under a ``.fleche`` :class:`types.SimpleNamespace`
+    (e.g. ``f.fleche.call(...)`` is equivalent to ``f.call(...)``):
+
+    - .call(*args, **kwargs): Get the :class:`.Call` object.
     - .digest(*args, **kwargs): Get the cache key.
     - .load(*args, **kwargs): Load result from cache.
     - .contains(*args, **kwargs): Check if result is in cache.
+    - .query(*args, **kwargs): Return matching calls from the active cache.
     - .rerun(*args, **kwargs): Forces reevaluation recursively.
     The original function is available via .__wrapped__.
 
@@ -382,6 +388,8 @@ def fleche(
         contains_func = make_contains(func, digest_func)
         wrapper = make_wrapper(func, policy, meta, isolate, get_call)
         rerun_func = make_rerun(func, wrapper)
+
+        wrapper.fleche = SimpleNamespace()
 
         _attach(wrapper, get_call, name="call", doc_prefix="Get the Call object for", ret=Call)
         _attach(wrapper, digest_func, name="digest", doc_prefix="Get the cache key for", ret=digest.Digest)

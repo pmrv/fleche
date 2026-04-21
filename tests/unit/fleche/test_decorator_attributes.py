@@ -118,3 +118,29 @@ def test_wrapper_helper_metadata():
     # Sig is from my_func due to @wraps(func)
     assert str(sig) == "(a: int, b: str = 'default') -> float"
     assert my_func.query.__annotations__["return"] == Iterable[Call]
+
+
+def test_fleche_namespace_bundle():
+    """Helpers are also reachable via a ``.fleche`` SimpleNamespace bundle, while remaining
+    directly on the wrapped function for backwards compatibility."""
+    from types import SimpleNamespace
+
+    c = Cache(ValueMemory({}), CallMemory({}))
+    with cache(c):
+
+        @fleche(version=1)
+        def add(a, b=1):
+            return a + b
+
+        assert isinstance(add.fleche, SimpleNamespace)
+        for name in ("call", "digest", "load", "contains", "query", "rerun"):
+            assert getattr(add.fleche, name) is getattr(add, name), name
+
+        # Namespace helpers work identically to the bare ones.
+        assert add.fleche.call(1, b=2) == add.call(1, b=2)
+        assert add.fleche.digest(1, b=2) == add.digest(1, b=2)
+        assert not add.fleche.contains(1, b=2)
+        assert add(1, b=2) == 3
+        assert add.fleche.contains(1, b=2)
+        assert add.fleche.load(1, b=2) == 3
+        assert add.fleche.rerun(1, b=2) == 3
