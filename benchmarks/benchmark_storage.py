@@ -5,7 +5,12 @@ import shutil
 import tempfile
 import gc
 
-from fleche.storage import Memory, PickleFile, Sql, BagOfHoldingH5File
+from fleche.storage import (
+    ValueMemory,
+    ValuePickleFile,
+    ValueBagOfHoldingH5File,
+    Sql,
+)
 from fleche.digest import digest
 from fleche.call import Call
 import numpy as np
@@ -16,167 +21,206 @@ from functools import partial
 def benchmark_storage_ops(storage_name, storage_factory, values_to_store):
     results = []
 
-    # Create temp dir for storage
     tmp_dir = tempfile.mkdtemp()
     try:
         storage = storage_factory(tmp_dir)
 
-        # Pre-compute keys
-        keys = []
-        for val in values_to_store:
-            try:
-                keys.append(digest(val))
-            except Exception as e:
-                print(f"Error digesting for {storage_name}: {e}", file=sys.stderr)
-                keys.append(None)
-
-        valid_items = [
-            (val, k) for val, k in zip(values_to_store, keys) if k is not None
-        ]
-
-        if not valid_items:
-            return []
+        keys = [digest(val) for val in values_to_store]
+        valid_items = list(zip(values_to_store, keys))
 
         # Benchmark Save
         save_times = []
         for val, key in valid_items:
             timer = timeit.Timer(partial(storage.save, val, key))
-            # Use smaller number for storage since it's much slower than digest
             number = 10
             times = timer.repeat(repeat=3, number=number)
             save_times.extend([t / number for t in times])
 
-        if save_times:
-            results.append(
-                {
-                    "benchmark": "storage_save",
-                    "storage": storage_name,
-                    "iterations": len(valid_items) * 30,
-                    "time": min(save_times),
-                }
-            )
+        results.append(
+            {
+                "benchmark": "storage_save",
+                "storage": storage_name,
+                "iterations": len(valid_items) * 30,
+                "time": min(save_times),
+            }
+        )
 
         # Benchmark Contains (Hit)
         contains_hit_times = []
         for _, key in valid_items:
-            try:
-                # Temporary stop-gap: in-place _contains implementation using try/except KeyError on load
-                # This ensures we can benchmark the 'contains' equivalent until all storages explicitly support it.
-                check_func = getattr(storage, "contains", None)
-                if check_func is None:
-                    def _contains(k):
-                        try:
-                            storage.load(k)
-                            return True
-                        except KeyError:
-                            return False
-                    check_func = _contains
+            timer = timeit.Timer(partial(storage.contains, key))
+            number = 10
+            times = timer.repeat(repeat=3, number=number)
+            contains_hit_times.extend([t / number for t in times])
 
-                timer = timeit.Timer(partial(check_func, key))
-                number = 10
-                times = timer.repeat(repeat=3, number=number)
-                contains_hit_times.extend([t / number for t in times])
-            except Exception as e:
-                print(f"Error checking contains (hit) in {storage_name}: {e}", file=sys.stderr)
-                continue
-
-        if contains_hit_times:
-            results.append(
-                {
-                    "benchmark": "storage_contains_hit",
-                    "storage": storage_name,
-                    "iterations": len(contains_hit_times),
-                    "time": min(contains_hit_times),
-                }
-            )
+        results.append(
+            {
+                "benchmark": "storage_contains_hit",
+                "storage": storage_name,
+                "iterations": len(contains_hit_times),
+                "time": min(contains_hit_times),
+            }
+        )
 
         # Benchmark Contains (Miss)
         contains_miss_times = []
         missing_keys = [digest(f"__missing_key_{i}__") for i in range(len(valid_items))]
         for key in missing_keys:
-            try:
-                # Temporary stop-gap: in-place _contains implementation using try/except KeyError on load
-                # This ensures we can benchmark the 'contains' equivalent until all storages explicitly support it.
-                check_func = getattr(storage, "contains", None)
-                if check_func is None:
-                    def _contains(k):
-                        try:
-                            storage.load(k)
-                            return True
-                        except KeyError:
-                            return False
-                    check_func = _contains
+            timer = timeit.Timer(partial(storage.contains, key))
+            number = 10
+            times = timer.repeat(repeat=3, number=number)
+            contains_miss_times.extend([t / number for t in times])
 
-                timer = timeit.Timer(partial(check_func, key))
-                number = 10
-                times = timer.repeat(repeat=3, number=number)
-                contains_miss_times.extend([t / number for t in times])
-            except Exception as e:
-                print(f"Error checking contains (miss) in {storage_name}: {e}", file=sys.stderr)
-                continue
-
-        if contains_miss_times:
-            results.append(
-                {
-                    "benchmark": "storage_contains_miss",
-                    "storage": storage_name,
-                    "iterations": len(contains_miss_times),
-                    "time": min(contains_miss_times),
-                }
-            )
+        results.append(
+            {
+                "benchmark": "storage_contains_miss",
+                "storage": storage_name,
+                "iterations": len(contains_miss_times),
+                "time": min(contains_miss_times),
+            }
+        )
 
         # Benchmark Load
         load_times = []
         for _, key in valid_items:
-            try:
-                timer = timeit.Timer(partial(storage.load, key))
-                number = 10
-                times = timer.repeat(repeat=3, number=number)
-                load_times.extend([t / number for t in times])
-            except Exception as e:
-                print(f"Error loading from {storage_name}: {e}", file=sys.stderr)
-                continue
+            timer = timeit.Timer(partial(storage.load, key))
+            number = 10
+            times = timer.repeat(repeat=3, number=number)
+            load_times.extend([t / number for t in times])
 
-        if load_times:
-            results.append(
-                {
-                    "benchmark": "storage_load",
-                    "storage": storage_name,
-                    "iterations": len(load_times),
-                    "time": min(load_times),
-                }
-            )
+        results.append(
+            {
+                "benchmark": "storage_load",
+                "storage": storage_name,
+                "iterations": len(load_times),
+                "time": min(load_times),
+            }
+        )
 
         # Benchmark Evict
         evict_times = []
         for _, key in valid_items:
-            try:
-                # Eviction removes it, so we can't repeat it simply with timeit without setup.
-                # Since evict alters state, we need to do a manual setup and single pass per iteration,
-                # or just use a simple loop. Timeit allows setup string, but we just want to measure evict.
-                # Best way for evict is to time one execution per key.
-                start = time.perf_counter()
-                storage.evict(key)
-                end = time.perf_counter()
-                evict_times.append(end - start)
-            except NotImplementedError:
-                break
-            except Exception as e:
-                print(f"Error evicting from {storage_name}: {e}", file=sys.stderr)
-                continue
+            # Eviction mutates state, so we can't repeat it via timeit.
+            # Measure a single call per key with perf_counter.
+            start = time.perf_counter()
+            storage.evict(key)
+            end = time.perf_counter()
+            evict_times.append(end - start)
 
-        if evict_times:
-            results.append(
-                {
-                    "benchmark": "storage_evict",
-                    "storage": storage_name,
-                    "iterations": len(evict_times),
-                    "time": min(evict_times),
-                }
-            )
+        results.append(
+            {
+                "benchmark": "storage_evict",
+                "storage": storage_name,
+                "iterations": len(evict_times),
+                "time": min(evict_times),
+            }
+        )
 
     finally:
         shutil.rmtree(tmp_dir)
+
+    return results
+
+
+def benchmark_sql_ops(storage_label, url, calls_data):
+    results = []
+    storage = Sql(url)
+
+    # Save
+    save_times = []
+    keys = []
+    for c in calls_data:
+        timer = timeit.Timer(partial(storage.save, c))
+        number = 10
+        times = timer.repeat(repeat=3, number=number)
+        save_times.extend([t / number for t in times])
+        keys.append(c.to_lookup_key())
+
+    results.append(
+        {
+            "benchmark": "storage_save",
+            "storage": storage_label,
+            "iterations": len(calls_data) * 30,
+            "time": min(save_times),
+        }
+    )
+
+    # Contains (Hit)
+    contains_hit_times = []
+    for key in keys:
+        timer = timeit.Timer(partial(storage.contains, key))
+        number = 10
+        times = timer.repeat(repeat=3, number=number)
+        contains_hit_times.extend([t / number for t in times])
+
+    results.append(
+        {
+            "benchmark": "storage_contains_hit",
+            "storage": storage_label,
+            "iterations": len(contains_hit_times),
+            "time": min(contains_hit_times),
+        }
+    )
+
+    # Contains (Miss)
+    contains_miss_times = []
+    missing_keys = [
+        Call(
+            name="func",
+            arguments={"a": f"__missing_{i}__"},
+            module="mod",
+            version=1,
+        ).to_lookup_key()
+        for i in range(len(keys))
+    ]
+    for key in missing_keys:
+        timer = timeit.Timer(partial(storage.contains, key))
+        number = 10
+        times = timer.repeat(repeat=3, number=number)
+        contains_miss_times.extend([t / number for t in times])
+
+    results.append(
+        {
+            "benchmark": "storage_contains_miss",
+            "storage": storage_label,
+            "iterations": len(contains_miss_times),
+            "time": min(contains_miss_times),
+        }
+    )
+
+    # Load
+    load_times = []
+    for key in keys:
+        timer = timeit.Timer(partial(storage.load, key))
+        number = 10
+        times = timer.repeat(repeat=3, number=number)
+        load_times.extend([t / number for t in times])
+
+    results.append(
+        {
+            "benchmark": "storage_load",
+            "storage": storage_label,
+            "iterations": len(keys) * 30,
+            "time": min(load_times),
+        }
+    )
+
+    # Evict (single call per key)
+    evict_times = []
+    for key in keys:
+        start = time.perf_counter()
+        storage.evict(key)
+        end = time.perf_counter()
+        evict_times.append(end - start)
+
+    results.append(
+        {
+            "benchmark": "storage_evict",
+            "storage": storage_label,
+            "iterations": len(evict_times),
+            "time": min(evict_times),
+        }
+    )
 
     return results
 
@@ -187,196 +231,91 @@ def main():
     # Test Data
     small_data = [f"value_{i}" for i in range(100)]
 
-    # Generate some complex nested structures
-    from utils import st_nested_values
+    # Deterministic, backend-agnostic nested structures.  Hypothesis'
+    # ``st_nested_values`` is unsuitable here: it produces dynamic dataclasses
+    # (not pickleable by stdlib pickle) and arbitrary unicode/binary that
+    # H5Bag can't always round-trip.  A seeded RNG over safe primitive types
+    # lets every backend complete this workload without silent skips.
+    import random
 
-    try:
-        nested_data = [st_nested_values.example() for _ in range(50)]
-    except Exception as e:
-        print(f"Failed to generate nested data: {e}", file=sys.stderr)
-        nested_data = [{"a": 1, "b": [2, 3], "c": {"d": "test"}}] * 50
+    rng = random.Random(0)
+
+    def _make_leaf():
+        kind = rng.randrange(5)
+        if kind == 0:
+            return None
+        if kind == 1:
+            return rng.choice([True, False])
+        if kind == 2:
+            return rng.randint(-10_000, 10_000)
+        if kind == 3:
+            return rng.uniform(-1e6, 1e6)
+        return "".join(
+            rng.choices("abcdefghijklmnopqrstuvwxyz0123456789", k=rng.randint(0, 20))
+        )
+
+    def _make_nested(depth=0):
+        if depth >= 3 or rng.random() < 0.35:
+            return _make_leaf()
+        kind = rng.randrange(2)
+        size = rng.randint(0, 6)
+        if kind == 0:
+            return [_make_nested(depth + 1) for _ in range(size)]
+        return {
+            f"k{i}_{rng.randrange(100)}": _make_nested(depth + 1)
+            for i in range(size)
+        }
+
+    nested_data = [_make_nested() for _ in range(50)]
 
     workloads = [("small_strings", small_data), ("nested_structures", nested_data)]
 
-    if np:
-        large_data = [np.random.rand(100, 100) for _ in range(20)]  # 20 large arrays
-        workloads.append(("numpy_arrays", large_data))
+    large_data = [np.random.rand(100, 100) for _ in range(20)]
+    workloads.append(("numpy_arrays", large_data))
 
+    secret = [b"benchmark-test-key-at-least-32-bytes"]
     factories = {
-        "Memory": lambda path: Memory({}),
-        "PickleFile": lambda path: PickleFile.with_pickle(root=path),
-        "PickleFile_Signed": lambda path: PickleFile.with_pickle(root=path, secret_key=[b"benchmark-test-key-at-least-32-bytes"]),
-        "CloudpickleFile": lambda path: PickleFile.with_cloudpickle(root=path),
-        "CloudpickleFile_Signed": lambda path: PickleFile.with_cloudpickle(root=path, secret_key=[b"benchmark-test-key-at-least-32-bytes"]),
-        "DillFile": lambda path: PickleFile.with_dill(root=path),
-        "DillFile_Signed": lambda path: PickleFile.with_dill(root=path, secret_key=[b"benchmark-test-key-at-least-32-bytes"]),
-        # Sql is a CallStorage, skipped for general values
-        "BagOfHoldingH5File": lambda path: BagOfHoldingH5File(
-            root=path
-        ),  # removed project arg
+        "Memory": lambda path: ValueMemory({}),
+        "PickleFile": lambda path: ValuePickleFile.with_pickle(root=path),
+        "PickleFile_Signed": lambda path: ValuePickleFile.with_pickle(
+            root=path, secret_key=secret
+        ),
+        "CloudpickleFile": lambda path: ValuePickleFile.with_cloudpickle(root=path),
+        "CloudpickleFile_Signed": lambda path: ValuePickleFile.with_cloudpickle(
+            root=path, secret_key=secret
+        ),
+        "DillFile": lambda path: ValuePickleFile.with_dill(root=path),
+        "DillFile_Signed": lambda path: ValuePickleFile.with_dill(
+            root=path, secret_key=secret
+        ),
+        # Sql is a CallStorage, benchmarked separately below
+        "BagOfHoldingH5File": lambda path: ValueBagOfHoldingH5File(root=path),
     }
 
     all_results = []
 
     for workload_name, data in workloads:
         for storage_name, factory in factories.items():
+            gc.collect()
+            results = benchmark_storage_ops(
+                f"{storage_name}/{workload_name}", factory, data
+            )
+            all_results.extend(results)
 
-            try:
-                # Force GC to minimize interference
-                gc.collect()
-                results = benchmark_storage_ops(
-                    f"{storage_name}/{workload_name}", factory, data
-                )
-                all_results.extend(results)
-            except Exception as e:
-                print(f"Failed {storage_name}/{workload_name}: {e}", file=sys.stderr)
+    # Sql specifically with Call objects
+    calls_data = [
+        Call(name="func", arguments={"a": i}, module="mod", version=1)
+        for i in range(50)
+    ]
 
-    # Test Sql specifically with Call objects
-    calls_data = []
-    for i in range(50):
-        c = Call(name="func", arguments={"a": i}, module="mod", version=1)
-        calls_data.append(c)
-
-    # Let's do Sql benchmark separately
     tmp_dir = tempfile.mkdtemp()
     try:
         for storage_label, url in [
             ("SqlFile/calls", f"sqlite:///{tmp_dir}/db.sqlite"),
             ("SqlMemory/calls", "sqlite:///:memory:"),
         ]:
-            sql_results = []
-            try:
-                storage = Sql(url)
-
-                save_times = []
-                keys = []
-                for c in calls_data:
-                    timer = timeit.Timer(partial(storage.save, c))
-                    number = 10
-                    times = timer.repeat(repeat=3, number=number)
-                    save_times.extend([t / number for t in times])
-                    keys.append(c.to_lookup_key())  # Call keys are their lookup key
-
-                sql_results.append(
-                    {
-                        "benchmark": "storage_save",
-                        "storage": storage_label,
-                        "iterations": len(calls_data) * 30,
-                        "time": min(save_times),
-                    }
-                )
-
-                contains_hit_times = []
-                for key in keys:
-                    try:
-                        # Temporary stop-gap: in-place _contains implementation using try/except KeyError on load
-                        # This ensures we can benchmark the 'contains' equivalent until all storages explicitly support it.
-                        check_func = getattr(storage, "contains", None)
-                        if check_func is None:
-                            def _contains(k):
-                                try:
-                                    storage.load(k)
-                                    return True
-                                except KeyError:
-                                    return False
-                            check_func = _contains
-
-                        timer = timeit.Timer(partial(check_func, key))
-                        number = 10
-                        times = timer.repeat(repeat=3, number=number)
-                        contains_hit_times.extend([t / number for t in times])
-                    except Exception as e:
-                        print(f"Error checking contains (hit) in {storage_label}: {e}", file=sys.stderr)
-                        continue
-
-                if contains_hit_times:
-                    sql_results.append(
-                        {
-                            "benchmark": "storage_contains_hit",
-                            "storage": storage_label,
-                            "iterations": len(contains_hit_times),
-                            "time": min(contains_hit_times),
-                        }
-                    )
-
-                contains_miss_times = []
-                missing_calls_keys = [
-                    Call(name="func", arguments={"a": f"__missing_{i}__"}, module="mod", version=1).to_lookup_key()
-                    for i in range(len(keys))
-                ]
-                for key in missing_calls_keys:
-                    try:
-                        # Temporary stop-gap: in-place _contains implementation using try/except KeyError on load
-                        # This ensures we can benchmark the 'contains' equivalent until all storages explicitly support it.
-                        check_func = getattr(storage, "contains", None)
-                        if check_func is None:
-                            def _contains(k):
-                                try:
-                                    storage.load(k)
-                                    return True
-                                except KeyError:
-                                    return False
-                            check_func = _contains
-
-                        timer = timeit.Timer(partial(check_func, key))
-                        number = 10
-                        times = timer.repeat(repeat=3, number=number)
-                        contains_miss_times.extend([t / number for t in times])
-                    except Exception as e:
-                        print(f"Error checking contains (miss) in {storage_label}: {e}", file=sys.stderr)
-                        continue
-
-                if contains_miss_times:
-                    sql_results.append(
-                        {
-                            "benchmark": "storage_contains_miss",
-                            "storage": storage_label,
-                            "iterations": len(contains_miss_times),
-                            "time": min(contains_miss_times),
-                        }
-                    )
-
-                load_times = []
-                for key in keys:
-                    timer = timeit.Timer(partial(storage.load, key))
-                    number = 10
-                    times = timer.repeat(repeat=3, number=number)
-                    load_times.extend([t / number for t in times])
-
-                sql_results.append(
-                    {
-                        "benchmark": "storage_load",
-                        "storage": storage_label,
-                        "iterations": len(keys) * 30,
-                        "time": min(load_times),
-                    }
-                )
-
-                # Sql supports evict(key)
-                evict_times = []
-                for key in keys:
-                    # Single run for eviction
-                    start = time.perf_counter()
-                    storage.evict(key)
-                    end = time.perf_counter()
-                    evict_times.append(end - start)
-
-                sql_results.append(
-                    {
-                        "benchmark": "storage_evict",
-                        "storage": storage_label,
-                        "iterations": len(evict_times),
-                        "time": min(evict_times),
-                    }
-                )
-
-                all_results.extend(sql_results)
-
-            except Exception as e:
-                import traceback
-
-                print(f"Failed {storage_label}: {e}", file=sys.stderr)
-                traceback.print_exc(file=sys.stderr)
+            gc.collect()
+            all_results.extend(benchmark_sql_ops(storage_label, url, calls_data))
     finally:
         shutil.rmtree(tmp_dir)
 
