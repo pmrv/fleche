@@ -2,7 +2,7 @@ import pytest
 from hypothesis import given, settings, HealthCheck
 import numpy as np
 
-from fleche.storage import SaveError
+from fleche.storage import SaveError, CallMemory
 from fleche.storage.sql import Sql
 from fleche.call import Call
 from fleche.digest import digest
@@ -54,7 +54,8 @@ def test_backend_short_prefix_expand(storage_backend, value):
     assert storage_backend.expand(key[:8]) == key
 
 
-def test_callstorages_evict(call_storage):
+def test_callstorages_evict():
+    store = CallMemory({})
     call = Call(
         name="evict_me",
         arguments={"a": "a" * 64},
@@ -63,29 +64,26 @@ def test_callstorages_evict(call_storage):
         version=None,
         result=None,
     )
-    try:
-        key = call_storage.save(call)
-    except SaveError:
-        return
-    assert key in set(call_storage.list())
+    key = store.save(call)
+    assert key in set(store.list())
 
     # Test short-hand eviction
     short_key = key[:8]
-    call_storage.evict(short_key)
-    assert key not in set(call_storage.list())
+    store.evict(short_key)
+    assert key not in set(store.list())
     with pytest.raises(KeyError):
-        call_storage.load(key)
+        store.load(key)
 
     # Test idempotent eviction (full key)
-    call_storage.evict(key)  # Should not raise anything
+    store.evict(key)  # Should not raise anything
 
     # Re-save and test full key eviction
-    key = call_storage.save(call)
-    assert key in set(call_storage.list())
-    call_storage.evict(key)
-    assert key not in set(call_storage.list())
+    key = store.save(call)
+    assert key in set(store.list())
+    store.evict(key)
+    assert key not in set(store.list())
     with pytest.raises(KeyError):
-        call_storage.load(key)
+        store.load(key)
 
 
 def test_sql_metadata_roundtrip_and_query(tmp_path):
