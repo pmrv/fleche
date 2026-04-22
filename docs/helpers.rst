@@ -53,3 +53,32 @@ The original, undecorated function is always accessible via the ``.__wrapped__``
 
    # Bypass cache
    result = my_func.__wrapped__(10)
+
+Usage with Decorated Methods
+-----------------------------
+
+.. note::
+
+   When ``@fleche`` is applied to a method, the helper methods (`.call`, `.digest`, `.query`,
+   `.load`, `.contains`, `.rerun`) do **not** automatically bind ``self``. Accessing
+   ``obj.method.query`` returns the same unbound helper as ``MyClass.method.query`` — Python's
+   descriptor protocol does not propagate through attribute lookups on bound methods.
+
+   You must pass the instance explicitly as the first positional argument:
+
+   .. code-block:: python
+
+      class MyClass:
+          @fleche
+          def compute(self, x):
+              ...
+
+      obj = MyClass()
+
+      # Correct — pass self explicitly
+      obj.compute.query(obj, x=5)
+      obj.compute.contains(obj, x=5)
+      obj.compute.digest(obj, x=5)
+
+      # Also works as a keyword argument
+      obj.compute.query(self=obj, x=5)
