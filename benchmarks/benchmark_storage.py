@@ -17,6 +17,27 @@ import numpy as np
 import timeit
 from functools import partial
 
+from utils import st_backend_safe_nested
+from hypothesis import given, settings, HealthCheck
+from hypothesis.database import InMemoryExampleDatabase
+
+
+def _generate_backend_safe_nested(count=50, max_depth=3, max_size=6):
+    """Generate backend-compatible nested test data using hypothesis."""
+    collected = []
+
+    @settings(
+        max_examples=count,
+        suppress_health_check=list(HealthCheck),
+        database=InMemoryExampleDatabase(),
+    )
+    @given(val=st_backend_safe_nested(max_depth=max_depth, max_size=max_size))
+    def _collect(val):
+        collected.append(val)
+
+    _collect()
+    return collected
+
 
 def benchmark_storage_ops(storage_name, storage_factory, values_to_store):
     results = []
@@ -231,42 +252,7 @@ def main():
     # Test Data
     small_data = [f"value_{i}" for i in range(100)]
 
-    # Deterministic, backend-agnostic nested structures.  Hypothesis'
-    # ``st_nested_values`` is unsuitable here: it produces dynamic dataclasses
-    # (not pickleable by stdlib pickle) and arbitrary unicode/binary that
-    # H5Bag can't always round-trip.  A seeded RNG over safe primitive types
-    # lets every backend complete this workload without silent skips.
-    import random
-
-    rng = random.Random(0)
-
-    def _make_leaf():
-        kind = rng.randrange(5)
-        if kind == 0:
-            return None
-        if kind == 1:
-            return rng.choice([True, False])
-        if kind == 2:
-            return rng.randint(-10_000, 10_000)
-        if kind == 3:
-            return rng.uniform(-1e6, 1e6)
-        return "".join(
-            rng.choices("abcdefghijklmnopqrstuvwxyz0123456789", k=rng.randint(0, 20))
-        )
-
-    def _make_nested(depth=0):
-        if depth >= 3 or rng.random() < 0.35:
-            return _make_leaf()
-        kind = rng.randrange(2)
-        size = rng.randint(0, 6)
-        if kind == 0:
-            return [_make_nested(depth + 1) for _ in range(size)]
-        return {
-            f"k{i}_{rng.randrange(100)}": _make_nested(depth + 1)
-            for i in range(size)
-        }
-
-    nested_data = [_make_nested() for _ in range(50)]
+    nested_data = _generate_backend_safe_nested()
 
     workloads = [("small_strings", small_data), ("nested_structures", nested_data)]
 
