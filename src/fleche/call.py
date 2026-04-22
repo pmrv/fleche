@@ -140,27 +140,33 @@ class DigestedCall:
     version: int | None = None
     code_digest: str | None = None
 
-    @classmethod
-    def from_call(cls, call: "Call") -> "DigestedCall":
-        """Wrap a stored :class:`Call` whose argument and result fields are already :class:`~fleche.digest.Digest`
-        pointers as a typed :class:`DigestedCall`.
-
-        Args:
-            call: A :class:`Call` loaded from :class:`~fleche.storage.CallStorage`, where
-                ``arguments`` and ``result`` hold :class:`~fleche.digest.Digest` values.
-
-        Returns:
-            A :class:`DigestedCall` with the same field values as *call*.
-        """
-        return cls(
-            name=call.name,
-            arguments=call.arguments,
-            result=call.result,
-            metadata=call.metadata,
-            module=call.module,
-            version=call.version,
-            code_digest=call.code_digest,
+    def __eq__(self, other: object) -> bool:
+        # DigestedCall and Call with identical field values are semantically equivalent.
+        if not isinstance(other, (DigestedCall, Call)):
+            return NotImplemented
+        return (
+            self.name == other.name
+            and self.arguments == other.arguments
+            and self.result == other.result
+            and self.metadata == other.metadata
+            and self.module == other.module
+            and self.version == other.version
+            and self.code_digest == other.code_digest
         )
+
+    def __digest__(self):
+        # DigestedCall must hash identically to the equivalent Call with the same fields,
+        # so that digest(DigestedCall) == digest(LazyCall) == digest(Call-with-digest-args).
+        c = Call(
+            name=self.name,
+            arguments=self.arguments,
+            metadata=self.metadata,
+            module=self.module,
+            version=self.version,
+            code_digest=self.code_digest,
+            result=self.result,
+        )
+        return digest.digest(c)
 
     def to_lookup_key(self) -> str:
         # Independent implementation: build a Call directly without calling Call.to_lookup_key.
@@ -169,19 +175,21 @@ class DigestedCall:
         c = Call(name=self.name, arguments={}, module=self.module, version=self.version, code_digest=self.code_digest)
         return digest.digest(replace(c, arguments=arg_pairs, result=None, metadata=None))
 
-    def fetch(self, values) -> "Call":
-        """Reconstruct a full :class:`Call` by loading all values from *values*.
+    def fetch(self, cache) -> "LazyCall":
+        """Wrap this :class:`DigestedCall` in a :class:`LazyCall` backed by *cache*.
 
         Args:
-            values: A :class:`~fleche.storage.ValueStorage` instance to load values from.
+            cache: A cache instance (e.g. :class:`~fleche.caches.Cache`) whose value
+                storage will be used to load argument and result values on demand.
 
         Returns:
-            A :class:`Call` with all argument and result digests replaced by their stored values.
+            A :class:`LazyCall` that loads values lazily from *cache*.
         """
-        return Call(
+        return LazyCall(
             name=self.name,
-            arguments={k: values.load(v) for k, v in self.arguments.items()},
-            result=values.load(self.result) if self.result is not None else None,
+            _arguments=self.arguments,
+            _result=self.result,
+            _cache=cache,
             metadata=self.metadata,
             module=self.module,
             version=self.version,

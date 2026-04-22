@@ -4,9 +4,9 @@ import threading
 from typing import Iterable, Any, List
 from pathlib import Path
 from dataclasses import dataclass, field
-from .base import KeyManagement, CallStorage, AmbiguousDigestError
+from .base import KeyManagement, CallStorage, AmbiguousDigestError, _to_digested_call
 from .thread_safe import PerKeyLockMixin
-from ..call import Call, QueryCall
+from ..call import Call, DigestedCall, QueryCall
 from ..digest import Digest, DIGEST_LENGTH, digest
 
 from pyiron_snippets.import_alarm import ImportAlarm
@@ -301,11 +301,11 @@ class Sql(PerKeyLockMixin, CallStorage):
                 self.evict(str(key))
             return self.put(call, key)
 
-    def load(self, key: Digest | str) -> Call:
+    def load(self, key: Digest | str) -> DigestedCall:
         with self._operation_context(key):
             key = self._normalize_key(key)
             logger.debug("Loading call with key %s", key)
-            return self.get(key)
+            return _to_digested_call(self.get(key))
 
     def _normalize_value(self, v: Any) -> str:
         """Return the stored form used in SQL for argument/result matching.
@@ -387,7 +387,7 @@ class Sql(PerKeyLockMixin, CallStorage):
                         stmt = stmt.where(M.data[k].as_string() == v)
         return stmt
 
-    def query(self, template: QueryCall) -> Iterable[Call]:
+    def query(self, template: QueryCall) -> Iterable[DigestedCall]:
         """Find cached calls matching a template using SQL-side filtering.
 
         Semantics match CallStorage.query:

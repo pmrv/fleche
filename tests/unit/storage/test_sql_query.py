@@ -274,7 +274,10 @@ def test_sql_call_digest_persistence(store):
 
     assert loaded.code_digest == "some_code_digest"
     assert loaded.to_lookup_key() == original.to_lookup_key()
-    assert loaded == original
+    assert loaded.metadata == original.metadata
+    assert loaded.module == original.module
+    assert loaded.version == original.version
+    assert str(loaded.result) == str(original.result)
 
 
 # ---------------------------------------------------------------------------

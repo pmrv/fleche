@@ -2,43 +2,26 @@
 import pytest
 from unittest.mock import MagicMock
 
-from fleche.call import Call, DigestedCall
+from fleche.call import Call, DigestedCall, LazyCall
+from fleche.caches import Cache
 from fleche.digest import Digest
 from fleche.storage.base import SaveError
-from fleche.storage.memory import ValueMemory
+from fleche.storage.memory import ValueMemory, CallMemory
 
 
 def _mem():
     return ValueMemory({})
 
 
+def _cache(values=None):
+    values = values or _mem()
+    return Cache(values, CallMemory({}))
+
+
 def _call(**kwargs):
     defaults = dict(name="f", arguments={"x": 1, "y": 2}, result=42)
     defaults.update(kwargs)
     return Call(**defaults)
-
-
-# ---------------------------------------------------------------------------
-# DigestedCall.from_call
-# ---------------------------------------------------------------------------
-
-class TestDigestedCallFromCall:
-    def test_wraps_stored_call(self):
-        call = _call(module="m", version=2, code_digest="abc")
-        dc = DigestedCall.from_call(call)
-        assert isinstance(dc, DigestedCall)
-        assert dc.name == call.name
-        assert dc.arguments is call.arguments
-        assert dc.result is call.result
-        assert dc.metadata is call.metadata
-        assert dc.module == call.module
-        assert dc.version == call.version
-        assert dc.code_digest == call.code_digest
-
-    def test_lookup_key_matches(self):
-        call = _call()
-        dc = DigestedCall.from_call(call)
-        assert dc.to_lookup_key() == call.to_lookup_key()
 
 
 # ---------------------------------------------------------------------------
@@ -89,46 +72,52 @@ class TestDigestedCallLookupKey:
 # ---------------------------------------------------------------------------
 
 class TestDigestedCallFetch:
-    def test_fetch_returns_call(self):
+    def test_fetch_returns_lazy_call(self):
         values = _mem()
+        cache = _cache(values)
         call = _call()
         digested = call.stash(values)
-        restored = digested.fetch(values)
-        assert isinstance(restored, Call)
+        lazy = digested.fetch(cache)
+        assert isinstance(lazy, LazyCall)
 
     def test_fetch_restores_arguments(self):
         values = _mem()
+        cache = _cache(values)
         call = _call(arguments={"x": 10, "y": 20})
         digested = call.stash(values)
-        restored = digested.fetch(values)
+        restored = digested.fetch(cache).fetch()
         assert restored.arguments == {"x": 10, "y": 20}
 
     def test_fetch_restores_result(self):
         values = _mem()
+        cache = _cache(values)
         call = _call(result=99)
         digested = call.stash(values)
-        restored = digested.fetch(values)
+        restored = digested.fetch(cache).fetch()
         assert restored.result == 99
 
     def test_fetch_preserves_metadata(self):
         values = _mem()
+        cache = _cache(values)
         call = _call(metadata={"Runtime": {"elapsed": 2.5}})
         digested = call.stash(values)
-        restored = digested.fetch(values)
-        assert restored.metadata == {"Runtime": {"elapsed": 2.5}}
+        lazy = digested.fetch(cache)
+        assert lazy.metadata == {"Runtime": {"elapsed": 2.5}}
 
     def test_fetch_roundtrip_lookup_key(self):
         values = _mem()
+        cache = _cache(values)
         call = _call()
-        restored = call.stash(values).fetch(values)
-        assert restored.to_lookup_key() == call.to_lookup_key()
+        lazy = call.stash(values).fetch(cache)
+        assert lazy.to_lookup_key() == call.to_lookup_key()
 
     def test_fetch_none_result(self):
         """fetch handles DigestedCall with no result (result=None)."""
         dc = DigestedCall(name="f", arguments={})
-        values = _mem()
-        restored = dc.fetch(values)
-        assert restored.result is None
+        cache = _cache()
+        lazy = dc.fetch(cache)
+        assert isinstance(lazy, LazyCall)
+        assert lazy._result is None
 
 
 # ---------------------------------------------------------------------------

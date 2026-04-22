@@ -276,43 +276,14 @@ class Cache(BaseCache):
         return self.calls.save(call)
 
     @overload
-    def _decode_call(self, dc: DigestedCall, lazy: bool = False) -> Call: ...
-
-    @overload
-    def _decode_call(self, dc: DigestedCall, lazy: bool = True) -> LazyCall: ...
-
-    def _decode_call(self, dc: DigestedCall, lazy: bool) -> Call | LazyCall:
-        if lazy:
-            return LazyCall(
-                name=dc.name,
-                _arguments=dc.arguments,
-                _result=dc.result,
-                _cache=self,
-                metadata=dc.metadata,
-                module=dc.module,
-                version=dc.version,
-                code_digest=dc.code_digest,
-            )
-
-        return Call(
-            name=dc.name,
-            arguments={k: self._handle_args_load(v) for k, v in dc.arguments.items()},
-            result=self.load_value(dc.result) if isinstance(dc.result, Digest) else dc.result,
-            metadata=dc.metadata,
-            module=dc.module,
-            version=dc.version,
-            code_digest=dc.code_digest,
-        )
-
-    @overload
     def load(self, key: str, lazy: bool = False) -> Call: ...
 
     @overload
     def load(self, key: str, lazy: bool = True) -> LazyCall: ...
 
     def load(self, key: str, lazy: bool = True) -> Call | LazyCall:
-        stored = self.calls.load(key)
-        return self._decode_call(DigestedCall.from_call(stored), lazy)
+        lc = self.calls.load(key).fetch(self)
+        return lc if lazy else lc.fetch()
 
     def contains(self, key: str) -> bool:
         return self.calls.contains(key)
@@ -369,7 +340,7 @@ class Cache(BaseCache):
         )
         for c in self.calls.query(call):
             try:
-                yield self._decode_call(DigestedCall.from_call(c), lazy=True)
+                yield c.fetch(self)
             except Exception as err:
                 logger.error(
                         f"Failed to load matching call {c.to_lookup_key()} with {err}! Indicates corrupt cache."

@@ -1,7 +1,7 @@
 import logging
 from unittest.mock import Mock, MagicMock
 from fleche import fleche, cache
-from fleche.call import Call, QueryCall
+from fleche.call import Call, DigestedCall, QueryCall
 from fleche.digest import Digest
 from fleche.caches import Cache, CacheStack
 
@@ -35,7 +35,7 @@ def test_cache_load():
     calls_storage = Mock()
 
     calls_storage.load = Mock(
-        return_value=Call(
+        return_value=DigestedCall(
             name="test",
             arguments={
                 "arg1": Digest("arg1" + "0" * 60),
