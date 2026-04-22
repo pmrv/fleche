@@ -1,14 +1,24 @@
 
 name: Tests
 
-on:
-  pull_request:
-    paths:
-      - 'src/**'
-      - 'tests/**'
+on: pull_request
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.filter.outputs.run }}
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            run:
+              - 'src/**'
+              - 'tests/**'
+
   build:
+    needs: changes
     strategy:
       fail-fast: false
       matrix:
@@ -16,17 +26,24 @@ jobs:
         os: ["ubuntu-latest"]
     runs-on: ${{ matrix.os }}
     steps:
+    - name: Skip notice
+      if: needs.changes.outputs.run != 'true'
+      run: echo "No src/ or tests/ changes; skipping."
     - uses: actions/checkout@v5
+      if: needs.changes.outputs.run == 'true'
     - name: Set up Python ${{ matrix.python-version }}
+      if: needs.changes.outputs.run == 'true'
       uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
         cache: pip
     - name: Setup
+      if: needs.changes.outputs.run == 'true'
       shell: bash -l {0}
       run: |
         pip install -e .[tests]
     - name: run tests
+      if: needs.changes.outputs.run == 'true'
       shell: bash -l {0}
       run: |
         pytest
