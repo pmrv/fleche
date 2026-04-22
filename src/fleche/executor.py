@@ -94,6 +94,6 @@ def wrap_executor(executor):
         bound = func.fleche.bind(*args, **func_kwargs)
         return original_submit(bound, **submit_kwargs)
 
-    submit._fleche_wrapped = True
+    submit._fleche_wrapped = True  # type: ignore
     executor.submit = submit
     return executor
