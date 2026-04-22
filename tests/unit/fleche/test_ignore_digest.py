@@ -1,7 +1,10 @@
 import logging
 
+import pytest
+
 from fleche import fleche, cache
 from fleche.caches import Cache
+from fleche.digest import Unhashable
 from fleche.storage import ValueMemory, CallMemory
 
 
@@ -91,6 +94,26 @@ def test_ignore_string_list_tuple_equivalent():
     k3a = f_tuple.fleche.digest(1, b=2)
     k3b = f_tuple.fleche.digest(999, b=2)
     assert k3a == k3b
+
+
+def test_unignored_unhashable_raises_but_ignored_is_ok():
+    # Without ignore, an unhashable argument should cause digest to raise
+    @fleche
+    def g(x):
+        return 1
+
+    with pytest.raises(Unhashable):
+        _ = g.fleche.digest(UnhashableThing())
+
+    # With ignore, the same unhashable value should be fine and not affect digest
+    @fleche(ignore=("x",))
+    def h(x, y):
+        return y
+
+    try:
+        h.fleche.digest(UnhashableThing(), y=2)
+    except Unhashable:
+        assert False
 
 
 def test_keyword_only_and_positional_only_params_with_ignore():
