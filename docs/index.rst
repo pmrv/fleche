@@ -44,6 +44,7 @@ Welcome to the **Fleche** library documentation.
    notebooks/StorageBackends
    notebooks/SecureStorage
    notebooks/CacheStack
+   notebooks/ConcurrentExecution
 
 .. toctree::
    :maxdepth: 2
