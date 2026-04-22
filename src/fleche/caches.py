@@ -3,8 +3,7 @@ import logging
 import random
 import threading
 from dataclasses import dataclass, replace, field
-from copy import copy
-from typing import Iterable, Any, Callable, Literal, overload
+from typing import Iterable, Any, Callable, Literal
 
 import pandas as pd
 
@@ -35,16 +34,8 @@ class BaseCache(ABC):
     def save(self, call: Call) -> str:
         ...
 
-    @overload
-    def load(self, key: str, lazy: bool = False) -> Call:
-        ...
-
-    @overload
-    def load(self, key: str, lazy: bool = True) -> LazyCall:
-        ...
-
     @abstractmethod
-    def load(self, key: str, lazy: bool = True) -> Call | LazyCall:
+    def load(self, key: str) -> LazyCall:
         ...
 
     @abstractmethod
@@ -56,7 +47,7 @@ class BaseCache(ABC):
 
     def contains(self, key: str) -> bool:
         try:
-            self.load(key, lazy=True)
+            self.load(key)
             return True
         except KeyError:
             return False
@@ -244,16 +235,6 @@ class Cache(BaseCache):
 
         return self.values.load(key)
 
-    def _handle_args_save(self, value):
-        if isinstance(value, Digest):
-            return value
-        # for arguments saving is not critical, substitute digest and move on
-        try:
-            return self.values.save(value)
-        except storage.SaveError:
-            logger.warning("Failed to save argument: %s", value)
-            return _digest.digest(value)
-
     def _handle_args_load(self, key):
         if not isinstance(key, Digest):
             return key  # found a simple value
@@ -264,26 +245,14 @@ class Cache(BaseCache):
             return key
 
     def save(self, call: Call) -> str:
-        call = copy(call)
         try:
-            call.result = self.values.save(call.result)
-            call.arguments = {
-                k: self._handle_args_save(v) for k, v in call.arguments.items()
-            }
+            digested = call.stash(self.values)
         except storage.SaveError as e:
             raise Rejected(e)
+        return self.calls.save(digested)
 
-        return self.calls.save(call)
-
-    @overload
-    def load(self, key: str, lazy: bool = False) -> Call: ...
-
-    @overload
-    def load(self, key: str, lazy: bool = True) -> LazyCall: ...
-
-    def load(self, key: str, lazy: bool = True) -> Call | LazyCall:
-        lc = self.calls.load(key).fetch(self)
-        return lc if lazy else lc.fetch()
+    def load(self, key: str) -> LazyCall:
+        return self.calls.load(key).fetch(self)
 
     def contains(self, key: str) -> bool:
         return self.calls.contains(key)
@@ -370,8 +339,8 @@ class ReadOnlyCache(BaseCache):
     def save(self, call: Call):
         raise Rejected(self, call)
 
-    def load(self, key, lazy: bool = True):
-        return self.cache.load(key, lazy=lazy)
+    def load(self, key) -> LazyCall:
+        return self.cache.load(key)
 
     def expand(self, key: Digest | str) -> Digest:
         return self.cache.expand(key)
@@ -406,13 +375,11 @@ class FilteredCache(ReadOnlyCache):
 
     predicate: Callable[[Call | LazyCall], bool]
 
-    def load(self, key, lazy: bool = True):
-        call: LazyCall = self.cache.load(key, lazy=True)  # ty: ignore bug or I'm really tired
-        if self.predicate(call):
-            if not lazy:
-                return call.fetch()
-            return call
-        raise KeyError(key)
+    def load(self, key) -> LazyCall:
+        lc = self.cache.load(key)
+        if not self.predicate(lc):
+            raise KeyError(key)
+        return lc
 
     def _query(self, call: call.QueryCall) -> Iterable[LazyCall]:
         for c in self.cache.query(call):
@@ -437,13 +404,7 @@ class RefreshingCache(BaseCache):
     def save(self, call: Call) -> str:
         return self.cache.save(call)
 
-    @overload
-    def load(self, key: str, lazy: bool = False) -> Call: ...
-
-    @overload
-    def load(self, key: str, lazy: bool = True) -> LazyCall: ...
-
-    def load(self, key: str, lazy: bool = True) -> Call | LazyCall:
+    def load(self, key: str) -> LazyCall:
         raise KeyError(key)
 
     def load_value(self, key: str) -> Any:
@@ -483,21 +444,20 @@ class CacheStack(BaseCache):
     def save(self, call: Call):
         self.stack[0].save(call)
 
-    def load(self, key, lazy: bool = True):
+    def load(self, key) -> LazyCall:
         for i, cache in enumerate(self.stack):
             try:
-                call = cache.load(key, lazy=lazy)
+                lc = cache.load(key)
                 if i > 0:
                     try:
-                        self.save(call.fetch() if lazy else call)  # ty: ignore
+                        self.save(lc.fetch())
                         logger.info("Transferred hit for %s from higher cache to base cache", key)
                     except Rejected as e:
                         logger.warning("Failed to transfer hit for %s to base cache: %s", key, e)
-                return call
+                return lc
             except KeyError:
                 continue
-        else:
-            raise KeyError(key)
+        raise KeyError(key)
 
     def load_value(self, key):
         for cache in self.stack:

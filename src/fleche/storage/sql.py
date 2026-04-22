@@ -4,7 +4,7 @@ import threading
 from typing import Iterable, Any, List
 from pathlib import Path
 from dataclasses import dataclass, field
-from .base import KeyManagement, CallStorage, AmbiguousDigestError, _to_digested_call
+from .base import KeyManagement, CallStorage, AmbiguousDigestError
 from .thread_safe import PerKeyLockMixin
 from ..call import Call, DigestedCall, QueryCall
 from ..digest import Digest, DIGEST_LENGTH, digest
@@ -215,7 +215,7 @@ class Sql(PerKeyLockMixin, CallStorage):
         # Always return a Digest instance, not a plain str
         return key
 
-    def get(self, key: Digest) -> Call:
+    def get(self, key: Digest) -> DigestedCall:
         session = self._local.session
         call_model = session.execute(
             select(CallModel).where(CallModel.key == str(key))
@@ -230,7 +230,7 @@ class Sql(PerKeyLockMixin, CallStorage):
             .scalars()
             .all()
         )
-        return Call(
+        return DigestedCall(
             name=call_model.name,
             arguments=arguments,
             metadata={row.name: (row.data or {}) for row in meta_rows},
@@ -305,7 +305,7 @@ class Sql(PerKeyLockMixin, CallStorage):
         with self._operation_context(key):
             key = self._normalize_key(key)
             logger.debug("Loading call with key %s", key)
-            return _to_digested_call(self.get(key))
+            return self.get(key)
 
     def _normalize_value(self, v: Any) -> str:
         """Return the stored form used in SQL for argument/result matching.

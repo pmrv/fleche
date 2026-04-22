@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 from fleche.call import Call, DigestedCall, LazyCall
 from fleche.caches import Cache
-from fleche.digest import Digest
+from fleche.digest import Digest, digest
 from fleche.storage.base import SaveError
 from fleche.storage.memory import ValueMemory, CallMemory
 
@@ -212,3 +212,65 @@ class TestCallDigest:
     def test_metadata_preserved(self):
         call = _call(metadata={"Tags": {"env": "prod"}})
         assert call.digest().metadata == {"Tags": {"env": "prod"}}
+
+
+# ---------------------------------------------------------------------------
+# DigestedCall.__digest__  —  cross-type digest equivalence
+#
+# DigestedCall.__digest__ ensures that digest(DigestedCall) == digest(Call) for
+# semantically equivalent objects.  This invariant is load-bearing: it allows
+# LazyCall.to_lookup_key() to delegate to DigestedCall without re-hashing raw
+# values, and it means stored DigestedCall objects hash the same way as the
+# original Call from which they were produced.
+#
+# The three-way equivalence that must hold:
+#   digest(original_Call) == digest(DigestedCall) == digest(LazyCall)
+# for objects representing the same function call.
+# ---------------------------------------------------------------------------
+
+class TestDigestedCallDigestEquivalence:
+    """digest(DigestedCall) must equal digest(equivalent Call) and digest(equivalent LazyCall)."""
+
+    def test_digested_call_digest_matches_original_call(self):
+        """digest(dc) == digest(call) — Digest pass-through makes value vs pointer transparent."""
+        call = _call(arguments={"x": 10, "y": 20}, result=99)
+        dc = call.digest()
+        assert digest(dc) == digest(call)
+
+    def test_stash_digest_matches_original_call(self):
+        """digest(stash) == digest(call) — stash stores values but same hash as original."""
+        values = _mem()
+        call = _call(arguments={"x": 10, "y": 20}, result=99)
+        stashed = call.stash(values)
+        assert digest(stashed) == digest(call)
+
+    def test_digested_call_digest_matches_lazy_call(self):
+        """digest(DigestedCall) == digest(LazyCall) — three-way equivalence."""
+        values = _mem()
+        cache = _cache(values)
+        call = _call(arguments={"x": 10, "y": 20}, result=99)
+        stashed = call.stash(values)
+        lazy = stashed.fetch(cache)
+        assert digest(stashed) == digest(lazy)
+        assert digest(lazy) == digest(call)
+
+    def test_digested_call_digest_stable_across_stash_fetch(self):
+        """digest is stable after a full stash → fetch → fetch round-trip."""
+        values = _mem()
+        cache = _cache(values)
+        call = _call(arguments={"x": 42}, result="hello")
+        stashed = call.stash(values)
+        restored = stashed.fetch(cache).fetch()
+        assert digest(stashed) == digest(restored)
+
+    def test_digested_call_digest_varies_with_arguments(self):
+        """Different arguments produce different digests."""
+        call_a = _call(arguments={"x": 1})
+        call_b = _call(arguments={"x": 2})
+        assert digest(call_a.digest()) != digest(call_b.digest())
+
+    def test_digested_call_digest_varies_with_metadata(self):
+        """Different metadata produces different full digests (metadata is NOT excluded from digest)."""
+        call_a = _call(metadata={"Runtime": {"elapsed": 1.0}})
+        call_b = _call(metadata={"Runtime": {"elapsed": 9.9}})
+        assert digest(call_a.digest()) != digest(call_b.digest())

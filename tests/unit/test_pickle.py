@@ -140,7 +140,7 @@ def test_cache_functional_roundtrip(value_storage, call_storage, call):
     except Rejected:
         return
     restored = roundtrip(cache)
-    loaded = restored.load(key, lazy=False)
+    loaded = restored.load(key).fetch()
     assert loaded == call
 
 
@@ -155,7 +155,7 @@ def test_cache_stack_functional_roundtrip(value_storage, call_storage, call):
         return
     stack = CacheStack((cache, Cache(ValueMemory({}), CallMemory({}))))
     restored = roundtrip(stack)
-    loaded = restored.load(key, lazy=False)
+    loaded = restored.load(key).fetch()
     assert loaded == call
 
 

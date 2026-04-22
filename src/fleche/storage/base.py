@@ -217,21 +217,6 @@ class CallStorage(KeyManagement):
                 self.save(new_call)
 
 
-def _to_digested_call(raw: Call | DigestedCall) -> DigestedCall:
-    """Wrap a raw stored call (whose argument/result fields are Digest values) as a DigestedCall."""
-    if isinstance(raw, DigestedCall):
-        return raw
-    return DigestedCall(
-        name=raw.name,
-        arguments=raw.arguments,
-        result=raw.result,
-        metadata=raw.metadata,
-        module=raw.module,
-        version=raw.version,
-        code_digest=raw.code_digest,
-    )
-
-
 class CallMixin(CallStorage, StorageBackend):
     """Bridges :class:`CallStorage` with :class:`StorageBackend` primitives.
 
@@ -255,7 +240,7 @@ class CallMixin(CallStorage, StorageBackend):
         with self._operation_context(key):
             key = self._normalize_key(key)
             logger.debug("Loading call with key %s", key)
-            return _to_digested_call(self.get(key))
+            return self.get(key)
 
     def query(self, template: QueryCall) -> Iterable[DigestedCall]:
         """Find cached calls that 'match' the template.

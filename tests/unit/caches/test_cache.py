@@ -241,7 +241,7 @@ def test_base_cache_transfer_no_overwrite_and_pop(caplog):
     assert c2.contains(str(call2.to_lookup_key()))
     assert not c1.contains(str(call2.to_lookup_key()))
     # call1 in c2 should retain the original value, not be overwritten
-    assert c2.load(str(call1.to_lookup_key()), lazy=False).result == "existing"
+    assert c2.load(str(call1.to_lookup_key())).result == "existing"
     # call1 should still be in c1 — NOT evicted because it conflicted
     assert c1.contains(str(call1.to_lookup_key()))
     # a warning should have been emitted for the skipped eviction
