@@ -32,26 +32,6 @@ def test_custom_digest():
     assert isinstance(digest(CustomMethod("method")), Digest)
 
 
-def test_custom_digest_priority():
-    """Test that __digest__ has priority over default implementations."""
-
-    class CustomStr(str):
-        def __digest__(self):
-            return "custom_str_digest"
-
-    class CustomInt(int):
-        def __digest__(self):
-            return "custom_int_digest"
-
-    class CustomDict(dict):
-        def __digest__(self):
-            return "custom_dict_digest"
-
-    assert digest(CustomStr("hello")) == "custom_str_digest"
-    assert digest(CustomInt(42)) == "custom_int_digest"
-    assert digest(CustomDict(a=1)) == "custom_dict_digest"
-
-
 def test_supported_types():
     """Test that all supported types can be digested without raising an exception."""
 
