@@ -317,6 +317,39 @@ def test_cache_load_restores_complex_arguments_and_result():
     assert loaded.result == [4, 5, 6]
 
 
+def test_cache_query_convenience_kwargs():
+    """BaseCache.query accepts QueryCall kwargs directly without constructing a QueryCall."""
+    from fleche.storage.memory import ValueMemory, CallMemory
+
+    c = Cache(values=ValueMemory({}), calls=CallMemory({}))
+
+    call1 = Call(name="foo", arguments={"x": 1}, result=2, module="m", version=None, metadata={})
+    call2 = Call(name="bar", arguments={"x": 3}, result=4, module="m", version=None, metadata={})
+    c.save(call1)
+    c.save(call2)
+
+    results = list(c.query(name="foo"))
+    assert len(results) == 1
+    assert results[0].name == "foo"
+
+    results = list(c.query())
+    assert len(results) == 2
+
+    results = list(c.query(QueryCall(name="bar")))
+    assert len(results) == 1
+    assert results[0].name == "bar"
+
+
+def test_cache_query_kwargs_and_template_raises():
+    """Passing both a QueryCall template and kwargs should raise TypeError."""
+    import pytest
+    from fleche.storage.memory import ValueMemory, CallMemory
+
+    c = Cache(values=ValueMemory({}), calls=CallMemory({}))
+    with pytest.raises(TypeError):
+        c.query(QueryCall(), name="foo")
+
+
 def test_hash_builtin_caches():
     """Test that all cache types respond properly to hash() builtin."""
     from fleche.caches import ReadOnlyCache, FilteredCache, RefreshingCache, SizeLimitedCache

@@ -135,10 +135,32 @@ class BaseCache(ABC):
     @abstractmethod
     def _query(self, call: call.QueryCall) -> Iterable[LazyCall]: ...
 
-    def query(self, call: call.QueryCall) -> query.QueryIterator:
+    def query(self, template: "call.QueryCall | None" = None, **kwargs) -> query.QueryIterator:
+        """Query the cache for matching calls.
+
+        Accepts either a :class:`~fleche.call.QueryCall` as the first positional argument,
+        or the same keyword arguments that :class:`~fleche.call.QueryCall` accepts.
+        Omitted fields default to ``None`` (wildcard).  Passing both a template and
+        keyword arguments raises :class:`TypeError`.
+
+        Examples::
+
+            cache.query(name="my_func")
+            cache.query(name="my_func", arguments={"x": 1})
+            cache.query(QueryCall(name="my_func"))  # existing form still works
+            cache.query()  # all calls
+
+        Returns:
+            :class:`~fleche.query.QueryIterator`
+        """
+        if template is None:
+            template = call.QueryCall(**kwargs)
+        elif kwargs:
+            raise TypeError("Cannot pass keyword arguments when a QueryCall template is provided")
+
         def _safe_iter():
             try:
-                yield from self._query(call)
+                yield from self._query(template)
             except _digest.Unhashable as e:
                 logger.warning("No hash for query argument: %s", e.args[0])
         return query.QueryIterator(_safe_iter())
