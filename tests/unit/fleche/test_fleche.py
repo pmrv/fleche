@@ -116,10 +116,11 @@ def test_fleche_with_version():
 def test_fleche_with_module():
     mock_function = Mock(return_value=42)
     mock_function.__name__ = "name"
+    mock_function.__qualname__ = "name"
 
     with cache(Cache(ValueMemory({}), CallMemory({}))):
         # First call, should execute the function and save to cache
-        mock_function.__module__ = "module1"
+        mock_function.__module__ = "json"
         # need to assigne dunder before wrapping for fleche to pick it up
         my_func = fleche(mock_function)
 
@@ -129,7 +130,7 @@ def test_fleche_with_module():
         assert cache().contains(key_m1)
 
         # Second call, with different module, should execute again
-        mock_function.__module__ = "module2"
+        mock_function.__module__ = "os"
         my_func = fleche(mock_function)
         assert my_func(2) == 42
         assert mock_function.call_count == 2

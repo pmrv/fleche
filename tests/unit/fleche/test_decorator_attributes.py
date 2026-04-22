@@ -23,7 +23,7 @@ def test_fleche_extra_attributes():
 
         # Test call
         call = add.fleche.call(1, b=2)
-        assert call.name == "add"
+        assert call.name == add.__wrapped__.__qualname__
         assert list(call.arguments.items()) == [("a", 1), ("b", 2)]
         assert call.version == 1
 

@@ -56,6 +56,7 @@ def test_wrapper_query_integration(tmp_path):
         same(2, 2, 'noise')
         samekw(1, 1)
 
+        add_name = add.__wrapped__.__qualname__
         calls_alpha = list(
             add.fleche.query(a=None, b=None, metadata={"tags": {"project": "alpha"}})
         )
@@ -64,7 +65,7 @@ def test_wrapper_query_integration(tmp_path):
         ), "Expected at least one 'alpha' tagged call found via wrapper.query"
         for c in calls_alpha:
             assert (
-                c.name == "add"
+                c.name == add_name
             ), "Query by function wrapper should return calls of that function"
             assert (
                 c.metadata.get("tags", {}).get("project") == "alpha"
@@ -86,7 +87,7 @@ def test_wrapper_query_integration(tmp_path):
         calls_4 = add.fleche.query(a=None, b=4)
         for c in calls_4:
             assert (
-                c.name == "add"
+                c.name == add_name
             ), "Query by function wrapper should return calls of that function"
             assert (
                 c.arguments.get("b") == 4
@@ -114,6 +115,7 @@ def test_query_by_result_integration(tmp_path):
     def add(a, b):
         return a + b
 
+    add_name = add.__wrapped__.__qualname__
     with cache(test_cache):
         # Populate
         add(1, 2)  # result 3
@@ -121,7 +123,7 @@ def test_query_by_result_integration(tmp_path):
 
         # Build a template filtering by result only; name ensures function match
         tpl = Call(
-            name="add",
+            name=add_name,
             arguments=None,
             metadata=None,
             module=None,
@@ -134,5 +136,5 @@ def test_query_by_result_integration(tmp_path):
         ), "At least one returned call must have result 14"
         # Verify all returned calls are from the right function and correct result
         for c in matches:
-            assert c.name == "add", "Result filter should match the correct function"
+            assert c.name == add_name, "Result filter should match the correct function"
             assert c.result == 14, "All matched calls must have the requested result"
