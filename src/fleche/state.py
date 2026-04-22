@@ -130,11 +130,10 @@ class BoundWrapper:
     """A plain callable that freezes cache and metadata state at construction time.
 
     :class:`.BoundWrapper` is intentionally a minimal wrapper: it captures the active
-    :class:`.BaseCache` and metadata tuple and restores them around every call to
-    :attr:`.func`, but it does **not** expose the ``fleche`` helper namespace
+    :class:`.BaseCache` and metadata tuple and restores them around every call to the
+    wrapped function, but it does **not** expose the ``fleche`` helper namespace
     (``digest``, ``call``, ``load``, ``contains``, ``query``, ``rerun``).  Those
-    helpers live on the decorated function itself and can still be reached via
-    ``bound.func.fleche.*``.
+    helpers are available on the original decorated function.
 
     This is intended to enable passing around fleche-decorated functions in pickled
     form by baking the active state into the object."""
@@ -151,7 +150,7 @@ class BoundWrapper:
         in which :meth:`.bind()` was originally invoked.  The returned object is a
         :class:`.BoundWrapper` — a simple dataclass with a ``__call__`` method — and
         does **not** carry the ``fleche`` helper namespace.  To access helpers such as
-        ``digest`` or ``query``, use ``bound.func.fleche.*`` directly.
+        ``digest`` or ``query``, use them on the original decorated function.
 
         Args:
             func (callable): any callable; plain functions that only call fleche-wrapped ones are explicitly allowed
