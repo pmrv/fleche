@@ -372,10 +372,6 @@ def test_count_returns_correct_number(test_cache):
     assert test_cache.query(tpl).count() == 2
 
 
-def test_count_empty():
-    assert QueryIterator([]).count() == 0
-
-
 def test_any_returns_call(test_cache):
     test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
     tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)

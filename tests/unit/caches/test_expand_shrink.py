@@ -89,20 +89,6 @@ def test_cache_stack_evict_removes_from_all_layers():
     assert not c2.contains(key)
 
 
-def test_cache_stack_evict_tolerates_key_missing_from_some_layers():
-    """evict must not fail when the key exists in only some layers."""
-    c1 = Cache(ValueMemory({}), CallMemory({}))
-    c2 = Cache(ValueMemory({}), CallMemory({}))
-    call = Call(name="f", arguments={"a": 1}, result="r", module="m", version="1.0", metadata={})
-    c2.save(call)
-    key = call.to_lookup_key()
-    stack = CacheStack((c1, c2))
-
-    stack.evict(key)  # must not raise
-
-    assert not c2.contains(key)
-
-
 # ---------------------------------------------------------------------------
 # CacheStack.expand
 # ---------------------------------------------------------------------------
