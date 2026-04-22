@@ -21,6 +21,39 @@ def test_query_call_matches():
     assert not QueryCall(name="f", arguments={"x": 1}, result=20).matches(c1)
 
 
+def test_query_call_matches_metadata():
+    """Verify QueryCall.matches() metadata filtering covers all branches.
+
+    Branches exercised:
+      * metadata name missing on the candidate → reject
+      * filters=None as wildcard on a present metadata name → accept
+      * filters value equal to stored → accept
+      * filters value different from stored → reject
+      * filters value is None (presence-only): key present → accept
+      * filters value is None (presence-only): key absent → reject
+    """
+    c = Call(
+        name="f",
+        arguments={"x": 1},
+        metadata={"runtime": {"walltime": 1.0, "host": "nuc"}},
+        result=10,
+    )
+
+    # filters=None is a wildcard on a present metadata name
+    assert QueryCall(metadata={"runtime": None}).matches(c)
+
+    # value equality
+    assert QueryCall(metadata={"runtime": {"walltime": 1.0}}).matches(c)
+    assert not QueryCall(metadata={"runtime": {"walltime": 2.0}}).matches(c)
+
+    # presence-only filter via None value
+    assert QueryCall(metadata={"runtime": {"host": None}}).matches(c)
+    assert not QueryCall(metadata={"runtime": {"missing": None}}).matches(c)
+
+    # required metadata name absent on the candidate → reject
+    assert not QueryCall(metadata={"tags": None}).matches(c)
+
+
 def test_query_call_matches_lazy():
     """Verify that QueryCall.matches() correctly handles LazyCall objects."""
     values_storage = ValueMemory({})

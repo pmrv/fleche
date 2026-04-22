@@ -52,7 +52,7 @@ def test_fleche_retrieves_from_cache():
     def my_func(x):
         return mock_function(x)
 
-    key = my_func.digest(2)
+    key = my_func.fleche.digest(2)
 
     with cache(Cache(ValueMemory({}), CallMemory({}))):
         # First call, should execute the function and save to cache
@@ -100,7 +100,7 @@ def test_fleche_with_version():
         # First call, should execute the function and save to cache
         assert my_func(2) == 42
         mock_function.assert_called_once_with(2)
-        key_v1 = my_func.digest(2)
+        key_v1 = my_func.fleche.digest(2)
         assert cache().contains(key_v1)
 
         mock_function.__version__ = 2
@@ -109,7 +109,7 @@ def test_fleche_with_version():
         # Second call, with different version, should execute again
         assert my_func(2) == 42
         assert mock_function.call_count == 2
-        key_v2 = my_func.digest(2)
+        key_v2 = my_func.fleche.digest(2)
         assert cache().contains(key_v2)
 
 
@@ -125,7 +125,7 @@ def test_fleche_with_module():
 
         assert my_func(2) == 42
         mock_function.assert_called_once_with(2)
-        key_m1 = my_func.digest(2)
+        key_m1 = my_func.fleche.digest(2)
         assert cache().contains(key_m1)
 
         # Second call, with different module, should execute again
@@ -133,5 +133,5 @@ def test_fleche_with_module():
         my_func = fleche(mock_function)
         assert my_func(2) == 42
         assert mock_function.call_count == 2
-        key_m2 = my_func.digest(2)
+        key_m2 = my_func.fleche.digest(2)
         assert cache().contains(key_m2)

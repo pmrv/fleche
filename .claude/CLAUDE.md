@@ -21,7 +21,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | `digest.py` | `Digest(str)` (with `.expand`/`.shrink`); `digest()` (SHA256 hex); `Hook`, `add_hook`, `get_hooks`; `Unhashable`; `DIGEST_LENGTH=64`; entry-point hooks for numpy/complex/etc. |
 | `call.py` | `Call` dataclass (`from_call`, `to_lookup_key`); `LazyCall` (deferred deser via `_cache`); `QueryCall` (wildcard match via `matches`); `bind()` wrapper over `inspect.Signature.bind[_partial]` |
 | `caches.py` | `BaseCache`, `Cache`, `CacheStack`, `ReadOnlyCache`, `FilteredCache`, `RefreshingCache`, `SizeLimitedMixin`/`SizeLimitedCache`; `Rejected` exception; `Cache.transfer`, `.readonly`, `.push`, `.filter`, `.table`, `.redigest` |
-| `state.py` | `cache()`, `meta()`, `tags()`, `project()`; `_StickyContext` (backport of Py3.14 Token CM); `BoundWrapper` (freezes cache + metadata for pickling). **`BoundWrapper` is a plain callable without the `.fleche` helper namespace**; access helpers via `bound.func.fleche.*`. |
+| `state.py` | `cache()`, `meta()`, `tags()`, `project()`; `_StickyContext` (backport of Py3.14 Token CM); `BoundWrapper` (freezes cache + metadata for pickling) |
 | `query.py` | `QueryIterator` — lazy helpers: `only/any/count/empty/take/skip/filter/sorted/unique/groupby/latest/oldest/evict/results/table`; `.table()` → pandas DataFrame (auto-converts `timestart`/`timestop` to local tz) |
 | `metadata.py` | `MetaData` ABC (`pre`/`post` → JSON-serializable); built-ins `Runtime` (timestart/timestop/walltime), `Tags` |
 | `config.py` | TOML loader; `storage_from_config`/`storage_to_config`, `cache_from_config`/`cache_to_config` (round-trippable); `_live_caches` interns named caches. See module docstring for full type reference. |

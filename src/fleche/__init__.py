@@ -14,6 +14,7 @@ from .state import (
         BoundWrapper,
 )
 from .wrapper import fleche, Ignored, Required
+from .executor import wrap_executor
 
 
 def D(value) -> digest.Digest:
@@ -54,4 +55,5 @@ __all__ = [
         "Ignored",
         "Required",
         "D",
+        "wrap_executor",
 ]

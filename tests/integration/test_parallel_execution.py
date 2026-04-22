@@ -88,7 +88,7 @@ def test_threadpool_inheritance_failure():
             future = executor.submit(my_func, 100)
             future.result()
 
-            assert not cache1.contains(my_func.digest(100))
+            assert not cache1.contains(my_func.fleche.digest(100))
 
 
 def test_threadpool_explicit_context_propagation():
@@ -103,7 +103,7 @@ def test_threadpool_explicit_context_propagation():
             future = executor.submit(ctx.run, my_func, 200)
             future.result()
 
-            assert cache1.contains(my_func.digest(200))
+            assert cache1.contains(my_func.fleche.digest(200))
 
 
 # ---------------------------------------------------------------------------
@@ -139,7 +139,7 @@ def test_process_executor_in_memory_cache_not_propagated():
             result = future.result()
 
     assert result == 20
-    assert not cache.contains(double.digest(10)), (
+    assert not cache.contains(double.fleche.digest(10)), (
         "In-memory cache is process-local; worker results are not visible to the parent."
     )
 
@@ -190,7 +190,7 @@ def test_executorlib_file_backed_cache_shared():
             result = future.result()
 
         assert result == 42, f"Expected 42, got {result}"
-        assert parent_cache.contains(double.digest(21)), (
+        assert parent_cache.contains(double.fleche.digest(21)), (
             "With file-backed storage, results written by the worker process are "
             "visible to the parent via the shared filesystem path."
         )
@@ -218,7 +218,7 @@ def test_threadpool_bound_wrapper():
         future = executor.submit(bound, 300)
         future.result()
 
-    assert cache1.contains(my_func.digest(300)), (
+    assert cache1.contains(my_func.fleche.digest(300)), (
         "BoundWrapper restores the bound cache in the thread so the result is "
         "stored in the parent's cache object."
     )
@@ -246,7 +246,7 @@ def test_process_executor_bound_wrapper():
             result = executor.submit(bound, 21).result()
 
         assert result == 42, f"Expected 42, got {result}"
-        assert file_cache.contains(double.digest(21)), (
+        assert file_cache.contains(double.fleche.digest(21)), (
             "BoundWrapper carries the file-backed cache into the worker; results "
             "written there are visible to the parent via the shared filesystem path."
         )
@@ -276,7 +276,169 @@ def test_executorlib_bound_wrapper():
             result = executor.submit(bound, 21).result()
 
         assert result == 42, f"Expected 42, got {result}"
-        assert file_cache.contains(double.digest(21)), (
+        assert file_cache.contains(double.fleche.digest(21)), (
             "BoundWrapper carries the file-backed cache into the executorlib worker; "
             "results are visible to the parent via the shared filesystem path."
         )
+
+
+# ---------------------------------------------------------------------------
+# wrap_executor tests
+# ---------------------------------------------------------------------------
+# ``fleche.wrap_executor`` monkey-patches ``executor.submit`` so that
+# fleche-wrapped functions are bound at submission time, and cache hits short-
+# circuit the executor entirely.
+
+
+@fleche.fleche
+def triple(x):
+    return x * 3
+
+
+def _plain_add(a, b):
+    return a + b
+
+
+class _NeverSubmitExecutor:
+    """Executor stub that explodes if ``submit`` is actually called.
+
+    Used to prove that a cache-hit path never reaches the underlying executor.
+    """
+
+    def submit(self, func, *args, **kwargs):
+        raise AssertionError(
+            f"submit should not have been called (func={func!r}, "
+            f"args={args}, kwargs={kwargs})"
+        )
+
+
+class _RecordingExecutor:
+    """Executor stub whose ``submit`` declares a keyword-only ``resource_dict``.
+
+    Captures what was forwarded to ``submit`` and what the callable was
+    invoked with, so tests can assert the kwarg split.
+    """
+
+    def __init__(self):
+        self.submit_args = None
+        self.submit_kwargs = None
+        self.call_args = None
+        self.call_kwargs = None
+        self.result = None
+
+    def submit(self, func, *args, resource_dict=None, **kwargs):
+        self.submit_args = args
+        self.submit_kwargs = {"resource_dict": resource_dict, **kwargs}
+
+        def _run(*a, **kw):
+            self.call_args = a
+            self.call_kwargs = kw
+            self.result = func(*a, **kw)
+            return self.result
+
+        fut = concurrent.futures.Future()
+        fut.set_result(_run(*args, **kwargs))
+        return fut
+
+
+def test_wrap_executor_passthrough_non_fleche():
+    """Non-fleche callables go straight to the original submit."""
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        fleche.wrap_executor(executor)
+        result = executor.submit(_plain_add, 2, 3).result()
+
+    assert result == 5
+
+
+def test_wrap_executor_thread_cache_miss():
+    """A cache miss on a wrapped ThreadPoolExecutor binds state and submits."""
+    cache1 = Cache(ValueMemory({}), CallMemory({}))
+
+    with fleche.cache(cache1):
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            fleche.wrap_executor(executor)
+            future = executor.submit(my_func, 400)
+            assert future.result() == 401
+
+    assert cache1.contains(my_func.digest(400)), (
+        "wrap_executor should bind the current cache into the worker so the "
+        "result is stored in the parent's cache object."
+    )
+
+
+def test_wrap_executor_cache_hit_skips_submit():
+    """A cache hit returns a completed Future without ever calling submit."""
+    cache1 = Cache(ValueMemory({}), CallMemory({}))
+
+    with fleche.cache(cache1):
+        # seed the cache
+        assert triple(7) == 21
+
+        executor = _NeverSubmitExecutor()
+        fleche.wrap_executor(executor)
+
+        future = executor.submit(triple, 7)
+
+    assert future.done()
+    assert future.result() == 21
+
+
+def test_process_executor_wrap_executor(file_cache):
+    """wrap_executor replaces manual BoundWrapper.bind for a ProcessPoolExecutor.
+
+    Analogue of test_process_executor_bound_wrapper: the user submits the
+    fleche function directly, and the patched submit takes care of binding.
+    """
+    with fleche.cache(file_cache):
+        with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
+            fleche.wrap_executor(executor)
+            result = executor.submit(double, 21).result()
+
+    assert result == 42, f"Expected 42, got {result}"
+    assert file_cache.contains(double.digest(21)), (
+        "wrap_executor binds the file-backed cache into the worker; "
+        "results are visible to the parent via the shared filesystem path."
+    )
+
+
+def test_wrap_executor_splits_submit_kwargs():
+    """Keyword-only params on submit are forwarded to submit, not the callable."""
+    cache1 = Cache(ValueMemory({}), CallMemory({}))
+    executor = _RecordingExecutor()
+
+    with fleche.cache(cache1):
+        fleche.wrap_executor(executor)
+        future = executor.submit(my_func, resource_dict={"cores": 4}, x=42)
+
+    assert future.result() == 43
+    assert executor.submit_kwargs == {"resource_dict": {"cores": 4}}
+    # The bound wrapper is invoked with *no* args/kwargs from the recording
+    # stub; the function payload (x=42) was baked into the BoundWrapper via
+    # ``func.fleche.bind``.
+    assert executor.call_args == ()
+    assert executor.call_kwargs == {}
+    assert cache1.contains(my_func.digest(42))
+
+
+def test_wrap_executor_is_idempotent():
+    """Wrapping the same executor twice installs a single interception layer."""
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        fleche.wrap_executor(executor)
+        patched_once = executor.submit
+        fleche.wrap_executor(executor)
+        # The second call must not replace or stack on the first patch.
+        assert executor.submit is patched_once
+
+
+@_skip_no_executorlib
+def test_executorlib_wrap_executor(file_cache):
+    """wrap_executor works with executorlib.SingleNodeExecutor."""
+    from executorlib import SingleNodeExecutor
+
+    with fleche.cache(file_cache):
+        with SingleNodeExecutor() as executor:
+            fleche.wrap_executor(executor)
+            result = executor.submit(double, 21).result()
+
+    assert result == 42, f"Expected 42, got {result}"
+    assert file_cache.contains(double.digest(21))

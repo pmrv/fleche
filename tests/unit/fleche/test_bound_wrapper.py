@@ -57,9 +57,9 @@ def test_bound_wrapper_uses_bound_cache_not_outer():
     assert result == 10
     # Result stored in bound_cache, not in outer_cache
     with cache(bound_cache):
-        assert my_func.contains(5)
+        assert my_func.fleche.contains(5)
     with cache(outer_cache):
-        assert not my_func.contains(5)
+        assert not my_func.fleche.contains(5)
 
 
 def test_bound_wrapper_preserves_metadata():
@@ -134,7 +134,7 @@ def test_bound_wrapper_picklable():
     assert result == 11
     # Result should be stored in the bound cache that travelled with the wrapper
     with cache(restored.cache):
-        assert _pickle_func.contains(10)
+        assert _pickle_func.fleche.contains(10)
 
 
 def test_bound_wrapper_pickle_preserves_cache_identity():
@@ -190,13 +190,13 @@ def test_bound_wrapper_nested_fleche_functions():
 
     # Both inner and outer cached in bound_cache
     with cache(bound_cache):
-        assert outer.contains(3)
-        assert inner.contains(3)
+        assert outer.fleche.contains(3)
+        assert inner.fleche.contains(3)
 
     # Neither cached in outer_cache
     with cache(outer_cache):
-        assert not outer.contains(3)
-        assert not inner.contains(3)
+        assert not outer.fleche.contains(3)
+        assert not inner.fleche.contains(3)
 
 
 def test_bound_wrapper_fleche_called_from_plain_function():
@@ -221,9 +221,9 @@ def test_bound_wrapper_fleche_called_from_plain_function():
 
     # cached_func stored in bound_cache, not outer_cache
     with cache(bound_cache):
-        assert cached_func.contains(2)
+        assert cached_func.fleche.contains(2)
     with cache(outer_cache):
-        assert not cached_func.contains(2)
+        assert not cached_func.fleche.contains(2)
 
 
 def test_bound_wrapper_pickle_nested_fleche_in_plain():
@@ -238,4 +238,107 @@ def test_bound_wrapper_pickle_nested_fleche_in_plain():
     assert result == 16  # 3 * 2 + 10
 
     with cache(restored.cache):
-        assert _pickle_inner.contains(3)
+        assert _pickle_inner.fleche.contains(3)
+
+
+# ---------------------------------------------------------------------------
+# 4. .bind helper on wrapped functions
+# ---------------------------------------------------------------------------
+
+
+def test_bind_helper_no_args_returns_bound_wrapper():
+    """.fleche.bind() with no args returns a BoundWrapper bound to the current state."""
+    bound_cache = _make_cache()
+
+    @fleche
+    def my_func(x):
+        return x + 1
+
+    with cache(bound_cache):
+        bound = my_func.fleche.bind()
+
+    assert isinstance(bound, fleche_state.BoundWrapper)
+    assert bound.func is my_func
+
+
+def test_bind_helper_uses_bound_cache():
+    """.fleche.bind() captures the cache active at call time, not at invocation time."""
+    bound_cache = _make_cache()
+    outer_cache = _make_cache()
+
+    @fleche
+    def my_func(x):
+        return x * 3
+
+    with cache(bound_cache):
+        bound = my_func.fleche.bind()
+
+    with cache(outer_cache):
+        result = bound(4)
+
+    assert result == 12
+    with cache(bound_cache):
+        assert my_func.fleche.contains(4)
+    with cache(outer_cache):
+        assert not my_func.fleche.contains(4)
+
+
+def test_bind_helper_partial_args():
+    """.fleche.bind(x) pre-applies x so the returned BoundWrapper only needs remaining args."""
+    bound_cache = _make_cache()
+
+    @fleche
+    def add(a, b):
+        return a + b
+
+    with cache(bound_cache):
+        bound = add.fleche.bind(10)
+
+    result = bound(5)
+    assert result == 15
+
+
+def test_bind_helper_partial_kwargs():
+    """.fleche.bind(b=2) pre-applies a keyword argument."""
+    bound_cache = _make_cache()
+
+    @fleche
+    def add(a, b):
+        return a + b
+
+    with cache(bound_cache):
+        bound = add.fleche.bind(b=2)
+
+    result = bound(8)
+    assert result == 10
+
+
+def test_bind_helper_partial_stores_in_bound_cache():
+    """Partial .fleche.bind() result stores entries under the bound cache, not the active one."""
+    bound_cache = _make_cache()
+    outer_cache = _make_cache()
+
+    @fleche
+    def add(a, b):
+        return a + b
+
+    with cache(bound_cache):
+        bound = add.fleche.bind(a=1)
+
+    with cache(outer_cache):
+        result = bound(b=9)
+
+    assert result == 10
+    with cache(bound_cache):
+        assert add.fleche.contains(1, 9)
+    with cache(outer_cache):
+        assert not add.fleche.contains(1, 9)
+
+
+def test_bind_helper_accessible_via_fleche_namespace():
+    """.fleche.bind is the same object as .bind."""
+    @fleche
+    def my_func(x):
+        return x
+
+    assert my_func.bind is my_func.fleche.bind

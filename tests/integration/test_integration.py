@@ -60,7 +60,7 @@ def test_fleche_readonly_cache():
         # this should not be saved
         func(1)
         with pytest.raises(KeyError):
-            func.load(1)
+            func.fleche.load(1)
 
     # add the call to underlying cache
     with cache(c):
@@ -69,7 +69,7 @@ def test_fleche_readonly_cache():
     with cache(ro_cache):
         # this should be loaded from ro_cache
         try:
-            func.load(1)
+            func.fleche.load(1)
         except KeyError:
             assert False, "Failed to load value from underlying cache!"
 
@@ -85,8 +85,8 @@ def test_fleche_cache_stack():
 
     stack = CacheStack(stack=(cache2, cache1))
 
-    key1 = func.digest(1)
-    key2 = func.digest(2)
+    key1 = func.fleche.digest(1)
+    key2 = func.fleche.digest(2)
 
     with cache(stack):
         # first call, should go in cache2
@@ -122,13 +122,13 @@ def test_fleche_cache_stack_context_manager():
     with cache(cache1):
         with cache(cache2, stack=True):
             func(1)
-            key = func.digest(1)
+            key = func.fleche.digest(1)
             assert cache2.contains(key)
             assert cache2.load(key).result == 1
             assert not cache1.contains(key)
 
         func(2)
-        key = func.digest(2)
+        key = func.fleche.digest(2)
         assert cache1.contains(key)
 
         with cache(cache2, stack=True):

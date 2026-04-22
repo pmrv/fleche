@@ -15,7 +15,7 @@ from fleche.storage import (
 )
 from fleche.storage.memory import MemoryBackend
 from fleche.storage.pickle_file import PickleFileBackend
-from fleche.storage.thread_safe import _PicklableRLock
+from fleche.storage.thread_safe import _PicklableLock, _PicklableRLock
 
 
 # ---------------------------------------------------------------------------
@@ -186,3 +186,30 @@ def test_per_key_lock_released_when_unused():
     gc.collect()
     # The lock is no longer held by anyone, so it should be collectable.
     assert ref() is None
+
+
+# ---------------------------------------------------------------------------
+# Pickling support (__reduce__ on both picklable lock wrappers)
+# ---------------------------------------------------------------------------
+
+def test_picklable_lock_pickle_roundtrip():
+    """_PicklableLock.__reduce__ produces a fresh unlocked lock on unpickle."""
+    import pickle
+    lock = _PicklableLock()
+    restored = pickle.loads(pickle.dumps(lock))
+    assert isinstance(restored, _PicklableLock)
+    # Restored lock must be acquirable (not stuck in acquired state).
+    # Use blocking=False so a stuck lock raises AssertionError instead of deadlocking.
+    assert restored._lock.acquire(blocking=False), "lock should be free after unpickle"
+    restored._lock.release()
+
+
+def test_picklable_rlock_pickle_roundtrip():
+    """_PicklableRLock.__reduce__ produces a fresh unlocked lock on unpickle."""
+    import pickle
+    lock = _PicklableRLock()
+    restored = pickle.loads(pickle.dumps(lock))
+    assert isinstance(restored, _PicklableRLock)
+    # Use blocking=False so a stuck lock raises AssertionError instead of deadlocking.
+    assert restored._lock.acquire(blocking=False), "lock should be free after unpickle"
+    restored._lock.release()

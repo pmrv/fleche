@@ -5,6 +5,21 @@ Fleche-decorated functions work with Python's ``concurrent.futures`` executors
 and other process-/thread-based parallelism libraries.  This page explains the
 recommended patterns for each executor type.
 
+Three complementary APIs cover the common cases:
+
+- :class:`~fleche.BoundWrapper` — freeze the active cache and metadata into a
+  picklable callable that a worker can invoke without any further setup.  Use
+  when you own the submission site and want explicit control.
+- **Future pass-through** — a fleche-decorated function that internally
+  returns a :class:`~concurrent.futures.Future` is cached automatically when
+  the future completes.  Use when the decorated function *is* the one that
+  submits work.
+- :func:`~fleche.wrap_executor` — a one-line wrapper around an executor
+  instance that transparently binds fleche-decorated functions on ``submit``
+  **and** short-circuits cache hits without ever touching the executor.  Use
+  when you want the most compact call site, or to avoid submit/serialise
+  overhead on cached inputs.
+
 .. contents:: On this page
    :local:
    :depth: 2
@@ -188,33 +203,112 @@ automatically caches the result once the future completes:
 On the next call, ``compute(4)`` returns the cached value directly (no
 ``Future`` is created).
 
-When to prefer each pattern
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-.. list-table::
-   :header-rows: 1
-   :widths: 45 55
-
-   * - Future pass-through
-     - :class:`~fleche.BoundWrapper`
-   * - The decorated function owns its own executor and naturally returns a
-       ``Future``
-     - You submit a fleche-decorated function to an *external* executor
-   * - No need to change the call site — callers already handle ``Future``
-       objects
-     - You want to fan out many calls to the same decorated function across a
-       pool
-   * - Works with ``ThreadPoolExecutor``; for ``ProcessPoolExecutor`` the
-       cache context must still be available in the worker (use file/SQL
-       storage)
-     - Works with both thread- and process-based executors; the cache is
-       embedded in the callable
-
 .. note::
 
    When a decorated function with future pass-through is called and a cached
    value already exists, the function is **not** invoked and no ``Future`` is
    created — the cached result is returned directly.
+
+``wrap_executor`` — Transparent Submit Interception
+---------------------------------------------------
+
+:func:`fleche.wrap_executor` monkey-patches ``executor.submit`` on an existing
+executor **instance** (no subclassing — callers pass us instances of
+third-party executors) so that fleche-decorated functions are handled
+automatically:
+
+- Non-fleche callables pass straight through to the original ``submit``.
+- Cache hits are served from an already-completed
+  :class:`~concurrent.futures.Future` without ever touching the executor,
+  avoiding submit/serialise overhead on cached inputs.
+- Cache misses are bound via :meth:`~fleche.BoundWrapper.bind` so the parent's
+  cache and metadata travel with the call into the worker.
+
+.. code-block:: python
+
+   import concurrent.futures
+   import fleche
+
+   @fleche.fleche
+   def heavy_computation(x):
+       return x ** 3
+
+   with fleche.cache(file_cache):
+       with concurrent.futures.ProcessPoolExecutor() as executor:
+           fleche.wrap_executor(executor)             # patch once
+
+           # Submit exactly as you would a plain function.
+           futures = [executor.submit(heavy_computation, i) for i in range(8)]
+           results = [f.result() for f in futures]
+
+       # A second round with the same inputs never enters the worker pool:
+       with concurrent.futures.ProcessPoolExecutor() as executor:
+           fleche.wrap_executor(executor)
+           fut = executor.submit(heavy_computation, 3)
+           assert fut.done()                          # already-completed future
+           assert fut.result() == 27
+
+Executor-specific keyword arguments
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Some executors (e.g. `executorlib
+<https://executorlib.readthedocs.io/>`_'s ``resource_dict``, dask's
+``resources=``/``key=``) define their own keyword-only parameters on
+``submit``.  :func:`~fleche.wrap_executor` introspects the signature with
+:func:`inspect.signature` and splits those off automatically — they are
+forwarded to ``submit`` while the rest are bound as part of the callable's
+payload:
+
+.. code-block:: python
+
+   from executorlib import SingleNodeExecutor
+
+   with fleche.cache(file_cache):
+       with SingleNodeExecutor() as executor:
+           fleche.wrap_executor(executor)
+           future = executor.submit(
+               heavy_computation, 5,
+               resource_dict={"cores": 4},   # goes to SingleNodeExecutor.submit
+           )
+           assert future.result() == 125
+
+.. note::
+
+   :func:`~fleche.wrap_executor` mutates the instance it is given; it does
+   not return a proxy.  The call is idempotent: wrapping an already-wrapped
+   executor a second time is a no-op.
+
+When to prefer each pattern
+---------------------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 26 26 26
+
+   * -
+     - :class:`~fleche.BoundWrapper`
+     - Future pass-through
+     - :func:`~fleche.wrap_executor`
+   * - Who owns the executor?
+     - Caller
+     - The decorated function
+     - Caller
+   * - Call-site change
+     - Wrap callable: ``executor.submit(BoundWrapper.bind(func), ...)``
+     - None (decorated function returns a ``Future``)
+     - Patch executor once, then ``executor.submit(func, ...)``
+   * - Cache hit behaviour
+     - Always submits; worker does the cache lookup
+     - Returns cached result directly (no ``Future`` created)
+     - Returns an already-completed ``Future`` without contacting the worker
+   * - Works across processes
+     - Yes, with file/SQL storage
+     - Yes, if the wrapping function owns the executor
+     - Yes, with file/SQL storage
+   * - Best for
+     - Fine-grained control; sharing a bound callable across modules
+     - Wrapping expensive async-style code inside a decorated helper
+     - Transparently caching existing executor-based pipelines
 
 The ``isolate`` Flag
 --------------------
@@ -245,15 +339,16 @@ Quick Reference
    * - ``ThreadPoolExecutor``
      - Yes
      - No (manual)
-     - ``BoundWrapper.bind(func)`` or future pass-through
+     - :func:`~fleche.wrap_executor` (simplest), or ``BoundWrapper.bind(func)``,
+       or future pass-through
    * - ``ProcessPoolExecutor``
      - Yes
      - No (separate process)
-     - File/SQL storage + ``BoundWrapper``
+     - File/SQL storage + :func:`~fleche.wrap_executor` (or ``BoundWrapper``)
    * - ``executorlib.SingleNodeExecutor``
      - Yes
      - No (separate process)
-     - File/SQL storage + ``BoundWrapper``
+     - File/SQL storage + :func:`~fleche.wrap_executor` (or ``BoundWrapper``)
    * - Function returns ``Future`` directly
      - Yes
      - Yes (same thread/context)

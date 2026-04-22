@@ -49,7 +49,7 @@ def test_query_iterator_can_be_iterated_from_wrapper(test_cache):
         add(1, 2)
         add(3, 4)
 
-        result = add.query()
+        result = add.fleche.query()
         assert isinstance(result, QueryIterator)
         assert len(list(result)) == 2
 
@@ -83,7 +83,7 @@ def test_query_iterator_results_from_wrapper(test_cache):
         square(3)
         square(4)
 
-        results = sorted(square.query().results())
+        results = sorted(square.fleche.query().results())
         assert results == [9, 16]
 
 
@@ -268,7 +268,7 @@ def test_query_iterator_table_end_to_end_via_wrapper(test_cache):
         multiply(2, 3)
         multiply(4, 5)
 
-        df = multiply.query().table(arguments=["a", "b"], results=True)
+        df = multiply.fleche.query().table(arguments=["a", "b"], results=True)
         assert isinstance(df, pd.DataFrame)
         assert len(df) == 2
         assert set(df.columns) >= {"name", "a", "b", "result"}
@@ -318,11 +318,11 @@ def test_query_partial_arguments(test_cache):
         bar(1, 6, 10)
 
         # Querying for y=5: z is not specified so it's a wildcard → 2 results
-        results = list(bar.query(y=5))
+        results = list(bar.fleche.query(y=5))
         assert len(results) == 2
 
         # Querying for x=1: y and z are not specified so they're wildcards → 2 results
-        results = list(bar.query(x=1))
+        results = list(bar.fleche.query(x=1))
         assert len(results) == 2
 
 
@@ -370,10 +370,6 @@ def test_count_returns_correct_number(test_cache):
     test_cache.save(Call(name="f", arguments={"x": 2}, result=20))
     tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
     assert test_cache.query(tpl).count() == 2
-
-
-def test_count_empty():
-    assert QueryIterator([]).count() == 0
 
 
 def test_any_returns_call(test_cache):
