@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from typing import Iterable, Any, Callable
 
 from ..digest import digest, Digest, DIGEST_LENGTH
-from ..call import Call, DigestedCall, QueryCall
+from ..call import DigestedCall, QueryCall
 
 logger = logging.getLogger("fleche.storage")
 
@@ -187,7 +187,7 @@ class CallStorage(KeyManagement):
     """Abstract domain interface for call storage."""
 
     @abstractmethod
-    def save(self, call: Call | DigestedCall) -> Digest: ...
+    def save(self, call: DigestedCall) -> Digest: ...
 
     @abstractmethod
     def load(self, key: Digest | str) -> DigestedCall: ...
@@ -228,7 +228,7 @@ class CallMixin(CallStorage, StorageBackend):
     implementation to get a fully functional call storage.
     """
 
-    def save(self, call: Call | DigestedCall) -> Digest:
+    def save(self, call: DigestedCall) -> Digest:
         key = call.to_lookup_key()
         with self._operation_context(key):
             logger.debug("Saving call %s", key)

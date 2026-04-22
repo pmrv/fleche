@@ -6,7 +6,7 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from .base import KeyManagement, CallStorage, AmbiguousDigestError
 from .thread_safe import PerKeyLockMixin
-from ..call import Call, DigestedCall, QueryCall
+from ..call import DigestedCall, QueryCall
 from ..digest import Digest, DIGEST_LENGTH, digest
 
 from pyiron_snippets.import_alarm import ImportAlarm
@@ -177,7 +177,7 @@ class Sql(PerKeyLockMixin, CallStorage):
             with super()._operation_context(key):
                 yield
 
-    def put(self, call: Any, key: Digest) -> Digest:
+    def put(self, call: DigestedCall, key: Digest) -> Digest:
         session = self._local.session
         existing = session.get(CallModel, str(key))
         if existing is not None:
@@ -293,12 +293,12 @@ class Sql(PerKeyLockMixin, CallStorage):
         session.delete(instance)
         session.commit()
 
-    def save(self, call: Call) -> Digest:
+    def save(self, call: DigestedCall) -> Digest:
         key = call.to_lookup_key()
         with self._operation_context(key):
             logger.debug("Saving call %s", key)
-            if self.contains(str(key)):
-                self.evict(str(key))
+            if self.contains(key):
+                self.evict(key)
             return self.put(call, key)
 
     def load(self, key: Digest | str) -> DigestedCall:
@@ -426,7 +426,7 @@ class Sql(PerKeyLockMixin, CallStorage):
             keys = [Digest(k) for (k,) in self._local.session.execute(stmt).all()]
 
         # Yield loaded calls using existing loader (ensures metadata returned too)
-        def meta_matches(call: Call) -> bool:
+        def meta_matches(call: DigestedCall) -> bool:
             specs = template.metadata
             if not specs:
                 return True

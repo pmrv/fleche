@@ -65,7 +65,7 @@ class Call:
             call.code_digest = digest.digest(func.__code__)
         return call
 
-    def to_lookup_key(self):
+    def to_lookup_key(self) -> "Digest":
         # Iterate explicitly in the preserved parameter order; do not sort
         arg_pairs = tuple(self.arguments.items())
         call = replace(self, arguments=arg_pairs, metadata=None, result=None)
@@ -168,7 +168,7 @@ class DigestedCall:
         )
         return digest.digest(c)
 
-    def to_lookup_key(self) -> str:
+    def to_lookup_key(self) -> "Digest":
         # Independent implementation: build a Call directly without calling Call.to_lookup_key.
         # digest(Digest(x)) == x, so digested argument values hash identically to their originals.
         arg_pairs = tuple(self.arguments.items())
@@ -300,7 +300,7 @@ class QueryCall:
             call.module = func.__module__
         return call
 
-    def matches(self, other: 'Call | LazyCall') -> bool:
+    def matches(self, other: 'Call | LazyCall | DigestedCall') -> bool:
         """Check if this call matches another call, treating None as a wildcard in this object."""
         def none_or_equal(a, b):
             if a is None:
