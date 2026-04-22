@@ -7,18 +7,39 @@ on:
     branches: [ main ]
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.filter.outputs.run }}
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            run:
+              - 'src/**'
+              - 'tests/**'
+
   ty:
+    needs: changes
     runs-on: ubuntu-latest
     steps:
+      - name: Skip notice
+        if: needs.changes.outputs.run != 'true'
+        run: echo "No src/ or tests/ changes; skipping."
       - uses: actions/checkout@v6
+        if: needs.changes.outputs.run == 'true'
       - name: Set up Python
+        if: needs.changes.outputs.run == 'true'
         uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
       - name: Setup
+        if: needs.changes.outputs.run == 'true'
         shell: bash -l {0}
         run: |
           pip install -e .[tests] ty
       - name: Run ty
+        if: needs.changes.outputs.run == 'true'
         run: ty check src/
