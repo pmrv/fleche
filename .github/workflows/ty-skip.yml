@@ -1,0 +1,19 @@
+name: ty
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - 'src/**'
+      - 'tests/**'
+  pull_request:
+    branches: [ main ]
+    paths-ignore:
+      - 'src/**'
+      - 'tests/**'
+
+jobs:
+  ty:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No src/ or tests/ changes; reporting success to satisfy required status check."
