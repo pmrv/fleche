@@ -1,0 +1,5 @@
+{
+  "permissions": {
+    "allow": ["Edit(.claude/CLAUDE.md)", "Write(.claude/CLAUDE.md)"]
+  }
+}
