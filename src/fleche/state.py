@@ -127,12 +127,16 @@ def project(name):
 
 @dataclass(frozen=True, eq=True)
 class BoundWrapper:
-    """Utility class that freezes global state for the cache and metadata config.
+    """A plain callable that freezes cache and metadata state at construction time.
 
-    Essentially acts like an early binding closure.
+    :class:`.BoundWrapper` is intentionally a minimal wrapper: it captures the active
+    :class:`.BaseCache` and metadata tuple and restores them around every call to the
+    wrapped function, but it does **not** expose the ``fleche`` helper namespace
+    (``digest``, ``call``, ``load``, ``contains``, ``query``, ``rerun``).  Those
+    helpers are available on the original decorated function.
 
-    This is intended to enable passing around fleche-decorated functions in pickled form by baking in the state into the
-    pickle on request."""
+    This is intended to enable passing around fleche-decorated functions in pickled
+    form by baking the active state into the object."""
 
     func: Callable
     cache: caches.BaseCache
@@ -142,8 +146,11 @@ class BoundWrapper:
     def bind(cls, func):
         """Bind cache and metadata state.
 
-        Returns a new callable that will behave always as if run under the context under which :meth:`.bind()` was
-        originally called.
+        Returns a plain callable that always executes as if called under the context
+        in which :meth:`.bind()` was originally invoked.  The returned object is a
+        :class:`.BoundWrapper` — a simple dataclass with a ``__call__`` method — and
+        does **not** carry the ``fleche`` helper namespace.  To access helpers such as
+        ``digest`` or ``query``, use them on the original decorated function.
 
         Args:
             func (callable): any callable; plain functions that only call fleche-wrapped ones are explicitly allowed
