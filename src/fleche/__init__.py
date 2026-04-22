@@ -17,6 +17,7 @@ from .wrapper import fleche, Ignored, Required
 from .executor import wrap_executor
 
 
+
 def D(value) -> digest.Digest:
     """
     Convenience wrapper to create a Digest from a value.
