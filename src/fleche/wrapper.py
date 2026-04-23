@@ -219,7 +219,7 @@ def make_query(func, policy):
         call.metadata = metadata
         return state._CACHE.get().query(call)
 
-    wraps(func)(_query_func)  # ty: ignore
+    wraps(func)(_query_func)
     return _query_func
 
 
