@@ -1,7 +1,7 @@
 import logging
 from unittest.mock import Mock, MagicMock
 from fleche import fleche, cache
-from fleche.call import Call, QueryCall
+from fleche.call import Call, DigestedCall, QueryCall
 from fleche.digest import Digest
 from fleche.caches import Cache, CacheStack
 
@@ -35,7 +35,7 @@ def test_cache_load():
     calls_storage = Mock()
 
     calls_storage.load = Mock(
-        return_value=Call(
+        return_value=DigestedCall(
             name="test",
             arguments={
                 "arg1": Digest("arg1" + "0" * 60),
@@ -241,7 +241,7 @@ def test_base_cache_transfer_no_overwrite_and_pop(caplog):
     assert c2.contains(str(call2.to_lookup_key()))
     assert not c1.contains(str(call2.to_lookup_key()))
     # call1 in c2 should retain the original value, not be overwritten
-    assert c2.load(str(call1.to_lookup_key()), lazy=False).result == "existing"
+    assert c2.load(str(call1.to_lookup_key())).result == "existing"
     # call1 should still be in c1 — NOT evicted because it conflicted
     assert c1.contains(str(call1.to_lookup_key()))
     # a warning should have been emitted for the skipped eviction

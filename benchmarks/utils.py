@@ -87,3 +87,56 @@ def generate_examples(strategy, count=100):
     for _ in range(count):
         examples.append(strategy.example())
     return examples
+
+
+# Backend-safe strategies: restrict to types that every value-storage backend
+# (stdlib pickle, cloudpickle, dill, H5Bag) can round-trip.
+# Excluded from key_strategies above:
+#   - st.binary(): H5Bag cannot store raw byte strings
+#   - st.text() with full unicode: surrogates/null bytes break HDF5 strings
+#   - dataclasses via make_dataclass: not importable by stdlib pickle
+#   - calls: memoization metadata, not stored values
+_backend_safe_leaf_strategies = [
+    st.none(),
+    st.booleans(),
+    st.integers(),
+    st.floats(allow_nan=False, allow_infinity=False),
+    st.text(
+        alphabet=string.ascii_letters + string.digits + string.punctuation + " ",
+        max_size=50,
+    ),
+]
+
+st_backend_safe_base = st.one_of(*_backend_safe_leaf_strategies)
+
+
+def st_backend_safe_nested(max_depth=3, max_size=6):
+    """Hypothesis strategy for nested values serializable by every storage backend.
+
+    Leaf types — None, bool, int, finite float, printable-ASCII text — are
+    accepted by stdlib pickle, cloudpickle, dill, and H5Bag.  Containers are
+    restricted to lists and str-keyed dicts.
+
+    Parameters
+    ----------
+    max_depth : int
+        Controls nesting depth via ``max_leaves = max_depth * max_size``.
+    max_size : int
+        Maximum items per list or dict.
+    """
+    return st.recursive(
+        st_backend_safe_base,
+        lambda children: st.one_of(
+            st.lists(children, max_size=max_size),
+            st.dictionaries(
+                st.text(
+                    alphabet=string.ascii_letters + string.digits,
+                    min_size=1,
+                    max_size=10,
+                ),
+                children,
+                max_size=max_size,
+            ),
+        ),
+        max_leaves=max_depth * max_size,
+    )

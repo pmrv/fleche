@@ -62,7 +62,7 @@ def test_query_call_matches_lazy():
 
     original = Call(name="f", arguments={"x": 1}, result=10)
     key = cache.save(original)
-    lazy = cache.load(key, lazy=True)
+    lazy = cache.load(key)
 
     # Template matching
     assert QueryCall(name="f", arguments=None).matches(lazy)

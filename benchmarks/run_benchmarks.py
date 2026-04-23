@@ -10,24 +10,27 @@ import pandas as pd
 
 def run_script(script_path: str) -> List[Dict]:
     print(f"Running {script_path}...", file=sys.stderr)
-    result = None
-    try:
-        # Run the script and capture stdout
-        result = subprocess.run(
-            [sys.executable, script_path], capture_output=True, text=True, check=True
+    # Forward stderr in real time so slow sub-scripts give feedback, and a
+    # failure surfaces its full traceback instead of being swallowed.
+    result = subprocess.run(
+        [sys.executable, script_path], capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        sys.stderr.write(result.stderr)
+        raise RuntimeError(
+            f"{script_path} exited with status {result.returncode}; "
+            "its table would be missing from the report, aborting."
         )
-        # The scripts print JSON to stdout
+    try:
         return json.loads(result.stdout)
-    except subprocess.CalledProcessError as e:
-        print(f"Error running {script_path}:", file=sys.stderr)
-        print(e.stderr, file=sys.stderr)
-        return []
     except json.JSONDecodeError as e:
-        print(f"Error decoding JSON from {script_path}: {e}", file=sys.stderr)
-        print("Output was:", file=sys.stderr)
-        if result is not None:
-            print(result.stdout, file=sys.stderr)
-        return []
+        sys.stderr.write(result.stderr)
+        sys.stderr.write("--- stdout ---\n")
+        sys.stderr.write(result.stdout)
+        raise RuntimeError(
+            f"{script_path} produced invalid JSON: {e}; "
+            "its table would be missing from the report, aborting."
+        ) from e
 
 
 def round_to_2_sig_figs(x):

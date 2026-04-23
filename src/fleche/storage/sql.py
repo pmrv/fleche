@@ -7,7 +7,7 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from .base import KeyManagement, CallStorage, _resolve_prefix
 from .thread_safe import PerKeyLockMixin
-from ..call import Call, QueryCall
+from ..call import DigestedCall, QueryCall
 from ..digest import Digest, DIGEST_LENGTH, digest
 
 from pyiron_snippets.import_alarm import ImportAlarm
@@ -178,7 +178,7 @@ class Sql(PerKeyLockMixin, CallStorage):
             with super()._operation_context(key):
                 yield
 
-    def put(self, call: Any, key: Digest) -> Digest:
+    def put(self, call: DigestedCall, key: Digest) -> Digest:
         session = self._local.session
         existing = session.get(CallModel, str(key))
         if existing is not None:
@@ -216,7 +216,7 @@ class Sql(PerKeyLockMixin, CallStorage):
         # Always return a Digest instance, not a plain str
         return key
 
-    def get(self, key: Digest) -> Call:
+    def get(self, key: Digest) -> DigestedCall:
         session = self._local.session
         call_model = session.execute(
             select(CallModel).where(CallModel.key == str(key))
@@ -231,7 +231,7 @@ class Sql(PerKeyLockMixin, CallStorage):
             .scalars()
             .all()
         )
-        return Call(
+        return DigestedCall(
             name=call_model.name,
             arguments=arguments,
             metadata={row.name: (row.data or {}) for row in meta_rows},
@@ -279,15 +279,15 @@ class Sql(PerKeyLockMixin, CallStorage):
         session.delete(instance)
         session.commit()
 
-    def save(self, call: Call) -> Digest:
+    def save(self, call: DigestedCall) -> Digest:
         key = call.to_lookup_key()
         with self._operation_context(key):
             logger.debug("Saving call %s", key)
-            if self.contains(str(key)):
-                self.evict(str(key))
+            if self.contains(key):
+                self.evict(key)
             return self.put(call, key)
 
-    def load(self, key: Digest | str) -> Call:
+    def load(self, key: Digest | str) -> DigestedCall:
         with self._operation_context(key):
             key = self._normalize_key(key)
             logger.debug("Loading call with key %s", key)
@@ -373,7 +373,7 @@ class Sql(PerKeyLockMixin, CallStorage):
                         stmt = stmt.where(M.data[k].as_string() == v)
         return stmt
 
-    def query(self, template: QueryCall) -> Iterable[Call]:
+    def query(self, template: QueryCall) -> Iterable[DigestedCall]:
         """Find cached calls matching a template using SQL-side filtering.
 
         Semantics match CallStorage.query:
@@ -412,7 +412,7 @@ class Sql(PerKeyLockMixin, CallStorage):
             keys = [Digest(k) for (k,) in self._local.session.execute(stmt).all()]
 
         # Yield loaded calls using existing loader (ensures metadata returned too)
-        def meta_matches(call: Call) -> bool:
+        def meta_matches(call: DigestedCall) -> bool:
             specs = template.metadata
             if not specs:
                 return True

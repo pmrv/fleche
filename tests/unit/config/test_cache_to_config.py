@@ -93,7 +93,7 @@ def test_cache_to_config_unknown_raises():
         def save(self, call):
             return ""
 
-        def load(self, key, lazy=True):
+        def load(self, key):
             raise KeyError(key)
 
         def load_value(self, key):

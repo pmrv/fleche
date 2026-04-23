@@ -18,38 +18,33 @@ def test_lazy_call_load():
     original = Call(name="test_func", arguments={"a": 1, "b": 2}, result=3)
     key = cache.save(original)
 
-    # Load with lazy=True
-    lazy = cache.load(key, lazy=True)
+    lazy = cache.load(key)
     assert isinstance(lazy, LazyCall)
     assert lazy.name == "test_func"
 
-    # Check that it's NOT yet loaded. We mock the internal load handlers to track calls.
-    with patch.object(Cache, '_handle_args_load', wraps=cache._handle_args_load) as mock_handle_args, \
-         patch.object(Cache, 'load_value', wraps=cache.load_value) as mock_load_value:
+    # Check that it's NOT yet loaded. We mock load_value to track calls.
+    with patch.object(Cache, 'load_value', wraps=cache.load_value) as mock_load_value:
 
         # Accessing arguments property returns a proxy, doesn't trigger load yet.
         args = lazy.arguments
         assert isinstance(args, LazyArguments)
-        assert mock_handle_args.call_count == 0
+        assert mock_load_value.call_count == 0
 
-        # Accessing an individual argument should trigger exactly one load for that argument.
+        # Accessing an individual argument should trigger exactly one load_value call.
         val_a = args["a"]
         assert val_a == 1
-        assert mock_handle_args.call_count == 1
-        mock_handle_args.assert_called_with(digest(1))
+        assert mock_load_value.call_count == 1
+        mock_load_value.assert_called_with(digest(1))
 
         # Accessing another argument triggers another load.
         val_b = args["b"]
         assert val_b == 2
-        assert mock_handle_args.call_count == 2
+        assert mock_load_value.call_count == 2
 
         # Accessing result should trigger its own load.
-        # Note: load_value might have been called by _handle_args_load if arguments were complex,
-        # but here they are simple ints.
-        load_value_count_before = mock_load_value.call_count
         res = lazy.result
         assert res == 3
-        assert mock_load_value.call_count == load_value_count_before + 1
+        assert mock_load_value.call_count == 3
         mock_load_value.assert_called_with(digest(3))
 
 
@@ -62,7 +57,7 @@ def test_lazy_call_to_lookup_key():
     original = Call(name="test_func", arguments={"a": [1, 2]}, result=42)
     key = cache.save(original)
 
-    lazy = cache.load(key, lazy=True)
+    lazy = cache.load(key)
     assert lazy.to_lookup_key() == key
 
 
@@ -79,7 +74,7 @@ def test_lazy_call_digest():
     # The saved call in storage has Digests.
     saved_call = calls_storage.load(key)
 
-    lazy = cache.load(key, lazy=True)
+    lazy = cache.load(key)
 
     # 1. LazyCall digest should match the saved Call (which has Digests)
     assert digest(lazy) == digest(saved_call)
@@ -105,7 +100,6 @@ def test_cache_query_lazy():
         name="f", arguments=None, metadata=None, module=None, version=None, result=None
     )
 
-    # Query with lazy=True
     results = list(cache.query(tpl))
     assert len(results) == 2
     for r in results:
@@ -124,18 +118,21 @@ def test_lazy_call_frozen():
 
 def test_lazy_arguments_mapping():
     """Verify that LazyArguments implements the Mapping interface correctly."""
+    from fleche.digest import Digest
     cache = Mock()
-    cache._handle_args_load.side_effect = lambda x: f"loaded_{x}"
-    arg_digests = {"a": "dig_a", "b": "dig_b"}
+    cache.load_value.side_effect = lambda x: f"loaded_{x}"
+    dig_a = Digest("a" * 64)
+    dig_b = Digest("b" * 64)
+    arg_digests = {"a": dig_a, "b": dig_b}
     args = LazyArguments(cache, arg_digests)
 
     assert len(args) == 2
     assert set(args) == {"a", "b"}
-    assert args["a"] == "loaded_dig_a"
-    assert args["b"] == "loaded_dig_b"
+    assert args["a"] == f"loaded_{'a' * 64}"
+    assert args["b"] == f"loaded_{'b' * 64}"
     assert "a" in args
     assert "c" not in args
-    assert list(args.items()) == [("a", "loaded_dig_a"), ("b", "loaded_dig_b")]
+    assert list(args.items()) == [("a", f"loaded_{'a' * 64}"), ("b", f"loaded_{'b' * 64}")]
 
 
 def test_lazy_call_maintains_cache_reference():
@@ -148,7 +145,7 @@ def test_lazy_call_maintains_cache_reference():
     key = cache1.save(Call(name="f", arguments={"x": "val1"}, result="res1"))
 
     # Obtain a lazy call from cache1
-    lazy = cache1.load(key, lazy=True)
+    lazy = cache1.load(key)
 
     # Set up second cache
     cache2 = Cache(ValueMemory({}), CallMemory({}))
@@ -172,7 +169,7 @@ def test_lazy_call_fetch():
     original = Call(name="test_func", arguments={"a": 1, "b": 2}, result=3)
     key = cache.save(original)
 
-    lazy = cache.load(key, lazy=True)
+    lazy = cache.load(key)
     full_call = lazy.fetch()
 
     assert isinstance(full_call, Call)
@@ -199,7 +196,7 @@ def test_lazy_call_to_lookup_key_consistency(args):
     key = cache.save(original)
 
     # Load as LazyCall
-    lazy = cache.load(key, lazy=True)
+    lazy = cache.load(key)
 
     assert isinstance(lazy, LazyCall)
     assert lazy.to_lookup_key() == original.to_lookup_key()
