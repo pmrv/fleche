@@ -247,7 +247,7 @@ def _asdict_init_only(obj) -> dict[str, Any]:
     appear in serialised config.
     """
     non_init = {f.name for f in dataclasses.fields(obj) if not f.init}
-    return {k: v for k, v in asdict(obj).items() if k not in non_init}  # type: ignore
+    return {k: v for k, v in asdict(obj).items() if k not in non_init}
 
 
 def storage_to_config(s: storage.ValueStorage | storage.CallStorage) -> dict[str, Any]:
