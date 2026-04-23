@@ -3,7 +3,7 @@ from typing import Any
 from inspect import signature
 from collections.abc import Mapping
 
-from pyiron_snippets.versions import get_module, get_qualname, get_version
+from pyiron_snippets.versions import VersionInfo, get_module, get_qualname
 
 from . import digest
 
@@ -11,18 +11,19 @@ from . import digest
 def _extract_version_info(func) -> tuple[str, str, str | None]:
     """Extract ``(name, module, version)`` from ``func`` via :mod:`pyiron_snippets.versions`.
 
-    ``name`` is the object's qualified name (or its module name if the former is
-    unavailable, e.g. when ``func`` is itself a module). If the module declared on
-    ``func`` is not importable, ``version`` falls back to ``None`` rather than
-    propagating :class:`ModuleNotFoundError`.
+    Uses :meth:`VersionInfo.of` to introspect ``func``.  When the module is not
+    importable, falls back to attribute inspection without a version.  A ``__version__``
+    attribute set directly on ``func`` takes priority over the module-level version.
     """
-    module = get_module(func)
-    name = get_qualname(func) or module
     try:
-        version = get_version(module)
+        info = VersionInfo.of(func)
     except ModuleNotFoundError:
-        version = None
-    return name, module, version
+        module = get_module(func)
+        name = get_qualname(func) or module
+        return name, module, None
+    name = info.qualname or info.module
+    version = getattr(func, "__version__", info.version)
+    return name, info.module, version
 
 
 def bind(func, args, kwargs, apply_defaults=False, partial=False):
