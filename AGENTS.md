@@ -18,22 +18,22 @@ Reference for AI coding agents working in this repository.
 | File | Role |
 |------|------|
 | `wrapper.py` | `@fleche()` decorator; `Ignored`/`Required` arg markers (via `__class_getitem__` → `Annotated`); `ArgumentPolicy`; attaches `.call/.digest/.load/.contains/.query/.rerun/.bind` helpers (also under `.fleche.*`) |
-| `digest.py` | `Digest(str)` (with `.expand`/`.shrink`); `digest()` (SHA256 hex); `Hook`, `add_hook`, `get_hooks`; `Unhashable`; `DIGEST_LENGTH=64`; entry-point hooks for numpy/complex/etc. |
-| `call.py` | `Call` dataclass (`from_call`, `to_lookup_key`); `LazyCall` (deferred deser via `_cache`); `QueryCall` (wildcard match via `matches`); `bind()` wrapper over `inspect.Signature.bind[_partial]` |
-| `caches.py` | `BaseCache`, `Cache`, `CacheStack`, `ReadOnlyCache`, `FilteredCache`, `RefreshingCache`, `SizeLimitedMixin`/`SizeLimitedCache`; `Rejected` exception; `Cache.transfer`, `.readonly`, `.push`, `.filter`, `.table`, `.redigest` |
+| `digest.py` | `Digest(str)` (with `.expand`/`.shrink`); `digest()` (SHA256 hex); `Hook`, `add_hook`, `get_hooks`, `load_entry_points`; `Unhashable`; `DIGEST_LENGTH=64`; entry-point hooks for numpy/complex/etc. lazy-loaded on first `Unhashable`. |
+| `call.py` | `Call` dataclass (`from_call`, `to_lookup_key`); `LazyCall` (private `_arguments`/`_result`, deferred deser via `_cache`; `LazyArguments` Mapping resolves digests on access); `QueryCall` (wildcard match via `matches`, `partial=True` binding); `bind()` wrapper over `inspect.Signature.bind[_partial]`; `AnyCall = Call \| LazyCall` |
+| `caches.py` | `BaseCache`, `Cache`, `CacheStack`, `ReadOnlyCache`, `FilteredCache`, `RefreshingCache`, `SizeLimitedMixin`/`SizeLimitedCache`; `Rejected` exception; `Cache.transfer`, `.readonly`, `.push`, `.filter`, `.table`, `.redigest`. `CacheStack` saves to bottom (`stack[0]`), loads top-down and back-fills hits to bottom; cannot nest. |
 | `state.py` | `cache()`, `meta()`, `tags()`, `project()`; `_StickyContext` (backport of Py3.14 Token CM); `BoundWrapper` (freezes cache + metadata for pickling) |
-| `query.py` | `QueryIterator` — lazy helpers: `only/any/count/empty/take/skip/filter/sorted/unique/groupby/latest/oldest/evict/results/table`; `.table()` → pandas DataFrame (auto-converts `timestart`/`timestop` to local tz) |
-| `metadata.py` | `MetaData` ABC (`pre`/`post` → JSON-serializable); built-ins `Runtime` (timestart/timestop/walltime), `Tags` |
-| `config.py` | TOML loader; `storage_from_config`/`storage_to_config`, `cache_from_config`/`cache_to_config` (round-trippable); `_live_caches` interns named caches. See module docstring for full type reference. |
-| `security.py` | `SignedBytes` HMAC-SHA256 wrapper (hex-encoded so it never contains pickle STOP); `SignatureError`; `normalize_secret_key`/`get_secret_key`; `FLECHE_SECRET_KEY` env var / `secret_key` config key |
-| `executor.py` | `wrap_executor(executor)` monkey-patches `.submit`: cached fleche calls skip the executor and return a pre-completed `Future`; misses are auto-`bind()`'d so cache/metadata context reaches the worker. Splits off executor-reserved kw-only params (e.g. `resources=`) from payload kwargs. Idempotent. |
+| `query.py` | `QueryIterator` — lazy helpers: `only/any/count/empty/take/skip/filter/sorted/unique/groupby/latest/oldest/evict/results/table`; `.table()` → pandas DataFrame (auto-converts `timestart`/`timestop` to local tz). `latest`/`oldest` need `Runtime` metadata. |
+| `metadata.py` | `MetaData` ABC (abstract `pre`/`post` → `dict[str, JSONValue]`, abstract `name` and `keys` schema); `JSONValue` type alias; built-ins `Runtime` (timestart/timestop/walltime, name=`"runtime"`), `Tags` (name=`"tags"`, flattens to columns) |
+| `config.py` | TOML loader (`load_cache_config`, `load_default_metadata`); `storage_from_config`/`storage_to_config`, `cache_from_config`/`cache_to_config` (round-trippable); `_live_caches` interns named caches. **TOML loading goes through `_create_cache` and only ever produces a plain `Cache`** — `max_size`/`read_only`/list-stack configs in TOML are silently ignored (`cache_from_config`'s shape dispatch is not wired to the loader). See module docstring for full type reference. |
+| `security.py` | `SignedBytes` HMAC-SHA256 wrapper (hex-encoded so it never contains pickle STOP, which is how `loads` finds the signature boundary); `SignatureError`; `normalize_secret_key`/`get_secret_key`; `FLECHE_SECRET_KEY` env var (colon-separated hex) / `secret_key` config key |
+| `executor.py` | `wrap_executor(executor)` monkey-patches `.submit`: cached fleche calls skip the executor and return a pre-completed `Future`; misses are auto-`bind()`'d so cache/metadata context reaches the worker. Splits off executor-reserved kw-only params (e.g. `resources=`) from payload kwargs. Idempotent (`submit._fleche_wrapped`). |
 
 **Storage layout (`storage/`):**
-- `base.py` — `KeyManagement` (`list`/`_evict`/`_contains` abstract; `evict`/`contains`/`expand`/`shrink`/`_normalize_key` concrete; `_operation_context` hook) → `StorageBackend` (adds `put`/`get`) → domain ABCs `ValueStorage`/`CallStorage` (+ `transform`) → **bridge mixins** `ValueMixin`/`CallMixin` that implement `save`/`load`[/`query`] on top of `put`/`get`. Also: `SaveError`, `AmbiguousDigestError`, `_resolve_prefix`.
-- `file.py` — `FileStorage` base for disk-backed backends: locking (`file_write_lock`/`file_read_lock` with exponential backoff), `root` resolution, `_to_file`/`_from_file` hooks. Compression and signing live in `pickle_file.py`, not here.
-- `memory.py`, `void.py`, `pickle_file.py` (+`PickleFileBackend.with_pickle`/`with_cloudpickle`/`with_dill`), `bagofholding_file.py`, `sql.py` — concrete backends (each exposes `Value*` and/or `Call*` classes; `sql.py` only has `Sql` for calls).
-- `destructuring.py` — `DestructuringMixin` for recursive value splitting + `DigestedIterable`/`DigestedDict`/`Digested` markers (preserve digest equivalence via `__digest__`). `remaining_depth` (default `0`) controls how deep structures are split across keys.
-- `thread_safe.py` — `SerializingMixin` (single RLock), `PerKeyLockMixin` (striped locks via a module-level `WeakKeyDictionary`); `_PicklableLock`/`_PicklableRLock` (survive pickle round-trip, state not preserved).
+- `base.py` — `KeyManagement` (`list`/`_evict`/`_contains` abstract; `evict`/`contains`/`expand`/`shrink`/`_normalize_key` concrete; `_operation_context` hook — chain via `super()._operation_context(key)`) → `StorageBackend` (adds `put`/`get`) → domain ABCs `ValueStorage`, `CallStorage` (the latter also defines `transform()`, used by `Cache.redigest`) → **bridge mixins** `ValueMixin`/`CallMixin` that implement `save`/`load`[/`query`] on top of `put`/`get`. Also: `SaveError`, `AmbiguousDigestError`, `_resolve_prefix` (used by both base and `Sql`).
+- `file.py` — `FileStorage` base for disk-backed backends: locking (`file_write_lock`/`file_read_lock` with exponential backoff and stale-lock fallback), `root` resolution (expanduser+absolute+resolve in `__post_init__`), `_to_file`/`_from_file` hooks. Compression and signing live in `pickle_file.py`, not here.
+- `memory.py`, `void.py`, `pickle_file.py` (+`PickleFileBackend.with_pickle`/`with_cloudpickle`/`with_dill`; `compress_all`/`decompress_all` migration helpers; gzip auto-detected by `\x1f\x8b` magic on read), `bagofholding_file.py`, `sql.py` — concrete backends (each exposes `Value*` and/or `Call*` classes; `sql.py` only has `Sql` for calls).
+- `destructuring.py` — `DestructuringMixin` for recursive value splitting + `DigestedIterable`/`DigestedDict`/`Digested` markers (preserve digest equivalence via `__digest__`). `remaining_depth` (default `0`) controls how deep structures are split across keys. `count_reuses()` reports how often each key is referenced as a sub-component (useful for GC-style audits). NamedTuples are deliberately **not** destructured (`_is_trojan_tuple` guard).
+- `thread_safe.py` — `SerializingMixin` (single `_PicklableRLock`), `PerKeyLockMixin` (striped locks via a module-level `_per_instance_locks: WeakKeyDictionary`; per-instance `WeakValueDictionary[key, RLock]`); `_PicklableLock`/`_PicklableRLock` (survive pickle round-trip, state not preserved — in-process only, NOT inter-process synchronisation).
 
 **Storage class composition:** Concrete classes are `@dataclass(frozen=True)` and inherit via MRO. Thread-safety mixins are **already baked into** the disk-backed classes — do not wrap them again:
 - `ValueMemory(ValueMixin, DestructuringMixin, MemoryBackend)`
@@ -43,7 +43,7 @@ Reference for AI coding agents working in this repository.
 - `ValueBagOfHoldingH5File`/`CallBagOfHoldingH5File` — same pattern (PerKeyLock + …Mixin + [Destructuring] + BagOfHoldingH5FileBackend)
 - `Sql(PerKeyLockMixin, CallStorage)` — bespoke; bypasses `StorageBackend`/`CallMixin`, implements `put`/`get`/`query` directly against SQLAlchemy; `__reduce__` reconstructs from `(url, echo)`
 
-Each mixin/backend declares its own dataclass fields; Python's dataclass machinery merges them into one generated `__init__` via MRO — **do not pass `init=False`** on user-facing fields. Internal state (locks, `_keys` on `SizeLimitedMixin`, `engine`/`session` on `Sql`) uses `field(init=False, repr=False, compare=False)` and is rebuilt in `__post_init__` via `object.__setattr__`.
+Each mixin/backend declares its own dataclass fields; Python's dataclass machinery merges them into one generated `__init__` via MRO — **do not pass `init=False`** on user-facing fields. Internal state (locks, `_keys` on `SizeLimitedMixin`, `engine`/`session`/`_local` on `Sql`) uses `field(init=False, repr=False, compare=False)` and is rebuilt in `__post_init__` via `object.__setattr__`. `config._asdict_init_only` strips `init=False` fields when serialising, so any new internal field must be `init=False` or it leaks into round-tripped configs.
 
 ---
 
@@ -59,7 +59,7 @@ python benchmarks/run_benchmarks.py                    # benchmarks (writes benc
 
 Python `>=3.11,<3.14`. No committed lint config; `pyproject.toml` has no `[tool.ruff]`/`[tool.flake8]`.
 
-Optional deps are gated via `pyiron_snippets.import_alarm.ImportAlarm` — importing a backend without its extra installed raises at construction, not import.
+Optional dep extras: `cloudpickle`, `dill`, `sqlalchemy`, `bagofholding`, `executorlib`, `docs`, `tests` (the `tests` extra already pulls in cloudpickle/dill/sqlalchemy/bagofholding). Optional deps are gated via `pyiron_snippets.import_alarm.ImportAlarm` — importing a backend without its extra installed raises at construction, not at module import.
 
 ## Architecture notes
 
@@ -85,55 +85,30 @@ Cache
 
 ### Config
 
-See `config.py` module docstring for the authoritative type-string reference. `cache_from_config` shape-dispatches: list → `CacheStack`; dict with `max_size` → `SizeLimitedCache`; dict with `read_only: true` → wraps in `ReadOnlyCache`; else `Cache`. Special named caches `"memory"` and `"void"` bypass the config file. Example `fleche.toml`:
-```toml
-[default]
-cache = "persistent"
-metadata = ["Runtime"]            # "Tags" is NOT allowed here
+See `config.py` module docstring for the authoritative type-string reference and a worked TOML example. Two API layers, both live in `config.py`:
 
-[persistent]
-values.type = "cloudpickle"
-values.root = "~/.fleche/values"
-calls.type  = "cloudpickle"
-calls.root  = "~/.fleche/calls"
-```
+- `cache_from_config(d)` (programmatic): shape-dispatches — list → `CacheStack`; dict with `max_size` → `SizeLimitedCache`; dict with `read_only: true` → wraps in `ReadOnlyCache`; else `Cache`.
+- `load_cache_config(name)` (TOML loader, called at import time from `state.py`): only ever produces a plain `Cache` via `_create_cache` — `max_size`/`read_only`/list-stack keys in TOML are silently ignored. Wire those up programmatically. Special named caches `"memory"` and `"void"` bypass the config file. `metadata = [...]` only accepts `"Runtime"` — `"Tags"` raises (it requires arguments).
 
 ### Security (optional)
 
-Pickle-family backends accept `secret_key` (list of hex strings) or fall back to `FLECHE_SECRET_KEY` env var (colon-separated hex). `SignedBytes` in `security.py` signs payloads with HMAC-SHA256; hex encoding avoids the pickle STOP opcode so the signature can be split off on load. Supports key rotation (first key signs, all keys verify). `SignatureError` from `SignedBytes.loads` is caught in `PickleFileBackend._from_file` and re-raised as `KeyError`, so tampered entries behave as missing rather than hard-failing.
+Pickle-family backends accept `secret_key` (list of hex strings) or fall back to `FLECHE_SECRET_KEY` env var (colon-separated hex). `SignedBytes` in `security.py` signs payloads with HMAC-SHA256; hex encoding avoids the pickle STOP opcode so the signature can be split off on load by `rfind(pickle.STOP)`. Supports key rotation (first key signs, all keys verify). `SignatureError` from `SignedBytes.loads` is caught in `PickleFileBackend._from_file` and re-raised as `KeyError`, so tampered entries behave as missing rather than hard-failing.
 
 ## Test layout
 
-```
-tests/
-├── conftest.py     # registers tests.fixtures as a pytest plugin
-├── fixtures.py     # shared pytest fixtures
-├── strategies.py   # hypothesis strategies
-├── unit/
-│   ├── caches/      # cache/stack/filter/readonly/size_limited/lazy_call/redigest/expand_shrink
-│   ├── call/        # partial_binding, code_digest, matches
-│   ├── config/      # config, cache_from_config, cache_to_config, storage_to_config
-│   ├── digest/      # digest, entry_points
-│   ├── fleche/      # fleche (decorator), bound_wrapper, dataclass_input, decorator_attributes,
-│   │                # digest_args, futures, hash_code, ignore_digest, process_args, processpool,
-│   │                # query_iterator, rerun, signature_binding, type_hints, workdir
-│   ├── metadata/    # test_metadata
-│   ├── storage/     # storage, file_storage, mixins, pickle_file, bagofholding_file, sql_query,
-│   │                # sql_digest_types, sql_url_coercion, destructuring_storage, thread_safe,
-│   │                # secure_storage, void, short_digest, operation_context, optional_deps,
-│   │                # overwrite, transform
-│   ├── test_cache_sticky.py   # top-level: sticky cache context semantics
-│   └── test_pickle.py         # top-level: pickling of caches/wrappers
-├── integration/    # integration (main), notebooks, parallel_execution, methods,
-│                   # wrapper_query_integration, hash_code_integration
-└── regression/     # test_issue_{297,319,352}, test_sql_concurrent_save, test_sql_table_uniqueness
-```
+`tests/` has `conftest.py` (registers `tests.fixtures` as a pytest plugin), `fixtures.py` (shared fixtures), `strategies.py` (hypothesis strategies), and three subtrees:
+
+- `unit/` — one subdirectory per module under test (`caches/`, `call/`, `config/`, `digest/`, `fleche/`, `metadata/`, `storage/`); filenames mirror the feature being tested. Two top-level files: `test_cache_sticky.py` (sticky `cache()` context semantics) and `test_pickle.py` (pickling caches/wrappers).
+- `integration/` — `test_integration.py` (main), `test_notebooks.py` (exercises `notebooks/`), `test_parallel_execution.py`, `test_methods.py`, `test_wrapper_query_integration.py`, `test_hash_code_integration.py`.
+- `regression/` — `test_issue_{297,319,352}.py`, `test_sql_concurrent_save.py`, `test_sql_table_uniqueness.py`.
 
 ## Other directories
 
 - `benchmarks/` — `benchmark_{digest,integration,storage}.py`, `run_benchmarks.py`, `utils.py`, `results.csv`.
 - `devnotes/storage-hierarchy.{dot,md,svg}` — rendered inheritance diagram for the storage classes.
-- `notebooks/` — usage examples (exercised by `tests/integration/test_notebooks.py`).
+- `docs/` — Sphinx sources (`*.rst` per topic: `cache_stack`, `configuration`, `custom_digests`, `digests_as_args`, `helpers`, `lazy_call`, `parallel_execution`, `query`, `security`, `installation`).
+- `notebooks/` — usage examples (`GettingStarted`, `Caches`, `CacheStack`, `StorageBackends`, `SecureStorage`, `ConcurrentExecution`, `ExtraMethods`, `TransferWorkflow`); exercised by `tests/integration/test_notebooks.py`.
+- `.github/workflows/` — CI: `tests.yml`, `ty.yml`, `benchmarks.yml`/`updatebenchmarks.yml`, `rendernb.yml`, `pypi-publish.yml`.
 
 ## PR and Issue notes
 
