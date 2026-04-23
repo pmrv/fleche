@@ -21,15 +21,11 @@ When you call ``cache().load(key)`` or iterate over ``cache().query(...)``, you 
    print(lazy_call.result)          # Triggers a load from value storage
    print(lazy_call.arguments['x'])  # Triggers a load for argument 'x'
 
-To load everything upfront, pass ``lazy=False`` or call ``.fetch()`` on an existing ``LazyCall``:
+To load everything upfront, call ``.fetch()`` on an existing ``LazyCall``:
 
 .. code-block:: python
 
-   # Eager load: deserializes everything immediately
-   call = cache().load(key, lazy=False)
-   print(call.result)  # Already in memory
-
-   # Or fetch from a lazy call you already have
+   # Fetch everything from a lazy call you already have
    call = lazy_call.fetch()
 
 Parity with Call

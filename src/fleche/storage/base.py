@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from typing import Iterable, Any, Callable
 
 from ..digest import digest, Digest, DIGEST_LENGTH
-from ..call import Call, QueryCall
+from ..call import DigestedCall, QueryCall
 
 logger = logging.getLogger("fleche.storage")
 
@@ -195,21 +195,20 @@ class CallStorage(KeyManagement):
     """Abstract domain interface for call storage."""
 
     @abstractmethod
-    def save(self, call: Call) -> Digest: ...
+    def save(self, call: DigestedCall) -> Digest: ...
 
     @abstractmethod
-    def load(self, key: Digest | str) -> Call: ...
+    def load(self, key: Digest | str) -> DigestedCall: ...
 
     @abstractmethod
-    def query(self, template: QueryCall) -> Iterable[Call]: ...
+    def query(self, template: QueryCall) -> Iterable[DigestedCall]: ...
 
-    def transform(self, func: Callable[[Call], Call] | None = None) -> None:
-        """Applies a transformation function to all Call objects in the storage.
+    def transform(self, func: Callable[[DigestedCall], DigestedCall] | None = None) -> None:
+        """Applies a transformation function to all DigestedCall objects in the storage.
 
         Args:
-            func (Callable[[Call], Call] | None): A function that takes a Call
-                and returns a transformed Call.  If None, the identity function
-                is used (useful for re-calculating keys).
+            func: A function that takes a :class:`DigestedCall` and returns a transformed
+                one.  If ``None``, the identity is used (useful for re-calculating keys).
         """
         for k in list(self.list()):
             try:
@@ -237,7 +236,7 @@ class CallMixin(CallStorage, StorageBackend):
     implementation to get a fully functional call storage.
     """
 
-    def save(self, call: Call) -> Digest:
+    def save(self, call: DigestedCall) -> Digest:
         key = call.to_lookup_key()
         with self._operation_context(key):
             logger.debug("Saving call %s", key)
@@ -245,13 +244,13 @@ class CallMixin(CallStorage, StorageBackend):
                 self.evict(key)
             return self.put(call, key)
 
-    def load(self, key: Digest | str) -> Call:
+    def load(self, key: Digest | str) -> DigestedCall:
         with self._operation_context(key):
             key = self._normalize_key(key)
             logger.debug("Loading call with key %s", key)
             return self.get(key)
 
-    def query(self, template: QueryCall) -> Iterable[Call]:
+    def query(self, template: QueryCall) -> Iterable[DigestedCall]:
         """Find cached calls that 'match' the template.
 
         Returns all calls where the given arguments, results or metadata match exactly the stored ones.  Values may be
@@ -261,7 +260,7 @@ class CallMixin(CallStorage, StorageBackend):
             template (Call): specification for calls to return; use `None` as wildcard.
 
         Returns:
-            Iterable[Call]: an iterable over all matching call objects
+            Iterable[DigestedCall]: an iterable over all matching digested call objects
         """
 
         for key in self.list():

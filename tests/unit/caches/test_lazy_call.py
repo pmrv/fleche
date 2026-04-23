@@ -18,8 +18,7 @@ def test_lazy_call_load():
     original = Call(name="test_func", arguments={"a": 1, "b": 2}, result=3)
     key = cache.save(original)
 
-    # Load with lazy=True
-    lazy = cache.load(key, lazy=True)
+    lazy = cache.load(key)
     assert isinstance(lazy, LazyCall)
     assert lazy.name == "test_func"
 
@@ -62,7 +61,7 @@ def test_lazy_call_to_lookup_key():
     original = Call(name="test_func", arguments={"a": [1, 2]}, result=42)
     key = cache.save(original)
 
-    lazy = cache.load(key, lazy=True)
+    lazy = cache.load(key)
     assert lazy.to_lookup_key() == key
 
 
@@ -79,7 +78,7 @@ def test_lazy_call_digest():
     # The saved call in storage has Digests.
     saved_call = calls_storage.load(key)
 
-    lazy = cache.load(key, lazy=True)
+    lazy = cache.load(key)
 
     # 1. LazyCall digest should match the saved Call (which has Digests)
     assert digest(lazy) == digest(saved_call)
@@ -105,7 +104,6 @@ def test_cache_query_lazy():
         name="f", arguments=None, metadata=None, module=None, version=None, result=None
     )
 
-    # Query with lazy=True
     results = list(cache.query(tpl))
     assert len(results) == 2
     for r in results:
@@ -148,7 +146,7 @@ def test_lazy_call_maintains_cache_reference():
     key = cache1.save(Call(name="f", arguments={"x": "val1"}, result="res1"))
 
     # Obtain a lazy call from cache1
-    lazy = cache1.load(key, lazy=True)
+    lazy = cache1.load(key)
 
     # Set up second cache
     cache2 = Cache(ValueMemory({}), CallMemory({}))
@@ -172,7 +170,7 @@ def test_lazy_call_fetch():
     original = Call(name="test_func", arguments={"a": 1, "b": 2}, result=3)
     key = cache.save(original)
 
-    lazy = cache.load(key, lazy=True)
+    lazy = cache.load(key)
     full_call = lazy.fetch()
 
     assert isinstance(full_call, Call)
@@ -199,7 +197,7 @@ def test_lazy_call_to_lookup_key_consistency(args):
     key = cache.save(original)
 
     # Load as LazyCall
-    lazy = cache.load(key, lazy=True)
+    lazy = cache.load(key)
 
     assert isinstance(lazy, LazyCall)
     assert lazy.to_lookup_key() == original.to_lookup_key()

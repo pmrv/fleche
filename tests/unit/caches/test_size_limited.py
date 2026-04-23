@@ -30,7 +30,7 @@ def test_save_and_load():
     cache = make_slcache(max_size=5)
     c = make_call("f", 42, 84)
     key = cache.save(c)
-    loaded = cache.load(key, lazy=False)
+    loaded = cache.load(key)
     assert loaded.name == "f"
     assert loaded.arguments["x"] == 42
     assert loaded.result == 84

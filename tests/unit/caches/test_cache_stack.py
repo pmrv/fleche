@@ -22,15 +22,12 @@ def test_cache_stack_load_hit():
     from fleche.call import Call
 
     c1 = Mock()
-    c1.load.side_effect = KeyError
-    c2 = Mock()
+    # c1 hits immediately — no transfer needed (i == 0)
     call = Call(name="test", arguments={"x": 1}, result="result")
-    c2.load.return_value = call
-    stack = CacheStack((c1, c2))
-    # avoid mocking a lazycall
-    result = stack.load("key", lazy=False)
-    c1.load.assert_called_once_with("key", lazy=False)
-    c2.load.assert_called_once_with("key", lazy=False)
+    c1.load.return_value = call
+    stack = CacheStack((c1,))
+    result = stack.load("key")
+    c1.load.assert_called_once_with("key")
     assert result == call
 
 
@@ -125,20 +122,20 @@ def test_cache_stack_load_transfers_call():
 
     # Verify c1 doesn't have it
     with pytest.raises(KeyError):
-        c1.load(key, lazy=False)
+        c1.load(key)
 
     # Load from stack
-    res_call = stack.load(key, lazy=False)
+    res_call = stack.load(key)
 
     assert res_call.result == "result"
 
     # Now c1 SHOULD have it due to automatic transfer
     assert c1.contains(key)
-    assert c1.load(key, lazy=False).result == "result"
+    assert c1.load(key).result == "result"
 
 
 def test_cache_stack_load_lazy_transfers_call():
-    """Verify that a lazy hit in a higher cache is transferred to the base cache."""
+    """Verify that a load from a higher cache is transferred to the base cache."""
     # Setup two caches
     c1 = Cache(ValueMemory({}), CallMemory({}))
     c2 = Cache(ValueMemory({}), CallMemory({}))
@@ -151,14 +148,14 @@ def test_cache_stack_load_lazy_transfers_call():
 
     stack = CacheStack((c1, c2))
 
-    # Load lazy from stack
-    lazy_call = stack.load(key, lazy=True)
+    # Load from stack (always lazy now)
+    lazy_call = stack.load(key)
 
     assert lazy_call.result == "result"
 
     # Now c1 SHOULD have it
     assert c1.contains(key)
-    assert c1.load(key, lazy=False).result == "result"
+    assert c1.load(key).result == "result"
 
 
 def test_cache_stack_load_value_does_not_transfer():
@@ -202,12 +199,12 @@ def test_cache_stack_multi_level_transfer():
 
     # Verify c1 and c2 don't have it
     with pytest.raises(KeyError):
-        c1.load(key, lazy=False)
+        c1.load(key)
     with pytest.raises(KeyError):
-        c2.load(key, lazy=False)
+        c2.load(key)
 
     # Load from stack. Should hit c3 and transfer to c1 (via stack.save())
-    stack.load(key, lazy=False)
+    stack.load(key)
 
     # c1 should have it
     assert c1.contains(key)
