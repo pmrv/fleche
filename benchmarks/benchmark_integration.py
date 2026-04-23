@@ -8,7 +8,13 @@ import numpy as np
 
 from fleche import fleche, cache
 from fleche.caches import Cache, SizeLimitedCache
-from fleche.storage import Memory, PickleFile, Sql, BagOfHoldingH5File
+from fleche.storage import (
+    ValueMemory,
+    CallMemory,
+    ValuePickleFile,
+    ValueBagOfHoldingH5File,
+    Sql,
+)
 
 
 # Define some test functions
@@ -152,31 +158,31 @@ def main():
     try:
         # Configurations
         configs = [
-            ("Memory", Cache(Memory({}), Memory({}))),
-            ("Memory+Sqlite(:memory:)", Cache(Memory({}), Sql())),
+            ("Memory", Cache(ValueMemory({}), CallMemory({}))),
+            ("Memory+Sqlite(:memory:)", Cache(ValueMemory({}), Sql())),
             (
                 "Pickle+Sql",
                 Cache(
-                    PickleFile.with_pickle(root=os.path.join(tmp_dir, "pickle")),
+                    ValuePickleFile.with_pickle(root=os.path.join(tmp_dir, "pickle")),
                     Sql(f"sqlite:///{tmp_dir}/db.sqlite"),
                 ),
             ),
             (
                 "H5+Sql",
                 Cache(
-                    BagOfHoldingH5File(root=os.path.join(tmp_dir, "h5")),
+                    ValueBagOfHoldingH5File(root=os.path.join(tmp_dir, "h5")),
                     Sql(f"sqlite:///{tmp_dir}/db_h5.sqlite"),
                 ),
             ),
             # SizeLimitedCache: max_size smaller than iterations → evictions occur
             (
                 "SizeLimitedCache(Memory,max=10)",
-                SizeLimitedCache(Memory({}), Memory({}), max_size=10),
+                SizeLimitedCache(ValueMemory({}), CallMemory({}), max_size=10),
             ),
             # SizeLimitedCache: max_size larger than iterations → no evictions
             (
                 "SizeLimitedCache(Memory,max=100)",
-                SizeLimitedCache(Memory({}), Memory({}), max_size=100),
+                SizeLimitedCache(ValueMemory({}), CallMemory({}), max_size=100),
             ),
         ]
 
