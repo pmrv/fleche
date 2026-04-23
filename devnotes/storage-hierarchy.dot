@@ -87,7 +87,7 @@ digraph StorageHierarchy {
         ]
 
         DestructuringMixin [
-            label="{DestructuringMixin|put(): splits collections\lget(): reassembles\lremaining_depth: int\l}"
+            label="{DestructuringMixin|save(): splits collections\lload(): reassembles\lremaining_depth: int\l}"
             fillcolor="#FFE0AA"
             color="#CC7700"
         ]
@@ -174,7 +174,7 @@ digraph StorageHierarchy {
     StorageBackend -> ValueMixin    [arrowhead=onormal, style=solid]
     CallStorage -> CallMixin        [arrowhead=onormal, style=solid]
     StorageBackend -> CallMixin     [arrowhead=onormal, style=solid]
-    StorageBackend -> DestructuringMixin [arrowhead=onormal, style=solid]
+    ValueStorage -> DestructuringMixin [arrowhead=onormal, style=solid]
 
     /* ── Inheritance: backends ─────────────────────────────── */
     StorageBackend -> MemoryBackend             [arrowhead=onormal, style=solid]

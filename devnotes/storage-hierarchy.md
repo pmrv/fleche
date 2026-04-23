@@ -115,13 +115,14 @@ class CallMixin(CallStorage, StorageBackend):
     def query(self, template: QueryCall): ...
 ```
 
-`DestructuringMixin` hooks in at the *backend* level—it overrides `put`/`get`
-on `StorageBackend` to transparently split nested collections (lists, dicts)
-into individually-stored sub-values.  Because it inherits only from
-`StorageBackend` it can be composed into either a value or call storage chain:
+`DestructuringMixin` hooks in at the *value* level—it overrides `save`/`load`
+on `ValueStorage` to transparently split nested collections (lists, dicts)
+into individually-stored sub-values.  It is a `ValueStorage` subclass, so it
+only composes with a value storage chain (destructuring has no meaning for
+call records):
 
 ```python
-class DestructuringValueMemory(ValueMixin, DestructuringMixin, MemoryBackend):
+class DestructuringValueMemory(DestructuringMixin, ValueMixin, MemoryBackend):
     pass
 ```
 
@@ -184,10 +185,10 @@ class Cache(BaseCache):
     calls:  CallStorage     # e.g. CallMemory() or Sql()
 ```
 
-To add destructuring to any backend, prepend `DestructuringMixin` in the MRO:
+To add destructuring to any value backend, prepend `DestructuringMixin` in the MRO:
 
 ```python
-class DestructuringValuePickleFile(ValueMixin, DestructuringMixin, PickleFileBackend):
+class DestructuringValuePickleFile(DestructuringMixin, ValueMixin, PickleFileBackend):
     pass
 ```
 
