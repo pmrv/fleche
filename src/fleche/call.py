@@ -8,7 +8,7 @@ from pyiron_snippets.versions import VersionInfo, get_module, get_qualname
 from . import digest
 
 
-def _extract_version_info(func) -> tuple[str, str, str | None]:
+def _extract_version_info(func) -> tuple[str, str, str | int | None]:
     """Extract ``(name, module, version)`` from ``func`` via :mod:`pyiron_snippets.versions`.
 
     Uses :meth:`VersionInfo.of` to introspect ``func``.  When the module is not
