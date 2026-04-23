@@ -257,15 +257,6 @@ class Cache(BaseCache):
 
         return self.values.load(key)
 
-    def _handle_args_load(self, key):
-        if not isinstance(key, Digest):
-            return key  # found a simple value
-        try:
-            return self.load_value(key)
-        except KeyError:
-            # if value is not in storage, leave the digest in place
-            return key
-
     def save(self, call: Call) -> str:
         try:
             digested = call.stash(self.values)

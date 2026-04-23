@@ -203,7 +203,14 @@ class LazyArguments(Mapping):
         self._arg_digests = arg_digests
 
     def __getitem__(self, key):
-        return self._cache._handle_args_load(self._arg_digests[key])
+        value = self._arg_digests[key]
+        if not isinstance(value, Digest):
+            return value
+        try:
+            return self._cache.load_value(value)
+        except KeyError:
+            # Value not in storage; leave the digest in place.
+            return value
 
     def __iter__(self):
         return iter(self._arg_digests)
