@@ -54,8 +54,10 @@ def test_different_function_implementations_have_different_digests():
     # Ensure metadata matches so only code differs
     func_v1.__name__ = "my_func"
     func_v2.__name__ = "my_func"
-    func_v1.__module__ = "test_module"
-    func_v2.__module__ = "test_module"
+    func_v1.__qualname__ = "my_func"
+    func_v2.__qualname__ = "my_func"
+    func_v1.__module__ = __name__
+    func_v2.__module__ = __name__
 
     call_v1 = Call.from_call(func_v1, 5)
     call_v2 = Call.from_call(func_v2, 5)
@@ -84,8 +86,10 @@ def test_same_function_implementation_has_same_digest():
 
     func_a.__name__ = "func"
     func_b.__name__ = "func"
-    func_a.__module__ = "mod"
-    func_b.__module__ = "mod"
+    func_a.__qualname__ = "func"
+    func_b.__qualname__ = "func"
+    func_a.__module__ = __name__
+    func_b.__module__ = __name__
 
     # Note: Python might compile these to identical code objects.
     # We rely on fleche.digest.digest(code_object) stability.

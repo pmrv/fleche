@@ -10,6 +10,8 @@ def test_hash_code_invalidates_on_change():
     # We want to simulate the SAME function (same name, same module) but different code.
     func_v1.__name__ = "my_func"
     func_v2.__name__ = "my_func"
+    func_v1.__qualname__ = "my_func"
+    func_v2.__qualname__ = "my_func"
     func_v1.__module__ = "my_module"
     func_v2.__module__ = "my_module"
 
@@ -28,6 +30,8 @@ def test_hash_code_default_ignores_change():
 
     func_v1.__name__ = "my_func"
     func_v2.__name__ = "my_func"
+    func_v1.__qualname__ = "my_func"
+    func_v2.__qualname__ = "my_func"
     func_v1.__module__ = "my_module"
     func_v2.__module__ = "my_module"
 

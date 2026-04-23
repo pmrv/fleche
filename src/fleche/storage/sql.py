@@ -1,4 +1,5 @@
 import contextlib
+import json
 import logging
 import threading
 from typing import Iterable, Any, List
@@ -45,7 +46,7 @@ with ImportAlarm(
         key = mapped_column(String(DIGEST_LENGTH), primary_key=True)
         name: Mapped[str] = mapped_column(String, nullable=False)
         module: Mapped[str] = mapped_column(String, nullable=True)
-        version: Mapped[int] = mapped_column(Integer, nullable=True)
+        version: Mapped[str] = mapped_column(String, nullable=True)
         code_digest: Mapped[str] = mapped_column(String(DIGEST_LENGTH), nullable=True)
         result: Mapped[str] = mapped_column(String(DIGEST_LENGTH), nullable=True)
 
@@ -191,7 +192,7 @@ class Sql(PerKeyLockMixin, CallStorage):
             key=str(key),
             name=call.name,
             module=call.module,
-            version=call.version,
+            version=json.dumps(call.version) if call.version is not None else None,
             code_digest=call.code_digest,
             result=call.result if call.result is None else str(call.result),
         )
@@ -235,7 +236,7 @@ class Sql(PerKeyLockMixin, CallStorage):
             arguments=arguments,
             metadata={row.name: (row.data or {}) for row in meta_rows},
             module=call_model.module,
-            version=call_model.version,
+            version=json.loads(call_model.version) if call_model.version is not None else None,
             code_digest=Digest(call_model.code_digest) if call_model.code_digest is not None else None,
             result=(
                 Digest(call_model.result) if call_model.result is not None else None
@@ -310,7 +311,7 @@ class Sql(PerKeyLockMixin, CallStorage):
         if template.module is not None:
             conditions.append(CallModel.module == template.module)
         if template.version is not None:
-            conditions.append(CallModel.version == template.version)
+            conditions.append(CallModel.version == json.dumps(template.version))
         if template.code_digest is not None:
             conditions.append(CallModel.code_digest == template.code_digest)
         if template.result is not None:

@@ -4,10 +4,30 @@ from typing import Any, Callable
 from inspect import signature
 from collections.abc import Mapping
 
+from pyiron_snippets.versions import VersionInfo, get_module, get_qualname
+
 from . import digest
 from .digest import Digest
 
 logger = logging.getLogger("fleche.call")
+
+
+def _extract_version_info(func) -> tuple[str, str, str | int | None]:
+    """Extract ``(name, module, version)`` from ``func`` via :mod:`pyiron_snippets.versions`.
+
+    Uses :meth:`VersionInfo.of` to introspect ``func``.  When the module is not
+    importable, falls back to attribute inspection without a version.  A ``__version__``
+    attribute set directly on ``func`` takes priority over the module-level version.
+    """
+    try:
+        info = VersionInfo.of(func)
+    except ModuleNotFoundError:
+        module = get_module(func)
+        name = get_qualname(func) or module
+        return name, module, None
+    name = info.qualname or info.module
+    version = getattr(func, "__version__", info.version)
+    return name, info.module, version
 
 
 def bind(func, args, kwargs, apply_defaults=False, partial=False):
@@ -49,18 +69,16 @@ class Call:
     arguments: dict[str, Any]
     metadata: dict[str, dict[str, Any]] = field(default_factory=dict)
     module: str | None = None
-    version: int | None = None
+    version: str | int | None = None
     code_digest: str | None = None
     result: Any = None
 
     @classmethod
     def from_call(cls, func, *args, **kwargs):
         arguments = dict(bind(func, args, kwargs, apply_defaults=True))
-        call = cls(func.__name__, arguments)
-        if hasattr(func, "__version__"):
-            call.version = func.__version__
-        if hasattr(func, "__module__"):
-            call.module = func.__module__
+        qualname, module, version = _extract_version_info(func)
+        call = cls(qualname, arguments, module=module)
+        call.version = getattr(func, "__version__", version)
         if hasattr(func, "__code__"):
             call.code_digest = digest.digest(func.__code__)
         return call
@@ -137,7 +155,7 @@ class DigestedCall:
     result: "digest.Digest | None" = None
     metadata: dict[str, dict[str, Any]] = field(default_factory=dict)
     module: str | None = None
-    version: int | None = None
+    version: str | int | None = None
     code_digest: str | None = None
 
     def __eq__(self, other: object) -> bool:
@@ -236,7 +254,7 @@ class LazyCall:
     _cache: Any = field(repr=False, compare=False)
     metadata: dict[str, dict[str, Any]] = field(default_factory=dict)
     module: str | None = None
-    version: int | None = None
+    version: str | int | None = None
     code_digest: str | None = None
 
     @property
@@ -291,7 +309,7 @@ class QueryCall:
     arguments: dict[str, AnyQueryType] | None = None
     metadata: dict[str, dict[str, StrQueryType]] | None = None
     module: str | None = None
-    version: int | None = None
+    version: str | int | None = None
     code_digest: digest.Digest | None = None
     result: AnyQueryType = None
 
@@ -300,11 +318,9 @@ class QueryCall:
         bound_args = bind(func, args, kwargs, partial=True)
         # Unspecified arguments default to None (wildcard)
         arguments = {name: bound_args.get(name) for name in signature(func).parameters}
-        call = cls(func.__name__, arguments)
-        if hasattr(func, "__version__"):
-            call.version = func.__version__
-        if hasattr(func, "__module__"):
-            call.module = func.__module__
+        qualname, module, version = _extract_version_info(func)
+        call = cls(qualname, arguments, module=module)
+        call.version = getattr(func, "__version__", version)
         return call
 
     def matches(self, other: 'Call | LazyCall | DigestedCall') -> bool:

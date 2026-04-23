@@ -21,12 +21,15 @@ def test_filter_by_name():
         foo(2)
         bar(3)
 
+    foo_name = foo.__wrapped__.__qualname__
+    bar_name = bar.__wrapped__.__qualname__
+
     # Filter only foo calls
-    c_foo = c.filter(lambda call: call.name == "foo")
+    c_foo = c.filter(lambda call: call.name == foo_name)
     assert isinstance(c_foo, FilteredCache)
 
-    assert len(list(c_foo.query(QueryCall(name="foo", arguments=None)))) == 2
-    assert len(list(c_foo.query(QueryCall(name="bar", arguments=None)))) == 0
+    assert len(list(c_foo.query(QueryCall(name=foo_name, arguments=None)))) == 2
+    assert len(list(c_foo.query(QueryCall(name=bar_name, arguments=None)))) == 0
 
     # Check values
     assert c_foo.load(foo.fleche.digest(1)).result == 2
@@ -42,7 +45,8 @@ def test_filter_reflects_changes():
     def foo(x):
         return x + 1
 
-    c_foo = c.filter(lambda call: call.name == "foo")
+    foo_name = foo.__wrapped__.__qualname__
+    c_foo = c.filter(lambda call: call.name == foo_name)
 
     with cache(c):
         foo(1)
@@ -68,7 +72,8 @@ def test_filter_with_template():
         bar(3)
 
     # Filter using a QueryCall object as a template
-    c_filtered = c.filter(QueryCall(name="foo", arguments=None))
+    foo_name = foo.__wrapped__.__qualname__
+    c_filtered = c.filter(QueryCall(name=foo_name, arguments=None))
 
     assert len(list(c_filtered.query(QueryCall(name=None, arguments=None)))) == 2
     assert c_filtered.load(foo.fleche.digest(1)).result == 2

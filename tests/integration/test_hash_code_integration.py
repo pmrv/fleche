@@ -11,6 +11,7 @@ def test_hash_code_integration():
             return x + 1
 
         func_v1.__name__ = "my_func"
+        func_v1.__qualname__ = "my_func"
         func_v1.__module__ = "my_module"
 
         wrapped_v1 = fleche(hash_code=True)(func_v1)
@@ -21,6 +22,7 @@ def test_hash_code_integration():
             return x + 2
 
         func_v2.__name__ = "my_func"
+        func_v2.__qualname__ = "my_func"
         func_v2.__module__ = "my_module"
 
         wrapped_v2 = fleche(hash_code=True)(func_v2)
@@ -37,6 +39,7 @@ def test_hash_code_disabled_integration():
             return x + 1
 
         func_v1.__name__ = "my_func"
+        func_v1.__qualname__ = "my_func"
         func_v1.__module__ = "my_module"
 
         wrapped_v1 = fleche(hash_code=False)(func_v1)
@@ -47,6 +50,7 @@ def test_hash_code_disabled_integration():
             return x + 2
 
         func_v2.__name__ = "my_func"
+        func_v2.__qualname__ = "my_func"
         func_v2.__module__ = "my_module"
 
         wrapped_v2 = fleche(hash_code=False)(func_v2)

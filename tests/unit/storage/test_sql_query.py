@@ -281,6 +281,72 @@ def test_sql_call_digest_persistence(store):
 
 
 # ---------------------------------------------------------------------------
+# Version type round-trips (str | int | None all preserved through SQL)
+# ---------------------------------------------------------------------------
+
+
+def test_sql_string_version_roundtrip(store):
+    """String version is stored and loaded with its type preserved."""
+    c = Call(
+        name="f",
+        arguments={"x": Digest("a" * 64)},
+        metadata={},
+        module="mod",
+        version="1.2.3",
+        result=Digest("r" * 64),
+    )
+    key = store.save(c)
+    loaded = store.load(key)
+    assert loaded.version == "1.2.3"
+    assert isinstance(loaded.version, str)
+    assert loaded.to_lookup_key() == c.to_lookup_key()
+
+
+def test_sql_int_version_roundtrip(store):
+    """Integer version is stored and loaded with its type preserved."""
+    c = Call(
+        name="f",
+        arguments={"x": Digest("a" * 64)},
+        metadata={},
+        module="mod",
+        version=42,
+        result=Digest("r" * 64),
+    )
+    key = store.save(c)
+    loaded = store.load(key)
+    assert loaded.version == 42
+    assert isinstance(loaded.version, int)
+    assert loaded.to_lookup_key() == c.to_lookup_key()
+
+
+def test_sql_query_by_string_version(store):
+    """Querying by string version returns only calls with that exact version."""
+    c1 = Call(
+        name="f",
+        arguments={"x": Digest("a" * 64)},
+        metadata={},
+        module="mod",
+        version="1.0.0",
+        result=Digest("r" * 64),
+    )
+    c2 = Call(
+        name="f",
+        arguments={"x": Digest("b" * 64)},
+        metadata={},
+        module="mod",
+        version="2.0.0",
+        result=Digest("s" * 64),
+    )
+    store.save(c1)
+    store.save(c2)
+
+    tpl = Call(name=None, arguments=None, metadata=None, module=None, version="1.0.0", result=None)
+    got = list(store.query(tpl))
+    assert len(got) == 1
+    assert got[0].version == "1.0.0"
+
+
+# ---------------------------------------------------------------------------
 # Consistency: SQL query vs QueryCall.matches()
 # ---------------------------------------------------------------------------
 
