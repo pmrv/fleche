@@ -270,6 +270,43 @@ class DestructuringMixin(base.ValueStorage):
             case _:
                 return value
 
+    def _raw_sub_digests(self, raw: Any) -> set[digest.Digest]:
+        """Direct digest children of a raw stored entry.
+
+        A *raw* entry is what ``super().load`` returns — i.e. what was written
+        to the underlying backend before :meth:`mend` rewires sub-digests back
+        into their parent container.  Only :class:`Digested` wrappers carry
+        child references; scalars and plain (non-destructured) containers
+        return an empty set.
+        """
+        match raw:
+            case DigestedIterable():
+                return {i for i in raw.items if isinstance(i, digest.Digest)}
+            case DigestedDict():
+                return {
+                    x
+                    for pair in raw.items.items()
+                    for x in pair
+                    if isinstance(x, digest.Digest)
+                }
+            case DigestedFields():
+                return {v for v in raw.fields.values() if isinstance(v, digest.Digest)}
+            case _:
+                return set()
+
+    def sub_digests(self, key: digest.Digest | str) -> set[digest.Digest]:
+        """Direct digest children of the raw entry stored at *key*.
+
+        Bypasses :meth:`mend`, so destructured sub-references are returned as
+        opaque :class:`~fleche.digest.Digest` keys rather than being followed.
+        Intended for reference-graph traversals (GC, debugging) where loading
+        the mended value would flatten the structure we need to inspect.
+
+        Raises:
+            KeyError: if *key* is not present in the underlying backend.
+        """
+        return self._raw_sub_digests(super().load(key))
+
     def count_reuses(self) -> Counter[digest.Digest]:
         """Return a counter of how many times each stored key is referenced as a sub-component.
 
@@ -295,20 +332,7 @@ class DestructuringMixin(base.ValueStorage):
         """
         counts: Counter[digest.Digest] = Counter({key: 0 for key in self.list()})
         for key in list(counts):
-            raw = super().load(key)
-            match raw:
-                case DigestedIterable():
-                    for item in raw.items:
-                        if isinstance(item, digest.Digest) and item in counts:
-                            counts[item] += 1
-                case DigestedDict():
-                    for k, v in raw.items.items():
-                        if isinstance(k, digest.Digest) and k in counts:
-                            counts[k] += 1
-                        if isinstance(v, digest.Digest) and v in counts:
-                            counts[v] += 1
-                case DigestedFields():
-                    for v in raw.fields.values():
-                        if isinstance(v, digest.Digest) and v in counts:
-                            counts[v] += 1
+            for sub in self._raw_sub_digests(super().load(key)):
+                if sub in counts:
+                    counts[sub] += 1
         return counts
