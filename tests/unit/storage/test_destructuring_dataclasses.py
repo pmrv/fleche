@@ -21,7 +21,7 @@ from tests.strategies import st_base_values, st_nested_values, dataclasses as st
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
-class DestructuringMemory(ValueMixin, DestructuringMixin, MemoryBackend):
+class DestructuringMemory(DestructuringMixin, ValueMixin, MemoryBackend):
     pass
 
 
