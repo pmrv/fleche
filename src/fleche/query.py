@@ -9,6 +9,17 @@ import pandas as pd
 from . import call
 
 
+def _resolve_key(key: "str | Callable[[call.LazyCall], Any]") -> "Callable[[call.LazyCall], Any]":
+    """Normalise a key argument to a callable.
+
+    When given a string, produce a lookup on ``LazyCall.arguments[key]``.
+    """
+    if isinstance(key, str):
+        arg_name = key
+        return lambda c: c.arguments[arg_name]
+    return key
+
+
 @dataclass(frozen=True)
 class QueryIterator(Iterable[call.LazyCall]):
     """Iterator that adds some convenience to plain iterators over calls of query result.
@@ -81,9 +92,7 @@ class QueryIterator(Iterable[call.LazyCall]):
             key: a callable taking a LazyCall, or a string argument name to sort by
             reverse: if True, sort in descending order
         """
-        if isinstance(key, str):
-            arg_name = key
-            key = lambda c: c.arguments[arg_name]
+        key = _resolve_key(key) if key is not None else None
         return QueryIterator(builtins.sorted(self, key=key, reverse=reverse))
 
     def unique(self, key: "str | Callable[[call.LazyCall], Any]") -> "QueryIterator":
@@ -92,9 +101,7 @@ class QueryIterator(Iterable[call.LazyCall]):
         Args:
             key: a callable taking a LazyCall, or a string argument name to deduplicate by
         """
-        if isinstance(key, str):
-            arg_name = key
-            key = lambda c: c.arguments[arg_name]
+        key = _resolve_key(key)
 
         def _unique(calls, k):
             seen: set = set()
@@ -112,9 +119,7 @@ class QueryIterator(Iterable[call.LazyCall]):
         Args:
             key: a callable taking a LazyCall, or a string argument name to group by
         """
-        if isinstance(key, str):
-            arg_name = key
-            key = lambda c: c.arguments[arg_name]
+        key = _resolve_key(key)
         groups: dict[Any, list] = {}
         for c in self:
             k = key(c)
