@@ -95,6 +95,32 @@ Example fleche.toml
     calls.type = "sql"
     calls.url = "sqlite:///~/.fleche/calls.db"
 
+    # SizeLimitedCache — evicts oldest entries once 100 entries are stored
+    [limited]
+    values.type = "memory"
+    calls.type = "memory"
+    max_size = 100
+
+    # ReadOnlyCache — loads from storage but never writes new results
+    [readonly]
+    values.type = "cloudpickle"
+    values.root = "~/.fleche/values"
+    calls.type = "cloudpickle"
+    calls.root = "~/.fleche/calls"
+    read_only = true
+
+    # CacheStack — TOML array-of-tables; saves to the bottom layer,
+    # loads top-down and back-fills hits to the bottom
+    [[mystack]]
+    values.type = "memory"
+    calls.type = "memory"
+
+    [[mystack]]
+    values.type = "cloudpickle"
+    values.root = "~/.fleche/values"
+    calls.type = "cloudpickle"
+    calls.root = "~/.fleche/calls"
+
 """
 
 import dataclasses
@@ -110,7 +136,7 @@ from . import storage, metadata, caches
 
 logger = logging.getLogger("fleche.config")
 
-_live_caches: dict[str | None, caches.Cache] = {}
+_live_caches: dict[str | None, caches.BaseCache] = {}
 
 
 def _load_config(path: Path) -> dict[str, Any]:
@@ -390,12 +416,6 @@ def cache_to_config(c: caches.BaseCache) -> "dict[str, Any] | list[dict[str, Any
             raise ValueError(f"Cannot convert cache of type {type(c).__name__!r} to config")
 
 
-def _create_cache(cache_config: dict[str, Any]) -> caches.Cache:
-    values = storage_from_config(cache_config["values"], "value")
-    calls = storage_from_config(cache_config["calls"], "call")
-    return caches.Cache(values=values, calls=calls)
-
-
 def _default_memory_cache(name: str | None, reason: str | None = None) -> caches.Cache:
     """Return (and intern) a fresh in-memory cache, optionally logging the fallback reason."""
     if reason is not None:
@@ -405,7 +425,7 @@ def _default_memory_cache(name: str | None, reason: str | None = None) -> caches
     return cache
 
 
-def load_cache_config(name: str | None = None) -> caches.Cache:
+def load_cache_config(name: str | None = None) -> caches.BaseCache:
     """
     Load a cache from the configuration file.
 
@@ -445,6 +465,6 @@ def load_cache_config(name: str | None = None) -> caches.Cache:
             return _default_memory_cache(name, f"cache {name!r} not found in configuration")
         cache_name, cache_config = name, config[name]
 
-    cache = _create_cache(cache_config)
+    cache = cache_from_config(cache_config)
     _live_caches[cache_name] = cache
     return cache
