@@ -31,7 +31,7 @@ class Digested(ABC):
     @staticmethod
     def get(storage, key):
         if isinstance(key, digest.Digest):
-            return storage.get(key)
+            return storage.load(key)
         else:
             return key
 
@@ -137,20 +137,19 @@ class DigestedDataclass(Digested):
 
 
 @dataclass(frozen=True)
-class DestructuringMixin(base.StorageBackend):
+class DestructuringMixin(base.ValueStorage):
     """Mixin that recursively destructures collections on save/load.
 
-    Place before a concrete :class:`StorageBackend` in the MRO to add
-    destructuring behavior.  Lists, tuples, and dicts are broken apart so each
-    element is stored independently; on load the original structure is
-    reassembled.
+    Place before a :class:`ValueMixin` in the MRO to add destructuring
+    behavior.  Lists, tuples, and dicts are broken apart so each element is
+    stored independently; on load the original structure is reassembled.
 
     Example:
 
         >>> from fleche.storage.base import ValueMixin
         >>> from fleche.storage.memory import MemoryBackend
         >>> @dataclass(frozen=True)
-        ... class MyValueStorage(ValueMixin, DestructuringMixin, MemoryBackend): ...
+        ... class MyValueStorage(DestructuringMixin, ValueMixin, MemoryBackend): ...
         >>> vm = MyValueStorage(storage={})
         >>> key = vm.save([1, [2, 3]])
         >>> vm.load(key) == [1, [2, 3]]
@@ -202,20 +201,20 @@ class DestructuringMixin(base.StorageBackend):
 
         if depth < self.remaining_depth:
             return value, depth
-        return super().put(value, key or digest.digest(value)), depth
+        return super().save(value, key), depth
 
-    def put(self, value: Any, key: digest.Digest) -> digest.Digest:
+    def save(self, value: Any, key: digest.Digest | None = None) -> digest.Digest:
 
         match value:
             case list() | tuple() | dict() if not value:
-                return super().put(value, key)
+                return super().save(value, key)
 
             case list() | tuple() | dict():
                 value_or_digest, depth = self._intern_rec(value, key)
                 # if given value is nominally not deep enough to be destructured/saved during recursion
                 # we do it here manually as the recursion base case
                 if depth < self.remaining_depth:
-                    return super().put(value_or_digest, key)
+                    return super().save(value_or_digest, key)
                 else:
                     return value_or_digest
 
@@ -229,10 +228,10 @@ class DestructuringMixin(base.StorageBackend):
                     return value_or_digest
 
             case _:
-                return super().put(value, key)
+                return super().save(value, key)
 
-    def get(self, key: digest.Digest | Any) -> Any:
-        value = super().get(key)
+    def load(self, key: digest.Digest | str) -> Any:
+        value = super().load(key)
 
         match value:
             case Digested():
@@ -265,7 +264,7 @@ class DestructuringMixin(base.StorageBackend):
         """
         counts: Counter[digest.Digest] = Counter({key: 0 for key in self.list()})
         for key in list(counts):
-            raw = super().get(key)
+            raw = super().load(key)
             match raw:
                 case DigestedIterable():
                     for item in raw.items:
