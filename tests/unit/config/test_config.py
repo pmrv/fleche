@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from fleche import storage, cache
 from fleche.config import load_cache_config, load_default_metadata, _live_caches
-from fleche.caches import Cache, BaseCache
+from fleche.caches import Cache, BaseCache, SizeLimitedCache, ReadOnlyCache, CacheStack
 from fleche.metadata import Runtime
 
 
@@ -331,3 +331,120 @@ def test_fallback_named_cache_missing_is_singleton(monkeypatch, config_file_no_d
     cache1 = load_cache_config("nonexistent")
     cache2 = load_cache_config("nonexistent")
     assert cache1 is cache2
+
+
+# --- TOML parity tests: max_size / read_only / CacheStack ---
+
+@pytest.fixture
+def config_file_max_size(tmp_path):
+    config = textwrap.dedent("""
+        [default]
+        cache = "limited"
+
+        [limited]
+        values.type = "memory"
+        calls.type = "memory"
+        max_size = 10
+    """)
+    config_dir = tmp_path / "fleche"
+    config_dir.mkdir()
+    (config_dir / "cache.toml").write_text(config)
+    return str(tmp_path)
+
+
+@pytest.fixture
+def config_file_read_only(tmp_path):
+    config = textwrap.dedent("""
+        [default]
+        cache = "readonly"
+
+        [readonly]
+        values.type = "memory"
+        calls.type = "memory"
+        read_only = true
+    """)
+    config_dir = tmp_path / "fleche"
+    config_dir.mkdir()
+    (config_dir / "cache.toml").write_text(config)
+    return str(tmp_path)
+
+
+@pytest.fixture
+def config_file_cache_stack(tmp_path):
+    config = textwrap.dedent("""
+        [default]
+        cache = "mystack"
+
+        [[mystack]]
+        values.type = "memory"
+        calls.type = "memory"
+
+        [[mystack]]
+        values.type = "void"
+        calls.type = "void"
+    """)
+    config_dir = tmp_path / "fleche"
+    config_dir.mkdir()
+    (config_dir / "cache.toml").write_text(config)
+    return str(tmp_path)
+
+
+def test_load_cache_config_max_size(monkeypatch, config_file_max_size):
+    monkeypatch.setenv("XDG_CONFIG_HOME", config_file_max_size)
+
+    cache_obj = load_cache_config()
+
+    assert isinstance(cache_obj, SizeLimitedCache)
+    assert cache_obj.max_size == 10
+    assert isinstance(cache_obj.values, storage.ValueMemory)
+    assert isinstance(cache_obj.calls, storage.CallMemory)
+
+
+def test_load_cache_config_read_only(monkeypatch, config_file_read_only):
+    monkeypatch.setenv("XDG_CONFIG_HOME", config_file_read_only)
+
+    cache_obj = load_cache_config()
+
+    assert isinstance(cache_obj, ReadOnlyCache)
+    assert isinstance(cache_obj.cache, Cache)
+    assert isinstance(cache_obj.cache.values, storage.ValueMemory)
+    assert isinstance(cache_obj.cache.calls, storage.CallMemory)
+
+
+def test_load_cache_config_cache_stack(monkeypatch, config_file_cache_stack):
+    monkeypatch.setenv("XDG_CONFIG_HOME", config_file_cache_stack)
+
+    cache_obj = load_cache_config()
+
+    assert isinstance(cache_obj, CacheStack)
+    assert len(cache_obj.stack) == 2
+    assert isinstance(cache_obj.stack[0], Cache)
+    assert isinstance(cache_obj.stack[0].values, storage.ValueMemory)
+    assert isinstance(cache_obj.stack[1], Cache)
+    assert isinstance(cache_obj.stack[1].values, storage.ValueVoid)
+
+
+def test_load_cache_config_max_size_by_name(monkeypatch, config_file_max_size):
+    monkeypatch.setenv("XDG_CONFIG_HOME", config_file_max_size)
+
+    cache_obj = load_cache_config("limited")
+
+    assert isinstance(cache_obj, SizeLimitedCache)
+    assert cache_obj.max_size == 10
+
+
+def test_load_cache_config_read_only_by_name(monkeypatch, config_file_read_only):
+    monkeypatch.setenv("XDG_CONFIG_HOME", config_file_read_only)
+
+    cache_obj = load_cache_config("readonly")
+
+    assert isinstance(cache_obj, ReadOnlyCache)
+
+
+def test_load_cache_config_cache_stack_by_name(monkeypatch, config_file_cache_stack):
+    monkeypatch.setenv("XDG_CONFIG_HOME", config_file_cache_stack)
+
+    cache_obj = load_cache_config("mystack")
+
+    assert isinstance(cache_obj, CacheStack)
+    assert len(cache_obj.stack) == 2
