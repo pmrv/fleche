@@ -1,5 +1,7 @@
+import hashlib
 from abc import ABC, abstractmethod
 from collections import Counter
+import dataclasses as _dataclasses
 from dataclasses import dataclass
 from numbers import Number
 from typing import Any, Callable
@@ -77,6 +79,63 @@ class DigestedDict(Digested):
         return cls(items), depth
 
 
+@dataclass
+class DigestedDataclass(Digested):
+    """Digested wrapper for dataclass instances, storing field values separately in CAS.
+
+    Field values may be replaced by :class:`~fleche.digest.Digest` back-references when they are
+    stored independently.  :meth:`mend` reconstructs the original instance by bypassing
+    ``__init__`` / ``__post_init__``, so ``InitVar`` and ``init=False`` fields are all handled
+    uniformly: we restore whatever attribute values were present at sunder time.
+    """
+
+    cls: type
+    fields: dict  # {field_name: field_value_or_digest}
+
+    def underlying(self):
+        return self.fields
+
+    def __digest__(self):
+        # Reproduce the same hash that digest._digest computes for a plain dataclass instance:
+        # SHA256(cls.__name__ + digest(fields_as_dict)).  Digest values in self.fields are
+        # transparent (digest(Digest("abc")) == "abc") so they round-trip correctly.
+        m = hashlib.sha256()
+        m.update(self.cls.__name__.encode())
+        m.update(digest.digest(self.fields).encode())
+        return digest.Digest(m.hexdigest())
+
+    def mend(self, storage: 'DestructuringMixin'):
+        obj = object.__new__(self.cls)
+        for name, val_or_digest in self.fields.items():
+            object.__setattr__(obj, name, self.get(storage, val_or_digest))
+        return obj
+
+    @classmethod
+    def sunder(cls, intern: Callable[[Any], tuple[Any, int | float]], value: Any):
+        # Fall back to whole-object storage on any structural problem.
+        try:
+            dc_fields = _dataclasses.fields(value)
+        except TypeError:
+            return value, float("inf")
+
+        if not dc_fields:
+            return value, 0
+
+        try:
+            field_values = [getattr(value, f.name) for f in dc_fields]
+        except AttributeError:
+            return value, float("inf")
+
+        children, depths = zip(*(intern(v) for v in field_values))
+        depth = 1 + max(depths)
+
+        if all(not isinstance(c, digest.Digest) for c in children):
+            return value, depth
+
+        fields = dict(zip((f.name for f in dc_fields), children))
+        return cls(type(value), fields), depth
+
+
 @dataclass(frozen=True)
 class DestructuringMixin(base.StorageBackend):
     """Mixin that recursively destructures collections on save/load.
@@ -138,6 +197,9 @@ class DestructuringMixin(base.StorageBackend):
             case dict():
                 value, depth = DigestedDict.sunder(self._intern_rec, value)
 
+            case _ if _dataclasses.is_dataclass(value) and not isinstance(value, type):
+                value, depth = DigestedDataclass.sunder(self._intern_rec, value)
+
         if depth < self.remaining_depth:
             return value, depth
         return super().put(value, key or digest.digest(value)), depth
@@ -152,6 +214,15 @@ class DestructuringMixin(base.StorageBackend):
                 value_or_digest, depth = self._intern_rec(value, key)
                 # if given value is nominally not deep enough to be destructured/saved during recursion
                 # we do it here manually as the recursion base case
+                if depth < self.remaining_depth:
+                    return super().put(value_or_digest, key)
+                else:
+                    return value_or_digest
+
+            case _ if _dataclasses.is_dataclass(value) and not isinstance(value, type):
+                if not _dataclasses.fields(value):
+                    return super().put(value, key)
+                value_or_digest, depth = self._intern_rec(value, key)
                 if depth < self.remaining_depth:
                     return super().put(value_or_digest, key)
                 else:
@@ -204,6 +275,10 @@ class DestructuringMixin(base.StorageBackend):
                     for k, v in raw.items.items():
                         if isinstance(k, digest.Digest) and k in counts:
                             counts[k] += 1
+                        if isinstance(v, digest.Digest) and v in counts:
+                            counts[v] += 1
+                case DigestedDataclass():
+                    for v in raw.fields.values():
                         if isinstance(v, digest.Digest) and v in counts:
                             counts[v] += 1
         return counts
