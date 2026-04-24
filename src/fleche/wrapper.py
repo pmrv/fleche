@@ -74,6 +74,14 @@ class ArgumentPolicy:
         return [r for r in self.required if r not in explicit]
 
 
+def _as_tuple(x: None | str | Iterable[str]) -> tuple[str, ...]:
+    if x is None:
+        return ()
+    if isinstance(x, str):
+        return (x,)
+    return tuple(x)
+
+
 def process_ignore_required_args(
         func,
         ignore: None | str | Iterable[str] = None,
@@ -103,21 +111,8 @@ def process_ignore_required_args(
     type_ignored = [name for name, hint in hints.items() if is_ignored(hint)]
     type_required = [name for name, hint in hints.items() if is_required(hint)]
 
-    if ignore is None:
-        ignore = ()
-    elif isinstance(ignore, str):
-        ignore = (ignore,)
-    else:
-        ignore = tuple(ignore)
-    ignored_args = ignore + tuple(type_ignored)
-
-    if require is None:
-        require = ()
-    elif isinstance(require, str):
-        require = (require,)
-    else:
-        require = tuple(require)
-    required_args = require + tuple(type_required)
+    ignored_args = _as_tuple(ignore) + tuple(type_ignored)
+    required_args = _as_tuple(require) + tuple(type_required)
 
     try:
         sig = signature(func)
