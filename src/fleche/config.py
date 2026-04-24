@@ -110,7 +110,7 @@ from . import storage, metadata, caches
 
 logger = logging.getLogger("fleche.config")
 
-_live_caches: dict[str, caches.Cache] = {}
+_live_caches: dict[str | None, caches.Cache] = {}
 
 
 def _load_config(path: Path) -> dict[str, Any]:
@@ -396,6 +396,15 @@ def _create_cache(cache_config: dict[str, Any]) -> caches.Cache:
     return caches.Cache(values=values, calls=calls)
 
 
+def _default_memory_cache(name: str | None, reason: str | None = None) -> caches.Cache:
+    """Return (and intern) a fresh in-memory cache, optionally logging the fallback reason."""
+    if reason is not None:
+        logger.warning("Using default memory cache: %s", reason)
+    cache = caches.Cache(storage.ValueMemory({}), storage.CallMemory({}))
+    _live_caches[name] = cache
+    return cache
+
+
 def load_cache_config(name: str | None = None) -> caches.Cache:
     """
     Load a cache from the configuration file.
@@ -410,9 +419,7 @@ def load_cache_config(name: str | None = None) -> caches.Cache:
         return _live_caches[name]
 
     if name == "memory":
-        cache = caches.Cache(storage.ValueMemory({}), storage.CallMemory({}))
-        _live_caches[name] = cache
-        return cache
+        return _default_memory_cache("memory")
 
     if name == "void":
         cache = caches.Cache(storage.ValueVoid(), storage.CallVoid())
@@ -420,40 +427,23 @@ def load_cache_config(name: str | None = None) -> caches.Cache:
         return cache
 
     path = _get_config_path()
-    if path is None or not path.exists():
-        if name is not None:
-            logger.warning(
-                "No config file found. Using default memory cache for '%s'.", name
-            )
-        else:
-            logger.warning("No config file found. Using default memory cache.")
-        return caches.Cache(storage.ValueMemory({}), storage.CallMemory({}))
+    if path is None:
+        reason = f"no config file found (name={name!r})" if name is not None else "no config file found"
+        return _default_memory_cache(name, reason)
 
     config = _load_config(path)
 
-    cache_name = name
-    cache_config = None
-
-    if cache_name is None:
+    if name is None:
         if "default" not in config or "cache" not in config["default"]:
-            logger.warning("No default cache configured. Using default memory cache.")
-            return caches.Cache(storage.ValueMemory({}), storage.CallMemory({}))
-
+            return _default_memory_cache(None, "no default cache configured")
         default_cache = config["default"]["cache"]
         if isinstance(default_cache, str):
             return load_cache_config(default_cache)
-        else:
-            cache_name = "default"
-            cache_config = default_cache
-
-    if cache_config is None:
-        if cache_name not in config:
-            logger.warning(
-                "Cache '%s' not found in configuration. Using default memory cache.",
-                cache_name,
-            )
-            return caches.Cache(storage.ValueMemory({}), storage.CallMemory({}))
-        cache_config = config[cache_name]
+        cache_name, cache_config = "default", default_cache
+    else:
+        if name not in config:
+            return _default_memory_cache(name, f"cache {name!r} not found in configuration")
+        cache_name, cache_config = name, config[name]
 
     cache = _create_cache(cache_config)
     _live_caches[cache_name] = cache

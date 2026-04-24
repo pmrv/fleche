@@ -5,7 +5,7 @@ import pytest
 from dataclasses import dataclass
 
 from fleche import storage, cache
-from fleche.config import load_cache_config, load_default_metadata
+from fleche.config import load_cache_config, load_default_metadata, _live_caches
 from fleche.caches import Cache, BaseCache
 from fleche.metadata import Runtime
 
@@ -86,6 +86,13 @@ def config_file_no_default():
         config_path = config_dir / "cache.toml"
         config_path.write_text(config)
         yield tmpdir
+
+
+@pytest.fixture(autouse=True)
+def _reset_live_caches():
+    _live_caches.clear()
+    yield
+    _live_caches.clear()
 
 
 @pytest.fixture
@@ -294,3 +301,33 @@ def test_load_default_metadata_with_syntax_error(tmp_path, monkeypatch):
     meta = load_default_metadata()
     assert len(meta) == 1
     assert isinstance(meta[0], Runtime)
+
+
+def test_fallback_no_config_file_is_singleton(monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", "/tmp/nonexistent")
+
+    default1 = load_cache_config()
+    default2 = load_cache_config()
+    assert default1 is default2
+
+    named1 = load_cache_config("missing")
+    named2 = load_cache_config("missing")
+    assert named1 is named2
+
+    assert default1 is not named1
+
+
+def test_fallback_no_default_in_config_is_singleton(monkeypatch, config_file_no_default):
+    monkeypatch.setenv("XDG_CONFIG_HOME", config_file_no_default)
+
+    cache1 = load_cache_config()
+    cache2 = load_cache_config()
+    assert cache1 is cache2
+
+
+def test_fallback_named_cache_missing_is_singleton(monkeypatch, config_file_no_default):
+    monkeypatch.setenv("XDG_CONFIG_HOME", config_file_no_default)
+
+    cache1 = load_cache_config("nonexistent")
+    cache2 = load_cache_config("nonexistent")
+    assert cache1 is cache2
