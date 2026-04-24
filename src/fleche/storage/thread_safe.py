@@ -44,8 +44,10 @@ class _PicklableLock:
     independent lock that shares no state with locks in other processes.
     """
 
+    _factory = threading.Lock
+
     def __init__(self):
-        self._lock = threading.Lock()
+        self._lock = self._factory()
 
     def __reduce__(self):
         return (type(self), ())
@@ -57,24 +59,14 @@ class _PicklableLock:
         return self._lock.__exit__(*args)
 
 
-class _PicklableRLock:
+class _PicklableRLock(_PicklableLock):
     """A ``threading.RLock`` wrapper that survives pickle round-trips.
 
     Same in-process-only semantics as :class:`_PicklableLock`; reentrant so
     that nested acquisitions (e.g. ``expand`` inside ``load``) do not deadlock.
     """
 
-    def __init__(self):
-        self._lock = threading.RLock()
-
-    def __reduce__(self):
-        return (type(self), ())
-
-    def __enter__(self):
-        return self._lock.__enter__()
-
-    def __exit__(self, *args):
-        return self._lock.__exit__(*args)
+    _factory = threading.RLock
 
 
 @dataclass(frozen=True)
