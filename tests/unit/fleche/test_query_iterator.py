@@ -567,23 +567,23 @@ def test_groupby_returns_query_iterators(test_cache):
 # ---------------------------------------------------------------------------
 
 def test_latest_returns_most_recent(test_cache):
-    test_cache.save(Call(name="f", arguments={"x": 1}, result=10, metadata={"runtime": {"timestart": 100.0}}))
-    test_cache.save(Call(name="f", arguments={"x": 2}, result=20, metadata={"runtime": {"timestart": 200.0}}))
-    test_cache.save(Call(name="f", arguments={"x": 3}, result=30, metadata={"runtime": {"timestart": 50.0}}))
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10, metadata={"runtime": {"timestop": 100.0}}))
+    test_cache.save(Call(name="f", arguments={"x": 2}, result=20, metadata={"runtime": {"timestop": 200.0}}))
+    test_cache.save(Call(name="f", arguments={"x": 3}, result=30, metadata={"runtime": {"timestop": 50.0}}))
     tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
     all_calls = list(test_cache.query(tpl))
-    expected = max(all_calls, key=lambda c: c.metadata["runtime"]["timestart"])
+    expected = max(all_calls, key=lambda c: c.metadata["runtime"]["timestop"])
     result = test_cache.query(tpl).latest()
     assert result.to_lookup_key() == expected.to_lookup_key()
 
 
 def test_oldest_returns_earliest(test_cache):
-    test_cache.save(Call(name="f", arguments={"x": 1}, result=10, metadata={"runtime": {"timestart": 100.0}}))
-    test_cache.save(Call(name="f", arguments={"x": 2}, result=20, metadata={"runtime": {"timestart": 200.0}}))
-    test_cache.save(Call(name="f", arguments={"x": 3}, result=30, metadata={"runtime": {"timestart": 50.0}}))
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10, metadata={"runtime": {"timestop": 100.0}}))
+    test_cache.save(Call(name="f", arguments={"x": 2}, result=20, metadata={"runtime": {"timestop": 200.0}}))
+    test_cache.save(Call(name="f", arguments={"x": 3}, result=30, metadata={"runtime": {"timestop": 50.0}}))
     tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
     all_calls = list(test_cache.query(tpl))
-    expected = min(all_calls, key=lambda c: c.metadata["runtime"]["timestart"])
+    expected = min(all_calls, key=lambda c: c.metadata["runtime"]["timestop"])
     result = test_cache.query(tpl).oldest()
     assert result.to_lookup_key() == expected.to_lookup_key()
 

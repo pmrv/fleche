@@ -123,27 +123,32 @@ class QueryIterator(Iterable[call.LazyCall]):
             groups[k].append(c)
         return {k: QueryIterator(v) for k, v in groups.items()}
 
+    def _timestop_extremum(self, *, reverse: bool) -> call.LazyCall:
+        sentinel = float("-inf") if reverse else float("inf")
+        result = (builtins.max if reverse else builtins.min)(
+            self,
+            key=lambda c: c.metadata.get("runtime", {}).get("timestop", sentinel),
+            default=None,
+        )
+        if result is None:
+            raise IndexError("QueryIterator is empty")
+        return result
+
     def latest(self) -> call.LazyCall:
-        """Return the call with the most recent timestart (requires Runtime metadata).
+        """Return the call with the most recent timestop (requires Runtime metadata).
 
         Raises:
             IndexError: if there are no matching calls
         """
-        calls = builtins.list(self)
-        if not calls:
-            raise IndexError("QueryIterator is empty")
-        return builtins.max(calls, key=lambda c: c.metadata.get("runtime", {}).get("timestart", float("-inf")))
+        return self._timestop_extremum(reverse=True)
 
     def oldest(self) -> call.LazyCall:
-        """Return the call with the oldest timestart (requires Runtime metadata).
+        """Return the call with the oldest timestop (requires Runtime metadata).
 
         Raises:
             IndexError: if there are no matching calls
         """
-        calls = builtins.list(self)
-        if not calls:
-            raise IndexError("QueryIterator is empty")
-        return builtins.min(calls, key=lambda c: c.metadata.get("runtime", {}).get("timestart", float("inf")))
+        return self._timestop_extremum(reverse=False)
 
     def evict(self) -> None:
         """Remove all matched calls from the cache."""
