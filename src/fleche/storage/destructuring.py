@@ -4,7 +4,7 @@ from collections import Counter
 import dataclasses as _dataclasses
 from dataclasses import dataclass
 from numbers import Number
-from typing import Any, Callable
+from typing import Any, Callable, Protocol, runtime_checkable
 
 from . import base
 from .. import _attrs
@@ -155,6 +155,25 @@ class DigestedAttrs(DigestedFields):
         return _attrs.field_items(value)
 
 
+@runtime_checkable
+class HasChildDigests(Protocol):
+    """Structural protocol for value storages that expose a reference-graph edge query.
+
+    Any :class:`~fleche.storage.base.ValueStorage` that implements
+    :meth:`child_digests` satisfies this protocol automatically — no explicit
+    registration or inheritance required.  Use ``isinstance(storage, HasChildDigests)``
+    to check at runtime whether the storage supports transitive reachability walks.
+    """
+
+    def child_digests(self, key: digest.Digest) -> set[digest.Digest]:
+        """Return the set of digests directly referenced by the entry at *key*.
+
+        Raises:
+            KeyError: if *key* is not present in the storage.
+        """
+        ...
+
+
 @dataclass(frozen=True)
 class DestructuringMixin(base.ValueStorage):
     """Mixin that recursively destructures collections on save/load.
@@ -294,7 +313,7 @@ class DestructuringMixin(base.ValueStorage):
             case _:
                 return set()
 
-    def sub_digests(self, key: digest.Digest | str) -> set[digest.Digest]:
+    def child_digests(self, key: digest.Digest | str) -> set[digest.Digest]:
         """Direct digest children of the raw entry stored at *key*.
 
         Bypasses :meth:`mend`, so destructured sub-references are returned as

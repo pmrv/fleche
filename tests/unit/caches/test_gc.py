@@ -121,11 +121,11 @@ def test_gc_preserves_call_records():
 
 
 def test_gc_on_non_destructuring_value_storage():
-    """Value storages without sub_digests() (e.g. ValueVoid) are handled gracefully."""
+    """Value storages without child_digests() (e.g. ValueVoid) are handled gracefully."""
 
     @dataclass(frozen=True)
     class _Stub:
-        """Minimal ValueStorage-ish stand-in: list + evict + no sub_digests."""
+        """Minimal ValueStorage-ish stand-in: list + evict + no child_digests."""
 
         _store: dict
 

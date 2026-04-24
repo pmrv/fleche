@@ -10,6 +10,7 @@ import pandas as pd
 from . import digest as _digest
 from .digest import Digest  # type hint convenience
 from . import storage
+from .storage.destructuring import HasChildDigests
 from .call import Call, DigestedCall, LazyCall, QueryCall
 from . import call
 from . import query
@@ -347,8 +348,9 @@ class Cache(BaseCache):
 
         Brute-force mark-and-sweep: walks every call record to build the set
         of directly-referenced value digests, then transitively follows
-        destructured sub-references (via :meth:`DestructuringMixin.sub_digests`
-        when available), and evicts every ``values`` key outside the reachable
+        destructured sub-references (via :meth:`DestructuringMixin.child_digests`
+        on storages that satisfy :class:`HasChildDigests`), and evicts every
+        ``values`` key outside the reachable
         set.  Call records are left untouched.
 
         Returns:
@@ -366,13 +368,12 @@ class Cache(BaseCache):
                 if isinstance(v, Digest):
                     reachable.add(v)
 
-        sub_digests = getattr(self.values, "sub_digests", None)
-        if sub_digests is not None:
+        if isinstance(self.values, HasChildDigests):
             frontier = set(reachable)
             while frontier:
                 key = frontier.pop()
                 try:
-                    children = sub_digests(key)
+                    children = self.values.child_digests(key)
                 except KeyError:
                     continue
                 new = children - reachable
