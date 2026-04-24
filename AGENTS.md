@@ -118,3 +118,26 @@ issue or PR.
 # General Instructions
 
 When you cannot complete a task or question because you are missing depedencies fail early and report the errors.
+
+## Commit attribution
+
+When running inside a GitHub Action, the workflow may be authenticated with a
+user PAT (see `.github/workflows/claude.yaml`). Without intervention, any
+commits you create would be attributed to that user. Always attribute your
+commits to the bot identity instead:
+
+```
+git -c user.name="claude[bot]" \
+    -c user.email="claude[bot]@users.noreply.github.com" \
+    commit --author="claude[bot] <claude[bot]@users.noreply.github.com>" ...
+```
+
+Or set the identity once per session:
+
+```
+git config user.name "claude[bot]"
+git config user.email "claude[bot]@users.noreply.github.com"
+```
+
+and pass `--author="claude[bot] <claude[bot]@users.noreply.github.com>"` on
+every `git commit`. This applies to amends, rebases, and squash-merges too.
