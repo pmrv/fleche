@@ -220,10 +220,10 @@ class DestructuringMixin(base.ValueStorage):
 
             case _ if _dataclasses.is_dataclass(value) and not isinstance(value, type):
                 if not _dataclasses.fields(value):
-                    return super().put(value, key)
+                    return super().save(value, key)
                 value_or_digest, depth = self._intern_rec(value, key)
                 if depth < self.remaining_depth:
-                    return super().put(value_or_digest, key)
+                    return super().save(value_or_digest, key)
                 else:
                     return value_or_digest
 
