@@ -15,7 +15,7 @@ from fleche import fleche, cache
 from fleche.caches import Cache
 from fleche.digest import digest, Digest
 from fleche.storage import CallMemory, ValueMemory, ValueMixin, DestructuringMixin
-from fleche.storage.destructuring import DigestedDataclass
+from fleche.storage.destructuring import DigestedAttrs, DigestedDataclass
 from fleche.storage.memory import MemoryBackend
 
 
@@ -243,10 +243,15 @@ def test_nested_attrs_destructuring_roundtrip(ds):
     assert type(loaded.inner) is AttrsBasic
 
 
-def test_attrs_stored_as_digested_dataclass(ds):
-    """attrs instances should use the same per-field destructuring as dataclasses."""
+def test_attrs_stored_as_digested_attrs(ds):
+    """attrs instances should be destructured into a DigestedAttrs marker.
+
+    Mirrors :class:`DigestedDataclass` for stdlib dataclasses but is a distinct
+    subclass so each record kind owns its own field-extraction logic.
+    """
     a = AttrsBasic(x=1, y="hello")
     key = ds.save(a)
     raw = ds.storage[key]
-    assert isinstance(raw, DigestedDataclass)
+    assert isinstance(raw, DigestedAttrs)
+    assert not isinstance(raw, DigestedDataclass)
     assert raw.cls is AttrsBasic

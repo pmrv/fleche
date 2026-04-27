@@ -11,31 +11,9 @@ from collections.abc import Iterable
 from typing import Any, TypeVar, Callable, Type, Generic
 import numpy as np
 
-try:
-    import attr as _attr_module
-    _attr: types.ModuleType | None = _attr_module
-except ImportError:
-    _attr = None
+from . import _attrs
 
 logger = logging.getLogger("fleche.digest")
-
-
-def is_attrs_instance(value: Any) -> bool:
-    """Return True iff *value* is an instance of an ``attrs``-decorated class.
-
-    Returns False (rather than raising) when ``attrs`` is not installed.
-    """
-    return (
-        _attr is not None
-        and not isinstance(value, type)
-        and _attr.has(type(value))
-    )
-
-
-def attrs_field_items(value: Any) -> list[tuple[str, Any]]:
-    """Return ``[(name, value), ...]`` for every attribute of an attrs instance."""
-    assert _attr is not None
-    return [(f.name, getattr(value, f.name)) for f in _attr.fields(type(value))]
 
 
 class Unhashable(Exception):
@@ -263,10 +241,10 @@ def _digest(value: Any) -> Digest:
                 lambda f: (f.name, getattr(value, f.name)), dataclasses.fields(value)
             )
             m.update(digest(dict(fields)).encode())
-        case _ if is_attrs_instance(value):
+        case _ if _attrs.is_attrs_instance(value):
             # mirror the dataclass digest format so an attrs class and a dataclass
             # with the same name + field layout hash identically.
-            m.update(digest(dict(attrs_field_items(value))).encode())
+            m.update(digest(dict(_attrs.field_items(value))).encode())
         case Iterable():
             for v in value:
                 m.update(digest(v).encode())
