@@ -64,16 +64,28 @@ Usage with Decorated Methods
    ``obj.method.query`` returns the same unbound helper as ``MyClass.method.query`` — Python's
    descriptor protocol does not propagate through attribute lookups on bound methods.
 
-   You must pass the instance explicitly as the first positional argument:
+   You must pass the instance explicitly as the first positional argument.
+
+   For ``fleche`` to cache calls that include ``self``, the class must be hashable —
+   i.e. it must implement a ``__digest__`` method (see :doc:`custom_digests`).
 
    .. code-block:: python
 
+      from fleche import fleche
+      from fleche.digest import digest, Digest
+
       class MyClass:
+          def __init__(self, id: int):
+              self.id = id
+
+          def __digest__(self) -> Digest:
+              return digest((type(self).__name__, self.id))
+
           @fleche
           def compute(self, x):
-              ...
+              return x ** 2
 
-      obj = MyClass()
+      obj = MyClass(id=1)
 
       # Correct — pass self explicitly
       obj.compute.query(obj, x=5)
