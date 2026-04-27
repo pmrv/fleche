@@ -4,6 +4,9 @@ import os
 import json
 import shutil
 import tempfile
+from statistics import median
+import timeit
+from functools import partial
 import numpy as np
 
 from fleche import fleche, cache
@@ -17,7 +20,6 @@ from fleche.storage import (
 )
 
 
-# Define some test functions
 @fleche
 def lightweight_func(x):
     return x * 2
@@ -25,59 +27,68 @@ def lightweight_func(x):
 
 @fleche
 def compute_heavy_func(n):
-    # Simulate heavy computation
-    time.sleep(0.01)
-    return n * n
+    # Deterministic CPU work — ~hundreds of microseconds, no scheduler noise.
+    # Using ``time.sleep`` here would make the miss-overhead measurement
+    # meaningless: the sleep's wake-up jitter dwarfs the framework overhead
+    # we are trying to isolate.
+    total = 0
+    for i in range(20_000):
+        total += (i * n) & 0xFFFF
+    return total
 
 
 @fleche
 def data_heavy_func(n):
-    # Returns a large numpy array
-    return np.random.rand(n, n)
+    # ``n`` controls the cache key only; output shape is fixed so every call
+    # — whether a miss or a hit — moves the same amount of data through the
+    # storage backend. Using ``np.random.rand`` avoids cheap-to-compress
+    # constant data fooling backends like H5.
+    return np.random.rand(100, 100)
 
 
 def benchmark_integration(name, cache_obj, func, args, iterations=10):
     results = []
 
-    # Pre-calculate base execution times for the function (without cache overhead)
-    base_times = []
     raw_func = getattr(func, "__wrapped__", func)
 
-    for i in range(iterations):
-        arg = args[i] if isinstance(args, list) else i
-        start = time.perf_counter()
-        raw_func(arg)
-        end = time.perf_counter()
-        base_times.append(end - start)
+    # Calibrate base function execution time using timeit (multiple averaged
+    # runs for noise reduction). We pick one representative arg since the
+    # function execution time is (by design) uniform across the supplied
+    # args.
+    sample_arg = args[0] if isinstance(args, list) else 0
+    base_timer = timeit.Timer(partial(raw_func, sample_arg))
+    base_number, _ = base_timer.autorange()
+    base_number = max(1, min(base_number, 1000))
+    base_repeats = base_timer.repeat(repeat=5, number=base_number)
+    base_time = min(t / base_number for t in base_repeats)
 
-    # We will subtract the average base execution time from the miss times
-    # to isolate the framework overhead (fleche logic + storage save).
-    # Since hit times don't execute the function, they don't need this adjustment.
-    avg_base_time = min(base_times)
-
-    # 1. First Call (Miss)
-    miss_overhead_times = []
+    # 1. First Call (Miss). Each iteration must use a unique argument that is
+    # not yet in the cache, otherwise we'd silently measure hits instead of
+    # misses. Callers are responsible for supplying ``iterations`` distinct
+    # args.
+    miss_total_times = []
     for i in range(iterations):
-        # vary argument to ensure miss
         arg = args[i] if isinstance(args, list) else i
 
         start = time.perf_counter()
         with cache(cache_obj):
             func(arg)
         end = time.perf_counter()
+        miss_total_times.append(end - start)
 
-        # Calculate overhead by subtracting base execution time for this specific call
-        # Or just subtract the general average. Subtracting specific base time might be better
-        # if execution time varies widely, but here it's fine to subtract the specific one since
-        # we ran the same arguments in the same order.
-        miss_overhead_times.append(max(0, (end - start) - base_times[i]))
+    # Use the median of (miss - base) without clamping. ``min`` of a
+    # subtracted quantity is biased toward iterations where ``base``
+    # happened to run slow; ``max(0, …)`` then hides the bias by zeroing
+    # negatives. Median is a robust, sign-preserving estimator of the
+    # framework overhead.
+    miss_overhead = median(miss_total_times) - base_time
 
     results.append(
         {
             "benchmark": "integration_miss",
             "name": name,
             "iterations": iterations,
-            "time": min(miss_overhead_times),
+            "time": miss_overhead,
         }
     )
 
@@ -198,12 +209,8 @@ def main():
                 )
             )
 
-            # Compute Heavy
-            # We subtract the sleep time to see overhead? No, total time is what matters for user usually,
-            # but for benchmarking the framework overhead, maybe we should use a function without sleep but still "heavy"?
-            # Or just accept that "miss" time includes execution time.
-            # Ideally we compare "miss time" vs "raw execution time".
-            # But here we just compare different storage backends for the same function.
+            # Compute Heavy: function does deterministic CPU work, miss
+            # measurement isolates framework overhead from execution.
             all_results.extend(
                 benchmark_integration(
                     f"{config_name}/compute_heavy",
@@ -214,17 +221,17 @@ def main():
                 )
             )
 
-            # Data Heavy
-            # args are size N
+            # Data Heavy: each arg must be unique so every miss iteration
+            # is a real miss. Output is a fixed-size 100x100 array.
             all_results.extend(
                 benchmark_integration(
                     f"{config_name}/data_heavy",
                     cache_inst,
                     data_heavy_func,
-                    [100] * 20,
+                    list(range(20)),
                     iterations=20,
                 )
-            )  # 100x100 array
+            )
 
     finally:
         shutil.rmtree(tmp_dir)
