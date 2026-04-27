@@ -113,26 +113,31 @@ class DigestedDataclass(Digested):
     @classmethod
     def sunder(cls, intern: Callable[[Any], tuple[Any, int | float]], value: Any):
         # Fall back to whole-object storage on any structural problem.
-        try:
-            dc_fields = _dataclasses.fields(value)
-        except TypeError:
+        if _dataclasses.is_dataclass(value) and not isinstance(value, type):
+            try:
+                items = [(f.name, getattr(value, f.name)) for f in _dataclasses.fields(value)]
+            except (AttributeError, TypeError):
+                return value, float("inf")
+        elif digest.is_attrs_instance(value):
+            try:
+                items = digest.attrs_field_items(value)
+            except (AttributeError, TypeError):
+                return value, float("inf")
+        else:
             return value, float("inf")
 
-        if not dc_fields:
+        if not items:
             return value, 0
 
-        try:
-            field_values = [getattr(value, f.name) for f in dc_fields]
-        except AttributeError:
-            return value, float("inf")
-
+        names = [n for n, _ in items]
+        field_values = [v for _, v in items]
         children, depths = zip(*(intern(v) for v in field_values))
         depth = 1 + max(depths)
 
         if all(not isinstance(c, digest.Digest) for c in children):
             return value, depth
 
-        fields = dict(zip((f.name for f in dc_fields), children))
+        fields = dict(zip(names, children))
         return cls(type(value), fields), depth
 
 
@@ -199,6 +204,9 @@ class DestructuringMixin(base.ValueStorage):
             case _ if _dataclasses.is_dataclass(value) and not isinstance(value, type):
                 value, depth = DigestedDataclass.sunder(self._intern_rec, value)
 
+            case _ if digest.is_attrs_instance(value):
+                value, depth = DigestedDataclass.sunder(self._intern_rec, value)
+
         if depth < self.remaining_depth:
             return value, depth
         return super().save(value, key), depth
@@ -220,6 +228,15 @@ class DestructuringMixin(base.ValueStorage):
 
             case _ if _dataclasses.is_dataclass(value) and not isinstance(value, type):
                 if not _dataclasses.fields(value):
+                    return super().save(value, key)
+                value_or_digest, depth = self._intern_rec(value, key)
+                if depth < self.remaining_depth:
+                    return super().save(value_or_digest, key)
+                else:
+                    return value_or_digest
+
+            case _ if digest.is_attrs_instance(value):
+                if not digest.attrs_field_items(value):
                     return super().save(value, key)
                 value_or_digest, depth = self._intern_rec(value, key)
                 if depth < self.remaining_depth:
