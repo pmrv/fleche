@@ -122,9 +122,9 @@ def my_function(x):
 
 ### SQL Storage
 - Requires `sqlalchemy`
-- Stores metadata and results in database
-- Currently supports SQLite
-- Query capabilities for cached results
+- **Call storage only** — stores call records (function name, arguments, metadata) in a SQL database; a separate value backend (file or memory) is still required for results
+- SQLite is the primary tested backend; any SQLAlchemy-supported database should work
+- Enables efficient server-side filtering when querying cached calls
 
 ### In-Memory Storage
 - For testing or temporary caching
