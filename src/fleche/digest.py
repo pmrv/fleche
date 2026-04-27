@@ -12,7 +12,8 @@ from typing import Any, TypeVar, Callable, Type, Generic
 import numpy as np
 
 try:
-    import attr as _attr
+    import attr as _attr_module
+    _attr: types.ModuleType | None = _attr_module
 except ImportError:
     _attr = None
 
@@ -33,6 +34,7 @@ def is_attrs_instance(value: Any) -> bool:
 
 def attrs_field_items(value: Any) -> list[tuple[str, Any]]:
     """Return ``[(name, value), ...]`` for every attribute of an attrs instance."""
+    assert _attr is not None
     return [(f.name, getattr(value, f.name)) for f in _attr.fields(type(value))]
 
 
