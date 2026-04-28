@@ -42,12 +42,12 @@ Notes:
 - You can combine multiple metadata keys under a name (AND logic), e.g. ``{"tags": {"project": "alpha", "phase": "train"}}``.
 
 
-Querying with a Call template
------------------------------
-You can also construct a Call template manually and query against the active cache::
+Querying with a QueryCall template
+-----------------------------------
+You can also construct a ``QueryCall`` template manually and query against the active cache::
 
-    from fleche.call import Call
-    tpl = Call(
+    from fleche.call import QueryCall
+    tpl = QueryCall(
         name="add",             # or None for wildcard
         arguments={"a": None},  # key present wildcard for argument 'a'
         metadata={"tags": {"project": "alpha"}},
