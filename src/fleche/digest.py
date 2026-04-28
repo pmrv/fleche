@@ -151,9 +151,13 @@ def _digest(value: Any) -> Digest:
     """
     m = hashlib.sha256()
 
-    for h in get_hooks():
-        if isinstance(value, h.type):
-            return h.digest(value)
+    # Fast-path: in the common case both hook lists are empty, so skip the
+    # ``get_hooks()`` call which would otherwise allocate a fresh combined list
+    # on every recursive ``_digest`` invocation (hot for large iterables).
+    if _HOOKS or _EP_HOOKS:
+        for h in get_hooks():
+            if isinstance(value, h.type):
+                return h.digest(value)
 
     m.update(type(value).__name__.encode())
     match value:
