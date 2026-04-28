@@ -67,6 +67,16 @@ class Hook(Generic[T]):
 _HOOKS = []
 _EP_HOOKS = []
 
+# Types confirmed *not* to define ``__digest__``.  ``__digest__`` is the opt-in
+# protocol that lets user types (including subclasses of dict/list/...) take
+# over their own digest, so the check has to run before the built-in ``match``
+# cases — which means it executes on every recursive ``_digest`` call for plain
+# ints, strs, dicts, lists, etc., where the answer is always False.  After the
+# first sighting of each built-in type, a set-membership check skips the
+# ``hasattr`` MRO walk entirely.  No semantic change for class-defined
+# ``__digest__`` (instance-level dunders are not supported anyway).
+_TYPES_WITHOUT_DIGEST: set[type] = set()
+
 
 def get_hooks():
     return list(reversed(_HOOKS)) + _EP_HOOKS
@@ -159,12 +169,20 @@ def _digest(value: Any) -> Digest:
             if isinstance(value, h.type):
                 return h.digest(value)
 
-    m.update(type(value).__name__.encode())
+    # ``__digest__`` opt-in protocol must win over the built-in ``match`` cases
+    # so dict/list subclasses can override their own digest.  Avoid the
+    # per-call ``hasattr`` MRO walk for the overwhelming common case (plain
+    # built-ins) by caching the negative answer in ``_TYPES_WITHOUT_DIGEST``.
+    t = type(value)
+    if t not in _TYPES_WITHOUT_DIGEST:
+        if hasattr(t, "__digest__"):
+            return Digest(value.__digest__())
+        _TYPES_WITHOUT_DIGEST.add(t)
+
+    m.update(t.__name__.encode())
     match value:
         case Digest():
             return value
-        case _ if hasattr(value, "__digest__"):
-            return Digest(value.__digest__())
         case str():
             m.update(value.encode())
         case bytes():
