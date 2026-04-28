@@ -283,8 +283,13 @@ class Sql(PerKeyLockMixin, CallStorage):
         key = call.to_lookup_key()
         with self._operation_context(key):
             logger.debug("Saving call %s", key)
-            if self.contains(key):
-                self.evict(key)
+            # ``put`` already runs a SELECT for the existing row and handles
+            # the overwrite-vs-no-op decision in a single transaction, so the
+            # earlier ``contains`` / ``evict`` pre-check was a redundant SELECT
+            # plus an extra DELETE+COMMIT round-trip on collisions.  Per-key
+            # locking via ``PerKeyLockMixin`` keeps concurrent saves serialised,
+            # so the simplification preserves the regression-tested behaviour
+            # (see ``test_sql_concurrent_save.py``).
             return self.put(call, key)
 
     def load(self, key: Digest | str) -> DigestedCall:
