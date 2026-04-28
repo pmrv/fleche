@@ -30,6 +30,29 @@ def _cached_version_info(func) -> tuple[str, str, str | int | None]:
     return _extract_version_info(func)
 
 
+def _func_statics(func) -> tuple[Signature, str, str, str | int | None, Digest | None]:
+    """Return ``(signature, qualname, module, version, code_digest)`` for *func*.
+
+    Uses the per-function ``lru_cache`` helpers when *func* is hashable; falls
+    back to direct introspection in a single ``except`` for callables with
+    ``__hash__ = None``.  Both :meth:`Call.from_call` and
+    :meth:`QueryCall.from_call` consume this tuple (the latter discards
+    ``code_digest``).
+    """
+    try:
+        return (
+            _cached_signature(func),
+            *_cached_version_info(func),
+            _cached_code_digest(func),
+        )
+    except TypeError:
+        return (
+            signature(func),
+            *_extract_version_info(func),
+            digest.digest(func.__code__) if hasattr(func, "__code__") else None,
+        )
+
+
 def _extract_version_info(func) -> tuple[str, str, str | int | None]:
     """Extract ``(name, module, version)`` from ``func`` via :mod:`pyiron_snippets.versions`.
 
@@ -97,18 +120,7 @@ class Call:
 
     @classmethod
     def from_call(cls, func, *args, **kwargs):
-        try:
-            sig = _cached_signature(func)
-            qualname, module, version = _cached_version_info(func)
-            code_digest = _cached_code_digest(func)
-        except TypeError:
-            # Unhashable callable (e.g. instance with __hash__ = None) —
-            # bypass the per-function caches and recompute directly.
-            sig = signature(func)
-            qualname, module, version = _extract_version_info(func)
-            code_digest = (
-                digest.digest(func.__code__) if hasattr(func, "__code__") else None
-            )
+        sig, qualname, module, version, code_digest = _func_statics(func)
         bound = sig.bind(*args, **kwargs)
         bound.apply_defaults()
         call = cls(qualname, dict(bound.arguments), module=module)
@@ -348,13 +360,7 @@ class QueryCall:
 
     @classmethod
     def from_call(cls, func, *args, **kwargs):
-        try:
-            sig = _cached_signature(func)
-            qualname, module, version = _cached_version_info(func)
-        except TypeError:
-            # Unhashable callable (e.g. instance with __hash__ = None).
-            sig = signature(func)
-            qualname, module, version = _extract_version_info(func)
+        sig, qualname, module, version, _code_digest = _func_statics(func)
         bound_args = bind(func, args, kwargs, partial=True)
         # Unspecified arguments default to None (wildcard)
         arguments = {name: bound_args.get(name) for name in sig.parameters}
