@@ -93,13 +93,24 @@ with ImportAlarm(
 
 
 def _coerce_sqlite_url(path_or_url: str | None) -> str:
+    """Normalise the user-facing ``url=`` argument.
+
+    Accepts a filesystem path (treated as sqlite), a ``sqlite:`` URL
+    (passed through, parent dir auto-created), or any other SQLAlchemy URL
+    such as ``postgresql://`` / ``mysql+pymysql://`` (passed through
+    verbatim). Only sqlite paths get the parent-dir-create convenience.
+    """
     if path_or_url is None:
         return "sqlite:///:memory:"
 
-    if isinstance(path_or_url, str) and path_or_url.startswith("sqlite:"):
-        url = path_or_url
+    s = str(path_or_url)
+
+    # Already a SQLAlchemy URL of any dialect (driver scheme contains "://"
+    # or the short ``sqlite:foo`` form). Leave it alone.
+    if "://" in s or s.startswith("sqlite:"):
+        url = s
     else:
-        abs_path = Path(str(path_or_url)).absolute()
+        abs_path = Path(s).absolute()
         url = f"sqlite:///{abs_path}"
 
     if url.startswith("sqlite:///"):
@@ -115,6 +126,11 @@ SQLITE_FOREIGN_KEYS_ON = "PRAGMA foreign_keys=ON"
 
 
 def _enable_sqlite_foreign_keys(engine) -> None:
+    # PRAGMA is sqlite-only; running it on Postgres/MySQL connections would
+    # raise at connect time, so gate the listener on the dialect.
+    if engine.dialect.name != "sqlite":
+        return
+
     @event.listens_for(engine, "connect")
     def _set_sqlite_pragma(dbapi_connection, connection_record):
         cursor = dbapi_connection.cursor()
@@ -142,7 +158,10 @@ class Sql(PerKeyLockMixin, CallStorage):
         coerced_url = _coerce_sqlite_url(self.url)
         assert coerced_url is not None
         object.__setattr__(self, "url", coerced_url)
-        connect_args = {"check_same_thread": False} if coerced_url.startswith("sqlite:") else {}
+        # ``check_same_thread=False`` is a pysqlite-only flag; passing it to
+        # any other DBAPI driver raises ``TypeError`` at connect time.
+        is_sqlite = coerced_url.startswith("sqlite:")
+        connect_args = {"check_same_thread": False} if is_sqlite else {}
         engine = create_engine(coerced_url, echo=self.echo, future=True, connect_args=connect_args)
         _enable_sqlite_foreign_keys(engine)
         Base.metadata.create_all(engine)
