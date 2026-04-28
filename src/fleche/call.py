@@ -13,35 +13,60 @@ from .digest import Digest
 logger = logging.getLogger("fleche.call")
 
 
-@lru_cache(maxsize=None)
-def _func_signature(func) -> Signature:
-    """Memoised :func:`inspect.signature` lookup.
-
-    ``signature()`` is a non-trivial introspection call (~30 µs) and is
-    invoked on every cache hit by :meth:`Call.from_call` /
-    :class:`ArgumentPolicy`.  Caching keyed on ``func`` removes ~6% from the
-    cache-hit hot path.  Tests that mutate ``func.__signature__`` can call
-    ``_func_signature.cache_clear()`` to drop the cache.
-    """
+@lru_cache(maxsize=1000)
+def _cached_signature(func) -> Signature:
     return signature(func)
 
 
-@lru_cache(maxsize=None)
-def _func_code_digest(func) -> Digest | None:
-    """Memoised digest of ``func.__code__``.
-
-    ``digest(func.__code__)`` recursively hashes the code object's bytecode,
-    constants, names, etc., which is the single biggest contributor to
-    :meth:`Call.from_call` time on the cache-hit path.  Cached by ``func``
-    identity; modules that hot-swap ``__code__`` should call
-    ``_func_code_digest.cache_clear()``.
+def _func_signature(func) -> Signature:
+    """Cached :func:`inspect.signature` lookup with a fallback for
+    callables that cannot be hashed (e.g. instances with
+    ``__hash__ = None``).  Caches the per-function statics that
+    :meth:`Call.from_call` and :class:`ArgumentPolicy.check_required`
+    would otherwise re-introspect on every cache hit.
     """
+    try:
+        return _cached_signature(func)
+    except TypeError:
+        return signature(func)
+
+
+@lru_cache(maxsize=1000)
+def _cached_code_digest(func) -> Digest | None:
     if not hasattr(func, "__code__"):
         return None
     return digest.digest(func.__code__)
 
 
+def _func_code_digest(func) -> Digest | None:
+    """Cached :func:`fleche.digest.digest` of ``func.__code__``, with a
+    fallback for unhashable callables.  Avoids re-running the recursive
+    code-object digest on every cache-hit invocation.
+    """
+    try:
+        return _cached_code_digest(func)
+    except TypeError:
+        if not hasattr(func, "__code__"):
+            return None
+        return digest.digest(func.__code__)
+
+
+@lru_cache(maxsize=1000)
+def _cached_version_info(func) -> tuple[str, str, str | int | None]:
+    return _compute_version_info(func)
+
+
 def _extract_version_info(func) -> tuple[str, str, str | int | None]:
+    """Cached ``(name, module, version)`` lookup, with a fallback for
+    unhashable callables.  Wraps :func:`_compute_version_info`.
+    """
+    try:
+        return _cached_version_info(func)
+    except TypeError:
+        return _compute_version_info(func)
+
+
+def _compute_version_info(func) -> tuple[str, str, str | int | None]:
     """Extract ``(name, module, version)`` from ``func`` via :mod:`pyiron_snippets.versions`.
 
     Uses :meth:`VersionInfo.of` to introspect ``func``.  When the module is not
