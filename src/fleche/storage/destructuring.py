@@ -114,8 +114,8 @@ class DigestedFields(Digested):
         return obj
 
     @staticmethod
-    def _field_items(value: Any) -> list[tuple[str, Any]]:
-        raise NotImplementedError
+    @abstractmethod
+    def _field_items(value: Any) -> list[tuple[str, Any]]: ...
 
     @classmethod
     def sunder(cls, intern: Callable[[Any], tuple[Any, int | float]], value: Any):
