@@ -18,19 +18,6 @@ def _cached_signature(func) -> Signature:
     return signature(func)
 
 
-def _func_signature(func) -> Signature:
-    """Cached :func:`inspect.signature` lookup with a fallback for
-    callables that cannot be hashed (e.g. instances with
-    ``__hash__ = None``).  Caches the per-function statics that
-    :meth:`Call.from_call` and :class:`ArgumentPolicy.check_required`
-    would otherwise re-introspect on every cache hit.
-    """
-    try:
-        return _cached_signature(func)
-    except TypeError:
-        return signature(func)
-
-
 @lru_cache(maxsize=1000)
 def _cached_code_digest(func) -> Digest | None:
     if not hasattr(func, "__code__"):
@@ -38,35 +25,12 @@ def _cached_code_digest(func) -> Digest | None:
     return digest.digest(func.__code__)
 
 
-def _func_code_digest(func) -> Digest | None:
-    """Cached :func:`fleche.digest.digest` of ``func.__code__``, with a
-    fallback for unhashable callables.  Avoids re-running the recursive
-    code-object digest on every cache-hit invocation.
-    """
-    try:
-        return _cached_code_digest(func)
-    except TypeError:
-        if not hasattr(func, "__code__"):
-            return None
-        return digest.digest(func.__code__)
-
-
 @lru_cache(maxsize=1000)
 def _cached_version_info(func) -> tuple[str, str, str | int | None]:
-    return _compute_version_info(func)
+    return _extract_version_info(func)
 
 
 def _extract_version_info(func) -> tuple[str, str, str | int | None]:
-    """Cached ``(name, module, version)`` lookup, with a fallback for
-    unhashable callables.  Wraps :func:`_compute_version_info`.
-    """
-    try:
-        return _cached_version_info(func)
-    except TypeError:
-        return _compute_version_info(func)
-
-
-def _compute_version_info(func) -> tuple[str, str, str | int | None]:
     """Extract ``(name, module, version)`` from ``func`` via :mod:`pyiron_snippets.versions`.
 
     Uses :meth:`VersionInfo.of` to introspect ``func``.  When the module is not
@@ -100,7 +64,11 @@ def bind(func, args, kwargs, apply_defaults=False, partial=False):
         :attr:`inspect.BoundArguments.arguments` — an ``OrderedDict``
         containing the supplied (and, when requested, defaulted) values.
     """
-    sig = _func_signature(func)
+    try:
+        sig = _cached_signature(func)
+    except TypeError:
+        # Unhashable callable (e.g. instance with __hash__ = None).
+        sig = signature(func)
     if partial:
         bound = sig.bind_partial(*args, **kwargs)
     else:
@@ -129,13 +97,23 @@ class Call:
 
     @classmethod
     def from_call(cls, func, *args, **kwargs):
-        sig = _func_signature(func)
+        try:
+            sig = _cached_signature(func)
+            qualname, module, version = _cached_version_info(func)
+            code_digest = _cached_code_digest(func)
+        except TypeError:
+            # Unhashable callable (e.g. instance with __hash__ = None) —
+            # bypass the per-function caches and recompute directly.
+            sig = signature(func)
+            qualname, module, version = _extract_version_info(func)
+            code_digest = (
+                digest.digest(func.__code__) if hasattr(func, "__code__") else None
+            )
         bound = sig.bind(*args, **kwargs)
         bound.apply_defaults()
-        qualname, module, version = _extract_version_info(func)
         call = cls(qualname, dict(bound.arguments), module=module)
         call.version = getattr(func, "__version__", version)
-        call.code_digest = _func_code_digest(func)
+        call.code_digest = code_digest
         return call
 
     def to_lookup_key(self) -> "Digest":
@@ -370,11 +348,16 @@ class QueryCall:
 
     @classmethod
     def from_call(cls, func, *args, **kwargs):
-        sig = _func_signature(func)
+        try:
+            sig = _cached_signature(func)
+            qualname, module, version = _cached_version_info(func)
+        except TypeError:
+            # Unhashable callable (e.g. instance with __hash__ = None).
+            sig = signature(func)
+            qualname, module, version = _extract_version_info(func)
         bound_args = bind(func, args, kwargs, partial=True)
         # Unspecified arguments default to None (wildcard)
         arguments = {name: bound_args.get(name) for name in sig.parameters}
-        qualname, module, version = _extract_version_info(func)
         call = cls(qualname, arguments, module=module)
         call.version = getattr(func, "__version__", version)
         return call
