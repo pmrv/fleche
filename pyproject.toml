@@ -59,6 +59,7 @@ tests = [
     "nbconvert",
     "ipykernel",
     "tabulate",
+    "attrs",
 ]
 executorlib = [
     "executorlib",

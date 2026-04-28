@@ -7,6 +7,7 @@ from numbers import Number
 from typing import Any, Callable
 
 from . import base
+from .. import _attrs
 from .. import digest
 
 
@@ -80,13 +81,15 @@ class DigestedDict(Digested):
 
 
 @dataclass
-class DigestedDataclass(Digested):
-    """Digested wrapper for dataclass instances, storing field values separately in CAS.
+class DigestedFields(Digested):
+    """Common base for record-shaped value markers (dataclasses, attrs).
 
-    Field values may be replaced by :class:`~fleche.digest.Digest` back-references when they are
-    stored independently.  :meth:`mend` reconstructs the original instance by bypassing
-    ``__init__`` / ``__post_init__``, so ``InitVar`` and ``init=False`` fields are all handled
-    uniformly: we restore whatever attribute values were present at sunder time.
+    Subclasses provide :meth:`_field_items` to enumerate ``(name, value)`` pairs from a
+    live instance; :meth:`sunder`, :meth:`mend`, and :meth:`__digest__` are shared.
+    Field values may be replaced by :class:`~fleche.digest.Digest` back-references when
+    they are stored independently.  :meth:`mend` reconstructs the original instance by
+    bypassing ``__init__`` / ``__post_init__``, so ``InitVar`` and ``init=False`` fields
+    (and attrs slots / frozen instances) are all handled uniformly.
     """
 
     cls: type
@@ -96,7 +99,7 @@ class DigestedDataclass(Digested):
         return self.fields
 
     def __digest__(self):
-        # Reproduce the same hash that digest._digest computes for a plain dataclass instance:
+        # Reproduce the same hash that digest._digest computes for a plain instance:
         # SHA256(cls.__name__ + digest(fields_as_dict)).  Digest values in self.fields are
         # transparent (digest(Digest("abc")) == "abc") so they round-trip correctly.
         m = hashlib.sha256()
@@ -110,30 +113,46 @@ class DigestedDataclass(Digested):
             object.__setattr__(obj, name, self.get(storage, val_or_digest))
         return obj
 
+    @staticmethod
+    @abstractmethod
+    def _field_items(value: Any) -> list[tuple[str, Any]]: ...
+
     @classmethod
     def sunder(cls, intern: Callable[[Any], tuple[Any, int | float]], value: Any):
-        # Fall back to whole-object storage on any structural problem.
         try:
-            dc_fields = _dataclasses.fields(value)
-        except TypeError:
+            items = cls._field_items(value)
+        except (AttributeError, TypeError):
             return value, float("inf")
 
-        if not dc_fields:
+        if not items:
             return value, 0
 
-        try:
-            field_values = [getattr(value, f.name) for f in dc_fields]
-        except AttributeError:
-            return value, float("inf")
-
+        names, field_values = zip(*items)
         children, depths = zip(*(intern(v) for v in field_values))
         depth = 1 + max(depths)
 
         if all(not isinstance(c, digest.Digest) for c in children):
             return value, depth
 
-        fields = dict(zip((f.name for f in dc_fields), children))
-        return cls(type(value), fields), depth
+        return cls(type(value), dict(zip(names, children))), depth
+
+
+@dataclass
+class DigestedDataclass(DigestedFields):
+    """Per-field marker for stdlib :mod:`dataclasses` instances."""
+
+    @staticmethod
+    def _field_items(value: Any) -> list[tuple[str, Any]]:
+        return [(f.name, getattr(value, f.name)) for f in _dataclasses.fields(value)]
+
+
+@dataclass
+class DigestedAttrs(DigestedFields):
+    """Per-field marker for ``attrs``-decorated instances."""
+
+    @staticmethod
+    def _field_items(value: Any) -> list[tuple[str, Any]]:
+        return _attrs.field_items(value)
 
 
 @dataclass(frozen=True)
@@ -199,6 +218,9 @@ class DestructuringMixin(base.ValueStorage):
             case _ if _dataclasses.is_dataclass(value) and not isinstance(value, type):
                 value, depth = DigestedDataclass.sunder(self._intern_rec, value)
 
+            case _ if _attrs.is_attrs_instance(value):
+                value, depth = DigestedAttrs.sunder(self._intern_rec, value)
+
         if depth < self.remaining_depth:
             return value, depth
         return super().save(value, key), depth
@@ -220,6 +242,15 @@ class DestructuringMixin(base.ValueStorage):
 
             case _ if _dataclasses.is_dataclass(value) and not isinstance(value, type):
                 if not _dataclasses.fields(value):
+                    return super().save(value, key)
+                value_or_digest, depth = self._intern_rec(value, key)
+                if depth < self.remaining_depth:
+                    return super().save(value_or_digest, key)
+                else:
+                    return value_or_digest
+
+            case _ if _attrs.is_attrs_instance(value):
+                if not _attrs.field_items(value):
                     return super().save(value, key)
                 value_or_digest, depth = self._intern_rec(value, key)
                 if depth < self.remaining_depth:
@@ -276,7 +307,7 @@ class DestructuringMixin(base.ValueStorage):
                             counts[k] += 1
                         if isinstance(v, digest.Digest) and v in counts:
                             counts[v] += 1
-                case DigestedDataclass():
+                case DigestedFields():
                     for v in raw.fields.values():
                         if isinstance(v, digest.Digest) and v in counts:
                             counts[v] += 1

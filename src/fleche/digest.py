@@ -11,6 +11,8 @@ from collections.abc import Iterable
 from typing import Any, TypeVar, Callable, Type, Generic
 import numpy as np
 
+from . import _attrs
+
 logger = logging.getLogger("fleche.digest")
 
 
@@ -239,6 +241,10 @@ def _digest(value: Any) -> Digest:
                 lambda f: (f.name, getattr(value, f.name)), dataclasses.fields(value)
             )
             m.update(digest(dict(fields)).encode())
+        case _ if _attrs.is_attrs_instance(value):
+            # mirror the dataclass digest format so an attrs class and a dataclass
+            # with the same name + field layout hash identically.
+            m.update(digest(dict(_attrs.field_items(value))).encode())
         case Iterable():
             for v in value:
                 m.update(digest(v).encode())
