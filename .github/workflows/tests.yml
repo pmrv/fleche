@@ -47,3 +47,58 @@ jobs:
       shell: bash -l {0}
       run: |
         pytest
+
+  sql-backends:
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: fleche
+          POSTGRES_PASSWORD: fleche
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fleche"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: fleche
+          MARIADB_DATABASE: mysql
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      FLECHE_TEST_POSTGRES_URL: postgresql+psycopg2://fleche:fleche@localhost:5432/postgres
+      FLECHE_TEST_MYSQL_URL: mysql+pymysql://root:fleche@localhost:3306/mysql
+    steps:
+    - uses: actions/checkout@v5
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.12"
+        cache: pip
+    - name: Setup
+      shell: bash -l {0}
+      run: |
+        pip install -e .[tests]
+        # Drivers needed for the non-sqlite backends. Kept out of the project
+        # extras so they're a CI-only dependency.
+        pip install psycopg2-binary pymysql
+    - name: Run sqlalchemy backend tests
+      shell: bash -l {0}
+      run: |
+        # Run the cross-backend conformance tests plus every test that uses
+        # the parametrized call_storage fixture. The env vars cause the
+        # ``sql_postgres`` / ``sql_mysql`` parametrizations to activate.
+        pytest tests/regression/test_sql_non_sqlite_backends.py tests/unit/storage/ -v

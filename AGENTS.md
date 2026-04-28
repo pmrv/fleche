@@ -100,10 +100,12 @@ Only pickle-family backends are signed. Key rotation: first key in the list sign
 
 - `unit/` — one subdirectory per module under test (`caches/`, `call/`, `config/`, `digest/`, `fleche/`, `metadata/`, `storage/`); filenames mirror the feature being tested. Two top-level files: `test_cache_sticky.py` (sticky `cache()` context semantics) and `test_pickle.py` (pickling caches/wrappers).
 - `integration/` — `test_integration.py` (main), `test_notebooks.py` (exercises `notebooks/`), `test_parallel_execution.py`, `test_methods.py`, `test_wrapper_query_integration.py`, `test_hash_code_integration.py`.
-- `regression/` — `test_issue_{297,319,352}.py`, `test_sql_concurrent_save.py`, `test_sql_table_uniqueness.py`.
+- `regression/` — `test_issue_{297,319,352}.py`, `test_sql_concurrent_save.py`, `test_sql_table_uniqueness.py`, `test_sql_non_sqlite_backends.py`.
 
 Shared fixtures (in `fixtures.py`):
 - `call_storage` / `value_storage` / `storage_backend` — *parametrised* over every concrete backend (memory, pickle/cloudpickle/dill files, bagofholding h5, plus sql for calls only). The pickle-family fixtures use a fixed `secret_key` so signing is exercised by default. New backends should be added to these fixtures so they're swept by every consumer test.
+- `call_storage` additionally gains `sql_postgres` / `sql_mysql` parametrizations when `FLECHE_TEST_POSTGRES_URL` / `FLECHE_TEST_MYSQL_URL` are set; each yields an `Sql` backed by a freshly-created database that is dropped on teardown. CI populates these env vars from the `postgres` / `mariadb` service containers in `.github/workflows/tests.yml` (`sql-backends` job).
+- `postgres_sql` / `mysql_sql` — single-shot variants of the above (skip when the URL env var is unset). Use these in tests targeting dialect-specific concerns rather than a cross-backend sweep; the cross-backend `external_sql` fixture in `regression/test_sql_non_sqlite_backends.py` parametrizes over both lazily via `request.getfixturevalue` (declaring both as direct dependencies cascades the unconfigured-side skip onto every test).
 - `clean_cache` — yields a fresh in-memory `Cache(ValueMemory, CallMemory)` (does **not** install it as the active cache; use `with cache(clean_cache):` if you need that).
 - `file_cache` — disk-backed pickle `Cache` rooted at `tmp_path`.
 

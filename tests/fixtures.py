@@ -1,4 +1,11 @@
+import os
+import uuid
+from contextlib import contextmanager
+
 import pytest
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine.url import make_url
+
 from fleche.storage import (
     ValueMemory,
     CallMemory,
@@ -15,22 +22,130 @@ from fleche.caches import Cache
 
 secret_key = [b"test_secret_key_32_bytes_long!!!!"]
 
-@pytest.fixture(params=["memory", "cloudpickle", "dill", "pickle", "h5", "sql"])
+
+# ---------------------------------------------------------------------------
+# Non-sqlite SQLAlchemy backend support
+#
+# We don't bundle any out-of-process database; instead, the corresponding
+# fixtures activate only when a connection URL is provided via environment
+# variable, and each test gets a freshly-created database for full isolation.
+# ---------------------------------------------------------------------------
+POSTGRES_URL_ENV = "FLECHE_TEST_POSTGRES_URL"
+MYSQL_URL_ENV = "FLECHE_TEST_MYSQL_URL"
+
+
+def _admin_url(url):
+    """Return a copy of ``url`` connected to the server's admin database.
+
+    Postgres requires connecting to *some* database to run ``CREATE DATABASE``;
+    we use the conventional ``postgres`` database. MySQL/MariaDB doesn't need a
+    selected database, so we drop the database name entirely.
+    """
+    backend = url.get_backend_name()
+    if backend == "postgresql":
+        return url.set(database="postgres")
+    return url.set(database=None)
+
+
+@contextmanager
+def _ephemeral_database(base_url: str):
+    """Create a uniquely-named database for one test, then drop it.
+
+    Yields the URL string a fleche ``Sql`` backend can be pointed at.
+    """
+    url = make_url(base_url)
+    backend = url.get_backend_name()
+    db_name = f"fleche_test_{uuid.uuid4().hex}"
+
+    admin_url = _admin_url(url)
+    admin_engine = create_engine(
+        admin_url, isolation_level="AUTOCOMMIT", future=True
+    )
+    # Use the dialect's own identifier preparer so MySQL/MariaDB get backticks
+    # and Postgres gets double quotes — bare double quotes are a syntax error
+    # on MariaDB unless ANSI_QUOTES is enabled.
+    quoted_db = admin_engine.dialect.identifier_preparer.quote(db_name)
+    try:
+        with admin_engine.connect() as conn:
+            conn.execute(text(f"CREATE DATABASE {quoted_db}"))
+    finally:
+        admin_engine.dispose()
+
+    test_url = url.set(database=db_name).render_as_string(hide_password=False)
+    try:
+        yield test_url
+    finally:
+        admin_engine = create_engine(
+            admin_url, isolation_level="AUTOCOMMIT", future=True
+        )
+        quoted_db = admin_engine.dialect.identifier_preparer.quote(db_name)
+        try:
+            with admin_engine.connect() as conn:
+                if backend == "postgresql":
+                    # Force-disconnect any leftover sessions or DROP DATABASE
+                    # blocks until they idle out.
+                    conn.execute(
+                        text(
+                            "SELECT pg_terminate_backend(pid) "
+                            "FROM pg_stat_activity "
+                            "WHERE datname = :db AND pid <> pg_backend_pid()"
+                        ),
+                        {"db": db_name},
+                    )
+                conn.execute(text(f"DROP DATABASE {quoted_db}"))
+        finally:
+            admin_engine.dispose()
+
+
+def _make_external_sql(env_var: str):
+    """Yield a ``Sql`` backend pointed at a fresh DB, or skip."""
+    base = os.environ.get(env_var)
+    if not base:
+        pytest.skip(f"{env_var} not set; non-sqlite SQL backend test skipped")
+    with _ephemeral_database(base) as url:
+        sql = Sql(url)
+        try:
+            yield sql
+        finally:
+            sql.engine.dispose()
+
+
+def _call_storage_params():
+    """Build the parametrization list for ``call_storage``.
+
+    Always-on backends are listed first; non-sqlite SQL backends are only
+    appended when their URL env var is set, so local default runs stay quiet.
+    """
+    params = ["memory", "cloudpickle", "dill", "pickle", "h5", "sql"]
+    if os.environ.get(POSTGRES_URL_ENV):
+        params.append("sql_postgres")
+    if os.environ.get(MYSQL_URL_ENV):
+        params.append("sql_mysql")
+    return params
+
+
+@pytest.fixture(params=_call_storage_params())
 def call_storage(request, tmp_path):
     if request.param == "memory":
-        return CallMemory({})
+        yield CallMemory({})
     elif request.param == "cloudpickle":
-        return CallPickleFile.with_cloudpickle(
+        yield CallPickleFile.with_cloudpickle(
             tmp_path / "cloudpickle", secret_key=secret_key
         )
     elif request.param == "dill":
-        return CallPickleFile.with_dill(tmp_path / "dill", secret_key=secret_key)
+        yield CallPickleFile.with_dill(tmp_path / "dill", secret_key=secret_key)
     elif request.param == "pickle":
-        return CallPickleFile.with_pickle(tmp_path / "pickle", secret_key=secret_key)
+        yield CallPickleFile.with_pickle(tmp_path / "pickle", secret_key=secret_key)
     elif request.param == "h5":
-        return CallBagOfHoldingH5File(tmp_path / "h5")
+        yield CallBagOfHoldingH5File(tmp_path / "h5")
     elif request.param == "sql":
-        return Sql(tmp_path / "calls.db")
+        yield Sql(tmp_path / "calls.db")
+    elif request.param == "sql_postgres":
+        yield from _make_external_sql(POSTGRES_URL_ENV)
+    elif request.param == "sql_mysql":
+        yield from _make_external_sql(MYSQL_URL_ENV)
+    else:
+        raise ValueError(f"Unknown call_storage param: {request.param}")
 
 
 @pytest.fixture(params=["memory", "cloudpickle", "dill", "pickle", "h5"])
@@ -60,6 +175,28 @@ def storage_backend(request, tmp_path):
         return PickleFileBackend.with_pickle(tmp_path / "pickle")
     elif request.param == "h5":
         return BagOfHoldingH5FileBackend(tmp_path / "h5")
+
+
+@pytest.fixture
+def postgres_sql():
+    """A ``Sql`` storage pointed at a freshly-created Postgres database.
+
+    Skipped unless ``FLECHE_TEST_POSTGRES_URL`` is set (e.g.
+    ``postgresql+psycopg2://user:pw@localhost:5432/postgres``). The fixture
+    creates a unique per-test database and drops it on teardown.
+    """
+    yield from _make_external_sql(POSTGRES_URL_ENV)
+
+
+@pytest.fixture
+def mysql_sql():
+    """A ``Sql`` storage pointed at a freshly-created MySQL/MariaDB database.
+
+    Skipped unless ``FLECHE_TEST_MYSQL_URL`` is set (e.g.
+    ``mysql+pymysql://user:pw@localhost:3306/mysql``). The fixture creates
+    a unique per-test database and drops it on teardown.
+    """
+    yield from _make_external_sql(MYSQL_URL_ENV)
 
 
 @pytest.fixture

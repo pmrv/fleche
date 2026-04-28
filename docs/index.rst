@@ -35,6 +35,7 @@ Welcome to the **Fleche** library documentation.
    query
    parallel_execution
    security
+   developer
 
 .. toctree::
    :maxdepth: 1
