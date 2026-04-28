@@ -54,6 +54,59 @@ The original, undecorated function is always accessible via the ``.__wrapped__``
    # Bypass cache
    result = my_func.__wrapped__(10)
 
+Per-Function Static Caching
+---------------------------
+
+To keep the cache-hit hot path fast, ``@fleche`` memoises three pure-of-``func``
+quantities the first time it sees a given function:
+
+- ``inspect.signature(func)``
+- the digest of ``func.__code__`` (when ``hash_code=True``, the default)
+- ``(qualname, module, version)`` extracted via
+  :class:`pyiron_snippets.versions.VersionInfo`
+
+These are keyed on the wrapped function's *identity* — i.e. on ``func`` itself
+as a hashable object — so subsequent calls re-use the cached result instead of
+re-introspecting on every invocation.
+
+The caches are bounded LRU maps (``max 1000`` entries each), scoped to the
+Python process; they have no effect on the persistent fleche backends.
+
+.. warning::
+
+   **Mutating ``func`` after the first call is not picked up.**  Changes to
+   ``func.__code__``, ``func.__signature__``, ``func.__module__``,
+   ``func.__qualname__``, or ``func.__version__`` made after the wrapper has
+   already seen ``func`` once will not affect subsequent cache keys.
+
+   In practice this matters only for code that hot-mutates dunder attributes
+   on a live function — typically ``Mock`` instances in tests, or
+   monkey-patching experiments.  Decorators that return a *new* wrapped
+   callable, and ``importlib.reload`` (which gives a reloaded module fresh
+   function identities), are unaffected: each new identity gets its own
+   cache entry, and old entries LRU-evict naturally.
+
+   If you genuinely need to drop the per-function caches in-process, the
+   helpers in :mod:`fleche.call` expose ``cache_clear()``:
+
+   .. code-block:: python
+
+      from fleche.call import (
+          _cached_signature,
+          _cached_code_digest,
+          _cached_version_info,
+      )
+
+      for c in (_cached_signature, _cached_code_digest, _cached_version_info):
+          c.cache_clear()
+
+.. note::
+
+   Callables that aren't python-hashable (``__hash__ = None``, e.g. some
+   instances with a custom ``__call__``) bypass the in-process cache
+   transparently.  Correctness is preserved — the wrapper re-introspects
+   on every call — but the cache-hit path is slower than for plain functions.
+
 Usage with Decorated Methods
 -----------------------------
 
