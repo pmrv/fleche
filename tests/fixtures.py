@@ -61,9 +61,13 @@ def _ephemeral_database(base_url: str):
     admin_engine = create_engine(
         admin_url, isolation_level="AUTOCOMMIT", future=True
     )
+    # Use the dialect's own identifier preparer so MySQL/MariaDB get backticks
+    # and Postgres gets double quotes — bare double quotes are a syntax error
+    # on MariaDB unless ANSI_QUOTES is enabled.
+    quoted_db = admin_engine.dialect.identifier_preparer.quote(db_name)
     try:
         with admin_engine.connect() as conn:
-            conn.execute(text(f'CREATE DATABASE "{db_name}"'))
+            conn.execute(text(f"CREATE DATABASE {quoted_db}"))
     finally:
         admin_engine.dispose()
 
@@ -74,6 +78,7 @@ def _ephemeral_database(base_url: str):
         admin_engine = create_engine(
             admin_url, isolation_level="AUTOCOMMIT", future=True
         )
+        quoted_db = admin_engine.dialect.identifier_preparer.quote(db_name)
         try:
             with admin_engine.connect() as conn:
                 if backend == "postgresql":
@@ -87,7 +92,7 @@ def _ephemeral_database(base_url: str):
                         ),
                         {"db": db_name},
                     )
-                conn.execute(text(f'DROP DATABASE "{db_name}"'))
+                conn.execute(text(f"DROP DATABASE {quoted_db}"))
         finally:
             admin_engine.dispose()
 

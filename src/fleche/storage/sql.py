@@ -41,12 +41,19 @@ with ImportAlarm(
 
     Base = declarative_base()
 
+    # MySQL/MariaDB reject ``VARCHAR`` columns without an explicit length, so
+    # every ``String`` here is sized. 255 is the conventional MySQL upper
+    # bound for indexable VARCHARs and comfortably fits Python qualified
+    # names, function/argument names, and the JSON-encoded scalar versions
+    # we actually store.
+    _NAME_LEN = 255
+
     class CallModel(Base):
         __tablename__ = "calls"
         key = mapped_column(String(DIGEST_LENGTH), primary_key=True)
-        name: Mapped[str] = mapped_column(String, nullable=False)
-        module: Mapped[str] = mapped_column(String, nullable=True)
-        version: Mapped[str] = mapped_column(String, nullable=True)
+        name: Mapped[str] = mapped_column(String(_NAME_LEN), nullable=False)
+        module: Mapped[str] = mapped_column(String(_NAME_LEN), nullable=True)
+        version: Mapped[str] = mapped_column(String(_NAME_LEN), nullable=True)
         code_digest: Mapped[str] = mapped_column(String(DIGEST_LENGTH), nullable=True)
         result: Mapped[str] = mapped_column(String(DIGEST_LENGTH), nullable=True)
 
@@ -66,7 +73,7 @@ with ImportAlarm(
             nullable=False,
         )
         position = mapped_column(Integer, nullable=False)
-        name = mapped_column(String, nullable=False)
+        name = mapped_column(String(_NAME_LEN), nullable=False)
         value = mapped_column(String(DIGEST_LENGTH), nullable=False)
 
         __table_args__ = (
@@ -84,7 +91,7 @@ with ImportAlarm(
             nullable=False,
             index=True,
         )
-        name: Mapped[str] = mapped_column(String, nullable=False, index=True)
+        name: Mapped[str] = mapped_column(String(_NAME_LEN), nullable=False, index=True)
         data: Mapped[dict] = mapped_column(JSON, nullable=False)
 
         __table_args__ = (
