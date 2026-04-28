@@ -8,6 +8,10 @@ no URL is configured, so the file is a no-op for default local runs but
 becomes the cross-backend conformance suite under CI / when a developer
 exports e.g. ``FLECHE_TEST_POSTGRES_URL``.
 
+End-user-facing documentation for the env-var contract and the maintainer
+workflow lives in ``docs/developer.rst`` (Developer Guide → "Testing the SQL
+backend on non-sqlite dialects").
+
 Why these specific assertions:
   * URL pass-through: regression for ``_coerce_sqlite_url`` rewriting any
     non-``sqlite:`` URL into a sqlite file path.
