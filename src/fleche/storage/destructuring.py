@@ -127,8 +127,7 @@ class DigestedFields(Digested):
         if not items:
             return value, 0
 
-        names = [n for n, _ in items]
-        field_values = [v for _, v in items]
+        names, field_values = zip(*items)
         children, depths = zip(*(intern(v) for v in field_values))
         depth = 1 + max(depths)
 

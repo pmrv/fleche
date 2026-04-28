@@ -29,6 +29,7 @@ Welcome to the **Fleche** library documentation.
    cache_stack
    lazy_call
    digests_as_args
+   digest_equivalence
    custom_digests
    configuration
    query
