@@ -116,11 +116,26 @@ def benchmark_integration(name, cache_obj, func, args, iterations=10):
         }
     )
 
+    # Probe which args are still cached. Size-limited caches use random
+    # eviction, so after a miss phase that overflows the cache an arbitrary
+    # subset of the saved args remains. Timing hits on evicted args would
+    # silently re-execute the function and re-save (potentially evicting
+    # other args too) — i.e. measure misses-with-thrashing, not hits.
+    present_args = []
+    with cache(cache_obj):
+        for i in range(iterations):
+            arg = args[i] if isinstance(args, list) else i
+            if func.contains(arg):
+                present_args.append(arg)
+
+    if not present_args:
+        raise RuntimeError(
+            f"{name}: no args remain in cache after miss phase — cannot time hits"
+        )
+
     # 3. Contains (Cache Check - Hit)
     contains_hit_times = []
-    for i in range(iterations):
-        arg = args[i] if isinstance(args, list) else i
-        # Use .contains method exposed by @fleche to get the key and pass to contains
+    for arg in present_args:
         start = time.perf_counter()
         with cache(cache_obj):
             func.contains(arg)
@@ -131,17 +146,14 @@ def benchmark_integration(name, cache_obj, func, args, iterations=10):
         {
             "benchmark": "integration_contains_hit",
             "name": name,
-            "iterations": iterations,
+            "iterations": len(present_args),
             "time": min(contains_hit_times),
         }
     )
 
     # 4. Second Call (Hit)
     hit_times = []
-    # Reuse the same args from above, they are now in cache
-    for i in range(iterations):
-        arg = args[i] if isinstance(args, list) else i
-
+    for arg in present_args:
         start = time.perf_counter()
         with cache(cache_obj):
             func(arg)
@@ -152,7 +164,7 @@ def benchmark_integration(name, cache_obj, func, args, iterations=10):
         {
             "benchmark": "integration_hit",
             "name": name,
-            "iterations": iterations,
+            "iterations": len(present_args),
             "time": min(hit_times),
         }
     )
@@ -185,12 +197,15 @@ def main():
                     Sql(f"sqlite:///{tmp_dir}/db_h5.sqlite"),
                 ),
             ),
-            # SizeLimitedCache: max_size smaller than iterations → evictions occur
+            # SizeLimitedCache: max_size < iterations exercises eviction
+            # during the miss phase. The hit phase auto-restricts to args
+            # that survived eviction (see ``present_args`` in
+            # ``benchmark_integration``).
             (
                 "SizeLimitedCache(Memory,max=10)",
                 SizeLimitedCache(ValueMemory({}), CallMemory({}), max_size=10),
             ),
-            # SizeLimitedCache: max_size larger than iterations → no evictions
+            # SizeLimitedCache: max_size >= iterations → no evictions
             (
                 "SizeLimitedCache(Memory,max=100)",
                 SizeLimitedCache(ValueMemory({}), CallMemory({}), max_size=100),
