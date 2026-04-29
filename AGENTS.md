@@ -125,7 +125,7 @@ issue or PR.
 
 # General Instructions
 
-When you cannot complete a task or question because you are missing depedencies fail early and report the errors.
+When you cannot complete a task or question because you are missing dependencies fail early and report the errors.
 
 ## Commit attribution
 
