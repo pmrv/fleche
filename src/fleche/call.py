@@ -1,7 +1,8 @@
 import logging
 from dataclasses import dataclass, field, replace
+from functools import lru_cache
 from typing import Any, Callable
-from inspect import signature
+from inspect import Signature, signature
 from collections.abc import Mapping
 
 from pyiron_snippets.versions import VersionInfo, get_module, get_qualname
@@ -10,6 +11,46 @@ from . import digest
 from .digest import Digest
 
 logger = logging.getLogger("fleche.call")
+
+
+@lru_cache(maxsize=1000)
+def _cached_signature(func) -> Signature:
+    return signature(func)
+
+
+@lru_cache(maxsize=1000)
+def _cached_code_digest(func) -> Digest | None:
+    if not hasattr(func, "__code__"):
+        return None
+    return digest.digest(func.__code__)
+
+
+@lru_cache(maxsize=1000)
+def _cached_version_info(func) -> tuple[str, str, str | int | None]:
+    return _extract_version_info(func)
+
+
+def _func_statics(func) -> tuple[Signature, str, str, str | int | None, Digest | None]:
+    """Return ``(signature, qualname, module, version, code_digest)`` for *func*.
+
+    Uses the per-function ``lru_cache`` helpers when *func* is hashable; falls
+    back to direct introspection in a single ``except`` for callables with
+    ``__hash__ = None``.  Both :meth:`Call.from_call` and
+    :meth:`QueryCall.from_call` consume this tuple (the latter discards
+    ``code_digest``).
+    """
+    try:
+        return (
+            _cached_signature(func),
+            *_cached_version_info(func),
+            _cached_code_digest(func),
+        )
+    except TypeError:
+        return (
+            signature(func),
+            *_extract_version_info(func),
+            digest.digest(func.__code__) if hasattr(func, "__code__") else None,
+        )
 
 
 def _extract_version_info(func) -> tuple[str, str, str | int | None]:
@@ -46,7 +87,11 @@ def bind(func, args, kwargs, apply_defaults=False, partial=False):
         :attr:`inspect.BoundArguments.arguments` — an ``OrderedDict``
         containing the supplied (and, when requested, defaulted) values.
     """
-    sig = signature(func)
+    try:
+        sig = _cached_signature(func)
+    except TypeError:
+        # Unhashable callable (e.g. instance with __hash__ = None).
+        sig = signature(func)
     if partial:
         bound = sig.bind_partial(*args, **kwargs)
     else:
@@ -75,12 +120,12 @@ class Call:
 
     @classmethod
     def from_call(cls, func, *args, **kwargs):
-        arguments = dict(bind(func, args, kwargs, apply_defaults=True))
-        qualname, module, version = _extract_version_info(func)
-        call = cls(qualname, arguments, module=module)
+        sig, qualname, module, version, code_digest = _func_statics(func)
+        bound = sig.bind(*args, **kwargs)
+        bound.apply_defaults()
+        call = cls(qualname, dict(bound.arguments), module=module)
         call.version = getattr(func, "__version__", version)
-        if hasattr(func, "__code__"):
-            call.code_digest = digest.digest(func.__code__)
+        call.code_digest = code_digest
         return call
 
     def to_lookup_key(self) -> "Digest":
@@ -315,10 +360,10 @@ class QueryCall:
 
     @classmethod
     def from_call(cls, func, *args, **kwargs):
+        sig, qualname, module, version, _code_digest = _func_statics(func)
         bound_args = bind(func, args, kwargs, partial=True)
         # Unspecified arguments default to None (wildcard)
-        arguments = {name: bound_args.get(name) for name in signature(func).parameters}
-        qualname, module, version = _extract_version_info(func)
+        arguments = {name: bound_args.get(name) for name in sig.parameters}
         call = cls(qualname, arguments, module=module)
         call.version = getattr(func, "__version__", version)
         return call

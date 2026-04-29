@@ -114,25 +114,53 @@ def test_fleche_with_version():
 
 
 def test_fleche_with_module():
-    mock_function = Mock(return_value=42)
-    mock_function.__name__ = "name"
-    mock_function.__qualname__ = "name"
+    # Two independent callables, each with its own module — exercises the
+    # "different module → different cache key" path.  We don't reuse one
+    # Mock and mutate its __module__ because per-function statics
+    # (signature, code digest, version info) are cached on func identity.
+    def make_mock(module):
+        m = Mock(return_value=42)
+        m.__name__ = "name"
+        m.__qualname__ = "name"
+        m.__module__ = module
+        return m
 
     with cache(Cache(ValueMemory({}), CallMemory({}))):
-        # First call, should execute the function and save to cache
-        mock_function.__module__ = "json"
-        # need to assigne dunder before wrapping for fleche to pick it up
-        my_func = fleche(mock_function)
-
+        m1 = make_mock("json")
+        my_func = fleche(m1)
         assert my_func(2) == 42
-        mock_function.assert_called_once_with(2)
+        m1.assert_called_once_with(2)
         key_m1 = my_func.fleche.digest(2)
         assert cache().contains(key_m1)
 
-        # Second call, with different module, should execute again
-        mock_function.__module__ = "os"
-        my_func = fleche(mock_function)
+        m2 = make_mock("os")
+        my_func = fleche(m2)
         assert my_func(2) == 42
-        assert mock_function.call_count == 2
+        m2.assert_called_once_with(2)
         key_m2 = my_func.fleche.digest(2)
         assert cache().contains(key_m2)
+        assert key_m1 != key_m2
+
+
+def test_fleche_with_unhashable_callable():
+    # Callable instance with __hash__ = None.  Per-function caches in
+    # call.py would raise TypeError on lookup; the wrapper must fall
+    # back to direct introspection rather than crash.
+    class UnhashableCallable:
+        __hash__ = None
+
+        def __call__(self, x):
+            return x * 2
+
+    fn = UnhashableCallable()
+
+    with cache(Cache(ValueMemory({}), CallMemory({}))):
+        wrapped = fleche()(fn)
+
+        # Cache miss path: must run the function via the fallback.
+        assert wrapped(5) == 10
+        # Cache hit path: lookup must also succeed without raising.
+        assert wrapped(5) == 10
+        # Helper APIs that go through the same machinery.
+        assert wrapped.fleche.contains(5)
+        assert wrapped.fleche.load(5) == 10
