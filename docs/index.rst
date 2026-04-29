@@ -39,7 +39,6 @@ Welcome to the **Fleche** library documentation.
    :caption: Digests
 
    digests/digests_as_args
-   digests/custom_digests
    digests/digest_equivalence
 
 .. toctree::
@@ -60,7 +59,8 @@ Welcome to the **Fleche** library documentation.
    :maxdepth: 2
    :caption: Development
 
-   developer
+   dev/custom_digests
+   dev/developer
 
 .. toctree::
    :maxdepth: 1

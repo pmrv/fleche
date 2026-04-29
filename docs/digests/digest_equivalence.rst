@@ -74,7 +74,7 @@ Boundaries to keep in mind
   ``__name__`` but in different modules collide.  This was already true for
   dataclasses; it now extends to attrs.  If you have multiple classes named ``Point``
   in your project that mean different things, give them distinct names or override
-  the digest per class (see :doc:`custom_digests`).
+  the digest per class (see :doc:`/dev/custom_digests`).
 * **Class-level construction logic is bypassed on load.**  When ``fleche`` reads a
   destructured attrs / dataclass instance back from value storage, it reconstructs it
   via :py:func:`object.__new__` plus :py:func:`object.__setattr__`, intentionally
@@ -93,7 +93,7 @@ Opting out per type
 ~~~~~~~~~~~~~~~~~~~
 
 If a particular class needs stricter scoping than "same name + same fields", give it
-a custom ``__digest__`` (see :doc:`custom_digests`).  For example, to scope by full
+a custom ``__digest__`` (see :doc:`/dev/custom_digests`).  For example, to scope by full
 qualified path:
 
 .. code-block:: python

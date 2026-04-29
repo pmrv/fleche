@@ -114,7 +114,7 @@ Shared fixtures (in `fixtures.py`):
 
 - `benchmarks/` — `benchmark_{digest,integration,storage}.py`, `run_benchmarks.py`, `utils.py`, `results.csv`.
 - `devnotes/storage-hierarchy.{dot,md,svg}` — rendered inheritance diagram for the storage classes.
-- `docs/` — Sphinx sources, grouped by topic: root holds `index`, `installation`, `parallel_execution`, `developer`; `usage/` holds `helpers`, `lazy_call`, `query`; `digests/` holds `custom_digests`, `digests_as_args`, `digest_equivalence`; `storage/` holds `configuration`, `cache_stack`, `security`.
+- `docs/` — Sphinx sources, grouped by topic: root holds `index`, `installation`, `parallel_execution`; `usage/` holds `helpers`, `lazy_call`, `query`; `digests/` holds `digests_as_args`, `digest_equivalence`; `storage/` holds `configuration`, `cache_stack`, `security`; `dev/` holds `custom_digests`, `developer`.
 - `notebooks/` — usage examples (`GettingStarted`, `Caches`, `CacheStack`, `StorageBackends`, `SecureStorage`, `ConcurrentExecution`, `ExtraMethods`, `TransferWorkflow`); exercised by `tests/integration/test_notebooks.py`.
 - `.github/workflows/` — CI: `tests.yml`, `ty.yml`, `benchmarks.yml`/`updatebenchmarks.yml`, `rendernb.yml`, `pypi-publish.yml`.
 
