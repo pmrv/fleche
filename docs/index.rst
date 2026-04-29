@@ -22,24 +22,49 @@ Welcome to the **Fleche** library documentation.
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
+   :caption: Getting Started
 
    installation
-   helpers
-   cache_stack
-   lazy_call
-   digests_as_args
-   digest_equivalence
-   custom_digests
-   configuration
-   query
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Using Fleche
+
+   usage/helpers
+   usage/lazy_call
+   usage/query
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Digests
+
+   digests/digests_as_args
+   digests/custom_digests
+   digests/digest_equivalence
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Caches & Storage
+
+   storage/configuration
+   storage/cache_stack
+   storage/security
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Advanced
+
    parallel_execution
-   security
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Development
+
    developer
 
 .. toctree::
    :maxdepth: 1
-   :caption: Notebooks:
+   :caption: Notebooks
 
    notebooks/GettingStarted
    notebooks/ExtraMethods
@@ -50,7 +75,7 @@ Welcome to the **Fleche** library documentation.
 
 .. toctree::
    :maxdepth: 2
-   :caption: API Reference:
+   :caption: API Reference
 
    autoapi/fleche/index
 
