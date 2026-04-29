@@ -42,15 +42,18 @@ def test_bagofholding_h5file(tmp_path):
     assert cfg["version_validator"] is None
 
 
-def test_bagofholding_h5file_version_validator_roundtrip(tmp_path):
+@pytest.mark.parametrize(
+    "version_validator", ["exact", "semantic-minor", "semantic-major", "none"]
+)
+def test_bagofholding_h5file_version_validator_roundtrip(tmp_path, version_validator):
     pytest.importorskip("bagofholding")
     root = tmp_path / "values"
-    original = storage.ValueBagOfHoldingH5File(root=root, version_validator="semantic-minor")
+    original = storage.ValueBagOfHoldingH5File(root=root, version_validator=version_validator)
     cfg = storage_to_config(original)
     assert cfg["type"] == "bagofholding_hdf"
     reconstructed = storage_from_config(cfg, "value")
     assert isinstance(reconstructed, storage.ValueBagOfHoldingH5File)
-    assert reconstructed.version_validator == "semantic-minor"
+    assert reconstructed.version_validator == version_validator
 
 
 def test_sql():
