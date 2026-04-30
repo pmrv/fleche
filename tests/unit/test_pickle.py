@@ -90,23 +90,28 @@ def test_cache_picklable(cache):
     assert isinstance(restored, Cache)
 
 
-def test_readonly_cache_picklable(cache):
-    restored = roundtrip(ReadOnlyCache(cache))
+# Wrapper picklability is backend-independent; test_cache_picklable sweeps backends.
+def _inner():
+    return Cache(ValueMemory({}), CallMemory({}))
+
+
+def test_readonly_cache_picklable():
+    restored = roundtrip(ReadOnlyCache(_inner()))
     assert isinstance(restored, ReadOnlyCache)
 
 
-def test_filtered_cache_picklable(cache):
-    restored = roundtrip(FilteredCache(cache, _always_true))
+def test_filtered_cache_picklable():
+    restored = roundtrip(FilteredCache(_inner(), _always_true))
     assert isinstance(restored, FilteredCache)
 
 
-def test_refreshing_cache_picklable(cache):
-    restored = roundtrip(RefreshingCache(cache))
+def test_refreshing_cache_picklable():
+    restored = roundtrip(RefreshingCache(_inner()))
     assert isinstance(restored, RefreshingCache)
 
 
-def test_cache_stack_picklable(cache):
-    stack = CacheStack((cache, Cache(ValueMemory({}), CallMemory({}))))
+def test_cache_stack_picklable():
+    stack = CacheStack((_inner(), _inner()))
     restored = roundtrip(stack)
     assert isinstance(restored, CacheStack)
     assert len(restored.stack) == 2
