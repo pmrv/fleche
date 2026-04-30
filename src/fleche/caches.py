@@ -253,10 +253,9 @@ class Cache(BaseCache):
     calls: storage.CallStorage
 
     def load_value(self, key):
-        if not isinstance(key, Digest):
-            return key
-
-        return self.values.load(key)
+        if isinstance(key, str):  # Digest is a str subclass; values.load handles normalization
+            return self.values.load(key)
+        return key
 
     def save(self, call: Call) -> str:
         try:
