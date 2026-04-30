@@ -10,6 +10,7 @@ import pandas as pd
 from . import digest as _digest
 from .digest import Digest  # type hint convenience
 from . import storage
+from .storage.destructuring import HasChildDigests
 from .call import Call, DigestedCall, LazyCall, QueryCall
 from . import call
 from . import query
@@ -341,6 +342,53 @@ class Cache(BaseCache):
                 # instantiate values too
                 self.save(call)
                 self.calls.evict(key)
+
+    def gc(self) -> set[Digest]:
+        """Evict value entries not reachable from any stored call.
+
+        Brute-force mark-and-sweep: walks every call record to build the set
+        of directly-referenced value digests, then transitively follows
+        destructured sub-references (via :meth:`DestructuringMixin.child_digests`
+        on storages that satisfy :class:`HasChildDigests`), and evicts every
+        ``values`` key outside the reachable
+        set.  Call records are left untouched.
+
+        Returns:
+            The set of digests that were evicted from value storage.
+        """
+        reachable: set[Digest] = set()
+        for key in self.calls.list():
+            try:
+                dc = self.calls.load(key)
+            except KeyError:
+                continue
+            if isinstance(dc.result, Digest):
+                reachable.add(dc.result)
+            for v in dc.arguments.values():
+                if isinstance(v, Digest):
+                    reachable.add(v)
+
+        if isinstance(self.values, HasChildDigests):
+            frontier = set(reachable)
+            while frontier:
+                key = frontier.pop()
+                try:
+                    children = self.values.child_digests(key)
+                except KeyError:
+                    continue
+                new = children - reachable
+                reachable |= new
+                frontier |= new
+
+        evicted: set[Digest] = set()
+        for key in list(self.values.list()):
+            if key not in reachable:
+                try:
+                    self.values.evict(key)
+                    evicted.add(key)
+                except KeyError:
+                    continue
+        return evicted
 
 
 @dataclass(frozen=True)

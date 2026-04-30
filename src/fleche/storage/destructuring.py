@@ -4,7 +4,7 @@ from collections import Counter
 import dataclasses as _dataclasses
 from dataclasses import dataclass
 from numbers import Number
-from typing import Any, Callable
+from typing import Any, Callable, Protocol, runtime_checkable
 
 from . import base
 from .. import _attrs
@@ -155,6 +155,25 @@ class DigestedAttrs(DigestedFields):
         return _attrs.field_items(value)
 
 
+@runtime_checkable
+class HasChildDigests(Protocol):
+    """Structural protocol for value storages that expose a reference-graph edge query.
+
+    Any :class:`~fleche.storage.base.ValueStorage` that implements
+    :meth:`child_digests` satisfies this protocol automatically — no explicit
+    registration or inheritance required.  Use ``isinstance(storage, HasChildDigests)``
+    to check at runtime whether the storage supports transitive reachability walks.
+    """
+
+    def child_digests(self, key: digest.Digest) -> set[digest.Digest]:
+        """Return the set of digests directly referenced by the entry at *key*.
+
+        Raises:
+            KeyError: if *key* is not present in the storage.
+        """
+        ...
+
+
 @dataclass(frozen=True)
 class DestructuringMixin(base.ValueStorage):
     """Mixin that recursively destructures collections on save/load.
@@ -270,6 +289,43 @@ class DestructuringMixin(base.ValueStorage):
             case _:
                 return value
 
+    def _raw_sub_digests(self, raw: Any) -> set[digest.Digest]:
+        """Direct digest children of a raw stored entry.
+
+        A *raw* entry is what ``super().load`` returns — i.e. what was written
+        to the underlying backend before :meth:`mend` rewires sub-digests back
+        into their parent container.  Only :class:`Digested` wrappers carry
+        child references; scalars and plain (non-destructured) containers
+        return an empty set.
+        """
+        match raw:
+            case DigestedIterable():
+                return {i for i in raw.items if isinstance(i, digest.Digest)}
+            case DigestedDict():
+                return {
+                    x
+                    for pair in raw.items.items()
+                    for x in pair
+                    if isinstance(x, digest.Digest)
+                }
+            case DigestedFields():
+                return {v for v in raw.fields.values() if isinstance(v, digest.Digest)}
+            case _:
+                return set()
+
+    def child_digests(self, key: digest.Digest | str) -> set[digest.Digest]:
+        """Direct digest children of the raw entry stored at *key*.
+
+        Bypasses :meth:`mend`, so destructured sub-references are returned as
+        opaque :class:`~fleche.digest.Digest` keys rather than being followed.
+        Intended for reference-graph traversals (GC, debugging) where loading
+        the mended value would flatten the structure we need to inspect.
+
+        Raises:
+            KeyError: if *key* is not present in the underlying backend.
+        """
+        return self._raw_sub_digests(super().load(key))
+
     def count_reuses(self) -> Counter[digest.Digest]:
         """Return a counter of how many times each stored key is referenced as a sub-component.
 
@@ -295,20 +351,7 @@ class DestructuringMixin(base.ValueStorage):
         """
         counts: Counter[digest.Digest] = Counter({key: 0 for key in self.list()})
         for key in list(counts):
-            raw = super().load(key)
-            match raw:
-                case DigestedIterable():
-                    for item in raw.items:
-                        if isinstance(item, digest.Digest) and item in counts:
-                            counts[item] += 1
-                case DigestedDict():
-                    for k, v in raw.items.items():
-                        if isinstance(k, digest.Digest) and k in counts:
-                            counts[k] += 1
-                        if isinstance(v, digest.Digest) and v in counts:
-                            counts[v] += 1
-                case DigestedFields():
-                    for v in raw.fields.values():
-                        if isinstance(v, digest.Digest) and v in counts:
-                            counts[v] += 1
+            for sub in self._raw_sub_digests(super().load(key)):
+                if sub in counts:
+                    counts[sub] += 1
         return counts
