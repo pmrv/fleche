@@ -114,7 +114,7 @@ Shared fixtures (in `fixtures.py`):
 
 - `benchmarks/` — `benchmark_{digest,integration,storage}.py`, `run_benchmarks.py`, `utils.py`, `results.csv`.
 - `devnotes/storage-hierarchy.{dot,md,svg}` — rendered inheritance diagram for the storage classes.
-- `docs/` — Sphinx sources (`*.rst` per topic: `cache_stack`, `configuration`, `custom_digests`, `developer`, `digest_equivalence`, `digests_as_args`, `helpers`, `installation`, `lazy_call`, `parallel_execution`, `query`, `security`).
+- `docs/` — Sphinx sources, grouped by topic: root holds `index`, `installation`, `parallel_execution`; `usage/` holds `helpers`, `lazy_call`, `query`; `digests/` holds `digests_as_args`, `digest_equivalence`; `storage/` holds `configuration`, `cache_stack`, `security`; `dev/` holds `custom_digests`, `developer`.
 - `notebooks/` — usage examples (`GettingStarted`, `Caches`, `CacheStack`, `StorageBackends`, `SecureStorage`, `ConcurrentExecution`, `ExtraMethods`, `TransferWorkflow`); exercised by `tests/integration/test_notebooks.py`.
 - `.github/workflows/` — CI: `tests.yml`, `ty.yml`, `benchmarks.yml`/`updatebenchmarks.yml`, `rendernb.yml`, `pypi-publish.yml`.
 
@@ -125,7 +125,7 @@ issue or PR.
 
 # General Instructions
 
-When you cannot complete a task or question because you are missing depedencies fail early and report the errors.
+When you cannot complete a task or question because you are missing dependencies fail early and report the errors.
 
 ## Commit attribution
 

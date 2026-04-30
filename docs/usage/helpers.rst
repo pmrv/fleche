@@ -120,7 +120,7 @@ Usage with Decorated Methods
    You must pass the instance explicitly as the first positional argument.
 
    For ``fleche`` to cache calls that include ``self``, the class must be hashable —
-   i.e. it must implement a ``__digest__`` method (see :doc:`custom_digests`).
+   i.e. it must implement a ``__digest__`` method (see :doc:`/dev/custom_digests`).
 
    .. code-block:: python
 
