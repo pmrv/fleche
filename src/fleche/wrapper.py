@@ -1,9 +1,8 @@
 import os
 from pathlib import Path
 from functools import wraps, partial
-from inspect import signature
 from types import SimpleNamespace
-from typing import Any, Callable, Dict, Iterable, TypeVar, Annotated, get_type_hints, get_origin, get_args
+from typing import Any, Callable, Dict, Iterable, TypeVar, Annotated, get_origin, get_args
 from dataclasses import dataclass, replace
 import tempfile
 import contextlib
@@ -13,7 +12,7 @@ from concurrent.futures import Future
 from . import digest
 from . import state
 from . import metadata
-from .call import Call, AnyCall, QueryCall, bind
+from .call import Call, AnyCall, QueryCall, bind, _get_profile
 from .caches import Rejected, BaseCache, RefreshingCache
 
 
@@ -89,10 +88,8 @@ def process_ignore_required_args(
 ) -> "ArgumentPolicy":
     """Collates arguments that should be ignored/required for caching from explicit arguments and annotations."""
 
-    try:
-        hints = get_type_hints(func, include_extras=True)
-    except (TypeError, NameError):
-        hints = {}
+    profile = _get_profile(func)
+    hints = profile.type_hints
 
     def is_ignored(hint):
         if hint is Ignored:
@@ -114,16 +111,14 @@ def process_ignore_required_args(
     ignored_args = _as_tuple(ignore) + tuple(type_ignored)
     required_args = _as_tuple(require) + tuple(type_required)
 
-    try:
-        sig = signature(func)
+    sig = profile.signature
+    if sig is not None:
         for r in required_args:
             if r in sig.parameters and sig.parameters[r].kind == sig.parameters[r].POSITIONAL_ONLY:
                 logger.warning(
                     "Argument '%s' is marked as Required but is positional-only. Required only works for keyword arguments.",
                     r
                 )
-    except (TypeError, ValueError):
-        pass
 
     return ArgumentPolicy(ignored=frozenset(ignored_args), required=frozenset(required_args))
 

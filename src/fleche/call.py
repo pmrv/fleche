@@ -1,7 +1,7 @@
 import logging
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
-from typing import Any, Callable
+from typing import Any, Callable, get_type_hints
 from inspect import Signature, signature
 from collections.abc import Mapping
 
@@ -13,62 +13,72 @@ from .digest import Digest
 logger = logging.getLogger("fleche.call")
 
 
-@lru_cache(maxsize=1000)
-def _cached_signature(func) -> Signature:
-    return signature(func)
+@dataclass(frozen=True)
+class FunctionProfile:
+    """All static per-function metadata, cached once per callable.
+
+    ``signature`` is ``None`` when :func:`inspect.signature` raises for the
+    callable (e.g. some C extensions).  Callers that need a valid signature
+    must handle ``None`` explicitly.
+    """
+
+    signature: Signature | None
+    qualname: str
+    module: str
+    version: str | int | None
+    code_digest: Digest | None
+    type_hints: dict[str, Any]
+
+    @classmethod
+    def of(cls, func) -> "FunctionProfile":
+        """Compute a :class:`FunctionProfile` for *func* without caching."""
+        try:
+            sig = signature(func)
+        except (TypeError, ValueError):
+            sig = None
+
+        try:
+            info = VersionInfo.of(func)
+            qualname = info.qualname or info.module
+            module = info.module
+            version = getattr(func, "__version__", info.version)
+        except ModuleNotFoundError:
+            module = get_module(func)
+            qualname = get_qualname(func) or module
+            version = None
+
+        code_digest = digest.digest(func.__code__) if hasattr(func, "__code__") else None
+
+        try:
+            type_hints = get_type_hints(func, include_extras=True)
+        except (TypeError, NameError):
+            type_hints = {}
+
+        return cls(
+            signature=sig,
+            qualname=qualname,
+            module=module,
+            version=version,
+            code_digest=code_digest,
+            type_hints=type_hints,
+        )
 
 
 @lru_cache(maxsize=1000)
-def _cached_code_digest(func) -> Digest | None:
-    if not hasattr(func, "__code__"):
-        return None
-    return digest.digest(func.__code__)
+def _profile(func) -> FunctionProfile:
+    return FunctionProfile.of(func)
 
 
-@lru_cache(maxsize=1000)
-def _cached_version_info(func) -> tuple[str, str, str | int | None]:
-    return _extract_version_info(func)
+def _get_profile(func) -> FunctionProfile:
+    """Return the :class:`FunctionProfile` for *func*, handling unhashable callables.
 
-
-def _func_statics(func) -> tuple[Signature, str, str, str | int | None, Digest | None]:
-    """Return ``(signature, qualname, module, version, code_digest)`` for *func*.
-
-    Uses the per-function ``lru_cache`` helpers when *func* is hashable; falls
-    back to direct introspection in a single ``except`` for callables with
-    ``__hash__ = None``.  Both :meth:`Call.from_call` and
-    :meth:`QueryCall.from_call` consume this tuple (the latter discards
-    ``code_digest``).
+    Falls back to :meth:`FunctionProfile.of` directly when *func* is not
+    hashable (i.e. when ``_profile(func)`` raises :exc:`TypeError`).
     """
     try:
-        return (
-            _cached_signature(func),
-            *_cached_version_info(func),
-            _cached_code_digest(func),
-        )
+        return _profile(func)
     except TypeError:
-        return (
-            signature(func),
-            *_extract_version_info(func),
-            digest.digest(func.__code__) if hasattr(func, "__code__") else None,
-        )
-
-
-def _extract_version_info(func) -> tuple[str, str, str | int | None]:
-    """Extract ``(name, module, version)`` from ``func`` via :mod:`pyiron_snippets.versions`.
-
-    Uses :meth:`VersionInfo.of` to introspect ``func``.  When the module is not
-    importable, falls back to attribute inspection without a version.  A ``__version__``
-    attribute set directly on ``func`` takes priority over the module-level version.
-    """
-    try:
-        info = VersionInfo.of(func)
-    except ModuleNotFoundError:
-        module = get_module(func)
-        name = get_qualname(func) or module
-        return name, module, None
-    name = info.qualname or info.module
-    version = getattr(func, "__version__", info.version)
-    return name, info.module, version
+        return FunctionProfile.of(func)
 
 
 def bind(func, args, kwargs, apply_defaults=False, partial=False):
@@ -87,10 +97,10 @@ def bind(func, args, kwargs, apply_defaults=False, partial=False):
         :attr:`inspect.BoundArguments.arguments` — an ``OrderedDict``
         containing the supplied (and, when requested, defaulted) values.
     """
-    try:
-        sig = _cached_signature(func)
-    except TypeError:
-        # Unhashable callable (e.g. instance with __hash__ = None).
+    p = _get_profile(func)
+    sig = p.signature
+    if sig is None:
+        # Re-raise the original error from signature().
         sig = signature(func)
     if partial:
         bound = sig.bind_partial(*args, **kwargs)
@@ -120,12 +130,15 @@ class Call:
 
     @classmethod
     def from_call(cls, func, *args, **kwargs):
-        sig, qualname, module, version, code_digest = _func_statics(func)
+        p = _get_profile(func)
+        sig = p.signature
+        if sig is None:
+            sig = signature(func)
         bound = sig.bind(*args, **kwargs)
         bound.apply_defaults()
-        call = cls(qualname, dict(bound.arguments), module=module)
-        call.version = getattr(func, "__version__", version)
-        call.code_digest = code_digest
+        call = cls(p.qualname, dict(bound.arguments), module=p.module)
+        call.version = getattr(func, "__version__", p.version)
+        call.code_digest = p.code_digest
         return call
 
     def to_lookup_key(self) -> "Digest":
@@ -360,12 +373,15 @@ class QueryCall:
 
     @classmethod
     def from_call(cls, func, *args, **kwargs):
-        sig, qualname, module, version, _code_digest = _func_statics(func)
+        p = _get_profile(func)
+        sig = p.signature
+        if sig is None:
+            sig = signature(func)
         bound_args = bind(func, args, kwargs, partial=True)
         # Unspecified arguments default to None (wildcard)
         arguments = {name: bound_args.get(name) for name in sig.parameters}
-        call = cls(qualname, arguments, module=module)
-        call.version = getattr(func, "__version__", version)
+        call = cls(p.qualname, arguments, module=p.module)
+        call.version = getattr(func, "__version__", p.version)
         return call
 
     def matches(self, other: 'Call | LazyCall | DigestedCall') -> bool:
@@ -416,6 +432,7 @@ __all__ = [
         "bind",
         "Call",
         "DigestedCall",
+        "FunctionProfile",
         "LazyCall",
         "QueryCall",
         "AnyCall"
