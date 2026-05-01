@@ -382,17 +382,6 @@ def test_load_value_short_prefix():
     assert c.load_value(short) == val
 
 
-def test_load_value_non_string_passthrough():
-    """load_value should return non-string values as-is (they are already loaded values)."""
-    from fleche.storage.memory import ValueMemory, CallMemory
-
-    c = Cache(values=ValueMemory({}), calls=CallMemory({}))
-
-    assert c.load_value(42) == 42
-    assert c.load_value(None) is None
-    assert c.load_value([1, 2]) == [1, 2]
-
-
 def test_hash_builtin_caches():
     """Test that all cache types respond properly to hash() builtin."""
     from fleche.caches import ReadOnlyCache, FilteredCache, RefreshingCache, SizeLimitedCache

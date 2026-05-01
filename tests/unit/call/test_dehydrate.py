@@ -118,6 +118,9 @@ class TestDigestedCallFetch:
         lazy = dc.fetch(cache)
         assert isinstance(lazy, LazyCall)
         assert lazy._result is None
+        # Accessing .result on a LazyCall with _result=None returns None
+        # without consulting the value store.
+        assert lazy.result is None
 
 
 # ---------------------------------------------------------------------------
