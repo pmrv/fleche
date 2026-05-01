@@ -18,6 +18,13 @@ class AmbiguousDigestError(ValueError):
     pass
 
 
+def _longest_common_prefix_length(s1: str, s2: str) -> int:
+    for i, (c1, c2) in enumerate(zip(s1, s2)):
+        if c1 != c2:
+            return i
+    return min(len(s1), len(s2))
+
+
 def _resolve_prefix(key: str, candidates: list[Digest]) -> Digest:
     """Return the unique Digest for *key* prefix, or raise KeyError / AmbiguousDigestError.
 
@@ -29,14 +36,9 @@ def _resolve_prefix(key: str, candidates: list[Digest]) -> Digest:
         raise KeyError(key)
     if len(candidates) == 1:
         return candidates[0]
-    m1, m2 = candidates[0], candidates[1]
-    for i, (c1, c2) in enumerate(zip(m1, m2)):
-        if c1 != c2:
-            break
-    else:
-        i = min(len(m1), len(m2))
+    lcp = _longest_common_prefix_length(candidates[0], candidates[1])
     raise AmbiguousDigestError(
-        f"Short digest {key} is ambiguous; need at least {i+1} characters."
+        f"Short digest {key} is ambiguous; need at least {lcp+1} characters."
     )
 
 
