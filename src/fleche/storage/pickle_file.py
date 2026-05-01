@@ -5,7 +5,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from .file import FileStorage, file_write_lock
+import filelock
+
+from .file import FileStorage
 from .base import ValueMixin, CallMixin
 from .thread_safe import PerKeyLockMixin
 from .destructuring import DestructuringMixin
@@ -88,7 +90,7 @@ class PickleFileBackend(FileStorage):
         for key in list(self.list()):
             path = self._path(key)
             lock_path = self._path(f"{key}.lock")
-            with file_write_lock(lock_path):
+            with filelock.FileLock(lock_path, timeout=self.lock_timeout):
                 try:
                     content = path.read_bytes()
                 except FileNotFoundError:
@@ -101,7 +103,7 @@ class PickleFileBackend(FileStorage):
         for key in list(self.list()):
             path = self._path(key)
             lock_path = self._path(f"{key}.lock")
-            with file_write_lock(lock_path):
+            with filelock.FileLock(lock_path, timeout=self.lock_timeout):
                 try:
                     content = path.read_bytes()
                 except FileNotFoundError:

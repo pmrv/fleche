@@ -22,9 +22,7 @@ following **lowercase** identifiers:
     :class:`~fleche.storage.CallPickleFile`).
     Required: ``root`` (path to storage directory).
     Optional: ``compress`` (bool, default ``False``) — gzip-compress files.
-    Optional: ``lock_timeout`` (float, default ``1.0``) — write-lock wait timeout (s).
-    Optional: ``lock_wait_start`` (float, default ``0.001``) — initial lock-poll
-    interval for exponential backoff (s).
+    Optional: ``lock_timeout`` (float, default ``1.0``) — file-lock acquisition timeout (s).
     Optional: ``secret_key`` (list of hex strings) — HMAC-SHA256 signing keys;
     each element is a hex-encoded byte string (same format as ``FLECHE_SECRET_KEY``).
     If omitted, falls back to the ``FLECHE_SECRET_KEY`` environment variable.
@@ -35,9 +33,7 @@ following **lowercase** identifiers:
     complex Python objects than ``pickle``.
     Required: ``root``.
     Optional: ``compress`` (bool, default ``False``) — gzip-compress files.
-    Optional: ``lock_timeout`` (float, default ``1.0``) — write-lock wait timeout (s).
-    Optional: ``lock_wait_start`` (float, default ``0.001``) — initial lock-poll
-    interval for exponential backoff (s).
+    Optional: ``lock_timeout`` (float, default ``1.0``) — file-lock acquisition timeout (s).
     Optional: ``secret_key`` (list of hex strings) — same as ``"pickle"``.
     Optional (value backend): ``remaining_depth`` (int, default ``0``).
 
@@ -45,9 +41,7 @@ following **lowercase** identifiers:
     Filesystem backend serialised with ``dill``.
     Required: ``root``.
     Optional: ``compress`` (bool, default ``False``) — gzip-compress files.
-    Optional: ``lock_timeout`` (float, default ``1.0``) — write-lock wait timeout (s).
-    Optional: ``lock_wait_start`` (float, default ``0.001``) — initial lock-poll
-    interval for exponential backoff (s).
+    Optional: ``lock_timeout`` (float, default ``1.0``) — file-lock acquisition timeout (s).
     Optional: ``secret_key`` (list of hex strings) — same as ``"pickle"``.
     Optional (value backend): ``remaining_depth`` (int, default ``0``).
 
@@ -56,9 +50,7 @@ following **lowercase** identifiers:
     (:class:`~fleche.storage.ValueBagOfHoldingH5File` /
     :class:`~fleche.storage.CallBagOfHoldingH5File`).
     Required: ``root``.
-    Optional: ``lock_timeout`` (float, default ``1.0``) — write-lock wait timeout (s).
-    Optional: ``lock_wait_start`` (float, default ``0.001``) — initial lock-poll
-    interval for exponential backoff (s).
+    Optional: ``lock_timeout`` (float, default ``1.0``) — file-lock acquisition timeout (s).
     Optional: ``version_validator`` (str, default omitted) — version validation
     strategy passed to :meth:`bagofholding:bagofholding.h5.bag.H5Bag.load`.  One of ``"exact"``, ``"semantic-minor"``,
     ``"semantic-major"``, ``"none"``.  When omitted, bagofholding's default applies.
@@ -237,14 +229,14 @@ def storage_from_config(d: dict[str, Any], type: Literal["call", "value"]) -> st
     * ``{"type": "memory"}``
     * ``{"type": "void"}``
     * ``{"type": "pickle", "root": "<path>"}``
-      — optional: ``compress``, ``lock_timeout``, ``lock_wait_start``,
+      — optional: ``compress``, ``lock_timeout``,
       ``secret_key`` (list of hex strings), ``remaining_depth`` (value only)
     * ``{"type": "cloudpickle", "root": "<path>"}``
       — same optional keys as ``"pickle"``
     * ``{"type": "dill", "root": "<path>"}``
       — same optional keys as ``"pickle"``
     * ``{"type": "bagofholding_hdf", "root": "<path>"}``
-      — optional: ``lock_timeout``, ``lock_wait_start``,
+      — optional: ``lock_timeout``,
       ``version_validator``, ``remaining_depth`` (value only)
     * ``{"type": "sql", "url": "<sqlalchemy-url>"}``  *(call storage only)*
       — optional: ``echo``
