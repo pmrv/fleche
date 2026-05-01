@@ -393,17 +393,30 @@ class Cache(BaseCache):
         return evicted
 
 
-@dataclass(frozen=True)
-class ReadOnlyCache(BaseCache):
-    """A cache that can only be read from."""
+class DelegatingCacheMixin(BaseCache):
+    """All BaseCache methods forward to ``self.cache`` by default.
 
-    cache: BaseCache
+    Combine with behaviour mixins (ReadOnlyMixin, RefreshingMixin, FilteringMixin)
+    and a concrete ``@dataclass(frozen=True)`` subclass that declares
+    ``cache: BaseCache`` as a field.
+    """
 
-    def save(self, call: Call):
-        raise Rejected(self, call)
+    cache: BaseCache  # declared by the concrete class
 
-    def load(self, key) -> LazyCall:
+    def save(self, call: Call) -> str:
+        return self.cache.save(call)
+
+    def load(self, key: str) -> LazyCall:
         return self.cache.load(key)
+
+    def load_value(self, key: str) -> Any:
+        return self.cache.load_value(key)
+
+    def contains(self, key: str) -> bool:
+        return self.cache.contains(key)
+
+    def evict(self, key: str | Digest) -> None:
+        self.cache.evict(key)
 
     def expand(self, key: Digest | str) -> Digest:
         return self.cache.expand(key)
@@ -411,47 +424,67 @@ class ReadOnlyCache(BaseCache):
     def shrink(self, key: Digest | str) -> Digest:
         return self.cache.shrink(key)
 
-    def evict(self, key: str | Digest) -> None:
-        raise Rejected("Cannot evict from a ReadOnlyCache", self, key)
-
-    def load_value(self, key):
-        return self.cache.load_value(key)
-
-    def contains(self, key: str) -> bool:
-        return self.cache.contains(key)
-
     def _query(self, call: call.QueryCall) -> Iterable[LazyCall]:
-        """Forward queries to the wrapped cache.
-
-        Args:
-            call: A template ``Call`` where ``None`` fields act as wildcards.
-
-        Yields:
-            Call | LazyCall: Results yielded by the wrapped cache's ``query`` method.
-        """
         return self.cache.query(call)
 
 
+class ReadOnlyMixin(BaseCache):
+    """Raises :class:`Rejected` for ``save`` and ``evict``."""
+
+    def save(self, call: Call):
+        raise Rejected(self, call)
+
+    def evict(self, key: str | Digest) -> None:
+        raise Rejected("Cannot evict from a ReadOnlyCache", self, key)
+
+
 @dataclass(frozen=True)
-class FilteredCache(ReadOnlyCache):
-    """A read-only view of a cache that only exposes calls matching a predicate."""
+class ReadOnlyCache(ReadOnlyMixin, DelegatingCacheMixin):
+    """A cache that can only be read from."""
 
-    predicate: Callable[[Call | LazyCall], bool]
+    cache: BaseCache
 
-    def load(self, key) -> LazyCall:
-        lc = self.cache.load(key)
+
+class FilteringMixin(BaseCache):
+    """Filters ``load`` and ``_query`` results by a predicate.
+
+    Requires ``self.cache: BaseCache`` — compose with :class:`DelegatingCacheMixin`.
+    """
+
+    predicate: Callable[[Call | LazyCall], bool]  # declared by the concrete class
+
+    def load(self, key: str) -> LazyCall:
+        lc = self.cache.load(key)  # type: ignore[attr-defined]
         if not self.predicate(lc):
             raise KeyError(key)
         return lc
 
     def _query(self, call: call.QueryCall) -> Iterable[LazyCall]:
-        for c in self.cache.query(call):
+        for c in self.cache.query(call):  # type: ignore[attr-defined]
             if self.predicate(c):
                 yield c
 
 
 @dataclass(frozen=True)
-class RefreshingCache(BaseCache):
+class FilteredCache(FilteringMixin, ReadOnlyMixin, DelegatingCacheMixin):
+    """A read-only view of a cache that only exposes calls matching a predicate."""
+
+    cache: BaseCache
+    predicate: Callable[[Call | LazyCall], bool]
+
+
+class RefreshingMixin(BaseCache):
+    """Always misses on ``load`` and ``contains``, forcing re-execution."""
+
+    def load(self, key: str) -> LazyCall:
+        raise KeyError(key)
+
+    def contains(self, key: str) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
+class RefreshingCache(RefreshingMixin, DelegatingCacheMixin):
     """A cache that forces re-execution by always missing on load.
 
     It forwards saves and value loads to an underlying cache, allowing
@@ -463,30 +496,6 @@ class RefreshingCache(BaseCache):
     """
 
     cache: BaseCache
-
-    def save(self, call: Call) -> str:
-        return self.cache.save(call)
-
-    def load(self, key: str) -> LazyCall:
-        raise KeyError(key)
-
-    def load_value(self, key: str) -> Any:
-        return self.cache.load_value(key)
-
-    def contains(self, key: str) -> bool:
-        return False
-
-    def evict(self, key: str | Digest) -> None:
-        self.cache.evict(key)
-
-    def expand(self, key: Digest | str) -> Digest:
-        return self.cache.expand(key)
-
-    def shrink(self, key: Digest | str) -> Digest:
-        return self.cache.shrink(key)
-
-    def _query(self, call: call.QueryCall) -> query.QueryIterator:
-        return self.cache.query(call)
 
 
 @dataclass(frozen=True)
