@@ -3,7 +3,7 @@ from pathlib import Path
 from functools import wraps, partial
 from types import SimpleNamespace
 from typing import Any, Callable, Dict, Iterable, TypeVar, Annotated, get_origin, get_args
-from dataclasses import dataclass, replace
+from dataclasses import replace
 import tempfile
 import contextlib
 from collections import defaultdict
@@ -12,7 +12,7 @@ from concurrent.futures import Future
 from . import digest
 from . import state
 from . import metadata
-from .call import Call, AnyCall, QueryCall, bind, _get_profile
+from .call import Call, AnyCall, FunctionProfile, QueryCall, bind, _get_profile
 from .caches import Rejected, BaseCache, RefreshingCache
 
 
@@ -53,26 +53,6 @@ class Required:
         return Annotated[item, cls]
 
 
-@dataclass(frozen=True)
-class ArgumentPolicy:
-    """Encapsulates the ignored/required argument policy for a cached function."""
-
-    ignored: frozenset[str]
-    required: frozenset[str]
-
-    def strip_for_key(self, bound: dict) -> None:
-        """Remove ignored arguments from a bound arguments dict in-place."""
-        for ign in self.ignored:
-            del bound[ign]
-
-    def check_required(self, func, args: tuple, kwargs: dict) -> list[str]:
-        """Return names of required args not explicitly provided as keyword arguments."""
-        if not self.required:
-            return []
-        explicit = set(bind(func, args, kwargs).keys())
-        return [r for r in self.required if r not in explicit]
-
-
 def _as_tuple(x: None | str | Iterable[str]) -> tuple[str, ...]:
     if x is None:
         return ()
@@ -85,7 +65,7 @@ def process_ignore_required_args(
         func,
         ignore: None | str | Iterable[str] = None,
         require: None | str | Iterable[str] = None,
-) -> "ArgumentPolicy":
+) -> FunctionProfile:
     """Collates arguments that should be ignored/required for caching from explicit arguments and annotations."""
 
     profile = _get_profile(func)
@@ -120,7 +100,7 @@ def process_ignore_required_args(
                     r
                 )
 
-    return ArgumentPolicy(ignored=frozenset(ignored_args), required=frozenset(required_args))
+    return replace(profile, ignored=frozenset(ignored_args), required=frozenset(required_args))
 
 
 def _get_working_directory_root() -> Path:
@@ -166,7 +146,7 @@ Returns:
 """
 
 
-def make_get_call(func, policy, hash_version, hash_module, hash_code):
+def make_get_call(func, profile, hash_version, hash_module, hash_code):
     """Build the `.call` helper that produces a :class:`.Call` for the given arguments."""
     @wraps(func)
     def get_call(*args, **kwargs):
@@ -176,7 +156,7 @@ def make_get_call(func, policy, hash_version, hash_module, hash_code):
         # generation, but then we'd also have to save it somehow and that just seems bothersome in particular for
         # Sql Callstorage.  We could add a new table there connecting unique functions and their ignored args, but
         # meh.
-        policy.strip_for_key(call.arguments)
+        profile.strip_for_key(call.arguments)
         if not hash_version:
             call.version = None
         if not hash_module:
@@ -195,13 +175,13 @@ def make_digest(func, get_call):
     return _digest_func
 
 
-def make_query(func, policy):
+def make_query(func, profile):
     """Build the `.query` helper that yields matching calls from the active cache."""
     def _query_func(
         *args, metadata={}, **kwargs
     ) -> Iterable[AnyCall]:
         call = QueryCall.from_call(func, *args, **kwargs)
-        policy.strip_for_key(call.arguments)
+        profile.strip_for_key(call.arguments)
         if "metadata" in call.arguments:
             logger.warning(
                 "Function argument 'metadata' shadowed by query argument"
@@ -247,7 +227,7 @@ def make_bind(wrapper):
     return _bind_func
 
 
-def make_wrapper(func, policy, meta, isolate, get_call):
+def make_wrapper(func, profile, meta, isolate, get_call):
     """Build the cached wrapper returned by :func:`fleche`."""
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> _T:
@@ -270,7 +250,7 @@ def make_wrapper(func, policy, meta, isolate, get_call):
             logger.warning("No hash for argument: %s", e.args[0])
             return func(*args, **kwargs)
 
-        missing = policy.check_required(func, args, kwargs)
+        missing = profile.check_required(args, kwargs)
         if missing:
             logger.warning(
                 "Missing required keyword arguments for caching: %s", missing
@@ -379,14 +359,14 @@ def fleche(
         if version is not None:
             func.__version__ = version  # ty: ignore
 
-        policy = process_ignore_required_args(func, ignore, require)
+        profile = process_ignore_required_args(func, ignore, require)
 
-        get_call = make_get_call(func, policy, hash_version, hash_module, hash_code)
+        get_call = make_get_call(func, profile, hash_version, hash_module, hash_code)
         digest_func = make_digest(func, get_call)
-        query_func = make_query(func, policy)
+        query_func = make_query(func, profile)
         load_func = make_load(func, digest_func)
         contains_func = make_contains(func, digest_func)
-        wrapper = make_wrapper(func, policy, meta, isolate, get_call)
+        wrapper = make_wrapper(func, profile, meta, isolate, get_call)
         rerun_func = make_rerun(func, wrapper)
         bind_func = make_bind(wrapper)
 
@@ -410,7 +390,6 @@ def fleche(
 
 
 __all__ = [
-        "ArgumentPolicy",
         "Ignored",
         "Required",
         "fleche",

@@ -28,6 +28,8 @@ class FunctionProfile:
     version: str | int | None
     code_digest: Digest | None
     type_hints: dict[str, Any]
+    ignored: frozenset[str] = field(default_factory=frozenset)
+    required: frozenset[str] = field(default_factory=frozenset)
 
     @classmethod
     def of(cls, func) -> "FunctionProfile":
@@ -62,6 +64,20 @@ class FunctionProfile:
             code_digest=code_digest,
             type_hints=type_hints,
         )
+
+    def strip_for_key(self, bound: dict) -> None:
+        """Remove ignored arguments from a bound arguments dict in-place."""
+        for ign in self.ignored:
+            del bound[ign]
+
+    def check_required(self, args: tuple, kwargs: dict) -> list[str]:
+        """Return names of required args not explicitly provided as keyword arguments."""
+        if not self.required:
+            return []
+        if self.signature is None:
+            return []
+        bound = self.signature.bind(*args, **kwargs)
+        return [r for r in self.required if r not in bound.arguments]
 
 
 @lru_cache(maxsize=1000)
