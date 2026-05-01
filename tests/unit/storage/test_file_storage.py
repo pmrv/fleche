@@ -1,7 +1,7 @@
 import time
 import threading
 import tempfile
-import socket
+import filelock
 from pathlib import Path
 import pytest
 from fleche.storage import ValuePickleFile as PickleFile
@@ -58,20 +58,21 @@ def test_file_storage_list_filtering(tmp_path):
 
 def test_load_waits_for_lock():
     with tempfile.TemporaryDirectory() as tmpdir:
-        storage = PickleFile.with_pickle(tmpdir)
+        storage = PickleFile.with_pickle(tmpdir, lock_timeout=2.0)
         key = digest("test")
         data = "content"
         storage.save(data, key=key)
 
         lock_path = Path(tmpdir) / f"{key}.lock"
-        lock_path.write_text("dummy")
+        holder = filelock.FileLock(lock_path)
+        holder.acquire()
 
-        def remove_lock_later():
+        def release_lock_later():
             time.sleep(0.2)
-            lock_path.unlink()
+            holder.release()
 
         start = time.perf_counter()
-        threading.Thread(target=remove_lock_later).start()
+        threading.Thread(target=release_lock_later).start()
 
         loaded = storage.load(key)
         end = time.perf_counter()
@@ -89,15 +90,19 @@ def test_load_timeouts_and_reads_anyway(caplog):
         storage.save(data, key=key)
 
         lock_path = Path(tmpdir) / f"{key}.lock"
-        lock_path.write_text("dummy")
+        holder = filelock.FileLock(lock_path)
+        holder.acquire()
 
-        start = time.perf_counter()
-        loaded = storage.load(key)
-        end = time.perf_counter()
+        try:
+            start = time.perf_counter()
+            loaded = storage.load(key)
+            end = time.perf_counter()
 
-        assert loaded == data
-        assert (end - start) >= 0.1
-        assert "trying to read anyway" in caplog.text
+            assert loaded == data
+            assert (end - start) >= 0.1
+            assert "trying to read anyway" in caplog.text
+        finally:
+            holder.release()
 
 
 def test_load_fails_after_timeout_raises_keyerror(caplog):
@@ -107,12 +112,16 @@ def test_load_fails_after_timeout_raises_keyerror(caplog):
         # Do NOT save data, so load will fail
 
         lock_path = Path(tmpdir) / f"{key}.lock"
-        lock_path.write_text("dummy")
+        holder = filelock.FileLock(lock_path)
+        holder.acquire()
 
-        with pytest.raises(KeyError):
-            storage.load(key)
+        try:
+            with pytest.raises(KeyError):
+                storage.load(key)
 
-        assert "Failed to read" in caplog.text
+            assert "Failed to read" in caplog.text
+        finally:
+            holder.release()
 
 
 def test_save_creates_and_removes_lock(monkeypatch):
@@ -128,15 +137,16 @@ def test_save_creates_and_removes_lock(monkeypatch):
             nonlocal write_called
             if self == data_path:
                 assert lock_path.exists()
-                content = lock_path.read_text().splitlines()
-                assert content[0] == socket.gethostname()
                 write_called = True
             return len(data)
 
         monkeypatch.setattr(Path, "write_bytes", mocked_write_bytes)
         storage.save("data", key=key)
         assert write_called
-        assert not lock_path.exists()
+        # verify the lock is released after save (can re-acquire immediately)
+        verifier = filelock.FileLock(lock_path, timeout=0.1)
+        verifier.acquire()
+        verifier.release()
 
 
 def test_list_excludes_locks():
@@ -146,7 +156,7 @@ def test_list_excludes_locks():
         storage.save("data", key=key)
 
         lock_path = Path(tmpdir) / f"{key}.lock"
-        lock_path.write_text("dummy")
+        lock_path.touch()
 
         keys = list(storage.list())
         assert key in keys
@@ -162,7 +172,7 @@ def test_evict_removes_lock():
         storage.save("data", key=key)
 
         lock_path = Path(tmpdir) / f"{key}.lock"
-        lock_path.write_text("dummy")
+        lock_path.touch()
 
         storage.evict(key)
         assert not lock_path.exists()
