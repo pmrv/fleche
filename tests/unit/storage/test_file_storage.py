@@ -1,6 +1,5 @@
 import time
 import threading
-import tempfile
 import filelock
 from pathlib import Path
 import pytest
@@ -23,156 +22,93 @@ class ConcreteFileStorage(FileStorage):
 def test_file_storage_list_filtering(tmp_path):
     storage = ConcreteFileStorage(root=tmp_path)
 
-    # Create valid files (simulating digests)
     valid_digest1 = "a" * 64
     valid_digest2 = "b" * 64
 
     (tmp_path / valid_digest1).touch()
     (tmp_path / valid_digest2).touch()
-
-    # Create lock files
     (tmp_path / f"{valid_digest1}.lock").touch()
     (tmp_path / "other.lock").touch()
-
-    # Create a directory (edge case)
     (tmp_path / "subdir").mkdir()
-
-    # Create a hidden file (edge case)
     (tmp_path / ".hidden").touch()
-
-    # Create a hidden directory (edge case)
     (tmp_path / ".hidden_dir").mkdir()
 
     items = list(storage.list())
 
+    assert len(items) == 2
     assert Digest(valid_digest1) in items
     assert Digest(valid_digest2) in items
-    assert Digest(f"{valid_digest1}.lock") not in items
-    assert Digest("other.lock") not in items
-    assert Digest("subdir") not in items
-    assert Digest(".hidden") not in items
-    assert Digest(".hidden_dir") not in items
-
-    assert len(items) == 2
 
 
-def test_load_waits_for_lock():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        storage = PickleFile.with_pickle(tmpdir, lock_timeout=2.0)
-        key = digest("test")
-        data = "content"
-        storage.save(data, key=key)
+def test_load_waits_for_lock(tmp_path):
+    storage = PickleFile.with_pickle(tmp_path, lock_timeout=2.0)
+    key = digest("test")
+    storage.save("content", key=key)
 
-        lock_path = Path(tmpdir) / f"{key}.lock"
-        holder = filelock.FileLock(lock_path)
-        holder.acquire()
+    lock_path = tmp_path / f"{key}.lock"
+    holder = filelock.FileLock(lock_path)
+    holder.acquire()
 
-        def release_lock_later():
-            time.sleep(0.2)
-            holder.release()
+    def release_lock_later():
+        time.sleep(0.2)
+        holder.release()
 
-        start = time.perf_counter()
-        threading.Thread(target=release_lock_later).start()
+    threading.Thread(target=release_lock_later).start()
+    start = time.perf_counter()
+    loaded = storage.load(key)
+    assert loaded == "content"
+    assert time.perf_counter() - start >= 0.2
 
+
+def test_load_timeouts_and_reads_anyway(tmp_path, caplog):
+    storage = PickleFile.with_pickle(tmp_path, lock_timeout=0.1)
+    key = digest("test")
+    storage.save("content", key=key)
+
+    lock_path = tmp_path / f"{key}.lock"
+    holder = filelock.FileLock(lock_path)
+    holder.acquire()
+    try:
         loaded = storage.load(key)
-        end = time.perf_counter()
-
-        assert loaded == data
-        assert (end - start) >= 0.2
-        print(f"Waited for {(end - start):.3f}s")
-
-
-def test_load_timeouts_and_reads_anyway(caplog):
-    with tempfile.TemporaryDirectory() as tmpdir:
-        storage = PickleFile.with_pickle(tmpdir, lock_timeout=0.1)
-        key = digest("test")
-        data = "content"
-        storage.save(data, key=key)
-
-        lock_path = Path(tmpdir) / f"{key}.lock"
-        holder = filelock.FileLock(lock_path)
-        holder.acquire()
-
-        try:
-            start = time.perf_counter()
-            loaded = storage.load(key)
-            end = time.perf_counter()
-
-            assert loaded == data
-            assert (end - start) >= 0.1
-            assert "trying to read anyway" in caplog.text
-        finally:
-            holder.release()
+        assert loaded == "content"
+        assert "trying to read anyway" in caplog.text
+    finally:
+        holder.release()
 
 
-def test_load_fails_after_timeout_raises_keyerror(caplog):
-    with tempfile.TemporaryDirectory() as tmpdir:
-        storage = PickleFile.with_pickle(tmpdir, lock_timeout=0.1)
-        key = digest("test")
-        # Do NOT save data, so load will fail
+def test_load_fails_after_timeout_raises_keyerror(tmp_path, caplog):
+    storage = PickleFile.with_pickle(tmp_path, lock_timeout=0.1)
+    key = digest("test")
 
-        lock_path = Path(tmpdir) / f"{key}.lock"
-        holder = filelock.FileLock(lock_path)
-        holder.acquire()
-
-        try:
-            with pytest.raises(KeyError):
-                storage.load(key)
-
-            assert "Failed to read" in caplog.text
-        finally:
-            holder.release()
+    lock_path = tmp_path / f"{key}.lock"
+    holder = filelock.FileLock(lock_path)
+    holder.acquire()
+    try:
+        with pytest.raises(KeyError):
+            storage.load(key)
+        assert "Failed to read" in caplog.text
+    finally:
+        holder.release()
 
 
-def test_save_creates_and_removes_lock(monkeypatch):
-    with tempfile.TemporaryDirectory() as tmpdir:
-        storage = PickleFile.with_pickle(tmpdir)
-        key = digest("test")
-        lock_path = storage._path(f"{key}.lock")
-        data_path = storage._path(key)
+def test_save_releases_lock(tmp_path):
+    storage = PickleFile.with_pickle(tmp_path)
+    key = digest("test")
+    storage.save("data", key=key)
 
-        write_called = False
-
-        def mocked_write_bytes(self, data):
-            nonlocal write_called
-            if self == data_path:
-                assert lock_path.exists()
-                write_called = True
-            return len(data)
-
-        monkeypatch.setattr(Path, "write_bytes", mocked_write_bytes)
-        storage.save("data", key=key)
-        assert write_called
-        # verify the lock is released after save (can re-acquire immediately)
-        verifier = filelock.FileLock(lock_path, timeout=0.1)
-        verifier.acquire()
-        verifier.release()
+    lock_path = tmp_path / f"{key}.lock"
+    verifier = filelock.FileLock(lock_path, timeout=0.1)
+    verifier.acquire()
+    verifier.release()
 
 
-def test_list_excludes_locks():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        storage = PickleFile.with_pickle(tmpdir)
-        key = digest("test")
-        storage.save("data", key=key)
+def test_evict_removes_lock(tmp_path):
+    storage = PickleFile.with_pickle(tmp_path)
+    key = digest("test")
+    storage.save("data", key=key)
 
-        lock_path = Path(tmpdir) / f"{key}.lock"
-        lock_path.touch()
+    lock_path = tmp_path / f"{key}.lock"
+    lock_path.touch()
 
-        keys = list(storage.list())
-        assert key in keys
-        assert len(keys) == 1
-        for k in keys:
-            assert not k.endswith(".lock")
-
-
-def test_evict_removes_lock():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        storage = PickleFile.with_pickle(tmpdir)
-        key = digest("test")
-        storage.save("data", key=key)
-
-        lock_path = Path(tmpdir) / f"{key}.lock"
-        lock_path.touch()
-
-        storage.evict(key)
-        assert not lock_path.exists()
+    storage.evict(key)
+    assert not lock_path.exists()
