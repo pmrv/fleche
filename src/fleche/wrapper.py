@@ -192,14 +192,6 @@ def make_get_call(func, policy, hash_version, hash_module, hash_code):
     return get_call
 
 
-def make_digest(func, get_call):
-    """Build the `.digest` helper that returns the lookup key for given arguments."""
-    @wraps(func)
-    def _digest_func(*args, **kwargs):
-        return get_call(*args, **kwargs).to_lookup_key()
-    return _digest_func
-
-
 def make_query(func, policy):
     """Build the `.query` helper that yields matching calls from the active cache."""
     def _query_func(
@@ -218,22 +210,6 @@ def make_query(func, policy):
     return _query_func
 
 
-def make_load(func, digest_func):
-    """Build the `.load` helper that retrieves a cached result for given arguments."""
-    @wraps(func)
-    def _load_func(*args, **kwargs):
-        return state._CACHE.get().load(digest_func(*args, **kwargs)).result
-    return _load_func
-
-
-def make_contains(func, digest_func):
-    """Build the `.contains` helper that checks cache membership for given arguments."""
-    @wraps(func)
-    def _contains_func(*args, **kwargs):
-        return state._CACHE.get().contains(digest_func(*args, **kwargs))
-    return _contains_func
-
-
 def make_rerun(func, wrapper):
     """Build the `.rerun` helper that forces recursive reevaluation through a :class:`RefreshingCache`."""
     @wraps(func)
@@ -242,14 +218,6 @@ def make_rerun(func, wrapper):
         with state.cache(RefreshingCache(cache)):
             return wrapper(*args, **kwargs)
     return _rerun_func
-
-
-def make_bind(wrapper):
-    """Build the `.bind` helper that creates a :class:`.BoundWrapper` with optionally pre-applied arguments."""
-    def _bind_func(*args, **kwargs):
-        target = partial(wrapper, *args, **kwargs) if (args or kwargs) else wrapper
-        return state.BoundWrapper.bind(target)
-    return _bind_func
 
 
 def make_wrapper(func, policy, meta, isolate, get_call):
@@ -387,13 +355,25 @@ def fleche(
         policy = process_ignore_required_args(func, ignore, require)
 
         get_call = make_get_call(func, policy, hash_version, hash_module, hash_code)
-        digest_func = make_digest(func, get_call)
         query_func = make_query(func, policy)
-        load_func = make_load(func, digest_func)
-        contains_func = make_contains(func, digest_func)
         wrapper = make_wrapper(func, policy, meta, isolate, get_call)
         rerun_func = make_rerun(func, wrapper)
-        bind_func = make_bind(wrapper)
+
+        @wraps(func)
+        def digest_func(*args, **kwargs):
+            return get_call(*args, **kwargs).to_lookup_key()
+
+        @wraps(func)
+        def load_func(*args, **kwargs):
+            return state._CACHE.get().load(digest_func(*args, **kwargs)).result
+
+        @wraps(func)
+        def contains_func(*args, **kwargs):
+            return state._CACHE.get().contains(digest_func(*args, **kwargs))
+
+        def bind_func(*args, **kwargs):
+            target = partial(wrapper, *args, **kwargs) if (args or kwargs) else wrapper
+            return state.BoundWrapper.bind(target)
 
         wrapper.fleche = SimpleNamespace()
 
