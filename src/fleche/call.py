@@ -308,6 +308,8 @@ class LazyCall:
 
     @property
     def result(self):
+        if self._result is None:
+            return None
         return self._cache.load_value(self._result)
 
     def to_lookup_key(self) -> str:
