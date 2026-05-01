@@ -1,5 +1,6 @@
 import pytest
 from fleche.storage import AmbiguousDigestError, ValueMemory
+from fleche.storage.base import _longest_common_prefix_length
 from fleche.digest import DIGEST_LENGTH
 
 
@@ -57,3 +58,23 @@ def test_missing_digest():
 
     with pytest.raises(KeyError):
         store.expand("ffff")
+
+
+class TestLongestCommonPrefixLength:
+    def test_identical_strings(self):
+        assert _longest_common_prefix_length("abcd", "abcd") == 4
+
+    def test_no_common_prefix(self):
+        assert _longest_common_prefix_length("abc", "xyz") == 0
+
+    def test_partial_common_prefix(self):
+        assert _longest_common_prefix_length("abcX", "abcY") == 3
+
+    def test_one_is_prefix_of_other(self):
+        assert _longest_common_prefix_length("abc", "abcdef") == 3
+
+    def test_empty_strings(self):
+        assert _longest_common_prefix_length("", "") == 0
+
+    def test_one_empty(self):
+        assert _longest_common_prefix_length("", "abc") == 0

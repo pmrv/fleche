@@ -10,6 +10,7 @@ import pandas as pd
 from . import digest as _digest
 from .digest import Digest  # type hint convenience
 from . import storage
+from .storage.base import _longest_common_prefix_length
 from .storage.destructuring import HasChildDigests
 from .call import Call, DigestedCall, LazyCall, QueryCall
 from . import call
@@ -224,14 +225,9 @@ def _combine_expand(key: "Digest | str", results: "Iterable[Digest]") -> "Digest
         raise KeyError(key)
     if len(unique) == 1:
         return unique[0]
-    m1, m2 = unique[0], unique[1]
-    for i, (c1, c2) in enumerate(zip(m1, m2)):
-        if c1 != c2:
-            break
-    else:
-        i = min(len(m1), len(m2))
+    lcp = _longest_common_prefix_length(unique[0], unique[1])
     raise storage.AmbiguousDigestError(
-        f"Short digest {key} is ambiguous; expands to: {unique}; need at least {i + 1} characters."
+        f"Short digest {key} is ambiguous; expands to: {unique}; need at least {lcp + 1} characters."
     )
 
 
