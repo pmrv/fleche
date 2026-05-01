@@ -1,7 +1,7 @@
 import logging
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
-from typing import Any, Callable, get_type_hints
+from typing import Any, Callable, get_type_hints, get_origin, get_args, Annotated
 from inspect import Signature, signature
 from collections.abc import Mapping
 
@@ -11,6 +11,37 @@ from . import digest
 from .digest import Digest
 
 logger = logging.getLogger("fleche.call")
+
+
+class Ignored:
+    """
+    Type wrapper to mark a function argument as ignored for caching.
+
+    Can be used as a type hint: ``arg: fleche.Ignored`` or ``arg: fleche.Ignored[int]``.
+    """
+
+    def __class_getitem__(cls, item):
+        return Annotated[item, cls]
+
+
+class Required:
+    """
+    Type wrapper to mark a function argument as required for caching.
+
+    Arguments marked as required must be explicitly provided by the caller as keyword
+    arguments (i.e.  not via their default value) for the result to be cached.
+    This is useful for arguments like random seeds or iteration counts, where
+    using the default value might lead to non-deterministic or otherwise
+    undesirable caching behavior.
+
+    This is mainly useful when wrapping third-party functions where you do not control
+    the default arguments.
+
+    Can be used as a type hint: ``arg: fleche.Required`` or ``arg: fleche.Required[int]``.
+    """
+
+    def __class_getitem__(cls, item):
+        return Annotated[item, cls]
 
 
 @dataclass(frozen=True)
@@ -56,6 +87,31 @@ class FunctionProfile:
         except (TypeError, NameError):
             type_hints = {}
 
+        def _is_ignored(hint):
+            if hint is Ignored:
+                return True
+            if get_origin(hint) is Annotated:
+                return Ignored in get_args(hint)
+            return False
+
+        def _is_required(hint):
+            if hint is Required:
+                return True
+            if get_origin(hint) is Annotated:
+                return Required in get_args(hint)
+            return False
+
+        ignored = frozenset(name for name, hint in type_hints.items() if _is_ignored(hint))
+        required = frozenset(name for name, hint in type_hints.items() if _is_required(hint))
+
+        if sig is not None:
+            for r in required:
+                if r in sig.parameters and sig.parameters[r].kind == sig.parameters[r].POSITIONAL_ONLY:
+                    logger.warning(
+                        "Argument '%s' is marked as Required but is positional-only. Required only works for keyword arguments.",
+                        r
+                    )
+
         return cls(
             signature=sig,
             qualname=qualname,
@@ -63,6 +119,8 @@ class FunctionProfile:
             version=version,
             code_digest=code_digest,
             type_hints=type_hints,
+            ignored=ignored,
+            required=required,
         )
 
     def strip_for_key(self, bound: dict) -> None:
@@ -449,7 +507,9 @@ __all__ = [
         "Call",
         "DigestedCall",
         "FunctionProfile",
+        "Ignored",
         "LazyCall",
         "QueryCall",
+        "Required",
         "AnyCall"
 ]

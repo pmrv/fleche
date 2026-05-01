@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from functools import wraps, partial
 from types import SimpleNamespace
-from typing import Any, Callable, Dict, Iterable, TypeVar, Annotated, get_origin, get_args
+from typing import Any, Callable, Dict, Iterable, TypeVar
 from dataclasses import replace
 import tempfile
 import contextlib
@@ -12,7 +12,7 @@ from concurrent.futures import Future
 from . import digest
 from . import state
 from . import metadata
-from .call import Call, AnyCall, FunctionProfile, QueryCall, bind, _get_profile
+from .call import Call, AnyCall, FunctionProfile, Ignored, Required, QueryCall, bind, _get_profile
 from .caches import Rejected, BaseCache, RefreshingCache
 
 
@@ -20,37 +20,6 @@ import logging
 
 # make messages from decorator below appear as if from the main module
 logger = logging.getLogger("fleche")
-
-
-class Ignored:
-    """
-    Type wrapper to mark a function argument as ignored for caching.
-
-    Can be used as a type hint: ``arg: fleche.Ignored`` or ``arg: fleche.Ignored[int]``.
-    """
-
-    def __class_getitem__(cls, item):
-        return Annotated[item, cls]
-
-
-class Required:
-    """
-    Type wrapper to mark a function argument as required for caching.
-
-    Arguments marked as required must be explicitly provided by the caller as keyword
-    arguments (i.e.  not via their default value) for the result to be cached.
-    This is useful for arguments like random seeds or iteration counts, where
-    using the default value might lead to non-deterministic or otherwise
-    undesirable caching behavior.
-
-    This is mainly useful when wrapping third-party functions where you do not control
-    the default arguments.
-
-    Can be used as a type hint: ``arg: fleche.Required`` or ``arg: fleche.Required[int]``.
-    """
-
-    def __class_getitem__(cls, item):
-        return Annotated[item, cls]
 
 
 def _as_tuple(x: None | str | Iterable[str]) -> tuple[str, ...]:
@@ -66,41 +35,15 @@ def process_ignore_required_args(
         ignore: None | str | Iterable[str] = None,
         require: None | str | Iterable[str] = None,
 ) -> FunctionProfile:
-    """Collates arguments that should be ignored/required for caching from explicit arguments and annotations."""
-
+    """Return the FunctionProfile for *func*, merging in explicit ignore/require sets."""
     profile = _get_profile(func)
-    hints = profile.type_hints
-
-    def is_ignored(hint):
-        if hint is Ignored:
-            return True
-        if get_origin(hint) is Annotated:
-            return Ignored in get_args(hint)
-        return False
-
-    def is_required(hint):
-        if hint is Required:
-            return True
-        if get_origin(hint) is Annotated:
-            return Required in get_args(hint)
-        return False
-
-    type_ignored = [name for name, hint in hints.items() if is_ignored(hint)]
-    type_required = [name for name, hint in hints.items() if is_required(hint)]
-
-    ignored_args = _as_tuple(ignore) + tuple(type_ignored)
-    required_args = _as_tuple(require) + tuple(type_required)
-
-    sig = profile.signature
-    if sig is not None:
-        for r in required_args:
-            if r in sig.parameters and sig.parameters[r].kind == sig.parameters[r].POSITIONAL_ONLY:
-                logger.warning(
-                    "Argument '%s' is marked as Required but is positional-only. Required only works for keyword arguments.",
-                    r
-                )
-
-    return replace(profile, ignored=frozenset(ignored_args), required=frozenset(required_args))
+    extra_ignored = frozenset(_as_tuple(ignore))
+    extra_required = frozenset(_as_tuple(require))
+    if not extra_ignored and not extra_required:
+        return profile
+    return replace(profile,
+                   ignored=profile.ignored | extra_ignored,
+                   required=profile.required | extra_required)
 
 
 def _get_working_directory_root() -> Path:
