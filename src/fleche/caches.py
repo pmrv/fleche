@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import logging
 import random
+import string
 import threading
 from dataclasses import dataclass, replace, field
 from typing import Iterable, Any, Callable, Literal
@@ -253,10 +254,11 @@ class Cache(BaseCache):
     calls: storage.CallStorage
 
     def load_value(self, key):
-        if not isinstance(key, Digest):
-            return key
-
-        return self.values.load(key)
+        if isinstance(key, Digest):
+            return self.values.load(key)
+        if isinstance(key, str) and 4 <= len(key) <= _digest.DIGEST_LENGTH and all(c in string.hexdigits for c in key):
+            return self.values.load(key)
+        return key
 
     def save(self, call: Call) -> str:
         try:

@@ -350,6 +350,49 @@ def test_cache_query_kwargs_and_template_raises():
         c.query(QueryCall(), name="foo")
 
 
+def test_load_value_plain_string_key():
+    """load_value should accept a plain hex string without requiring D() wrapping."""
+    from fleche.storage.memory import ValueMemory, CallMemory
+    from fleche.digest import digest
+
+    c = Cache(values=ValueMemory({}), calls=CallMemory({}))
+    val = 42
+    key = digest(val)  # full-length Digest
+
+    c.values.save(val)
+
+    # plain str (not Digest) should work without explicit D() wrapping
+    assert c.load_value(str(key)) == val
+    # Digest instance should still work
+    assert c.load_value(key) == val
+
+
+def test_load_value_short_prefix():
+    """load_value should accept a short hex prefix, expanding it automatically."""
+    from fleche.storage.memory import ValueMemory, CallMemory
+    from fleche.digest import digest
+
+    c = Cache(values=ValueMemory({}), calls=CallMemory({}))
+    val = "hello"
+    key = digest(val)
+
+    c.values.save(val)
+
+    short = str(key)[:8]
+    assert c.load_value(short) == val
+
+
+def test_load_value_non_string_passthrough():
+    """load_value should return non-string values as-is (they are already loaded values)."""
+    from fleche.storage.memory import ValueMemory, CallMemory
+
+    c = Cache(values=ValueMemory({}), calls=CallMemory({}))
+
+    assert c.load_value(42) == 42
+    assert c.load_value(None) is None
+    assert c.load_value([1, 2]) == [1, 2]
+
+
 def test_hash_builtin_caches():
     """Test that all cache types respond properly to hash() builtin."""
     from fleche.caches import ReadOnlyCache, FilteredCache, RefreshingCache, SizeLimitedCache
