@@ -58,7 +58,6 @@ class FunctionProfile:
     module: str
     version: str | int | None
     code_digest: Digest | None
-    type_hints: dict[str, Any]
     ignored: frozenset[str] = field(default_factory=frozenset)
     required: frozenset[str] = field(default_factory=frozenset)
 
@@ -87,22 +86,15 @@ class FunctionProfile:
         except (TypeError, NameError):
             type_hints = {}
 
-        def _is_ignored(hint):
-            if hint is Ignored:
+        def _is_marker(hint, marker_cls):
+            if hint is marker_cls:
                 return True
             if get_origin(hint) is Annotated:
-                return Ignored in get_args(hint)
+                return marker_cls in get_args(hint)
             return False
 
-        def _is_required(hint):
-            if hint is Required:
-                return True
-            if get_origin(hint) is Annotated:
-                return Required in get_args(hint)
-            return False
-
-        ignored = frozenset(name for name, hint in type_hints.items() if _is_ignored(hint))
-        required = frozenset(name for name, hint in type_hints.items() if _is_required(hint))
+        ignored = frozenset(name for name, hint in type_hints.items() if _is_marker(hint, Ignored))
+        required = frozenset(name for name, hint in type_hints.items() if _is_marker(hint, Required))
 
         if sig is not None:
             for r in required:
@@ -118,7 +110,6 @@ class FunctionProfile:
             module=module,
             version=version,
             code_digest=code_digest,
-            type_hints=type_hints,
             ignored=ignored,
             required=required,
         )

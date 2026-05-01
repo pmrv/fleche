@@ -12,7 +12,7 @@ from concurrent.futures import Future
 from . import digest
 from . import state
 from . import metadata
-from .call import Call, AnyCall, FunctionProfile, Ignored, Required, QueryCall, bind, _get_profile
+from .call import Call, AnyCall, FunctionProfile, Ignored, QueryCall, Required, bind, _get_profile
 from .caches import Rejected, BaseCache, RefreshingCache
 
 
@@ -35,7 +35,7 @@ def process_ignore_required_args(
         ignore: None | str | Iterable[str] = None,
         require: None | str | Iterable[str] = None,
 ) -> FunctionProfile:
-    """Return the FunctionProfile for *func*, merging in explicit ignore/require sets."""
+    """Merges explicit ignore/require decorator args into the function profile (annotation-based markers already in profile)."""
     profile = _get_profile(func)
     extra_ignored = frozenset(_as_tuple(ignore))
     extra_required = frozenset(_as_tuple(require))
