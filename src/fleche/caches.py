@@ -393,11 +393,11 @@ class Cache(BaseCache):
         return evicted
 
 
-class DelegatingCacheMixin(BaseCache):
-    """All BaseCache methods forward to ``self.cache`` by default.
+class CacheWrapper(BaseCache):
+    """Forwarding base class: all BaseCache methods delegate to ``self.cache``.
 
-    Combine with behaviour mixins (ReadOnlyMixin, RefreshingMixin, FilteringMixin)
-    and a concrete ``@dataclass(frozen=True)`` subclass that declares
+    Combine with behaviour mixins (ReadOnlyMixin, FilteringMixin) and a
+    concrete ``@dataclass(frozen=True)`` subclass that declares
     ``cache: BaseCache`` as a field.
     """
 
@@ -439,7 +439,7 @@ class ReadOnlyMixin(BaseCache):
 
 
 @dataclass(frozen=True)
-class ReadOnlyCache(ReadOnlyMixin, DelegatingCacheMixin):
+class ReadOnlyCache(ReadOnlyMixin, CacheWrapper):
     """A cache that can only be read from."""
 
     cache: BaseCache
@@ -448,7 +448,7 @@ class ReadOnlyCache(ReadOnlyMixin, DelegatingCacheMixin):
 class FilteringMixin(BaseCache):
     """Filters ``load`` and ``_query`` results by a predicate.
 
-    Requires ``self.cache: BaseCache`` — compose with :class:`DelegatingCacheMixin`.
+    Requires ``self.cache: BaseCache`` — compose with :class:`CacheWrapper`.
     """
 
     predicate: Callable[[Call | LazyCall], bool]  # declared by the concrete class
@@ -466,25 +466,15 @@ class FilteringMixin(BaseCache):
 
 
 @dataclass(frozen=True)
-class FilteredCache(FilteringMixin, ReadOnlyMixin, DelegatingCacheMixin):
+class FilteredCache(FilteringMixin, ReadOnlyMixin, CacheWrapper):
     """A read-only view of a cache that only exposes calls matching a predicate."""
 
     cache: BaseCache
     predicate: Callable[[Call | LazyCall], bool]
 
 
-class RefreshingMixin(BaseCache):
-    """Always misses on ``load`` and ``contains``, forcing re-execution."""
-
-    def load(self, key: str) -> LazyCall:
-        raise KeyError(key)
-
-    def contains(self, key: str) -> bool:
-        return False
-
-
 @dataclass(frozen=True)
-class RefreshingCache(RefreshingMixin, DelegatingCacheMixin):
+class RefreshingCache(CacheWrapper):
     """A cache that forces re-execution by always missing on load.
 
     It forwards saves and value loads to an underlying cache, allowing
@@ -496,6 +486,12 @@ class RefreshingCache(RefreshingMixin, DelegatingCacheMixin):
     """
 
     cache: BaseCache
+
+    def load(self, key: str) -> LazyCall:
+        raise KeyError(key)
+
+    def contains(self, key: str) -> bool:
+        return False
 
 
 @dataclass(frozen=True)
