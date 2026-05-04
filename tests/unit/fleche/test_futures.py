@@ -5,6 +5,7 @@ When a fleche-decorated function returns a concurrent.futures.Future,
 fleche passes the future back to the caller and attaches a done callback
 that caches the result once the future completes.
 """
+import time
 from concurrent.futures import Future, ThreadPoolExecutor, ProcessPoolExecutor
 from unittest.mock import Mock
 
@@ -12,6 +13,19 @@ from fleche import fleche
 from fleche.caches import Cache
 from fleche.state import cache
 from fleche.storage import ValueMemory, CallMemory
+
+
+def _wait_for_cache(fn, *args, timeout=2.0):
+    """Spin until fn.contains(*args) is True.
+
+    CPython's Future.set_result() releases the condition lock before calling
+    _invoke_callbacks(), so future.result() can return while the done callback
+    that saves to the cache is still pending on the worker thread.
+    """
+    deadline = time.monotonic() + timeout
+    while not fn.contains(*args):
+        assert time.monotonic() < deadline, f"cache never populated for args {args}"
+        time.sleep(0.001)
 
 
 def _make_cache():
@@ -50,8 +64,12 @@ class TestThreadPoolFutures:
             with cache(_make_cache()):
                 future = compute(5)
                 assert future.result() == 10
-                # Done callback has run — result is now cached
                 assert call_count == 1
+
+                # Wait for the done callback to populate the cache before
+                # re-calling; result() can return before _invoke_callbacks()
+                # fires (CPython releases the condition lock first).
+                _wait_for_cache(compute, 5)
 
                 second = compute(5)
                 # Cache hit: returns the plain value, not a future
@@ -73,6 +91,10 @@ class TestThreadPoolFutures:
                 f2 = compute(7)
                 assert f1.result() == 12
                 assert f2.result() == 21
+
+                # Wait for done callbacks before re-calling (same race as above)
+                _wait_for_cache(compute, 4)
+                _wait_for_cache(compute, 7)
 
                 assert compute(4) == 12
                 assert compute(7) == 21
@@ -117,6 +139,10 @@ class TestThreadPoolFutures:
                 futures = [compute(i) for i in range(5)]
                 results = [f.result() for f in futures]
                 assert results == [0, 1, 4, 9, 16]
+
+                # Wait for all done callbacks before re-calling
+                for i in range(5):
+                    _wait_for_cache(compute, i)
 
                 # All results should now be cached
                 cached = [compute(i) for i in range(5)]
