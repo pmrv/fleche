@@ -15,7 +15,7 @@ from fleche.state import cache
 from fleche.storage import ValueMemory, CallMemory
 
 
-def _wait_for_cache(fn, *args, timeout=2.0):
+def _wait_for_cache(fn, *args, timeout=0.1):
     """Spin until fn.contains(*args) is True.
 
     CPython's Future.set_result() releases the condition lock before calling
