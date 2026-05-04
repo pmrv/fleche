@@ -385,16 +385,29 @@ class Cache(BaseCache):
 
 
 @dataclass(frozen=True)
-class ReadOnlyCache(BaseCache):
-    """A cache that can only be read from."""
+class CacheWrapper(BaseCache):
+    """Forwarding base class: all BaseCache methods delegate to ``self.cache``.
+
+    Combine with behaviour mixins (ReadOnlyMixin, FilteringMixin) to build
+    concrete wrapper classes without redeclaring ``cache``.
+    """
 
     cache: BaseCache
 
-    def save(self, call: Call):
-        raise Rejected(self, call)
+    def save(self, call: Call) -> str:
+        return self.cache.save(call)
 
-    def load(self, key) -> LazyCall:
+    def load(self, key: str) -> LazyCall:
         return self.cache.load(key)
+
+    def load_value(self, key: str) -> Any:
+        return self.cache.load_value(key)
+
+    def contains(self, key: str) -> bool:
+        return self.cache.contains(key)
+
+    def evict(self, key: str | Digest) -> None:
+        self.cache.evict(key)
 
     def expand(self, key: Digest | str) -> Digest:
         return self.cache.expand(key)
@@ -402,34 +415,32 @@ class ReadOnlyCache(BaseCache):
     def shrink(self, key: Digest | str) -> Digest:
         return self.cache.shrink(key)
 
-    def evict(self, key: str | Digest) -> None:
-        raise Rejected("Cannot evict from a ReadOnlyCache", self, key)
-
-    def load_value(self, key):
-        return self.cache.load_value(key)
-
-    def contains(self, key: str) -> bool:
-        return self.cache.contains(key)
-
     def _query(self, call: call.QueryCall) -> Iterable[LazyCall]:
-        """Forward queries to the wrapped cache.
-
-        Args:
-            call: A template ``Call`` where ``None`` fields act as wildcards.
-
-        Yields:
-            Call | LazyCall: Results yielded by the wrapped cache's ``query`` method.
-        """
         return self.cache.query(call)
 
 
+class ReadOnlyMixin(CacheWrapper):
+    """Raises :class:`Rejected` for ``save`` and ``evict``."""
+
+    def save(self, call: Call):
+        raise Rejected(self, call)
+
+    def evict(self, key: str | Digest) -> None:
+        raise Rejected("Cannot evict from a ReadOnlyCache", self, key)
+
+
 @dataclass(frozen=True)
-class FilteredCache(ReadOnlyCache):
-    """A read-only view of a cache that only exposes calls matching a predicate."""
+class ReadOnlyCache(ReadOnlyMixin):
+    """A cache that can only be read from."""
+
+
+@dataclass(frozen=True)
+class FilteringMixin(CacheWrapper):
+    """Filters ``load`` and ``_query`` results by a predicate."""
 
     predicate: Callable[[Call | LazyCall], bool]
 
-    def load(self, key) -> LazyCall:
+    def load(self, key: str) -> LazyCall:
         lc = self.cache.load(key)
         if not self.predicate(lc):
             raise KeyError(key)
@@ -442,7 +453,12 @@ class FilteredCache(ReadOnlyCache):
 
 
 @dataclass(frozen=True)
-class RefreshingCache(BaseCache):
+class FilteredCache(FilteringMixin, ReadOnlyMixin):
+    """A read-only view of a cache that only exposes calls matching a predicate."""
+
+
+@dataclass(frozen=True)
+class RefreshingCache(CacheWrapper):
     """A cache that forces re-execution by always missing on load.
 
     It forwards saves and value loads to an underlying cache, allowing
@@ -453,31 +469,11 @@ class RefreshingCache(BaseCache):
     otherwise forcing them to re-execute would be awkward.
     """
 
-    cache: BaseCache
-
-    def save(self, call: Call) -> str:
-        return self.cache.save(call)
-
     def load(self, key: str) -> LazyCall:
         raise KeyError(key)
 
-    def load_value(self, key: str) -> Any:
-        return self.cache.load_value(key)
-
     def contains(self, key: str) -> bool:
         return False
-
-    def evict(self, key: str | Digest) -> None:
-        self.cache.evict(key)
-
-    def expand(self, key: Digest | str) -> Digest:
-        return self.cache.expand(key)
-
-    def shrink(self, key: Digest | str) -> Digest:
-        return self.cache.shrink(key)
-
-    def _query(self, call: call.QueryCall) -> query.QueryIterator:
-        return self.cache.query(call)
 
 
 @dataclass(frozen=True)
