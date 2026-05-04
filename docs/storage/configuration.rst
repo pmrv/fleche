@@ -120,7 +120,7 @@ Available storage types
      - Filesystem backend, standard ``pickle``
        (:class:`~fleche.storage.ValuePickleFile` / :class:`~fleche.storage.CallPickleFile`)
      - ``root``
-     - ``compress``, ``lock_timeout``, ``lock_wait_start``,
+     - ``compress``, ``lock_timeout``,
        ``secret_key``, ``remaining_depth`` *(value only)*
    * - ``"cloudpickle"``
      - Filesystem backend, ``cloudpickle``; handles lambdas, closures, etc.
@@ -137,7 +137,7 @@ Available storage types
        (:class:`~fleche.storage.ValueBagOfHoldingH5File` /
        :class:`~fleche.storage.CallBagOfHoldingH5File`)
      - ``root``
-     - ``lock_timeout``, ``lock_wait_start``,
+     - ``lock_timeout``,
        ``version_validator``, ``remaining_depth`` *(value only)*
    * - ``"sql"``
      - SQL via SQLAlchemy (:class:`~fleche.storage.Sql`).
@@ -157,10 +157,6 @@ Key descriptions
 ``lock_timeout``
     (float, default ``1.0``) — maximum seconds to wait for a concurrent write lock
     before attempting a read anyway.
-
-``lock_wait_start``
-    (float, default ``0.001``) — initial poll interval (seconds) for exponential
-    backoff while waiting for the write lock.
 
 ``secret_key``
     (list of hex strings) — HMAC-SHA256 signing keys for tamper detection;
