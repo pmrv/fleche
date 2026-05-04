@@ -1,4 +1,5 @@
 import cmath
+import datetime
 import hashlib
 import logging
 import dataclasses
@@ -256,6 +257,16 @@ def _digest(value: Any) -> Digest:
             if hasattr(value, "co_exceptiontable"):
                 props.append(value.co_exceptiontable)
             m.update(digest(tuple(props)).encode())
+        case datetime.timezone():
+            m.update(digest(value.utcoffset(None)).encode())
+        case datetime.timedelta():
+            m.update(digest(value.total_seconds()).encode())
+        case datetime.datetime():  # datetime subclasses date; must precede date case
+            m.update(value.isoformat().encode())
+        case datetime.date():
+            m.update(value.isoformat().encode())
+        case datetime.time():
+            m.update(value.isoformat().encode())
         case _ if dataclasses.is_dataclass(value):
             # cannot use asdict because it recursively converts values which destroys digests
             # instead (flat-) convert to dictionaries, salt with type name, then fallback to dictionary case.
