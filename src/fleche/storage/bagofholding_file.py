@@ -3,6 +3,8 @@ from pathlib import Path
 from typing import Any, Literal
 import logging
 
+import filelock
+
 from .file import FileStorage
 from .base import SaveError, ValueMixin, CallMixin
 from .thread_safe import PerKeyLockMixin
@@ -48,6 +50,22 @@ class BagOfHoldingH5FileBackend(FileStorage):
         except OSError as e:
             logger.error(f"Corrupt file present in cache at path {path}: {e}")
             raise KeyError(path) from e
+
+    def resave_all(self, version_validator: VersionValidator = "none") -> None:
+        """Re-open and re-save all bags using the given version validator.
+
+        Useful when bags were created with an older library version and
+        would otherwise fail strict version checking on load.
+        """
+        for key in list(self.list()):
+            path = self._path(key)
+            lock_path = self._path(f"{key}.lock")
+            with filelock.FileLock(lock_path, timeout=self.lock_timeout):
+                try:
+                    value = H5Bag(path).load(version_validator=version_validator)
+                    H5Bag.save(value, path)
+                except OSError:
+                    continue
 
 
 @dataclass(frozen=True)

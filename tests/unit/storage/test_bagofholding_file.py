@@ -91,3 +91,92 @@ def test_version_validator_none_not_passed_to_load(tmp_path, monkeypatch):
 
     assert captured["called"]
     assert "version_validator" not in captured["kwargs"]
+
+
+def test_resave_all_calls_load_and_save(tmp_path, monkeypatch):
+    pytest.importorskip("bagofholding")
+    import fleche.storage.bagofholding_file as boh_mod
+
+    load_calls = []
+    save_calls = []
+
+    class FakeH5Bag:
+        def __init__(self, path):
+            self.path = path
+
+        def load(self, **kwargs):
+            load_calls.append(kwargs)
+            return 99
+
+        @staticmethod
+        def save(value, path):
+            save_calls.append((value, path))
+
+    monkeypatch.setattr(boh_mod, "H5Bag", FakeH5Bag)
+
+    s = BagOfHoldingH5FileBackend(tmp_path)
+    key = Digest("resave_key")
+    # Create a file on disk directly so list() sees it
+    s._path(key).write_bytes(b"dummy")
+
+    s.resave_all(version_validator="none")
+
+    assert len(load_calls) == 1
+    assert load_calls[0]["version_validator"] == "none"
+    assert len(save_calls) == 1
+    assert save_calls[0][0] == 99
+
+
+def test_resave_all_skips_oserror(tmp_path, monkeypatch):
+    pytest.importorskip("bagofholding")
+    import fleche.storage.bagofholding_file as boh_mod
+
+    class FakeH5Bag:
+        def __init__(self, path):
+            self.path = path
+
+        def load(self, **kwargs):
+            raise OSError("broken bag")
+
+        @staticmethod
+        def save(value, path):
+            pass
+
+    monkeypatch.setattr(boh_mod, "H5Bag", FakeH5Bag)
+
+    s = BagOfHoldingH5FileBackend(tmp_path)
+    key = Digest("broken_key")
+    # Create a file on disk directly so list() sees it
+    s._path(key).write_bytes(b"dummy")
+
+    s.resave_all(version_validator="none")  # should not raise
+
+
+def test_resave_all_default_validator_is_none(tmp_path, monkeypatch):
+    pytest.importorskip("bagofholding")
+    import fleche.storage.bagofholding_file as boh_mod
+
+    load_calls = []
+
+    class FakeH5Bag:
+        def __init__(self, path):
+            self.path = path
+
+        def load(self, **kwargs):
+            load_calls.append(kwargs)
+            return 1
+
+        @staticmethod
+        def save(value, path):
+            pass
+
+    monkeypatch.setattr(boh_mod, "H5Bag", FakeH5Bag)
+
+    s = BagOfHoldingH5FileBackend(tmp_path)
+    key = Digest("default_key")
+    # Create a file on disk directly so list() sees it
+    s._path(key).write_bytes(b"dummy")
+
+    s.resave_all()
+
+    assert load_calls[0]["version_validator"] == "none"
