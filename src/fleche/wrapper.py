@@ -1,10 +1,9 @@
 import os
 from pathlib import Path
 from functools import wraps, partial
-from inspect import signature
 from types import SimpleNamespace
-from typing import Any, Callable, Dict, Iterable, TypeVar, Annotated, get_type_hints, get_origin, get_args
-from dataclasses import dataclass, replace
+from typing import Any, Callable, Dict, Iterable, TypeVar
+from dataclasses import replace
 import tempfile
 import contextlib
 from collections import defaultdict
@@ -13,7 +12,7 @@ from concurrent.futures import Future
 from . import digest
 from . import state
 from . import metadata
-from .call import Call, AnyCall, QueryCall, bind
+from .call import Call, AnyCall, FunctionProfile, Ignored, QueryCall, Required, bind, _get_profile
 from .caches import Rejected, BaseCache, RefreshingCache
 
 
@@ -21,57 +20,6 @@ import logging
 
 # make messages from decorator below appear as if from the main module
 logger = logging.getLogger("fleche")
-
-
-class Ignored:
-    """
-    Type wrapper to mark a function argument as ignored for caching.
-
-    Can be used as a type hint: ``arg: fleche.Ignored`` or ``arg: fleche.Ignored[int]``.
-    """
-
-    def __class_getitem__(cls, item):
-        return Annotated[item, cls]
-
-
-class Required:
-    """
-    Type wrapper to mark a function argument as required for caching.
-
-    Arguments marked as required must be explicitly provided by the caller as keyword
-    arguments (i.e.  not via their default value) for the result to be cached.
-    This is useful for arguments like random seeds or iteration counts, where
-    using the default value might lead to non-deterministic or otherwise
-    undesirable caching behavior.
-
-    This is mainly useful when wrapping third-party functions where you do not control
-    the default arguments.
-
-    Can be used as a type hint: ``arg: fleche.Required`` or ``arg: fleche.Required[int]``.
-    """
-
-    def __class_getitem__(cls, item):
-        return Annotated[item, cls]
-
-
-@dataclass(frozen=True)
-class ArgumentPolicy:
-    """Encapsulates the ignored/required argument policy for a cached function."""
-
-    ignored: frozenset[str]
-    required: frozenset[str]
-
-    def strip_for_key(self, bound: dict) -> None:
-        """Remove ignored arguments from a bound arguments dict in-place."""
-        for ign in self.ignored:
-            del bound[ign]
-
-    def check_required(self, func, args: tuple, kwargs: dict) -> list[str]:
-        """Return names of required args not explicitly provided as keyword arguments."""
-        if not self.required:
-            return []
-        explicit = set(bind(func, args, kwargs).keys())
-        return [r for r in self.required if r not in explicit]
 
 
 def _as_tuple(x: None | str | Iterable[str]) -> tuple[str, ...]:
@@ -86,46 +34,16 @@ def process_ignore_required_args(
         func,
         ignore: None | str | Iterable[str] = None,
         require: None | str | Iterable[str] = None,
-) -> "ArgumentPolicy":
-    """Collates arguments that should be ignored/required for caching from explicit arguments and annotations."""
-
-    try:
-        hints = get_type_hints(func, include_extras=True)
-    except (TypeError, NameError):
-        hints = {}
-
-    def is_ignored(hint):
-        if hint is Ignored:
-            return True
-        if get_origin(hint) is Annotated:
-            return Ignored in get_args(hint)
-        return False
-
-    def is_required(hint):
-        if hint is Required:
-            return True
-        if get_origin(hint) is Annotated:
-            return Required in get_args(hint)
-        return False
-
-    type_ignored = [name for name, hint in hints.items() if is_ignored(hint)]
-    type_required = [name for name, hint in hints.items() if is_required(hint)]
-
-    ignored_args = _as_tuple(ignore) + tuple(type_ignored)
-    required_args = _as_tuple(require) + tuple(type_required)
-
-    try:
-        sig = signature(func)
-        for r in required_args:
-            if r in sig.parameters and sig.parameters[r].kind == sig.parameters[r].POSITIONAL_ONLY:
-                logger.warning(
-                    "Argument '%s' is marked as Required but is positional-only. Required only works for keyword arguments.",
-                    r
-                )
-    except (TypeError, ValueError):
-        pass
-
-    return ArgumentPolicy(ignored=frozenset(ignored_args), required=frozenset(required_args))
+) -> FunctionProfile:
+    """Merges explicit ignore/require decorator args into the function profile (annotation-based markers already in profile)."""
+    profile = _get_profile(func)
+    extra_ignored = frozenset(_as_tuple(ignore))
+    extra_required = frozenset(_as_tuple(require))
+    if not extra_ignored and not extra_required:
+        return profile
+    return replace(profile,
+                   ignored=profile.ignored | extra_ignored,
+                   required=profile.required | extra_required)
 
 
 def _get_working_directory_root() -> Path:
@@ -171,7 +89,7 @@ Returns:
 """
 
 
-def make_get_call(func, policy, hash_version, hash_module, hash_code):
+def make_get_call(func, profile, hash_version, hash_module, hash_code):
     """Build the `.call` helper that produces a :class:`.Call` for the given arguments."""
     @wraps(func)
     def get_call(*args, **kwargs):
@@ -181,7 +99,7 @@ def make_get_call(func, policy, hash_version, hash_module, hash_code):
         # generation, but then we'd also have to save it somehow and that just seems bothersome in particular for
         # Sql Callstorage.  We could add a new table there connecting unique functions and their ignored args, but
         # meh.
-        policy.strip_for_key(call.arguments)
+        profile.strip_for_key(call.arguments)
         if not hash_version:
             call.version = None
         if not hash_module:
@@ -200,13 +118,13 @@ def make_digest(func, get_call):
     return _digest_func
 
 
-def make_query(func, policy):
+def make_query(func, profile):
     """Build the `.query` helper that yields matching calls from the active cache."""
     def _query_func(
         *args, metadata={}, **kwargs
     ) -> Iterable[AnyCall]:
         call = QueryCall.from_call(func, *args, **kwargs)
-        policy.strip_for_key(call.arguments)
+        profile.strip_for_key(call.arguments)
         if "metadata" in call.arguments:
             logger.warning(
                 "Function argument 'metadata' shadowed by query argument"
@@ -252,7 +170,7 @@ def make_bind(wrapper):
     return _bind_func
 
 
-def make_wrapper(func, policy, meta, isolate, get_call):
+def make_wrapper(func, profile, meta, isolate, get_call):
     """Build the cached wrapper returned by :func:`fleche`."""
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> _T:
@@ -275,7 +193,7 @@ def make_wrapper(func, policy, meta, isolate, get_call):
             logger.warning("No hash for argument: %s", e.args[0])
             return func(*args, **kwargs)
 
-        missing = policy.check_required(func, args, kwargs)
+        missing = profile.check_required(args, kwargs)
         if missing:
             logger.warning(
                 "Missing required keyword arguments for caching: %s", missing
@@ -384,14 +302,14 @@ def fleche(
         if version is not None:
             func.__version__ = version  # ty: ignore
 
-        policy = process_ignore_required_args(func, ignore, require)
+        profile = process_ignore_required_args(func, ignore, require)
 
-        get_call = make_get_call(func, policy, hash_version, hash_module, hash_code)
+        get_call = make_get_call(func, profile, hash_version, hash_module, hash_code)
         digest_func = make_digest(func, get_call)
-        query_func = make_query(func, policy)
+        query_func = make_query(func, profile)
         load_func = make_load(func, digest_func)
         contains_func = make_contains(func, digest_func)
-        wrapper = make_wrapper(func, policy, meta, isolate, get_call)
+        wrapper = make_wrapper(func, profile, meta, isolate, get_call)
         rerun_func = make_rerun(func, wrapper)
         bind_func = make_bind(wrapper)
 
@@ -415,7 +333,6 @@ def fleche(
 
 
 __all__ = [
-        "ArgumentPolicy",
         "Ignored",
         "Required",
         "fleche",

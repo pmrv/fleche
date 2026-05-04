@@ -1,7 +1,7 @@
 import logging
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
-from typing import Any, Callable
+from typing import Any, Callable, get_type_hints, get_origin, get_args, Annotated
 from inspect import Signature, signature
 from collections.abc import Mapping
 
@@ -13,62 +13,126 @@ from .digest import Digest
 logger = logging.getLogger("fleche.call")
 
 
-@lru_cache(maxsize=1000)
-def _cached_signature(func) -> Signature:
-    return signature(func)
+class Ignored:
+    """
+    Type wrapper to mark a function argument as ignored for caching.
+
+    Can be used as a type hint: ``arg: fleche.Ignored`` or ``arg: fleche.Ignored[int]``.
+    """
+
+    def __class_getitem__(cls, item):
+        return Annotated[item, cls]
+
+
+class Required:
+    """
+    Type wrapper to mark a function argument as required for caching.
+
+    Arguments marked as required must be explicitly provided by the caller as keyword
+    arguments (i.e.  not via their default value) for the result to be cached.
+    This is useful for arguments like random seeds or iteration counts, where
+    using the default value might lead to non-deterministic or otherwise
+    undesirable caching behavior.
+
+    This is mainly useful when wrapping third-party functions where you do not control
+    the default arguments.
+
+    Can be used as a type hint: ``arg: fleche.Required`` or ``arg: fleche.Required[int]``.
+    """
+
+    def __class_getitem__(cls, item):
+        return Annotated[item, cls]
+
+
+@dataclass(frozen=True)
+class FunctionProfile:
+    """All static per-function metadata, cached once per callable."""
+
+    signature: Signature
+    qualname: str
+    module: str
+    version: str | int | None
+    code_digest: Digest | None
+    ignored: frozenset[str] = field(default_factory=frozenset)
+    required: frozenset[str] = field(default_factory=frozenset)
+
+    @classmethod
+    def of(cls, func) -> "FunctionProfile":
+        """Compute a :class:`FunctionProfile` for *func* without caching."""
+        sig = signature(func)
+
+        try:
+            info = VersionInfo.of(func)
+            qualname = info.qualname or info.module
+            module = info.module
+            version = getattr(func, "__version__", info.version)
+        except ModuleNotFoundError:
+            module = get_module(func)
+            qualname = get_qualname(func) or module
+            version = None
+
+        code_digest = digest.digest(func.__code__) if hasattr(func, "__code__") else None
+
+        try:
+            type_hints = get_type_hints(func, include_extras=True)
+        except (TypeError, NameError):
+            type_hints = {}
+
+        def _is_marker(hint, marker_cls):
+            if hint is marker_cls:
+                return True
+            if get_origin(hint) is Annotated:
+                return marker_cls in get_args(hint)
+            return False
+
+        ignored = frozenset(name for name, hint in type_hints.items() if _is_marker(hint, Ignored))
+        required = frozenset(name for name, hint in type_hints.items() if _is_marker(hint, Required))
+
+        for r in required:
+            if r in sig.parameters and sig.parameters[r].kind == sig.parameters[r].POSITIONAL_ONLY:
+                logger.warning(
+                    "Argument '%s' is marked as Required but is positional-only. Required only works for keyword arguments.",
+                    r
+                )
+
+        return cls(
+            signature=sig,
+            qualname=qualname,
+            module=module,
+            version=version,
+            code_digest=code_digest,
+            ignored=ignored,
+            required=required,
+        )
+
+    def strip_for_key(self, bound: dict) -> None:
+        """Remove ignored arguments from a bound arguments dict in-place."""
+        for ign in self.ignored:
+            del bound[ign]
+
+    def check_required(self, args: tuple, kwargs: dict) -> list[str]:
+        """Return names of required args not explicitly provided as keyword arguments."""
+        if not self.required:
+            return []
+        bound = self.signature.bind(*args, **kwargs)
+        return [r for r in self.required if r not in bound.arguments]
 
 
 @lru_cache(maxsize=1000)
-def _cached_code_digest(func) -> Digest | None:
-    if not hasattr(func, "__code__"):
-        return None
-    return digest.digest(func.__code__)
+def _profile(func) -> FunctionProfile:
+    return FunctionProfile.of(func)
 
 
-@lru_cache(maxsize=1000)
-def _cached_version_info(func) -> tuple[str, str, str | int | None]:
-    return _extract_version_info(func)
+def _get_profile(func) -> FunctionProfile:
+    """Return the :class:`FunctionProfile` for *func*, handling unhashable callables.
 
-
-def _func_statics(func) -> tuple[Signature, str, str, str | int | None, Digest | None]:
-    """Return ``(signature, qualname, module, version, code_digest)`` for *func*.
-
-    Uses the per-function ``lru_cache`` helpers when *func* is hashable; falls
-    back to direct introspection in a single ``except`` for callables with
-    ``__hash__ = None``.  Both :meth:`Call.from_call` and
-    :meth:`QueryCall.from_call` consume this tuple (the latter discards
-    ``code_digest``).
+    Falls back to the unwrapped function directly when *func* is not
+    hashable (i.e. when ``_profile(func)`` raises :exc:`TypeError`).
     """
     try:
-        return (
-            _cached_signature(func),
-            *_cached_version_info(func),
-            _cached_code_digest(func),
-        )
+        return _profile(func)
     except TypeError:
-        return (
-            signature(func),
-            *_extract_version_info(func),
-            digest.digest(func.__code__) if hasattr(func, "__code__") else None,
-        )
-
-
-def _extract_version_info(func) -> tuple[str, str, str | int | None]:
-    """Extract ``(name, module, version)`` from ``func`` via :mod:`pyiron_snippets.versions`.
-
-    Uses :meth:`VersionInfo.of` to introspect ``func``.  When the module is not
-    importable, falls back to attribute inspection without a version.  A ``__version__``
-    attribute set directly on ``func`` takes priority over the module-level version.
-    """
-    try:
-        info = VersionInfo.of(func)
-    except ModuleNotFoundError:
-        module = get_module(func)
-        name = get_qualname(func) or module
-        return name, module, None
-    name = info.qualname or info.module
-    version = getattr(func, "__version__", info.version)
-    return name, info.module, version
+        return _profile.__wrapped__(func)
 
 
 def bind(func, args, kwargs, apply_defaults=False, partial=False):
@@ -87,11 +151,8 @@ def bind(func, args, kwargs, apply_defaults=False, partial=False):
         :attr:`inspect.BoundArguments.arguments` — an ``OrderedDict``
         containing the supplied (and, when requested, defaulted) values.
     """
-    try:
-        sig = _cached_signature(func)
-    except TypeError:
-        # Unhashable callable (e.g. instance with __hash__ = None).
-        sig = signature(func)
+    p = _get_profile(func)
+    sig = p.signature
     if partial:
         bound = sig.bind_partial(*args, **kwargs)
     else:
@@ -120,13 +181,10 @@ class Call:
 
     @classmethod
     def from_call(cls, func, *args, **kwargs):
-        sig, qualname, module, version, code_digest = _func_statics(func)
-        bound = sig.bind(*args, **kwargs)
+        p = _get_profile(func)
+        bound = p.signature.bind(*args, **kwargs)
         bound.apply_defaults()
-        call = cls(qualname, dict(bound.arguments), module=module)
-        call.version = getattr(func, "__version__", version)
-        call.code_digest = code_digest
-        return call
+        return cls(p.qualname, dict(bound.arguments), module=p.module, version=p.version, code_digest=p.code_digest)
 
     def to_lookup_key(self) -> "Digest":
         # Iterate explicitly in the preserved parameter order; do not sort
@@ -362,13 +420,11 @@ class QueryCall:
 
     @classmethod
     def from_call(cls, func, *args, **kwargs):
-        sig, qualname, module, version, _code_digest = _func_statics(func)
+        p = _get_profile(func)
         bound_args = bind(func, args, kwargs, partial=True)
         # Unspecified arguments default to None (wildcard)
-        arguments = {name: bound_args.get(name) for name in sig.parameters}
-        call = cls(qualname, arguments, module=module)
-        call.version = getattr(func, "__version__", version)
-        return call
+        arguments = {name: bound_args.get(name) for name in p.signature.parameters}
+        return cls(p.qualname, arguments, module=p.module, version=p.version)
 
     def matches(self, other: 'Call | LazyCall | DigestedCall') -> bool:
         """Check if this call matches another call, treating None as a wildcard in this object."""
@@ -418,7 +474,10 @@ __all__ = [
         "bind",
         "Call",
         "DigestedCall",
+        "FunctionProfile",
+        "Ignored",
         "LazyCall",
         "QueryCall",
+        "Required",
         "AnyCall"
 ]

@@ -57,20 +57,23 @@ The original, undecorated function is always accessible via the ``.__wrapped__``
 Per-Function Static Caching
 ---------------------------
 
-To keep the cache-hit hot path fast, ``@fleche`` memoises three pure-of-``func``
-quantities the first time it sees a given function:
+To keep the cache-hit hot path fast, ``@fleche`` computes a
+:class:`~fleche.call.FunctionProfile` the first time it sees a given function
+and caches it for the lifetime of the process.  A profile captures all static
+per-function metadata in one frozen dataclass:
 
-- ``inspect.signature(func)``
+- ``inspect.signature(func)`` — used for argument binding
 - the digest of ``func.__code__`` (included in cache keys only when ``hash_code=True``; the default is ``False``)
 - ``(qualname, module, version)`` extracted via
   :class:`pyiron_snippets.versions.VersionInfo`
+- the sets of :class:`~fleche.call.Ignored`- and
+  :class:`~fleche.call.Required`-annotated argument names
 
-These are keyed on the wrapped function's *identity* — i.e. on ``func`` itself
-as a hashable object — so subsequent calls re-use the cached result instead of
-re-introspecting on every invocation.
-
-The caches are bounded LRU maps (``max 1000`` entries each), scoped to the
-Python process; they have no effect on the persistent fleche backends.
+All fields are stored in a single frozen :class:`~fleche.call.FunctionProfile`
+dataclass, backed by one ``_profile`` LRU cache (max 1000 entries) keyed on
+the callable's identity.  Subsequent calls re-use the cached profile instead
+of re-introspecting on every invocation.  The cache is process-scoped and has
+no effect on the persistent fleche backends.
 
 .. warning::
 
@@ -86,19 +89,13 @@ Python process; they have no effect on the persistent fleche backends.
    function identities), are unaffected: each new identity gets its own
    cache entry, and old entries LRU-evict naturally.
 
-   If you genuinely need to drop the per-function caches in-process, the
-   helpers in :mod:`fleche.call` expose ``cache_clear()``:
+   If you genuinely need to drop the per-function cache in-process:
 
    .. code-block:: python
 
-      from fleche.call import (
-          _cached_signature,
-          _cached_code_digest,
-          _cached_version_info,
-      )
+      from fleche.call import _profile
 
-      for c in (_cached_signature, _cached_code_digest, _cached_version_info):
-          c.cache_clear()
+      _profile.cache_clear()
 
 .. note::
 
