@@ -1,4 +1,5 @@
 import cmath
+import datetime
 import struct
 import collections
 import collections.abc
@@ -475,3 +476,95 @@ def test_generic_mapping_same_content_same_type_identical_digest():
     cm1 = collections.ChainMap({'a': 1}, {'b': 2})
     cm2 = collections.ChainMap({'b': 2, 'a': 1})
     assert digest(cm1) == digest(cm2)
+
+
+# --- Tests for datetime type digests ---
+
+
+def test_datetime_date_is_digestible():
+    assert digest(datetime.date(2024, 1, 15)) is not None
+
+
+def test_datetime_datetime_is_digestible():
+    assert digest(datetime.datetime(2024, 1, 15, 12, 0, 0)) is not None
+
+
+def test_datetime_time_is_digestible():
+    assert digest(datetime.time(12, 30, 45)) is not None
+
+
+def test_datetime_timedelta_is_digestible():
+    assert digest(datetime.timedelta(days=3, seconds=7200)) is not None
+
+
+def test_datetime_timezone_is_digestible():
+    assert digest(datetime.timezone.utc) is not None
+    assert digest(datetime.timezone(datetime.timedelta(hours=5))) is not None
+
+
+def test_different_dates_have_different_digests():
+    assert digest(datetime.date(2024, 1, 1)) != digest(datetime.date(2024, 1, 2))
+    assert digest(datetime.date(2024, 1, 1)) != digest(datetime.date(2025, 1, 1))
+
+
+def test_different_datetimes_have_different_digests():
+    assert digest(datetime.datetime(2024, 1, 1, 0, 0)) != digest(datetime.datetime(2024, 1, 1, 0, 1))
+    assert digest(datetime.datetime(2024, 1, 1, 0, 0)) != digest(datetime.datetime(2024, 1, 2, 0, 0))
+
+
+def test_different_times_have_different_digests():
+    assert digest(datetime.time(12, 0, 0)) != digest(datetime.time(12, 0, 1))
+    assert digest(datetime.time(12, 0, 0)) != digest(datetime.time(13, 0, 0))
+
+
+def test_different_timedeltas_have_different_digests():
+    assert digest(datetime.timedelta(days=1)) != digest(datetime.timedelta(days=2))
+    assert digest(datetime.timedelta(seconds=1)) != digest(datetime.timedelta(seconds=2))
+
+
+def test_different_timezones_have_different_digests():
+    tz_utc = datetime.timezone.utc
+    tz_plus5 = datetime.timezone(datetime.timedelta(hours=5))
+    tz_minus3 = datetime.timezone(datetime.timedelta(hours=-3))
+    assert digest(tz_utc) != digest(tz_plus5)
+    assert digest(tz_plus5) != digest(tz_minus3)
+
+
+def test_datetime_subclass_matches_before_date():
+    """datetime.datetime is a subclass of datetime.date; they must produce different digests."""
+    d = datetime.date(2024, 6, 15)
+    dt = datetime.datetime(2024, 6, 15, 0, 0, 0)
+    assert digest(d) != digest(dt)
+
+
+def test_datetime_same_value_same_digest():
+    assert digest(datetime.date(2024, 3, 10)) == digest(datetime.date(2024, 3, 10))
+    assert digest(datetime.datetime(2024, 3, 10, 8, 0)) == digest(datetime.datetime(2024, 3, 10, 8, 0))
+    assert digest(datetime.time(8, 30)) == digest(datetime.time(8, 30))
+    assert digest(datetime.timedelta(hours=2)) == digest(datetime.timedelta(hours=2))
+    assert digest(datetime.timezone.utc) == digest(datetime.timezone.utc)
+
+
+def test_datetime_timezone_aware_differs_from_naive():
+    """A timezone-aware datetime digests differently from a naive one with the same wall-clock values."""
+    naive = datetime.datetime(2024, 1, 1, 12, 0)
+    aware = datetime.datetime(2024, 1, 1, 12, 0, tzinfo=datetime.timezone.utc)
+    assert digest(naive) != digest(aware)
+
+
+def test_datetime_stdlib_class_constants_digestible():
+    """Motivating use case: stdlib class-level datetime constants (e.g. date.min) must be digestible.
+
+    This is needed so that digest(dict(datetime.date.__dict__)) can eventually work.
+    """
+    assert digest(datetime.date.min) is not None
+    assert digest(datetime.date.max) is not None
+    assert digest(datetime.date.resolution) is not None
+    assert digest(datetime.datetime.min) is not None
+    assert digest(datetime.datetime.max) is not None
+    assert digest(datetime.time.min) is not None
+    assert digest(datetime.time.max) is not None
+    assert digest(datetime.timedelta.min) is not None
+    assert digest(datetime.timedelta.max) is not None
+    assert digest(datetime.timedelta.resolution) is not None
+    assert digest(datetime.timezone.utc) is not None

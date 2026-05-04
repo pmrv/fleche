@@ -1,4 +1,5 @@
 import cmath
+import datetime
 import hashlib
 import logging
 import dataclasses
@@ -134,6 +135,18 @@ def load_entry_points():
             logger.error("Failed to load entry point %s: %s", ep.name, e)
 
 
+def _digest_mapping(type_salt: str, contents: dict) -> Digest:
+    m = hashlib.sha256()
+    m.update(type_salt.encode())
+    sorted_items = sorted(
+        ((digest(k), k, v) for k, v in contents.items()), key=lambda item: item[0]
+    )
+    for k_digest, k, v in sorted_items:
+        m.update(k_digest.encode())
+        m.update(digest(v).encode())
+    return Digest(m.hexdigest())
+
+
 def digest(value: Any) -> Digest:
     try:
         return _digest(value)
@@ -248,6 +261,16 @@ def _digest(value: Any) -> Digest:
             if hasattr(value, "co_exceptiontable"):
                 props.append(value.co_exceptiontable)
             m.update(digest(tuple(props)).encode())
+        case datetime.timezone():
+            m.update(digest(value.utcoffset(None)).encode())
+        case datetime.timedelta():
+            m.update(digest(value.total_seconds()).encode())
+        case datetime.datetime():  # datetime subclasses date; must precede date case
+            m.update(value.isoformat().encode())
+        case datetime.date():
+            m.update(value.isoformat().encode())
+        case datetime.time():
+            m.update(value.isoformat().encode())
         case _ if dataclasses.is_dataclass(value):
             # cannot use asdict because it recursively converts values which destroys digests
             # instead (flat-) convert to dictionaries, salt with type name, then fallback to dictionary case.
@@ -260,12 +283,7 @@ def _digest(value: Any) -> Digest:
             # with the same name + field layout hash identically.
             m.update(digest(dict(_attrs.field_items(value))).encode())
         case Mapping():
-            sorted_items = sorted(
-                ((digest(k), k, v) for k, v in value.items()), key=lambda item: item[0]
-            )
-            for k_digest, k, v in sorted_items:
-                m.update(k_digest.encode())
-                m.update(digest(v).encode())
+            return _digest_mapping(str(type(value)), dict(value))
         case Iterable():
             for v in value:
                 m.update(digest(v).encode())
