@@ -219,14 +219,6 @@ def _digest(value: Any) -> Digest:
             m.update(str(value).encode())
         case None:
             m.update(b"__None__")
-        case dict():
-            # Sort by digest of keys to ensure merkle tree property and order stability
-            sorted_items = sorted(
-                ((digest(k), k, v) for k, v in value.items()), key=lambda item: item[0]
-            )
-            for k_digest, k, v in sorted_items:
-                m.update(k_digest.encode())
-                m.update(digest(v).encode())
         case np.bool_():
             return digest(bool(value))
         case np.integer():
