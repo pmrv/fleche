@@ -3,7 +3,7 @@ from pathlib import Path
 from functools import wraps, partial
 from types import SimpleNamespace
 from typing import Any, Callable, Dict, Iterable, TypeVar
-from dataclasses import replace
+from dataclasses import dataclass, replace
 import tempfile
 import contextlib
 from collections import defaultdict
@@ -89,7 +89,36 @@ Returns:
 """
 
 
-def make_get_call(func, profile, hash_version, hash_module, hash_code):
+@dataclass(frozen=True)
+class _HelperSpec:
+    """Spec for a helper function attached to a fleche-decorated function."""
+    name: str
+    doc_prefix: str
+    builder: Any  # Callable[[_HelpersCtx], Callable]
+    ret: Any = None
+    extra_doc: str = ""
+    ctx_attr: str | None = None
+
+
+class _HelpersCtx:
+    """Mutable context accumulated while building helpers for a fleche-decorated function."""
+    __slots__ = ('func', 'policy', 'meta', 'isolate', 'hash_version', 'hash_module', 'hash_code',
+                 'get_call', 'digest_func', 'wrapper')
+
+    def __init__(self, func, policy, meta, isolate, hash_version, hash_module, hash_code):
+        self.func = func
+        self.policy = policy
+        self.meta = meta
+        self.isolate = isolate
+        self.hash_version = hash_version
+        self.hash_module = hash_module
+        self.hash_code = hash_code
+        self.get_call = None
+        self.digest_func = None
+        self.wrapper = None
+
+
+def make_get_call(func, policy, hash_version, hash_module, hash_code):
     """Build the `.call` helper that produces a :class:`.Call` for the given arguments."""
     @wraps(func)
     def get_call(*args, **kwargs):
@@ -99,7 +128,7 @@ def make_get_call(func, profile, hash_version, hash_module, hash_code):
         # generation, but then we'd also have to save it somehow and that just seems bothersome in particular for
         # Sql Callstorage.  We could add a new table there connecting unique functions and their ignored args, but
         # meh.
-        profile.strip_for_key(call.arguments)
+        policy.strip_for_key(call.arguments)
         if not hash_version:
             call.version = None
         if not hash_module:
@@ -110,21 +139,13 @@ def make_get_call(func, profile, hash_version, hash_module, hash_code):
     return get_call
 
 
-def make_digest(func, get_call):
-    """Build the `.digest` helper that returns the lookup key for given arguments."""
-    @wraps(func)
-    def _digest_func(*args, **kwargs):
-        return get_call(*args, **kwargs).to_lookup_key()
-    return _digest_func
-
-
-def make_query(func, profile):
+def make_query(func, policy):
     """Build the `.query` helper that yields matching calls from the active cache."""
     def _query_func(
         *args, metadata={}, **kwargs
     ) -> Iterable[AnyCall]:
         call = QueryCall.from_call(func, *args, **kwargs)
-        profile.strip_for_key(call.arguments)
+        policy.strip_for_key(call.arguments)
         if "metadata" in call.arguments:
             logger.warning(
                 "Function argument 'metadata' shadowed by query argument"
@@ -134,22 +155,6 @@ def make_query(func, profile):
 
     wraps(func)(_query_func)
     return _query_func
-
-
-def make_load(func, digest_func):
-    """Build the `.load` helper that retrieves a cached result for given arguments."""
-    @wraps(func)
-    def _load_func(*args, **kwargs):
-        return state._CACHE.get().load(digest_func(*args, **kwargs)).result
-    return _load_func
-
-
-def make_contains(func, digest_func):
-    """Build the `.contains` helper that checks cache membership for given arguments."""
-    @wraps(func)
-    def _contains_func(*args, **kwargs):
-        return state._CACHE.get().contains(digest_func(*args, **kwargs))
-    return _contains_func
 
 
 def make_rerun(func, wrapper):
@@ -162,15 +167,7 @@ def make_rerun(func, wrapper):
     return _rerun_func
 
 
-def make_bind(wrapper):
-    """Build the `.bind` helper that creates a :class:`.BoundWrapper` with optionally pre-applied arguments."""
-    def _bind_func(*args, **kwargs):
-        target = partial(wrapper, *args, **kwargs) if (args or kwargs) else wrapper
-        return state.BoundWrapper.bind(target)
-    return _bind_func
-
-
-def make_wrapper(func, profile, meta, isolate, get_call):
+def make_wrapper(func, policy, meta, isolate, get_call):
     """Build the cached wrapper returned by :func:`fleche`."""
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> _T:
@@ -193,7 +190,7 @@ def make_wrapper(func, profile, meta, isolate, get_call):
             logger.warning("No hash for argument: %s", e.args[0])
             return func(*args, **kwargs)
 
-        missing = profile.check_required(args, kwargs)
+        missing = policy.check_required(args, kwargs)
         if missing:
             logger.warning(
                 "Missing required keyword arguments for caching: %s", missing
@@ -253,6 +250,70 @@ def make_wrapper(func, profile, meta, isolate, get_call):
     return wrapper
 
 
+# Specs for helpers built before make_wrapper (may seed ctx.get_call / ctx.digest_func).
+_PRE_WRAPPER_SPECS: list[_HelperSpec] = [
+    _HelperSpec(
+        name="call",
+        doc_prefix="Get the Call object for",
+        ret=Call,
+        ctx_attr="get_call",
+        builder=lambda ctx: make_get_call(
+            ctx.func, ctx.policy, ctx.hash_version, ctx.hash_module, ctx.hash_code
+        ),
+    ),
+    _HelperSpec(
+        name="digest",
+        doc_prefix="Get the cache key for",
+        ret=digest.Digest,
+        ctx_attr="digest_func",
+        builder=lambda ctx: wraps(ctx.func)(
+            lambda *a, **kw: ctx.get_call(*a, **kw).to_lookup_key()
+        ),
+    ),
+    _HelperSpec(
+        name="query",
+        doc_prefix="Return matching results from current cache for",
+        ret=Iterable[Call],
+        extra_doc=_QUERY_DOC,
+        builder=lambda ctx: make_query(ctx.func, ctx.policy),
+    ),
+    _HelperSpec(
+        name="load",
+        doc_prefix="Load result from cache for",
+        builder=lambda ctx: wraps(ctx.func)(
+            lambda *a, **kw: state._CACHE.get().load(ctx.digest_func(*a, **kw)).result
+        ),
+    ),
+    _HelperSpec(
+        name="contains",
+        doc_prefix="Check if result is in cache for",
+        ret=bool,
+        builder=lambda ctx: wraps(ctx.func)(
+            lambda *a, **kw: state._CACHE.get().contains(ctx.digest_func(*a, **kw))
+        ),
+    ),
+]
+
+# Specs for helpers that need ctx.wrapper (built after make_wrapper).
+_POST_WRAPPER_SPECS: list[_HelperSpec] = [
+    _HelperSpec(
+        name="rerun",
+        doc_prefix="Force reevaluation recursively for",
+        builder=lambda ctx: make_rerun(ctx.func, ctx.wrapper),
+    ),
+    _HelperSpec(
+        name="bind",
+        doc_prefix="Create a BoundWrapper for",
+        ret=state.BoundWrapper,
+        builder=lambda ctx: (
+            lambda *a, **kw: state.BoundWrapper.bind(
+                partial(ctx.wrapper, *a, **kw) if (a or kw) else ctx.wrapper
+            )
+        ),
+    ),
+]
+
+
 def fleche(
     _func=None,
     *,
@@ -302,28 +363,26 @@ def fleche(
         if version is not None:
             func.__version__ = version  # ty: ignore
 
-        profile = process_ignore_required_args(func, ignore, require)
+        policy = process_ignore_required_args(func, ignore, require)
+        ctx = _HelpersCtx(func, policy, meta, isolate, hash_version, hash_module, hash_code)
 
-        get_call = make_get_call(func, profile, hash_version, hash_module, hash_code)
-        digest_func = make_digest(func, get_call)
-        query_func = make_query(func, profile)
-        load_func = make_load(func, digest_func)
-        contains_func = make_contains(func, digest_func)
-        wrapper = make_wrapper(func, profile, meta, isolate, get_call)
-        rerun_func = make_rerun(func, wrapper)
-        bind_func = make_bind(wrapper)
+        helper_entries: list[tuple[_HelperSpec, Callable]] = []
+        for spec in _PRE_WRAPPER_SPECS:
+            fn = spec.builder(ctx)
+            if spec.ctx_attr is not None:
+                setattr(ctx, spec.ctx_attr, fn)
+            helper_entries.append((spec, fn))
+
+        ctx.wrapper = wrapper = make_wrapper(ctx.func, ctx.policy, ctx.meta, ctx.isolate, ctx.get_call)
+
+        for spec in _POST_WRAPPER_SPECS:
+            helper_entries.append((spec, spec.builder(ctx)))
 
         wrapper.fleche = SimpleNamespace()
+        for spec, fn in helper_entries:
+            _attach(wrapper, fn, name=spec.name, doc_prefix=spec.doc_prefix,
+                    ret=spec.ret, extra_doc=spec.extra_doc)
 
-        _attach(wrapper, get_call, name="call", doc_prefix="Get the Call object for", ret=Call)
-        _attach(wrapper, digest_func, name="digest", doc_prefix="Get the cache key for", ret=digest.Digest)
-        _attach(wrapper, query_func, name="query", doc_prefix="Return matching results from current cache for",
-                ret=Iterable[Call], extra_doc=_QUERY_DOC)
-        _attach(wrapper, load_func, name="load", doc_prefix="Load result from cache for")
-        _attach(wrapper, contains_func, name="contains", doc_prefix="Check if result is in cache for", ret=bool)
-        _attach(wrapper, rerun_func, name="rerun", doc_prefix="Force reevaluation recursively for")
-        _attach(wrapper, bind_func, name="bind", doc_prefix="Create a BoundWrapper for",
-                ret=state.BoundWrapper)
         return wrapper
 
     if callable(_func):
