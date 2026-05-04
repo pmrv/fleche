@@ -428,7 +428,7 @@ class CacheWrapper(BaseCache):
         return self.cache.query(call)
 
 
-class ReadOnlyMixin(BaseCache):
+class ReadOnlyMixin(CacheWrapper):
     """Raises :class:`Rejected` for ``save`` and ``evict``."""
 
     def save(self, call: Call):
@@ -439,34 +439,31 @@ class ReadOnlyMixin(BaseCache):
 
 
 @dataclass(frozen=True)
-class ReadOnlyCache(ReadOnlyMixin, CacheWrapper):
+class ReadOnlyCache(ReadOnlyMixin):
     """A cache that can only be read from."""
 
     cache: BaseCache
 
 
-class FilteringMixin(BaseCache):
-    """Filters ``load`` and ``_query`` results by a predicate.
-
-    Requires ``self.cache: BaseCache`` — compose with :class:`CacheWrapper`.
-    """
+class FilteringMixin(CacheWrapper):
+    """Filters ``load`` and ``_query`` results by a predicate."""
 
     predicate: Callable[[Call | LazyCall], bool]  # declared by the concrete class
 
     def load(self, key: str) -> LazyCall:
-        lc = self.cache.load(key)  # type: ignore[attr-defined]
+        lc = self.cache.load(key)
         if not self.predicate(lc):
             raise KeyError(key)
         return lc
 
     def _query(self, call: call.QueryCall) -> Iterable[LazyCall]:
-        for c in self.cache.query(call):  # type: ignore[attr-defined]
+        for c in self.cache.query(call):
             if self.predicate(c):
                 yield c
 
 
 @dataclass(frozen=True)
-class FilteredCache(FilteringMixin, ReadOnlyMixin, CacheWrapper):
+class FilteredCache(FilteringMixin, ReadOnlyMixin):
     """A read-only view of a cache that only exposes calls matching a predicate."""
 
     cache: BaseCache
