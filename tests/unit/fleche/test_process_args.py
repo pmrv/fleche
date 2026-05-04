@@ -1,3 +1,4 @@
+import pytest
 from typing import Annotated
 from fleche.call import FunctionProfile
 from fleche.wrapper import process_ignore_required_args, Ignored, Required
@@ -74,10 +75,10 @@ def test_process_missing_hints():
 
 
 def test_process_invalid_signature():
-    # Some objects might not have a signature
-    profile = process_ignore_required_args(object(), require="a")
-    assert profile.ignored == frozenset()
-    assert profile.required == frozenset({"a"})
+    # Objects without a signature raise TypeError; callers that need a profile
+    # must use a proper callable.
+    with pytest.raises(TypeError):
+        process_ignore_required_args(object(), require="a")
 
 
 def test_process_annotated_type_hints():

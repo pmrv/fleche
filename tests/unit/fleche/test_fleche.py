@@ -90,27 +90,36 @@ def test_fleche_with_version_argument():
 
 
 def test_fleche_with_version():
-    mock_function = Mock(return_value=42)
-    mock_function.__name__ = "mock_function"
+    # Two independent callables, each with its own version — exercises the
+    # "different version → different cache key" path.  We don't reuse one
+    # Mock and mutate its __version__ because per-function statics
+    # (signature, code digest, version info) are cached on func identity.
+    def make_mock(version):
+        m = Mock(return_value=42)
+        m.__name__ = "mock_function"
+        m.__qualname__ = "mock_function"
+        m.__module__ = "test"
+        m.__version__ = version
+        return m
 
     with cache(Cache(ValueMemory({}), CallMemory({}))):
-        mock_function.__version__ = 1
-        my_func = fleche(mock_function)
+        m1 = make_mock(1)
+        my_func = fleche(m1)
 
-        # First call, should execute the function and save to cache
         assert my_func(2) == 42
-        mock_function.assert_called_once_with(2)
+        m1.assert_called_once_with(2)
         key_v1 = my_func.fleche.digest(2)
         assert cache().contains(key_v1)
 
-        mock_function.__version__ = 2
-        my_func = fleche(mock_function)
+        m2 = make_mock(2)
+        my_func = fleche(m2)
 
-        # Second call, with different version, should execute again
+        # Different version → different cache key → cache miss → executes again
         assert my_func(2) == 42
-        assert mock_function.call_count == 2
+        m2.assert_called_once_with(2)
         key_v2 = my_func.fleche.digest(2)
         assert cache().contains(key_v2)
+        assert key_v1 != key_v2
 
 
 def test_fleche_with_module():

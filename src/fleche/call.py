@@ -46,14 +46,9 @@ class Required:
 
 @dataclass(frozen=True)
 class FunctionProfile:
-    """All static per-function metadata, cached once per callable.
+    """All static per-function metadata, cached once per callable."""
 
-    ``signature`` is ``None`` when :func:`inspect.signature` raises for the
-    callable (e.g. some C extensions).  Callers that need a valid signature
-    must handle ``None`` explicitly.
-    """
-
-    signature: Signature | None
+    signature: Signature
     qualname: str
     module: str
     version: str | int | None
@@ -64,10 +59,7 @@ class FunctionProfile:
     @classmethod
     def of(cls, func) -> "FunctionProfile":
         """Compute a :class:`FunctionProfile` for *func* without caching."""
-        try:
-            sig = signature(func)
-        except (TypeError, ValueError):
-            sig = None
+        sig = signature(func)
 
         try:
             info = VersionInfo.of(func)
@@ -96,13 +88,12 @@ class FunctionProfile:
         ignored = frozenset(name for name, hint in type_hints.items() if _is_marker(hint, Ignored))
         required = frozenset(name for name, hint in type_hints.items() if _is_marker(hint, Required))
 
-        if sig is not None:
-            for r in required:
-                if r in sig.parameters and sig.parameters[r].kind == sig.parameters[r].POSITIONAL_ONLY:
-                    logger.warning(
-                        "Argument '%s' is marked as Required but is positional-only. Required only works for keyword arguments.",
-                        r
-                    )
+        for r in required:
+            if r in sig.parameters and sig.parameters[r].kind == sig.parameters[r].POSITIONAL_ONLY:
+                logger.warning(
+                    "Argument '%s' is marked as Required but is positional-only. Required only works for keyword arguments.",
+                    r
+                )
 
         return cls(
             signature=sig,
@@ -123,8 +114,6 @@ class FunctionProfile:
         """Return names of required args not explicitly provided as keyword arguments."""
         if not self.required:
             return []
-        if self.signature is None:
-            return []
         bound = self.signature.bind(*args, **kwargs)
         return [r for r in self.required if r not in bound.arguments]
 
@@ -137,13 +126,13 @@ def _profile(func) -> FunctionProfile:
 def _get_profile(func) -> FunctionProfile:
     """Return the :class:`FunctionProfile` for *func*, handling unhashable callables.
 
-    Falls back to :meth:`FunctionProfile.of` directly when *func* is not
+    Falls back to the unwrapped function directly when *func* is not
     hashable (i.e. when ``_profile(func)`` raises :exc:`TypeError`).
     """
     try:
         return _profile(func)
     except TypeError:
-        return FunctionProfile.of(func)
+        return _profile.__wrapped__(func)
 
 
 def bind(func, args, kwargs, apply_defaults=False, partial=False):
@@ -164,9 +153,6 @@ def bind(func, args, kwargs, apply_defaults=False, partial=False):
     """
     p = _get_profile(func)
     sig = p.signature
-    if sig is None:
-        # Re-raise the original error from signature().
-        sig = signature(func)
     if partial:
         bound = sig.bind_partial(*args, **kwargs)
     else:
@@ -196,15 +182,9 @@ class Call:
     @classmethod
     def from_call(cls, func, *args, **kwargs):
         p = _get_profile(func)
-        sig = p.signature
-        if sig is None:
-            sig = signature(func)
-        bound = sig.bind(*args, **kwargs)
+        bound = p.signature.bind(*args, **kwargs)
         bound.apply_defaults()
-        call = cls(p.qualname, dict(bound.arguments), module=p.module)
-        call.version = getattr(func, "__version__", p.version)
-        call.code_digest = p.code_digest
-        return call
+        return cls(p.qualname, dict(bound.arguments), module=p.module, version=p.version, code_digest=p.code_digest)
 
     def to_lookup_key(self) -> "Digest":
         # Iterate explicitly in the preserved parameter order; do not sort
@@ -439,15 +419,10 @@ class QueryCall:
     @classmethod
     def from_call(cls, func, *args, **kwargs):
         p = _get_profile(func)
-        sig = p.signature
-        if sig is None:
-            sig = signature(func)
         bound_args = bind(func, args, kwargs, partial=True)
         # Unspecified arguments default to None (wildcard)
-        arguments = {name: bound_args.get(name) for name in sig.parameters}
-        call = cls(p.qualname, arguments, module=p.module)
-        call.version = getattr(func, "__version__", p.version)
-        return call
+        arguments = {name: bound_args.get(name) for name in p.signature.parameters}
+        return cls(p.qualname, arguments, module=p.module, version=p.version)
 
     def matches(self, other: 'Call | LazyCall | DigestedCall') -> bool:
         """Check if this call matches another call, treating None as a wildcard in this object."""
