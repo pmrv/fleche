@@ -393,15 +393,15 @@ class Cache(BaseCache):
         return evicted
 
 
+@dataclass(frozen=True)
 class CacheWrapper(BaseCache):
     """Forwarding base class: all BaseCache methods delegate to ``self.cache``.
 
-    Combine with behaviour mixins (ReadOnlyMixin, FilteringMixin) and a
-    concrete ``@dataclass(frozen=True)`` subclass that declares
-    ``cache: BaseCache`` as a field.
+    Combine with behaviour mixins (ReadOnlyMixin, FilteringMixin) to build
+    concrete wrapper classes without redeclaring ``cache``.
     """
 
-    cache: BaseCache  # declared by the concrete class
+    cache: BaseCache
 
     def save(self, call: Call) -> str:
         return self.cache.save(call)
@@ -442,13 +442,12 @@ class ReadOnlyMixin(CacheWrapper):
 class ReadOnlyCache(ReadOnlyMixin):
     """A cache that can only be read from."""
 
-    cache: BaseCache
 
-
+@dataclass(frozen=True)
 class FilteringMixin(CacheWrapper):
     """Filters ``load`` and ``_query`` results by a predicate."""
 
-    predicate: Callable[[Call | LazyCall], bool]  # declared by the concrete class
+    predicate: Callable[[Call | LazyCall], bool]
 
     def load(self, key: str) -> LazyCall:
         lc = self.cache.load(key)
@@ -466,9 +465,6 @@ class FilteringMixin(CacheWrapper):
 class FilteredCache(FilteringMixin, ReadOnlyMixin):
     """A read-only view of a cache that only exposes calls matching a predicate."""
 
-    cache: BaseCache
-    predicate: Callable[[Call | LazyCall], bool]
-
 
 @dataclass(frozen=True)
 class RefreshingCache(CacheWrapper):
@@ -481,8 +477,6 @@ class RefreshingCache(CacheWrapper):
     This is necessary to handle nested fleche calls during a rerun,
     otherwise forcing them to re-execute would be awkward.
     """
-
-    cache: BaseCache
 
     def load(self, key: str) -> LazyCall:
         raise KeyError(key)
