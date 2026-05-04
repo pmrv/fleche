@@ -49,6 +49,21 @@ class BagOfHoldingH5FileBackend(FileStorage):
             logger.error(f"Corrupt file present in cache at path {path}: {e}")
             raise KeyError(path) from e
 
+    def rebag(self, version_validator: VersionValidator = "none") -> None:
+        """Re-open and re-save all bags using the given version validator.
+
+        Useful when bags were created with an older library version and
+        would otherwise fail strict version checking on load.
+        """
+        for key in list(self.list()):
+            path = self._path(key)
+            with self._operation_context(key):
+                try:
+                    value = H5Bag(path).load(version_validator=version_validator)
+                    H5Bag.save(value, path)
+                except OSError as e:
+                    logger.warning("Failed to rebag %s: %s", key, e)
+
 
 @dataclass(frozen=True)
 class ValueBagOfHoldingH5File(PerKeyLockMixin, DestructuringMixin, ValueMixin, BagOfHoldingH5FileBackend): ...

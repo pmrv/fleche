@@ -1,4 +1,6 @@
 import logging
+from unittest.mock import MagicMock
+
 import pytest
 
 from fleche.digest import Digest
@@ -38,21 +40,9 @@ def test_version_validator_passed_to_load(tmp_path, monkeypatch):
     pytest.importorskip("bagofholding")
     import fleche.storage.bagofholding_file as boh_mod
 
-    captured = {}
-
-    class FakeH5Bag:
-        def __init__(self, path):
-            self.path = path
-
-        def load(self, **kwargs):
-            captured.update(kwargs)
-            return 42
-
-        @staticmethod
-        def save(value, path):
-            pass
-
-    monkeypatch.setattr(boh_mod, "H5Bag", FakeH5Bag)
+    mock_h5bag = MagicMock()
+    mock_h5bag.return_value.load.return_value = 42
+    monkeypatch.setattr(boh_mod, "H5Bag", mock_h5bag)
 
     s = BagOfHoldingH5FileBackend(tmp_path, version_validator="semantic-minor")
     key = Digest("test_key")
@@ -60,34 +50,74 @@ def test_version_validator_passed_to_load(tmp_path, monkeypatch):
     result = s.get(key)
 
     assert result == 42
-    assert captured.get("version_validator") == "semantic-minor"
+    mock_h5bag.return_value.load.assert_called_with(version_validator="semantic-minor")
 
 
 def test_version_validator_none_not_passed_to_load(tmp_path, monkeypatch):
     pytest.importorskip("bagofholding")
     import fleche.storage.bagofholding_file as boh_mod
 
-    captured = {"called": False}
-
-    class FakeH5Bag:
-        def __init__(self, path):
-            self.path = path
-
-        def load(self, **kwargs):
-            captured["kwargs"] = kwargs
-            captured["called"] = True
-            return 42
-
-        @staticmethod
-        def save(value, path):
-            pass
-
-    monkeypatch.setattr(boh_mod, "H5Bag", FakeH5Bag)
+    mock_h5bag = MagicMock()
+    mock_h5bag.return_value.load.return_value = 42
+    monkeypatch.setattr(boh_mod, "H5Bag", mock_h5bag)
 
     s = BagOfHoldingH5FileBackend(tmp_path)
     key = Digest("test_key2")
     s.put(42, key)
     s.get(key)
 
-    assert captured["called"]
-    assert "version_validator" not in captured["kwargs"]
+    _, kwargs = mock_h5bag.return_value.load.call_args
+    assert "version_validator" not in kwargs
+
+
+def test_rebag_calls_load_and_save(tmp_path, monkeypatch):
+    pytest.importorskip("bagofholding")
+    import fleche.storage.bagofholding_file as boh_mod
+
+    mock_h5bag = MagicMock()
+    mock_h5bag.return_value.load.return_value = 99
+    monkeypatch.setattr(boh_mod, "H5Bag", mock_h5bag)
+
+    s = BagOfHoldingH5FileBackend(tmp_path)
+    key = Digest("resave_key")
+    s._path(key).write_bytes(b"dummy")
+
+    s.rebag(version_validator="none")
+
+    mock_h5bag.return_value.load.assert_called_once_with(version_validator="none")
+    mock_h5bag.save.assert_called_once_with(99, s._path(key))
+
+
+def test_rebag_skips_oserror(tmp_path, monkeypatch, caplog):
+    pytest.importorskip("bagofholding")
+    import fleche.storage.bagofholding_file as boh_mod
+
+    mock_h5bag = MagicMock()
+    mock_h5bag.return_value.load.side_effect = OSError("broken bag")
+    monkeypatch.setattr(boh_mod, "H5Bag", mock_h5bag)
+
+    s = BagOfHoldingH5FileBackend(tmp_path)
+    key = Digest("broken_key")
+    s._path(key).write_bytes(b"dummy")
+
+    with caplog.at_level(logging.WARNING, logger="fleche.storage.bagofholding_file"):
+        s.rebag(version_validator="none")  # should not raise
+
+    assert "Failed to rebag" in caplog.text
+
+
+def test_rebag_default_validator_is_none(tmp_path, monkeypatch):
+    pytest.importorskip("bagofholding")
+    import fleche.storage.bagofholding_file as boh_mod
+
+    mock_h5bag = MagicMock()
+    mock_h5bag.return_value.load.return_value = 1
+    monkeypatch.setattr(boh_mod, "H5Bag", mock_h5bag)
+
+    s = BagOfHoldingH5FileBackend(tmp_path)
+    key = Digest("default_key")
+    s._path(key).write_bytes(b"dummy")
+
+    s.rebag()
+
+    mock_h5bag.return_value.load.assert_called_once_with(version_validator="none")
