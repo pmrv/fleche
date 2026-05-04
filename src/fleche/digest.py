@@ -283,7 +283,7 @@ def _digest(value: Any) -> Digest:
             # with the same name + field layout hash identically.
             m.update(digest(dict(_attrs.field_items(value))).encode())
         case Mapping():
-            return _digest_mapping(str(type(value)), dict(value))
+            return _digest_mapping(type(value).__name__, dict(value))
         case Iterable():
             for v in value:
                 m.update(digest(v).encode())
