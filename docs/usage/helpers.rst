@@ -61,7 +61,7 @@ To keep the cache-hit hot path fast, ``@fleche`` memoises three pure-of-``func``
 quantities the first time it sees a given function:
 
 - ``inspect.signature(func)``
-- the digest of ``func.__code__`` (when ``hash_code=True``, the default)
+- the digest of ``func.__code__`` (included in cache keys only when ``hash_code=True``; the default is ``False``)
 - ``(qualname, module, version)`` extracted via
   :class:`pyiron_snippets.versions.VersionInfo`
 
@@ -113,11 +113,11 @@ Usage with Decorated Methods
 .. note::
 
    When ``@fleche`` is applied to a method, the helper methods (`.call`, `.digest`, `.query`,
-   `.load`, `.contains`, `.rerun`) do **not** automatically bind ``self``. Accessing
-   ``obj.method.query`` returns the same unbound helper as ``MyClass.method.query`` — Python's
-   descriptor protocol does not propagate through attribute lookups on bound methods.
-
-   You must pass the instance explicitly as the first positional argument.
+   `.load`, `.contains`, `.rerun`) do **not** automatically bind ``self``. Python's bound method
+   objects delegate custom attribute lookups to the underlying function, so
+   ``obj.method.query`` and ``MyClass.method.query`` return the same helper function.
+   However, this helper is a plain function — not a bound method — so ``obj`` is not
+   pre-applied; you must pass the instance explicitly as the first positional argument.
 
    For ``fleche`` to cache calls that include ``self``, the class must be hashable —
    i.e. it must implement a ``__digest__`` method (see :doc:`/dev/custom_digests`).
