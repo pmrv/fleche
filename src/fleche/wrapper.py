@@ -1,4 +1,5 @@
 import os
+import threading
 from pathlib import Path
 from functools import wraps, partial
 from types import SimpleNamespace
@@ -169,6 +170,14 @@ def make_rerun(func, wrapper):
 
 def make_wrapper(func, policy, meta, isolate, get_call):
     """Build the cached wrapper returned by :func:`fleche`."""
+    # Tracks futures currently being computed so a second call with the same
+    # key can wait for the first result rather than re-executing.  This closes
+    # the race where CPython notifies result() waiters before invoking done
+    # callbacks, allowing a cache miss on the second call even though the first
+    # future has already resolved.
+    _in_flight: dict[str, Future] = {}
+    _in_flight_lock = threading.Lock()
+
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> _T:
         cache: BaseCache = state._CACHE.get()
@@ -204,6 +213,18 @@ def make_wrapper(func, policy, meta, isolate, get_call):
         except KeyError:
             logger.debug("Cache miss for %s with key %s", call.name, key)
 
+        # If a concurrent call is already computing this key, wait for it and
+        # return the resolved value (or re-check the cache if the callback has
+        # already saved it by the time we get here).
+        with _in_flight_lock:
+            in_flight = _in_flight.get(key)
+        if in_flight is not None:
+            val = in_flight.result()
+            try:
+                return cache.load(key).result
+            except KeyError:
+                return val
+
         def _run_and_cache():
             active_meta = state._METADATA.get() + tuple(meta)
             metadata: Dict[str, Any] = defaultdict(dict)
@@ -235,7 +256,17 @@ def make_wrapper(func, policy, meta, isolate, get_call):
             if not isinstance(result, Future):
                 return _cache()
             else:
-                result.add_done_callback(_cache)
+                with _in_flight_lock:
+                    _in_flight[key] = result
+
+                def _cache_and_cleanup(f):
+                    try:
+                        _cache(f)
+                    finally:
+                        with _in_flight_lock:
+                            _in_flight.pop(key, None)
+
+                result.add_done_callback(_cache_and_cleanup)
                 return result
 
         if isolate:
