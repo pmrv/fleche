@@ -192,7 +192,7 @@ def _digest(value: Any) -> Digest:
     m.update(t.__name__.encode())
     match value:
         case int():
-            # Most-frequent arm (bool ⊂ int: booleans are digested as integers here)
+            # Most-frequent arm; bool ⊂ int so booleans are digested here too
             m.update(
                 value.to_bytes(
                     (value.bit_length() + 8) // 8, byteorder="little", signed=True
@@ -209,8 +209,7 @@ def _digest(value: Any) -> Digest:
         case None:
             m.update(b"__None__")
         case Number():
-            # Must follow int (int ⊂ Number); np.integer and np.floating also reach
-            # this arm because np.integer/np.floating ⊂ Number.
+            # Must follow int (int ⊂ Number).
             # lest we have nice things
             if cmath.isnan(value):
                 # somehow hash(float('nan')) can yield different values even if having the same sign, because the
@@ -241,15 +240,6 @@ def _digest(value: Any) -> Digest:
         case np.bool_():
             # np.bool_ ∉ Number so this arm is reachable
             return digest(bool(value))
-        case np.integer():
-            # unreachable: np.integer ⊂ Number, caught above; kept for documentation
-            return digest(int(value))
-        case np.floating():
-            # unreachable: np.floating ⊂ Number, caught above; kept for documentation
-            return digest(float(value))
-        case bool():
-            # unreachable: bool ⊂ int, caught above; kept for documentation
-            m.update(str(value).encode())
         case types.FunctionType():
             return digest(value.__code__)
         case types.CodeType():
