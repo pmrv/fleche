@@ -114,6 +114,7 @@ def main():
             else str(storage_name)
         )
         colors = {
+            "Memory(Raw)": "🟣",
             "Memory": "🟣",
             "Memory+Sqlite(:memory:)": "🟤",
             "PickleFile": "🟢",

@@ -7,6 +7,7 @@ import tempfile
 from statistics import median
 import timeit
 from functools import partial
+from dataclasses import dataclass
 import numpy as np
 
 from fleche import fleche, cache
@@ -17,7 +18,19 @@ from fleche.storage import (
     ValuePickleFile,
     ValueBagOfHoldingH5File,
     Sql,
+    DestructuringMixin,
+    ValueMixin,
+    CallMixin,
 )
+from fleche.storage.memory import MemoryBackend
+
+
+@dataclass(frozen=True)
+class ValueMemoryRaw(DestructuringMixin, ValueMixin, MemoryBackend): ...
+
+
+@dataclass(frozen=True)
+class CallMemoryRaw(CallMixin, MemoryBackend): ...
 
 
 @fleche
@@ -169,6 +182,7 @@ def main():
     try:
         # Configurations
         configs = [
+            ("Memory(Raw)", Cache(ValueMemoryRaw({}), CallMemoryRaw({}))),
             ("Memory", Cache(ValueMemory({}), CallMemory({}))),
             ("Memory+Sqlite(:memory:)", Cache(ValueMemory({}), Sql())),
             (

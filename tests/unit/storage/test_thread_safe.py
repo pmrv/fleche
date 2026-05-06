@@ -37,8 +37,8 @@ class SerializingCallMemory(SerializingMixin, PlainCallMemory): ...
 
 @dataclass(frozen=True)
 class PerKeyValueMemory(PerKeyLockMixin, PlainValueMemory):
-    # storage: dict makes this unhashable by default; use identity hash so
-    # instances can serve as WeakKeyDictionary keys in PerKeyLockMixin.
+    # @dataclass(frozen=True) would generate __hash__ from storage: dict (failing);
+    # re-declare the identity hash from MemoryBackend so it takes effect here.
     __hash__ = object.__hash__
 
 @dataclass(frozen=True)

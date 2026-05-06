@@ -4,13 +4,17 @@ import json
 import shutil
 import tempfile
 import gc
+from dataclasses import dataclass
 
 from fleche.storage import (
     ValueMemory,
     ValuePickleFile,
     ValueBagOfHoldingH5File,
     Sql,
+    DestructuringMixin,
+    ValueMixin,
 )
+from fleche.storage.memory import MemoryBackend
 from fleche.digest import digest
 from fleche.call import Call
 import numpy as np
@@ -20,6 +24,10 @@ from functools import partial
 from utils import st_backend_safe_nested
 from hypothesis import given, settings, HealthCheck
 from hypothesis.database import InMemoryExampleDatabase
+
+
+@dataclass(frozen=True)
+class ValueMemoryRaw(DestructuringMixin, ValueMixin, MemoryBackend): ...
 
 
 def _generate_backend_safe_nested(count=50, max_depth=3, max_size=6):
@@ -261,6 +269,7 @@ def main():
 
     secret = [b"benchmark-test-key-at-least-32-bytes"]
     factories = {
+        "Memory(Raw)": lambda path: ValueMemoryRaw({}),
         "Memory": lambda path: ValueMemory({}),
         "PickleFile": lambda path: ValuePickleFile.with_pickle(root=path),
         "PickleFile_Signed": lambda path: ValuePickleFile.with_pickle(
