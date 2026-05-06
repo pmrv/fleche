@@ -52,3 +52,30 @@ def test_memory_literal_safety(tmp_path):
     # This should return the memory URL and NOT attempt to create a directory named ':memory:'
     # or fail.
     assert _coerce_sqlite_url("sqlite:///:memory:") == "sqlite:///:memory:"
+
+
+def test_tilde_expanded_in_bare_path(monkeypatch, tmp_path):
+    """Verify ~ is expanded to the home directory in bare paths."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    url = _coerce_sqlite_url("~/mydb.sqlite")
+    assert "~" not in url
+    assert str(tmp_path) in url
+    assert url.startswith("sqlite:///")
+
+
+def test_tilde_expanded_in_sqlite_url(monkeypatch, tmp_path):
+    """Verify ~ is expanded to the home directory in sqlite:/// URLs."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    url = _coerce_sqlite_url("sqlite:///~/mydb.sqlite")
+    assert "~" not in url
+    assert str(tmp_path) in url
+    assert url.startswith("sqlite:///")
+
+
+def test_tilde_expanded_creates_parent_dir(monkeypatch, tmp_path):
+    """Verify parent directory is created after ~ expansion."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    url = _coerce_sqlite_url("sqlite:///~/.cache/fleche/calls.db")
+    expected_dir = tmp_path / ".cache" / "fleche"
+    assert expected_dir.exists()
+    assert expected_dir.is_dir()

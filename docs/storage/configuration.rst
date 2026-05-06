@@ -163,10 +163,8 @@ Key descriptions
     ``FLECHE_SECRET_KEY`` environment variable.
 
 ``url``
-    SQLAlchemy connection URL, e.g. ``"sqlite:////absolute/path/to/calls.db"``.
-    Unlike ``root``, ``~`` is **not** expanded in SQL URLs — always use an
-    absolute path for SQLite, or configure the cache programmatically when the
-    path must be derived from the home directory at runtime.
+    SQLAlchemy connection URL, e.g. ``"sqlite:///~/.cache/fleche/calls.db"``.
+    Leading ``~`` is expanded to the home directory in ``sqlite:///`` URLs.
 
 ``echo``
     (bool, default ``false``) — log all SQL statements to stderr (useful for
@@ -238,9 +236,8 @@ Below is an example of a complete configuration file demonstrating several featu
    calls.type = "memory"
 
    [hdf5_values]
-   # HDF5 values backend with SQL call index.
-   # Note: unlike 'root', '~' is not expanded in SQL URLs — use an absolute path.
+   # HDF5 values backend with SQL call index
    values.type = "bagofholding_hdf"
    values.root = "~/.cache/fleche/hdf5_values"
    calls.type = "sql"
-   calls.url = "sqlite:////absolute/path/to/calls.db"
+   calls.url = "sqlite:///~/.cache/fleche/calls.db"
