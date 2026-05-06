@@ -268,6 +268,12 @@ def _digest(value: Any) -> Digest:
             m.update(value.isoformat().encode())
         case datetime.time():
             m.update(value.isoformat().encode())
+        case staticmethod():
+            m.update(digest(value.__func__).encode())
+        case classmethod():
+            m.update(digest(value.__func__).encode())
+        case property():
+            m.update(digest((value.fget, value.fset, value.fdel)).encode())
         case _ if dataclasses.is_dataclass(value):
             # cannot use asdict because it recursively converts values which destroys digests
             # instead (flat-) convert to dictionaries, salt with type name, then fallback to dictionary case.

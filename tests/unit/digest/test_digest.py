@@ -416,6 +416,175 @@ def test_local_function_digests_same_as_module_level():
     assert digest(local_add_one) == digest(_module_level_add_one)
 
 
+# --- Tests for digesting Python descriptors (staticmethod, classmethod, property) ---
+
+
+def test_staticmethod_can_be_digested():
+    """staticmethod objects must be digestible without raising Unhashable."""
+
+    def func(x):
+        return x + 1
+
+    sm = staticmethod(func)
+    result = digest(sm)
+    assert isinstance(result, Digest)
+
+
+def test_classmethod_can_be_digested():
+    """classmethod objects must be digestible without raising Unhashable."""
+
+    def func(cls, x):
+        return x + 1
+
+    cm = classmethod(func)
+    result = digest(cm)
+    assert isinstance(result, Digest)
+
+
+def test_property_can_be_digested():
+    """property objects must be digestible without raising Unhashable."""
+
+    def getter(self):
+        return self._x
+
+    p = property(getter)
+    result = digest(p)
+    assert isinstance(result, Digest)
+
+
+def test_staticmethod_digest_differs_from_underlying_function_digest():
+    """digest(staticmethod(f)) != digest(f) — type salting keeps them distinct."""
+
+    def func(x):
+        return x * 2
+
+    assert digest(staticmethod(func)) != digest(func)
+
+
+def test_classmethod_digest_differs_from_underlying_function_digest():
+    """digest(classmethod(f)) != digest(f) — type salting keeps them distinct."""
+
+    def func(cls, x):
+        return x * 2
+
+    assert digest(classmethod(func)) != digest(func)
+
+
+def test_staticmethod_and_classmethod_differ():
+    """Same underlying function wrapped as staticmethod vs classmethod must produce different digests."""
+
+    def func(x):
+        return x
+
+    assert digest(staticmethod(func)) != digest(classmethod(func))
+
+
+def test_staticmethods_with_different_bodies_have_different_digests():
+    """Two staticmethods wrapping different functions must produce different digests."""
+
+    def f(x):
+        return x + 1
+
+    def g(x):
+        return x + 2
+
+    assert digest(staticmethod(f)) != digest(staticmethod(g))
+
+
+def test_classmethods_with_different_bodies_have_different_digests():
+    """Two classmethods wrapping different functions must produce different digests."""
+
+    def f(cls, x):
+        return x + 1
+
+    def g(cls, x):
+        return x + 2
+
+    assert digest(classmethod(f)) != digest(classmethod(g))
+
+
+def test_property_with_only_getter():
+    """A property with only a getter must be digestible."""
+
+    def getter(self):
+        return self._value
+
+    p = property(getter)
+    result = digest(p)
+    assert isinstance(result, Digest)
+
+
+def test_property_with_getter_and_setter():
+    """A property with getter and setter must be digestible."""
+
+    def getter(self):
+        return self._value
+
+    def setter(self, v):
+        self._value = v
+
+    p = property(getter, setter)
+    result = digest(p)
+    assert isinstance(result, Digest)
+
+
+def test_property_with_getter_setter_deleter():
+    """A property with getter, setter, and deleter must be digestible."""
+
+    def getter(self):
+        return self._value
+
+    def setter(self, v):
+        self._value = v
+
+    def deleter(self):
+        del self._value
+
+    p = property(getter, setter, deleter)
+    result = digest(p)
+    assert isinstance(result, Digest)
+
+
+def test_properties_with_different_getters_have_different_digests():
+    """Two properties with different getter functions must produce different digests."""
+
+    def getter_a(self):
+        return self._a
+
+    def getter_b(self):
+        return self._b
+
+    assert digest(property(getter_a)) != digest(property(getter_b))
+
+
+def test_property_none_setter_vs_setter_differ():
+    """Adding a setter to a property changes its digest."""
+
+    def getter(self):
+        return self._value
+
+    def setter(self, v):
+        self._value = v
+
+    assert digest(property(getter)) != digest(property(getter, setter))
+
+
+def test_property_digest_differs_from_tuple():
+    """property has-a triple of functions but is-not a tuple — digests must differ."""
+
+    def getter(self):
+        return self._value
+
+    def setter(self, v):
+        self._value = v
+
+    def deleter(self):
+        del self._value
+
+    p = property(getter, setter, deleter)
+    assert digest(p) != digest((getter, setter, deleter))
+
+
 class _CustomMapping(collections.abc.Mapping):
     """Minimal Mapping implementation (not a dict subclass)."""
     def __init__(self, d):
