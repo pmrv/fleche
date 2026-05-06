@@ -3,6 +3,7 @@ import datetime
 import struct
 import collections
 import collections.abc
+import types as types_module
 
 import pytest
 from hypothesis import given
@@ -568,3 +569,106 @@ def test_datetime_stdlib_class_constants_digestible():
     assert digest(datetime.timedelta.max) is not None
     assert digest(datetime.timedelta.resolution) is not None
     assert digest(datetime.timezone.utc) is not None
+
+
+# --- module digest tests ---
+
+
+def _make_module(name="test_mod", **attrs):
+    """Helper: create a ModuleType and set given attrs."""
+    m = types_module.ModuleType(name)
+    for k, v in attrs.items():
+        setattr(m, k, v)
+    return m
+
+
+def test_module_digest_is_stable():
+    """Digesting the same module object twice returns the same digest."""
+    m = _make_module(x=1, y="hello")
+    assert digest(m) == digest(m)
+
+
+def test_module_digest_uses_all_when_present():
+    """When __all__ is defined only those names affect the digest."""
+    m1 = _make_module(x=1, y=2, z=3)
+    m1.__all__ = ["x", "y"]
+
+    # m2 has a different z but same __all__ exports
+    m2 = _make_module(x=1, y=2, z=999)
+    m2.__all__ = ["x", "y"]
+
+    assert digest(m1) == digest(m2)
+
+
+def test_module_digest_all_restricts_to_exported_names():
+    """Adding an attribute not in __all__ does not change the digest."""
+    m = _make_module(x=1)
+    m.__all__ = ["x"]
+    d_before = digest(m)
+
+    m.secret = 42  # not in __all__
+    d_after = digest(m)
+
+    assert d_before == d_after
+
+
+def test_module_digest_all_change_changes_digest():
+    """Changing an exported attribute value changes the digest."""
+    m1 = _make_module(x=1)
+    m1.__all__ = ["x"]
+
+    m2 = _make_module(x=2)
+    m2.__all__ = ["x"]
+
+    assert digest(m1) != digest(m2)
+
+
+def test_module_digest_uses_dir_when_no_all():
+    """Without __all__, two modules with different attribute values differ."""
+    m1 = _make_module(x=1, y=2)
+    m2 = _make_module(x=1, y=3)
+
+    assert digest(m1) != digest(m2)
+
+
+def test_module_digest_adding_attribute_changes_digest():
+    """Adding a new attribute (no __all__) changes the digest."""
+    m = _make_module(x=1)
+    d1 = digest(m)
+
+    m.y = 2
+    d2 = digest(m)
+
+    assert d1 != d2
+
+
+
+def test_module_digest_with_function_attribute():
+    """Modules containing Python functions are digestible."""
+    def my_func(x):
+        return x + 1
+
+    m = _make_module()
+    m.my_func = my_func
+    m.__all__ = ["my_func"]
+
+    assert isinstance(digest(m), Digest)
+
+
+def test_module_digest_function_content_independence():
+    """Two modules with __all__-exported functions with identical bodies hash the same."""
+    def f1(x):
+        return x + 1
+
+    def f2(x):
+        return x + 1
+
+    m1 = _make_module()
+    m1.func = f1
+    m1.__all__ = ["func"]
+
+    m2 = _make_module()
+    m2.func = f2
+    m2.__all__ = ["func"]
+
+    assert digest(m1) == digest(m2)

@@ -135,14 +135,13 @@ def load_entry_points():
             logger.error("Failed to load entry point %s: %s", ep.name, e)
 
 
-def _digest_mapping(m, contents: dict) -> Digest:
+def _digest_mapping(m, contents: dict) -> None:
     sorted_items = sorted(
         ((digest(k), k, v) for k, v in contents.items()), key=lambda item: item[0]
     )
     for k_digest, k, v in sorted_items:
         m.update(k_digest.encode())
         m.update(digest(v).encode())
-    return Digest(m.hexdigest())
 
 
 def digest(value: Any) -> Digest:
@@ -280,8 +279,13 @@ def _digest(value: Any) -> Digest:
             # mirror the dataclass digest format so an attrs class and a dataclass
             # with the same name + field layout hash identically.
             m.update(digest(dict(_attrs.field_items(value))).encode())
+        case _ if isinstance(value, types.ModuleType):
+            names = getattr(value, "__all__", None)
+            if names is None:
+                names = dir(value)
+            _digest_mapping(m, {name: getattr(value, name) for name in names})
         case Mapping():
-            return _digest_mapping(m, dict(value))
+            _digest_mapping(m, dict(value))
         case Iterable():
             for v in value:
                 m.update(digest(v).encode())
