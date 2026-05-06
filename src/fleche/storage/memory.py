@@ -15,6 +15,11 @@ class MemoryBackend(StorageBackend):
 
     storage: dict[Digest, Any]
 
+    # Each storage instance is its own world: hash on identity so that frozen
+    # dataclass subclasses can serve as WeakKeyDictionary keys in PerKeyLockMixin
+    # without the unhashable dict field causing a TypeError.
+    __hash__ = object.__hash__
+
     def list(self) -> Iterable[Digest]:
         return tuple(self.storage.keys())
 
@@ -33,7 +38,9 @@ class MemoryBackend(StorageBackend):
 
 
 @dataclass(frozen=True)
-class ValueMemory(DestructuringMixin, ValueMixin, MemoryBackend): ...
+class ValueMemory(DestructuringMixin, ValueMixin, MemoryBackend):
+    __hash__ = object.__hash__
 
 @dataclass(frozen=True)
-class CallMemory(CallMixin, MemoryBackend): ...
+class CallMemory(CallMixin, MemoryBackend):
+    __hash__ = object.__hash__

@@ -19,7 +19,7 @@ from fleche.storage import (
     ValueBagOfHoldingH5File,
     Sql,
 )
-from fleche.storage.thread_safe import SerializingMixin
+from fleche.storage.thread_safe import SerializingMixin, PerKeyLockMixin
 
 
 @dataclass(frozen=True)
@@ -28,6 +28,16 @@ class ValueMemorySerializing(SerializingMixin, ValueMemory): ...
 
 @dataclass(frozen=True)
 class CallMemorySerializing(SerializingMixin, CallMemory): ...
+
+
+@dataclass(frozen=True)
+class ValueMemoryPerKey(PerKeyLockMixin, ValueMemory):
+    __hash__ = object.__hash__
+
+
+@dataclass(frozen=True)
+class CallMemoryPerKey(PerKeyLockMixin, CallMemory):
+    __hash__ = object.__hash__
 
 
 @fleche
@@ -181,6 +191,7 @@ def main():
         configs = [
             ("Memory", Cache(ValueMemory({}), CallMemory({}))),
             ("Memory+Locked(Serializing)", Cache(ValueMemorySerializing({}), CallMemorySerializing({}))),
+            ("Memory+Locked(PerKey)", Cache(ValueMemoryPerKey({}), CallMemoryPerKey({}))),
             ("Memory+Sqlite(:memory:)", Cache(ValueMemory({}), Sql())),
             (
                 "Pickle+Sql",
