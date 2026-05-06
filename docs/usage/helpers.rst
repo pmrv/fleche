@@ -40,6 +40,34 @@ See :doc:`query` for a detailed guide on querying cached calls.
 
 Forces the function to re-execute, even if its result is already present in the cache, and saves the newly computed result to the cache. This forces reevaluation recursively for any nested `@fleche` calls as well.
 
+``.bind(*args, **kwargs)``
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Returns a :class:`~fleche.state.BoundWrapper` that captures the currently active cache and metadata at the moment of the call. The bound wrapper is a plain callable — it does not carry the ``fleche`` helper namespace.
+
+Optionally pre-applies ``*args`` and ``**kwargs`` via :func:`functools.partial`. This is useful when work needs to be submitted to a process pool where the cache context must travel with the callable.
+
+.. code-block:: python
+
+   from fleche import fleche, cache
+
+   @fleche
+   def add(a, b):
+       return a + b
+
+   with cache("memory"):
+       bound = add.bind()      # freezes the active "memory" cache
+       result = bound(1, 2)    # runs under that cache regardless of current context
+       assert result == 3
+
+   # Pre-apply arguments
+   with cache("memory"):
+       bound_partial = add.bind(1, 2)
+       result = bound_partial()   # equivalent to add(1, 2) in the frozen context
+       assert result == 3
+
+See :class:`~fleche.state.BoundWrapper` for the full API, including pickling support.
+
 Accessing the Original Function
 -------------------------------
 
