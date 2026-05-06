@@ -280,6 +280,13 @@ def _digest(value: Any) -> Digest:
             # mirror the dataclass digest format so an attrs class and a dataclass
             # with the same name + field layout hash identically.
             m.update(digest(dict(_attrs.field_items(value))).encode())
+        case _ if isinstance(value, types.ModuleType):
+            names = getattr(value, "__all__", None)
+            if names is None:
+                names = dir(value)
+            m_dict = hashlib.sha256()
+            m_dict.update(dict.__name__.encode())
+            return _digest_mapping(m_dict, {name: getattr(value, name) for name in names})
         case Mapping():
             return _digest_mapping(m, dict(value))
         case Iterable():
