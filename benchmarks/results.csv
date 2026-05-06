@@ -1,214 +1,241 @@
 topic,configuration,workload,function,time
-Digest,,Integer,digest,0.00015
-Digest,,String (len<100),digest,0.00013
-Digest,,String (len>100),digest,0.00026
-Digest,,Float,digest,0.00025
-Digest,,None,digest,0.00014
-Digest,,"List (integers, len<100)",digest,0.00093
-Digest,,"List (integers, len>100)",digest,0.025
-Digest,,Dict (small),digest,0.0017
-Digest,,"Numpy (integers, len<100)",digest,0.0008
-Digest,,"Numpy (integers, len>100)",digest,0.0032
+Digest,,Integer,digest,0.00017
+Digest,,String (len<100),digest,0.00015
+Digest,,String (len>100),digest,0.00023
+Digest,,Float,digest,0.00029
+Digest,,None,digest,0.00018
+Digest,,"List (integers, len<100)",digest,0.00081
+Digest,,"List (integers, len>100)",digest,0.035
+Digest,,Dict (small),digest,0.0015
+Digest,,"Numpy (integers, len<100)",digest,0.00092
+Digest,,"Numpy (integers, len>100)",digest,0.0038
 Digest,,Nested (Random Hypothesis),digest,0.0022
-Value Storage,Memory,small_strings,save,1.3e-06
-Value Storage,Memory,small_strings,contains_hit,8.4e-07
-Value Storage,Memory,small_strings,contains_miss,8.2e-07
-Value Storage,Memory,small_strings,load,1.6e-06
-Value Storage,Memory,small_strings,evict,8.6e-07
-Value Storage,PickleFile,small_strings,save,0.00096
-Value Storage,PickleFile,small_strings,contains_hit,7.4e-05
-Value Storage,PickleFile,small_strings,contains_miss,7e-05
-Value Storage,PickleFile,small_strings,load,0.00019
-Value Storage,PickleFile,small_strings,evict,0.00031
-Value Storage,PickleFile_Signed,small_strings,save,0.001
-Value Storage,PickleFile_Signed,small_strings,contains_hit,7.2e-05
-Value Storage,PickleFile_Signed,small_strings,contains_miss,7.3e-05
-Value Storage,PickleFile_Signed,small_strings,load,0.0002
-Value Storage,PickleFile_Signed,small_strings,evict,0.00033
-Value Storage,CloudpickleFile,small_strings,save,0.00092
-Value Storage,CloudpickleFile,small_strings,contains_hit,7.3e-05
-Value Storage,CloudpickleFile,small_strings,contains_miss,7.1e-05
-Value Storage,CloudpickleFile,small_strings,load,0.00019
-Value Storage,CloudpickleFile,small_strings,evict,0.00027
-Value Storage,CloudpickleFile_Signed,small_strings,save,0.001
-Value Storage,CloudpickleFile_Signed,small_strings,contains_hit,7.3e-05
-Value Storage,CloudpickleFile_Signed,small_strings,contains_miss,7.1e-05
-Value Storage,CloudpickleFile_Signed,small_strings,load,0.0002
-Value Storage,CloudpickleFile_Signed,small_strings,evict,0.00023
-Value Storage,DillFile,small_strings,save,0.001
-Value Storage,DillFile,small_strings,contains_hit,7.2e-05
-Value Storage,DillFile,small_strings,contains_miss,7.1e-05
-Value Storage,DillFile,small_strings,load,0.0002
-Value Storage,DillFile,small_strings,evict,0.00025
-Value Storage,DillFile_Signed,small_strings,save,0.00087
-Value Storage,DillFile_Signed,small_strings,contains_hit,7.1e-05
-Value Storage,DillFile_Signed,small_strings,contains_miss,7.1e-05
-Value Storage,DillFile_Signed,small_strings,load,0.00021
-Value Storage,DillFile_Signed,small_strings,evict,0.00031
-Value Storage,BagOfHoldingH5File,small_strings,save,0.0035
-Value Storage,BagOfHoldingH5File,small_strings,contains_hit,7.6e-05
-Value Storage,BagOfHoldingH5File,small_strings,contains_miss,7.2e-05
-Value Storage,BagOfHoldingH5File,small_strings,load,0.0039
-Value Storage,BagOfHoldingH5File,small_strings,evict,0.0003
-Value Storage,Memory,nested_structures,save,1.4e-06
-Value Storage,Memory,nested_structures,contains_hit,8.3e-07
-Value Storage,Memory,nested_structures,contains_miss,8.1e-07
-Value Storage,Memory,nested_structures,load,1.7e-06
-Value Storage,Memory,nested_structures,evict,1.2e-06
-Value Storage,PickleFile,nested_structures,save,0.0011
-Value Storage,PickleFile,nested_structures,contains_hit,7.5e-05
-Value Storage,PickleFile,nested_structures,contains_miss,7.3e-05
-Value Storage,PickleFile,nested_structures,load,0.00021
-Value Storage,PickleFile,nested_structures,evict,0.00018
-Value Storage,PickleFile_Signed,nested_structures,save,0.00098
-Value Storage,PickleFile_Signed,nested_structures,contains_hit,7.2e-05
-Value Storage,PickleFile_Signed,nested_structures,contains_miss,7.9e-05
-Value Storage,PickleFile_Signed,nested_structures,load,0.0002
-Value Storage,PickleFile_Signed,nested_structures,evict,0.00021
-Value Storage,CloudpickleFile,nested_structures,save,0.00091
-Value Storage,CloudpickleFile,nested_structures,contains_hit,7.3e-05
-Value Storage,CloudpickleFile,nested_structures,contains_miss,7.2e-05
-Value Storage,CloudpickleFile,nested_structures,load,0.0002
-Value Storage,CloudpickleFile,nested_structures,evict,0.00015
-Value Storage,CloudpickleFile_Signed,nested_structures,save,0.00099
-Value Storage,CloudpickleFile_Signed,nested_structures,contains_hit,7.1e-05
-Value Storage,CloudpickleFile_Signed,nested_structures,contains_miss,7.3e-05
-Value Storage,CloudpickleFile_Signed,nested_structures,load,0.0002
-Value Storage,CloudpickleFile_Signed,nested_structures,evict,0.00015
-Value Storage,DillFile,nested_structures,save,0.0011
-Value Storage,DillFile,nested_structures,contains_hit,7.3e-05
-Value Storage,DillFile,nested_structures,contains_miss,7e-05
-Value Storage,DillFile,nested_structures,load,0.00022
-Value Storage,DillFile,nested_structures,evict,0.00014
-Value Storage,DillFile_Signed,nested_structures,save,0.0012
-Value Storage,DillFile_Signed,nested_structures,contains_hit,7.4e-05
-Value Storage,DillFile_Signed,nested_structures,contains_miss,7.2e-05
-Value Storage,DillFile_Signed,nested_structures,load,0.00022
-Value Storage,DillFile_Signed,nested_structures,evict,0.00016
-Value Storage,BagOfHoldingH5File,nested_structures,save,0.0036
-Value Storage,BagOfHoldingH5File,nested_structures,contains_hit,7.2e-05
-Value Storage,BagOfHoldingH5File,nested_structures,contains_miss,7.4e-05
-Value Storage,BagOfHoldingH5File,nested_structures,load,0.0032
-Value Storage,BagOfHoldingH5File,nested_structures,evict,0.00016
-Value Storage,Memory,numpy_arrays,save,4.2e-06
-Value Storage,Memory,numpy_arrays,contains_hit,8.2e-07
-Value Storage,Memory,numpy_arrays,contains_miss,8.2e-07
-Value Storage,Memory,numpy_arrays,load,4.6e-06
-Value Storage,Memory,numpy_arrays,evict,1.1e-06
-Value Storage,PickleFile,numpy_arrays,save,0.0012
-Value Storage,PickleFile,numpy_arrays,contains_hit,7.3e-05
-Value Storage,PickleFile,numpy_arrays,contains_miss,7.2e-05
-Value Storage,PickleFile,numpy_arrays,load,0.00025
-Value Storage,PickleFile,numpy_arrays,evict,0.00025
-Value Storage,PickleFile_Signed,numpy_arrays,save,0.0013
-Value Storage,PickleFile_Signed,numpy_arrays,contains_hit,7.6e-05
-Value Storage,PickleFile_Signed,numpy_arrays,contains_miss,7.4e-05
+Value Storage,Memory,small_strings,save,2.5e-06
+Value Storage,Memory,small_strings,contains_hit,1.4e-06
+Value Storage,Memory,small_strings,contains_miss,1.4e-06
+Value Storage,Memory,small_strings,load,2.2e-06
+Value Storage,Memory,small_strings,evict,1.4e-06
+Value Storage,Memory+Locked(Serializing),small_strings,save,4.1e-06
+Value Storage,Memory+Locked(Serializing),small_strings,contains_hit,3e-06
+Value Storage,Memory+Locked(Serializing),small_strings,contains_miss,3e-06
+Value Storage,Memory+Locked(Serializing),small_strings,load,3.8e-06
+Value Storage,Memory+Locked(Serializing),small_strings,evict,2.9e-06
+Value Storage,PickleFile,small_strings,save,0.0003
+Value Storage,PickleFile,small_strings,contains_hit,2.3e-05
+Value Storage,PickleFile,small_strings,contains_miss,2.3e-05
+Value Storage,PickleFile,small_strings,load,0.00024
+Value Storage,PickleFile,small_strings,evict,7.4e-05
+Value Storage,PickleFile_Signed,small_strings,save,0.00031
+Value Storage,PickleFile_Signed,small_strings,contains_hit,2.4e-05
+Value Storage,PickleFile_Signed,small_strings,contains_miss,2.3e-05
+Value Storage,PickleFile_Signed,small_strings,load,0.00025
+Value Storage,PickleFile_Signed,small_strings,evict,7.3e-05
+Value Storage,CloudpickleFile,small_strings,save,0.00031
+Value Storage,CloudpickleFile,small_strings,contains_hit,2.3e-05
+Value Storage,CloudpickleFile,small_strings,contains_miss,2.3e-05
+Value Storage,CloudpickleFile,small_strings,load,0.00024
+Value Storage,CloudpickleFile,small_strings,evict,7.3e-05
+Value Storage,CloudpickleFile_Signed,small_strings,save,0.00032
+Value Storage,CloudpickleFile_Signed,small_strings,contains_hit,2.3e-05
+Value Storage,CloudpickleFile_Signed,small_strings,contains_miss,2.3e-05
+Value Storage,CloudpickleFile_Signed,small_strings,load,0.00025
+Value Storage,CloudpickleFile_Signed,small_strings,evict,7.3e-05
+Value Storage,DillFile,small_strings,save,0.00034
+Value Storage,DillFile,small_strings,contains_hit,2.4e-05
+Value Storage,DillFile,small_strings,contains_miss,2.3e-05
+Value Storage,DillFile,small_strings,load,0.00025
+Value Storage,DillFile,small_strings,evict,7.2e-05
+Value Storage,DillFile_Signed,small_strings,save,0.00033
+Value Storage,DillFile_Signed,small_strings,contains_hit,2.4e-05
+Value Storage,DillFile_Signed,small_strings,contains_miss,2.3e-05
+Value Storage,DillFile_Signed,small_strings,load,0.00026
+Value Storage,DillFile_Signed,small_strings,evict,7.2e-05
+Value Storage,BagOfHoldingH5File,small_strings,save,0.0015
+Value Storage,BagOfHoldingH5File,small_strings,contains_hit,2.3e-05
+Value Storage,BagOfHoldingH5File,small_strings,contains_miss,2.3e-05
+Value Storage,BagOfHoldingH5File,small_strings,load,0.0021
+Value Storage,BagOfHoldingH5File,small_strings,evict,6.6e-05
+Value Storage,Memory,nested_structures,save,2.6e-06
+Value Storage,Memory,nested_structures,contains_hit,1.4e-06
+Value Storage,Memory,nested_structures,contains_miss,1.4e-06
+Value Storage,Memory,nested_structures,load,2.3e-06
+Value Storage,Memory,nested_structures,evict,1.6e-06
+Value Storage,Memory+Locked(Serializing),nested_structures,save,4.4e-06
+Value Storage,Memory+Locked(Serializing),nested_structures,contains_hit,2.9e-06
+Value Storage,Memory+Locked(Serializing),nested_structures,contains_miss,2.9e-06
+Value Storage,Memory+Locked(Serializing),nested_structures,load,3.9e-06
+Value Storage,Memory+Locked(Serializing),nested_structures,evict,3.1e-06
+Value Storage,PickleFile,nested_structures,save,0.00032
+Value Storage,PickleFile,nested_structures,contains_hit,2.3e-05
+Value Storage,PickleFile,nested_structures,contains_miss,2.3e-05
+Value Storage,PickleFile,nested_structures,load,0.00024
+Value Storage,PickleFile,nested_structures,evict,4.2e-05
+Value Storage,PickleFile_Signed,nested_structures,save,0.00032
+Value Storage,PickleFile_Signed,nested_structures,contains_hit,2.4e-05
+Value Storage,PickleFile_Signed,nested_structures,contains_miss,2.3e-05
+Value Storage,PickleFile_Signed,nested_structures,load,0.00025
+Value Storage,PickleFile_Signed,nested_structures,evict,4.2e-05
+Value Storage,CloudpickleFile,nested_structures,save,0.00033
+Value Storage,CloudpickleFile,nested_structures,contains_hit,2.3e-05
+Value Storage,CloudpickleFile,nested_structures,contains_miss,2.3e-05
+Value Storage,CloudpickleFile,nested_structures,load,0.00024
+Value Storage,CloudpickleFile,nested_structures,evict,4.2e-05
+Value Storage,CloudpickleFile_Signed,nested_structures,save,0.00034
+Value Storage,CloudpickleFile_Signed,nested_structures,contains_hit,2.3e-05
+Value Storage,CloudpickleFile_Signed,nested_structures,contains_miss,2.3e-05
+Value Storage,CloudpickleFile_Signed,nested_structures,load,0.00025
+Value Storage,CloudpickleFile_Signed,nested_structures,evict,4.2e-05
+Value Storage,DillFile,nested_structures,save,0.00034
+Value Storage,DillFile,nested_structures,contains_hit,2.3e-05
+Value Storage,DillFile,nested_structures,contains_miss,2.4e-05
+Value Storage,DillFile,nested_structures,load,0.00025
+Value Storage,DillFile,nested_structures,evict,4.2e-05
+Value Storage,DillFile_Signed,nested_structures,save,0.00036
+Value Storage,DillFile_Signed,nested_structures,contains_hit,2.4e-05
+Value Storage,DillFile_Signed,nested_structures,contains_miss,2.4e-05
+Value Storage,DillFile_Signed,nested_structures,load,0.00026
+Value Storage,DillFile_Signed,nested_structures,evict,4.2e-05
+Value Storage,BagOfHoldingH5File,nested_structures,save,0.0013
+Value Storage,BagOfHoldingH5File,nested_structures,contains_hit,2.3e-05
+Value Storage,BagOfHoldingH5File,nested_structures,contains_miss,2.3e-05
+Value Storage,BagOfHoldingH5File,nested_structures,load,0.0015
+Value Storage,BagOfHoldingH5File,nested_structures,evict,4.2e-05
+Value Storage,Memory,numpy_arrays,save,5.8e-06
+Value Storage,Memory,numpy_arrays,contains_hit,1.4e-06
+Value Storage,Memory,numpy_arrays,contains_miss,1.4e-06
+Value Storage,Memory,numpy_arrays,load,5.3e-06
+Value Storage,Memory,numpy_arrays,evict,1.6e-06
+Value Storage,Memory+Locked(Serializing),numpy_arrays,save,7.6e-06
+Value Storage,Memory+Locked(Serializing),numpy_arrays,contains_hit,2.9e-06
+Value Storage,Memory+Locked(Serializing),numpy_arrays,contains_miss,2.9e-06
+Value Storage,Memory+Locked(Serializing),numpy_arrays,load,7e-06
+Value Storage,Memory+Locked(Serializing),numpy_arrays,evict,3.2e-06
+Value Storage,PickleFile,numpy_arrays,save,0.0004
+Value Storage,PickleFile,numpy_arrays,contains_hit,2.4e-05
+Value Storage,PickleFile,numpy_arrays,contains_miss,2.4e-05
+Value Storage,PickleFile,numpy_arrays,load,0.00026
+Value Storage,PickleFile,numpy_arrays,evict,8.4e-05
+Value Storage,PickleFile_Signed,numpy_arrays,save,0.00046
+Value Storage,PickleFile_Signed,numpy_arrays,contains_hit,2.4e-05
+Value Storage,PickleFile_Signed,numpy_arrays,contains_miss,2.4e-05
 Value Storage,PickleFile_Signed,numpy_arrays,load,0.00033
-Value Storage,PickleFile_Signed,numpy_arrays,evict,0.00031
-Value Storage,CloudpickleFile,numpy_arrays,save,0.0012
-Value Storage,CloudpickleFile,numpy_arrays,contains_hit,7.2e-05
-Value Storage,CloudpickleFile,numpy_arrays,contains_miss,6.8e-05
-Value Storage,CloudpickleFile,numpy_arrays,load,0.00025
-Value Storage,CloudpickleFile,numpy_arrays,evict,0.00033
-Value Storage,CloudpickleFile_Signed,numpy_arrays,save,0.0014
-Value Storage,CloudpickleFile_Signed,numpy_arrays,contains_hit,7.6e-05
-Value Storage,CloudpickleFile_Signed,numpy_arrays,contains_miss,7.2e-05
-Value Storage,CloudpickleFile_Signed,numpy_arrays,load,0.00031
-Value Storage,CloudpickleFile_Signed,numpy_arrays,evict,0.00046
-Value Storage,DillFile,numpy_arrays,save,0.0016
-Value Storage,DillFile,numpy_arrays,contains_hit,7.5e-05
-Value Storage,DillFile,numpy_arrays,contains_miss,7.8e-05
-Value Storage,DillFile,numpy_arrays,load,0.00026
-Value Storage,DillFile,numpy_arrays,evict,0.00033
-Value Storage,DillFile_Signed,numpy_arrays,save,0.0017
-Value Storage,DillFile_Signed,numpy_arrays,contains_hit,7.5e-05
-Value Storage,DillFile_Signed,numpy_arrays,contains_miss,7.4e-05
-Value Storage,DillFile_Signed,numpy_arrays,load,0.00039
-Value Storage,DillFile_Signed,numpy_arrays,evict,0.00035
-Value Storage,BagOfHoldingH5File,numpy_arrays,save,0.0047
-Value Storage,BagOfHoldingH5File,numpy_arrays,contains_hit,7e-05
-Value Storage,BagOfHoldingH5File,numpy_arrays,contains_miss,7e-05
-Value Storage,BagOfHoldingH5File,numpy_arrays,load,0.0042
-Value Storage,BagOfHoldingH5File,numpy_arrays,evict,0.00031
-Call Storage,SqlFile,calls,save,0.025
-Call Storage,SqlFile,calls,contains_hit,0.0004
-Call Storage,SqlFile,calls,contains_miss,0.0004
-Call Storage,SqlFile,calls,load,0.0017
-Call Storage,SqlFile,calls,evict,0.011
-Call Storage,SqlMemory,calls,save,0.0019
-Call Storage,SqlMemory,calls,contains_hit,0.00017
-Call Storage,SqlMemory,calls,contains_miss,0.00017
-Call Storage,SqlMemory,calls,load,0.00052
-Call Storage,SqlMemory,calls,evict,0.00088
-Integration,Memory,lightweight,miss,0.00017
-Integration,Memory,lightweight,contains_miss,9.9e-05
-Integration,Memory,lightweight,contains_hit,9.7e-05
-Integration,Memory,lightweight,hit,0.00011
-Integration,Memory,compute_heavy,miss,0.0
-Integration,Memory,compute_heavy,contains_miss,8.3e-05
-Integration,Memory,compute_heavy,contains_hit,8.4e-05
-Integration,Memory,compute_heavy,hit,0.00012
-Integration,Memory,data_heavy,miss,6.2e-05
-Integration,Memory,data_heavy,contains_miss,8.3e-05
-Integration,Memory,data_heavy,contains_hit,8.3e-05
-Integration,Memory,data_heavy,hit,0.00012
-Integration,Memory+Sqlite(:memory:),lightweight,miss,0.0021
-Integration,Memory+Sqlite(:memory:),lightweight,contains_miss,0.00035
-Integration,Memory+Sqlite(:memory:),lightweight,contains_hit,0.00035
+Value Storage,PickleFile_Signed,numpy_arrays,evict,7.9e-05
+Value Storage,CloudpickleFile,numpy_arrays,save,0.00042
+Value Storage,CloudpickleFile,numpy_arrays,contains_hit,2.4e-05
+Value Storage,CloudpickleFile,numpy_arrays,contains_miss,2.4e-05
+Value Storage,CloudpickleFile,numpy_arrays,load,0.00026
+Value Storage,CloudpickleFile,numpy_arrays,evict,7.8e-05
+Value Storage,CloudpickleFile_Signed,numpy_arrays,save,0.00048
+Value Storage,CloudpickleFile_Signed,numpy_arrays,contains_hit,2.4e-05
+Value Storage,CloudpickleFile_Signed,numpy_arrays,contains_miss,2.3e-05
+Value Storage,CloudpickleFile_Signed,numpy_arrays,load,0.00033
+Value Storage,CloudpickleFile_Signed,numpy_arrays,evict,7.9e-05
+Value Storage,DillFile,numpy_arrays,save,0.00055
+Value Storage,DillFile,numpy_arrays,contains_hit,2.3e-05
+Value Storage,DillFile,numpy_arrays,contains_miss,2.3e-05
+Value Storage,DillFile,numpy_arrays,load,0.00027
+Value Storage,DillFile,numpy_arrays,evict,7.8e-05
+Value Storage,DillFile_Signed,numpy_arrays,save,0.00061
+Value Storage,DillFile_Signed,numpy_arrays,contains_hit,2.4e-05
+Value Storage,DillFile_Signed,numpy_arrays,contains_miss,2.4e-05
+Value Storage,DillFile_Signed,numpy_arrays,load,0.00034
+Value Storage,DillFile_Signed,numpy_arrays,evict,8.1e-05
+Value Storage,BagOfHoldingH5File,numpy_arrays,save,0.002
+Value Storage,BagOfHoldingH5File,numpy_arrays,contains_hit,2.3e-05
+Value Storage,BagOfHoldingH5File,numpy_arrays,contains_miss,2.4e-05
+Value Storage,BagOfHoldingH5File,numpy_arrays,load,0.0021
+Value Storage,BagOfHoldingH5File,numpy_arrays,evict,7.8e-05
+Call Storage,SqlFile,calls,save,0.0026
+Call Storage,SqlFile,calls,contains_hit,0.00023
+Call Storage,SqlFile,calls,contains_miss,0.00023
+Call Storage,SqlFile,calls,load,0.00069
+Call Storage,SqlFile,calls,evict,0.0017
+Call Storage,SqlMemory,calls,save,0.0017
+Call Storage,SqlMemory,calls,contains_hit,0.00022
+Call Storage,SqlMemory,calls,contains_miss,0.00021
+Call Storage,SqlMemory,calls,load,0.00063
+Call Storage,SqlMemory,calls,evict,0.00089
+Integration,Memory,lightweight,miss,0.00019
+Integration,Memory,lightweight,contains_miss,5.6e-05
+Integration,Memory,lightweight,contains_hit,5.6e-05
+Integration,Memory,lightweight,hit,9.6e-05
+Integration,Memory,compute_heavy,miss,0.00068
+Integration,Memory,compute_heavy,contains_miss,5.5e-05
+Integration,Memory,compute_heavy,contains_hit,5.5e-05
+Integration,Memory,compute_heavy,hit,9.4e-05
+Integration,Memory,data_heavy,miss,0.00031
+Integration,Memory,data_heavy,contains_miss,5.5e-05
+Integration,Memory,data_heavy,contains_hit,5.5e-05
+Integration,Memory,data_heavy,hit,0.00011
+Integration,Memory+Locked(Serializing),lightweight,miss,0.0002
+Integration,Memory+Locked(Serializing),lightweight,contains_miss,5.8e-05
+Integration,Memory+Locked(Serializing),lightweight,contains_hit,5.9e-05
+Integration,Memory+Locked(Serializing),lightweight,hit,0.0001
+Integration,Memory+Locked(Serializing),compute_heavy,miss,0.00072
+Integration,Memory+Locked(Serializing),compute_heavy,contains_miss,5.9e-05
+Integration,Memory+Locked(Serializing),compute_heavy,contains_hit,5.7e-05
+Integration,Memory+Locked(Serializing),compute_heavy,hit,0.0001
+Integration,Memory+Locked(Serializing),data_heavy,miss,0.00033
+Integration,Memory+Locked(Serializing),data_heavy,contains_miss,5.8e-05
+Integration,Memory+Locked(Serializing),data_heavy,contains_hit,5.8e-05
+Integration,Memory+Locked(Serializing),data_heavy,hit,0.00011
+Integration,Memory+Sqlite(:memory:),lightweight,miss,0.0015
+Integration,Memory+Sqlite(:memory:),lightweight,contains_miss,0.0003
+Integration,Memory+Sqlite(:memory:),lightweight,contains_hit,0.0003
 Integration,Memory+Sqlite(:memory:),lightweight,hit,0.00077
 Integration,Memory+Sqlite(:memory:),compute_heavy,miss,0.002
-Integration,Memory+Sqlite(:memory:),compute_heavy,contains_miss,0.0004
-Integration,Memory+Sqlite(:memory:),compute_heavy,contains_hit,0.00035
-Integration,Memory+Sqlite(:memory:),compute_heavy,hit,0.00095
-Integration,Memory+Sqlite(:memory:),data_heavy,miss,0.00084
+Integration,Memory+Sqlite(:memory:),compute_heavy,contains_miss,0.0003
+Integration,Memory+Sqlite(:memory:),compute_heavy,contains_hit,0.0003
+Integration,Memory+Sqlite(:memory:),compute_heavy,hit,0.00078
+Integration,Memory+Sqlite(:memory:),data_heavy,miss,0.0016
 Integration,Memory+Sqlite(:memory:),data_heavy,contains_miss,0.0003
-Integration,Memory+Sqlite(:memory:),data_heavy,contains_hit,0.0003
-Integration,Memory+Sqlite(:memory:),data_heavy,hit,0.00087
-Integration,Pickle+Sql,lightweight,miss,0.019
-Integration,Pickle+Sql,lightweight,contains_miss,0.00056
-Integration,Pickle+Sql,lightweight,contains_hit,0.00062
-Integration,Pickle+Sql,lightweight,hit,0.0024
-Integration,Pickle+Sql,compute_heavy,miss,0.016
-Integration,Pickle+Sql,compute_heavy,contains_miss,0.00053
-Integration,Pickle+Sql,compute_heavy,contains_hit,0.00068
-Integration,Pickle+Sql,compute_heavy,hit,0.0033
-Integration,Pickle+Sql,data_heavy,miss,0.003
-Integration,Pickle+Sql,data_heavy,contains_miss,0.0006
-Integration,Pickle+Sql,data_heavy,contains_hit,0.00081
-Integration,Pickle+Sql,data_heavy,hit,0.0031
-Integration,H5+Sql,lightweight,miss,0.025
-Integration,H5+Sql,lightweight,contains_miss,0.00057
-Integration,H5+Sql,lightweight,contains_hit,0.00085
-Integration,H5+Sql,lightweight,hit,0.0063
-Integration,H5+Sql,compute_heavy,miss,0.024
-Integration,H5+Sql,compute_heavy,contains_miss,0.00064
-Integration,H5+Sql,compute_heavy,contains_hit,0.00081
-Integration,H5+Sql,compute_heavy,hit,0.0067
-Integration,H5+Sql,data_heavy,miss,0.0075
-Integration,H5+Sql,data_heavy,contains_miss,0.00065
-Integration,H5+Sql,data_heavy,contains_hit,0.00066
-Integration,H5+Sql,data_heavy,hit,0.0069
-Integration,"SizeLimitedCache(Memory,max=10)",lightweight,miss,0.00018
-Integration,"SizeLimitedCache(Memory,max=10)",lightweight,contains_miss,8.2e-05
-Integration,"SizeLimitedCache(Memory,max=10)",lightweight,contains_hit,8.2e-05
-Integration,"SizeLimitedCache(Memory,max=10)",lightweight,hit,0.00012
-Integration,"SizeLimitedCache(Memory,max=10)",compute_heavy,miss,0.0
-Integration,"SizeLimitedCache(Memory,max=10)",compute_heavy,contains_miss,8.8e-05
-Integration,"SizeLimitedCache(Memory,max=10)",compute_heavy,contains_hit,8.6e-05
-Integration,"SizeLimitedCache(Memory,max=10)",compute_heavy,hit,0.00015
-Integration,"SizeLimitedCache(Memory,max=10)",data_heavy,miss,5.6e-05
-Integration,"SizeLimitedCache(Memory,max=10)",data_heavy,contains_miss,8.5e-05
-Integration,"SizeLimitedCache(Memory,max=10)",data_heavy,contains_hit,8.6e-05
-Integration,"SizeLimitedCache(Memory,max=10)",data_heavy,hit,0.00012
-Integration,"SizeLimitedCache(Memory,max=100)",lightweight,miss,0.00017
-Integration,"SizeLimitedCache(Memory,max=100)",lightweight,contains_miss,8.4e-05
-Integration,"SizeLimitedCache(Memory,max=100)",lightweight,contains_hit,8.2e-05
-Integration,"SizeLimitedCache(Memory,max=100)",lightweight,hit,0.00011
-Integration,"SizeLimitedCache(Memory,max=100)",compute_heavy,miss,0.0
-Integration,"SizeLimitedCache(Memory,max=100)",compute_heavy,contains_miss,9e-05
-Integration,"SizeLimitedCache(Memory,max=100)",compute_heavy,contains_hit,8.9e-05
-Integration,"SizeLimitedCache(Memory,max=100)",compute_heavy,hit,0.00012
-Integration,"SizeLimitedCache(Memory,max=100)",data_heavy,miss,6.6e-05
-Integration,"SizeLimitedCache(Memory,max=100)",data_heavy,contains_miss,8.5e-05
-Integration,"SizeLimitedCache(Memory,max=100)",data_heavy,contains_hit,8.5e-05
-Integration,"SizeLimitedCache(Memory,max=100)",data_heavy,hit,0.00012
+Integration,Memory+Sqlite(:memory:),data_heavy,contains_hit,0.00031
+Integration,Memory+Sqlite(:memory:),data_heavy,hit,0.00078
+Integration,Pickle+Sql,lightweight,miss,0.0032
+Integration,Pickle+Sql,lightweight,contains_miss,0.00033
+Integration,Pickle+Sql,lightweight,contains_hit,0.00033
+Integration,Pickle+Sql,lightweight,hit,0.0012
+Integration,Pickle+Sql,compute_heavy,miss,0.0037
+Integration,Pickle+Sql,compute_heavy,contains_miss,0.00033
+Integration,Pickle+Sql,compute_heavy,contains_hit,0.00033
+Integration,Pickle+Sql,compute_heavy,hit,0.0012
+Integration,Pickle+Sql,data_heavy,miss,0.0037
+Integration,Pickle+Sql,data_heavy,contains_miss,0.00033
+Integration,Pickle+Sql,data_heavy,contains_hit,0.00033
+Integration,Pickle+Sql,data_heavy,hit,0.0013
+Integration,H5+Sql,lightweight,miss,0.0055
+Integration,H5+Sql,lightweight,contains_miss,0.00032
+Integration,H5+Sql,lightweight,contains_hit,0.00033
+Integration,H5+Sql,lightweight,hit,0.0031
+Integration,H5+Sql,compute_heavy,miss,0.0061
+Integration,H5+Sql,compute_heavy,contains_miss,0.00032
+Integration,H5+Sql,compute_heavy,contains_hit,0.00033
+Integration,H5+Sql,compute_heavy,hit,0.0031
+Integration,H5+Sql,data_heavy,miss,0.0064
+Integration,H5+Sql,data_heavy,contains_miss,0.00033
+Integration,H5+Sql,data_heavy,contains_hit,0.00033
+Integration,H5+Sql,data_heavy,hit,0.0032
+Integration,"SizeLimitedCache(Memory,max=10)",lightweight,miss,0.00019
+Integration,"SizeLimitedCache(Memory,max=10)",lightweight,contains_miss,5.5e-05
+Integration,"SizeLimitedCache(Memory,max=10)",lightweight,contains_hit,5.5e-05
+Integration,"SizeLimitedCache(Memory,max=10)",lightweight,hit,0.0001
+Integration,"SizeLimitedCache(Memory,max=10)",compute_heavy,miss,0.00071
+Integration,"SizeLimitedCache(Memory,max=10)",compute_heavy,contains_miss,5.6e-05
+Integration,"SizeLimitedCache(Memory,max=10)",compute_heavy,contains_hit,5.6e-05
+Integration,"SizeLimitedCache(Memory,max=10)",compute_heavy,hit,0.0001
+Integration,"SizeLimitedCache(Memory,max=10)",data_heavy,miss,0.00031
+Integration,"SizeLimitedCache(Memory,max=10)",data_heavy,contains_miss,5.6e-05
+Integration,"SizeLimitedCache(Memory,max=10)",data_heavy,contains_hit,5.4e-05
+Integration,"SizeLimitedCache(Memory,max=10)",data_heavy,hit,0.00011
+Integration,"SizeLimitedCache(Memory,max=100)",lightweight,miss,0.00018
+Integration,"SizeLimitedCache(Memory,max=100)",lightweight,contains_miss,5.6e-05
+Integration,"SizeLimitedCache(Memory,max=100)",lightweight,contains_hit,5.5e-05
+Integration,"SizeLimitedCache(Memory,max=100)",lightweight,hit,9.5e-05
+Integration,"SizeLimitedCache(Memory,max=100)",compute_heavy,miss,0.00068
+Integration,"SizeLimitedCache(Memory,max=100)",compute_heavy,contains_miss,5.5e-05
+Integration,"SizeLimitedCache(Memory,max=100)",compute_heavy,contains_hit,5.5e-05
+Integration,"SizeLimitedCache(Memory,max=100)",compute_heavy,hit,9.4e-05
+Integration,"SizeLimitedCache(Memory,max=100)",data_heavy,miss,0.00031
+Integration,"SizeLimitedCache(Memory,max=100)",data_heavy,contains_miss,5.6e-05
+Integration,"SizeLimitedCache(Memory,max=100)",data_heavy,contains_hit,5.6e-05
+Integration,"SizeLimitedCache(Memory,max=100)",data_heavy,hit,0.0001

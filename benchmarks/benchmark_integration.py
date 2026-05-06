@@ -7,6 +7,7 @@ import tempfile
 from statistics import median
 import timeit
 from functools import partial
+from dataclasses import dataclass
 import numpy as np
 
 from fleche import fleche, cache
@@ -18,6 +19,15 @@ from fleche.storage import (
     ValueBagOfHoldingH5File,
     Sql,
 )
+from fleche.storage.thread_safe import SerializingMixin
+
+
+@dataclass(frozen=True)
+class ValueMemorySerializing(SerializingMixin, ValueMemory): ...
+
+
+@dataclass(frozen=True)
+class CallMemorySerializing(SerializingMixin, CallMemory): ...
 
 
 @fleche
@@ -170,6 +180,7 @@ def main():
         # Configurations
         configs = [
             ("Memory", Cache(ValueMemory({}), CallMemory({}))),
+            ("Memory+Locked(Serializing)", Cache(ValueMemorySerializing({}), CallMemorySerializing({}))),
             ("Memory+Sqlite(:memory:)", Cache(ValueMemory({}), Sql())),
             (
                 "Pickle+Sql",

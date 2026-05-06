@@ -4,6 +4,7 @@ import json
 import shutil
 import tempfile
 import gc
+from dataclasses import dataclass
 
 from fleche.storage import (
     ValueMemory,
@@ -11,6 +12,7 @@ from fleche.storage import (
     ValueBagOfHoldingH5File,
     Sql,
 )
+from fleche.storage.thread_safe import SerializingMixin
 from fleche.digest import digest
 from fleche.call import Call
 import numpy as np
@@ -20,6 +22,15 @@ from functools import partial
 from utils import st_backend_safe_nested
 from hypothesis import given, settings, HealthCheck
 from hypothesis.database import InMemoryExampleDatabase
+
+
+@dataclass(frozen=True)
+class ValueMemorySerializing(SerializingMixin, ValueMemory): ...
+
+
+# PerKeyLockMixin is incompatible with MemoryBackend: the storage dict field
+# makes instances unhashable, which WeakKeyDictionary (used by PerKeyLockMixin)
+# requires. Only SerializingMixin works here.
 
 
 def _generate_backend_safe_nested(count=50, max_depth=3, max_size=6):
@@ -262,6 +273,7 @@ def main():
     secret = [b"benchmark-test-key-at-least-32-bytes"]
     factories = {
         "Memory": lambda path: ValueMemory({}),
+        "Memory+Locked(Serializing)": lambda path: ValueMemorySerializing({}),
         "PickleFile": lambda path: ValuePickleFile.with_pickle(root=path),
         "PickleFile_Signed": lambda path: ValuePickleFile.with_pickle(
             root=path, secret_key=secret
