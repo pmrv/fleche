@@ -135,7 +135,7 @@ def load_entry_points():
             logger.error("Failed to load entry point %s: %s", ep.name, e)
 
 
-def _digest_mapping(m, contents: dict) -> None:
+def _digest_mapping(m, contents: Mapping) -> None:
     sorted_items = sorted(
         ((digest(k), k, v) for k, v in contents.items()), key=lambda item: item[0]
     )
@@ -203,9 +203,6 @@ def _digest(value: Any) -> Digest:
             return value
         case str():
             m.update(value.encode())
-        case dict():
-            # Fast path for plain dicts — avoids ~18 isinstance checks via Mapping()
-            _digest_mapping(m, value)
         case None:
             m.update(b"__None__")
         case Number():
@@ -286,7 +283,7 @@ def _digest(value: Any) -> Digest:
                 names = dir(value)
             _digest_mapping(m, {name: getattr(value, name) for name in names})
         case Mapping():
-            _digest_mapping(m, dict(value))
+            _digest_mapping(m, value)
         case Iterable():
             for v in value:
                 m.update(digest(v).encode())
