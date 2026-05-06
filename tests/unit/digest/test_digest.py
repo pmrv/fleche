@@ -1,6 +1,8 @@
 import cmath
 import datetime
 import struct
+import collections
+import collections.abc
 
 import pytest
 from hypothesis import given
@@ -411,6 +413,69 @@ def test_local_function_digests_same_as_module_level():
         return x + 1
 
     assert digest(local_add_one) == digest(_module_level_add_one)
+
+
+class _CustomMapping(collections.abc.Mapping):
+    """Minimal Mapping implementation (not a dict subclass)."""
+    def __init__(self, d):
+        self._d = dict(d)
+
+    def __getitem__(self, key):
+        return self._d[key]
+
+    def __iter__(self):
+        return iter(self._d)
+
+    def __len__(self):
+        return len(self._d)
+
+
+def test_generic_mapping_value_change_causes_digest_change():
+    """Changing a value in a non-dict Mapping must change its digest."""
+    cm1 = collections.ChainMap({'a': 1, 'b': 2})
+    cm2 = collections.ChainMap({'a': 99, 'b': 2})
+    assert digest(cm1) != digest(cm2)
+
+    m1 = _CustomMapping({'x': 'hello'})
+    m2 = _CustomMapping({'x': 'world'})
+    assert digest(m1) != digest(m2)
+
+
+def test_generic_mapping_key_change_causes_digest_change():
+    """Changing a key in a non-dict Mapping must change its digest."""
+    m1 = _CustomMapping({'a': 1})
+    m2 = _CustomMapping({'b': 1})
+    assert digest(m1) != digest(m2)
+
+
+def test_different_mapping_types_same_content_hash_differently():
+    """Different mapping types with identical content must hash differently."""
+    content = {'a': 1, 'b': 2}
+
+    d = dict(content)
+    cm = collections.ChainMap(content)
+    m = _CustomMapping(content)
+    od = collections.OrderedDict(content)
+
+    # plain dict vs ChainMap
+    assert digest(d) != digest(cm)
+    # plain dict vs custom Mapping
+    assert digest(d) != digest(m)
+    # plain dict vs OrderedDict (already handled by dict case, but type name differs)
+    assert digest(d) != digest(od)
+    # ChainMap vs custom Mapping
+    assert digest(cm) != digest(m)
+
+
+def test_generic_mapping_same_content_same_type_identical_digest():
+    """Two Mapping instances of the same type with the same content must hash identically."""
+    m1 = _CustomMapping({'a': 1, 'b': 2})
+    m2 = _CustomMapping({'b': 2, 'a': 1})  # insertion order differs
+    assert digest(m1) == digest(m2)
+
+    cm1 = collections.ChainMap({'a': 1}, {'b': 2})
+    cm2 = collections.ChainMap({'b': 2, 'a': 1})
+    assert digest(cm1) == digest(cm2)
 
 
 # --- Tests for datetime type digests ---

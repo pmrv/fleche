@@ -8,7 +8,7 @@ from numbers import Number
 import struct
 import types
 import importlib.metadata
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from typing import Any, TypeVar, Callable, Type, Generic
 import numpy as np
 
@@ -135,6 +135,16 @@ def load_entry_points():
             logger.error("Failed to load entry point %s: %s", ep.name, e)
 
 
+def _digest_mapping(m, contents: dict) -> Digest:
+    sorted_items = sorted(
+        ((digest(k), k, v) for k, v in contents.items()), key=lambda item: item[0]
+    )
+    for k_digest, k, v in sorted_items:
+        m.update(k_digest.encode())
+        m.update(digest(v).encode())
+    return Digest(m.hexdigest())
+
+
 def digest(value: Any) -> Digest:
     try:
         return _digest(value)
@@ -220,14 +230,6 @@ def _digest(value: Any) -> Digest:
             m.update(str(value).encode())
         case None:
             m.update(b"__None__")
-        case dict():
-            # Sort by digest of keys to ensure merkle tree property and order stability
-            sorted_items = sorted(
-                ((digest(k), k, v) for k, v in value.items()), key=lambda item: item[0]
-            )
-            for k_digest, k, v in sorted_items:
-                m.update(k_digest.encode())
-                m.update(digest(v).encode())
         case np.bool_():
             return digest(bool(value))
         case np.integer():
@@ -278,6 +280,8 @@ def _digest(value: Any) -> Digest:
             # mirror the dataclass digest format so an attrs class and a dataclass
             # with the same name + field layout hash identically.
             m.update(digest(dict(_attrs.field_items(value))).encode())
+        case Mapping():
+            return _digest_mapping(m, dict(value))
         case Iterable():
             for v in value:
                 m.update(digest(v).encode())
