@@ -642,22 +642,6 @@ def test_module_digest_adding_attribute_changes_digest():
     assert d1 != d2
 
 
-def test_module_digest_equals_dict_of_all_contents():
-    """digest(module) == digest({name: getattr(m, name) for name in m.__all__})."""
-    m = _make_module(x=1, y="hello")
-    m.__all__ = ["x", "y"]
-
-    expected = digest({name: getattr(m, name) for name in m.__all__})
-    assert digest(m) == expected
-
-
-def test_module_digest_equals_dict_of_dir_contents():
-    """Without __all__, digest(module) == digest({name: getattr(m, name) for name in dir(m)})."""
-    m = _make_module(x=1, y="hello")
-
-    expected = digest({name: getattr(m, name) for name in dir(m)})
-    assert digest(m) == expected
-
 
 def test_module_digest_with_function_attribute():
     """Modules containing Python functions are digestible."""

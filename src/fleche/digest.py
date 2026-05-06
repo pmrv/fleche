@@ -135,14 +135,13 @@ def load_entry_points():
             logger.error("Failed to load entry point %s: %s", ep.name, e)
 
 
-def _digest_mapping(m, contents: dict) -> Digest:
+def _digest_mapping(m, contents: dict) -> None:
     sorted_items = sorted(
         ((digest(k), k, v) for k, v in contents.items()), key=lambda item: item[0]
     )
     for k_digest, k, v in sorted_items:
         m.update(k_digest.encode())
         m.update(digest(v).encode())
-    return Digest(m.hexdigest())
 
 
 def digest(value: Any) -> Digest:
@@ -284,11 +283,9 @@ def _digest(value: Any) -> Digest:
             names = getattr(value, "__all__", None)
             if names is None:
                 names = dir(value)
-            m_dict = hashlib.sha256()
-            m_dict.update(dict.__name__.encode())
-            return _digest_mapping(m_dict, {name: getattr(value, name) for name in names})
+            _digest_mapping(m, {name: getattr(value, name) for name in names})
         case Mapping():
-            return _digest_mapping(m, dict(value))
+            _digest_mapping(m, dict(value))
         case Iterable():
             for v in value:
                 m.update(digest(v).encode())
