@@ -3,6 +3,7 @@ from typing import Any, Iterable
 
 from .base import ValueMixin, CallMixin, StorageBackend
 from .destructuring import DestructuringMixin
+from .thread_safe import PerKeyLockMixin
 from ..digest import Digest
 from copy import deepcopy
 
@@ -38,9 +39,9 @@ class MemoryBackend(StorageBackend):
 
 
 @dataclass(frozen=True)
-class ValueMemory(DestructuringMixin, ValueMixin, MemoryBackend):
+class ValueMemory(PerKeyLockMixin, DestructuringMixin, ValueMixin, MemoryBackend):
     __hash__ = object.__hash__
 
 @dataclass(frozen=True)
-class CallMemory(CallMixin, MemoryBackend):
+class CallMemory(PerKeyLockMixin, CallMixin, MemoryBackend):
     __hash__ = object.__hash__

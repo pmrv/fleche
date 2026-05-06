@@ -18,26 +18,28 @@ from fleche.storage import (
     ValuePickleFile,
     ValueBagOfHoldingH5File,
     Sql,
+    DestructuringMixin,
+    ValueMixin,
+    CallMixin,
 )
-from fleche.storage.thread_safe import SerializingMixin, PerKeyLockMixin
+from fleche.storage.memory import MemoryBackend
+from fleche.storage.thread_safe import SerializingMixin
 
 
 @dataclass(frozen=True)
-class ValueMemorySerializing(SerializingMixin, ValueMemory): ...
+class ValueMemoryRaw(DestructuringMixin, ValueMixin, MemoryBackend): ...
 
 
 @dataclass(frozen=True)
-class CallMemorySerializing(SerializingMixin, CallMemory): ...
+class CallMemoryRaw(CallMixin, MemoryBackend): ...
 
 
 @dataclass(frozen=True)
-class ValueMemoryPerKey(PerKeyLockMixin, ValueMemory):
-    __hash__ = object.__hash__
+class ValueMemorySerializing(SerializingMixin, ValueMemoryRaw): ...
 
 
 @dataclass(frozen=True)
-class CallMemoryPerKey(PerKeyLockMixin, CallMemory):
-    __hash__ = object.__hash__
+class CallMemorySerializing(SerializingMixin, CallMemoryRaw): ...
 
 
 @fleche
@@ -189,9 +191,9 @@ def main():
     try:
         # Configurations
         configs = [
-            ("Memory", Cache(ValueMemory({}), CallMemory({}))),
+            ("Memory(Raw)", Cache(ValueMemoryRaw({}), CallMemoryRaw({}))),
             ("Memory+Locked(Serializing)", Cache(ValueMemorySerializing({}), CallMemorySerializing({}))),
-            ("Memory+Locked(PerKey)", Cache(ValueMemoryPerKey({}), CallMemoryPerKey({}))),
+            ("Memory", Cache(ValueMemory({}), CallMemory({}))),
             ("Memory+Sqlite(:memory:)", Cache(ValueMemory({}), Sql())),
             (
                 "Pickle+Sql",

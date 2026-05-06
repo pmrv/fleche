@@ -11,8 +11,11 @@ from fleche.storage import (
     ValuePickleFile,
     ValueBagOfHoldingH5File,
     Sql,
+    DestructuringMixin,
+    ValueMixin,
 )
-from fleche.storage.thread_safe import SerializingMixin, PerKeyLockMixin
+from fleche.storage.memory import MemoryBackend
+from fleche.storage.thread_safe import SerializingMixin
 from fleche.digest import digest
 from fleche.call import Call
 import numpy as np
@@ -25,12 +28,11 @@ from hypothesis.database import InMemoryExampleDatabase
 
 
 @dataclass(frozen=True)
-class ValueMemorySerializing(SerializingMixin, ValueMemory): ...
+class ValueMemoryRaw(DestructuringMixin, ValueMixin, MemoryBackend): ...
 
 
 @dataclass(frozen=True)
-class ValueMemoryPerKey(PerKeyLockMixin, ValueMemory):
-    __hash__ = object.__hash__
+class ValueMemorySerializing(SerializingMixin, ValueMemoryRaw): ...
 
 
 def _generate_backend_safe_nested(count=50, max_depth=3, max_size=6):
@@ -272,9 +274,9 @@ def main():
 
     secret = [b"benchmark-test-key-at-least-32-bytes"]
     factories = {
-        "Memory": lambda path: ValueMemory({}),
+        "Memory(Raw)": lambda path: ValueMemoryRaw({}),
         "Memory+Locked(Serializing)": lambda path: ValueMemorySerializing({}),
-        "Memory+Locked(PerKey)": lambda path: ValueMemoryPerKey({}),
+        "Memory": lambda path: ValueMemory({}),
         "PickleFile": lambda path: ValuePickleFile.with_pickle(root=path),
         "PickleFile_Signed": lambda path: ValuePickleFile.with_pickle(
             root=path, secret_key=secret
