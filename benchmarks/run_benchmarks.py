@@ -115,8 +115,7 @@ def main():
         )
         colors = {
             "Memory(Raw)": "🟣",
-            "Memory": "🟪",
-            "Memory+Locked(Serializing)": "🟪",
+            "Memory": "🟣",
             "Memory+Sqlite(:memory:)": "🟤",
             "PickleFile": "🟢",
             "PickleFile_Signed": "🟢",

@@ -23,7 +23,6 @@ from fleche.storage import (
     CallMixin,
 )
 from fleche.storage.memory import MemoryBackend
-from fleche.storage.thread_safe import SerializingMixin
 
 
 @dataclass(frozen=True)
@@ -32,14 +31,6 @@ class ValueMemoryRaw(DestructuringMixin, ValueMixin, MemoryBackend): ...
 
 @dataclass(frozen=True)
 class CallMemoryRaw(CallMixin, MemoryBackend): ...
-
-
-@dataclass(frozen=True)
-class ValueMemorySerializing(SerializingMixin, ValueMemoryRaw): ...
-
-
-@dataclass(frozen=True)
-class CallMemorySerializing(SerializingMixin, CallMemoryRaw): ...
 
 
 @fleche
@@ -192,7 +183,6 @@ def main():
         # Configurations
         configs = [
             ("Memory(Raw)", Cache(ValueMemoryRaw({}), CallMemoryRaw({}))),
-            ("Memory+Locked(Serializing)", Cache(ValueMemorySerializing({}), CallMemorySerializing({}))),
             ("Memory", Cache(ValueMemory({}), CallMemory({}))),
             ("Memory+Sqlite(:memory:)", Cache(ValueMemory({}), Sql())),
             (
