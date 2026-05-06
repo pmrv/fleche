@@ -191,19 +191,26 @@ def _digest(value: Any) -> Digest:
 
     m.update(t.__name__.encode())
     match value:
-        case Digest():
-            return value
-        case str():
-            m.update(value.encode())
-        case bytes():
-            m.update(value)
         case int():
+            # Most-frequent arm (bool ⊂ int: booleans are digested as integers here)
             m.update(
                 value.to_bytes(
                     (value.bit_length() + 8) // 8, byteorder="little", signed=True
                 )
             )
+        case Digest():
+            # Must precede str (Digest ⊂ str)
+            return value
+        case str():
+            m.update(value.encode())
+        case dict():
+            # Fast path for plain dicts — avoids ~18 isinstance checks via Mapping()
+            _digest_mapping(m, value)
+        case None:
+            m.update(b"__None__")
         case Number():
+            # Must follow int (int ⊂ Number); np.integer and np.floating also reach
+            # this arm because np.integer/np.floating ⊂ Number.
             # lest we have nice things
             if cmath.isnan(value):
                 # somehow hash(float('nan')) can yield different values even if having the same sign, because the
@@ -225,20 +232,24 @@ def _digest(value: Any) -> Digest:
                 value = hash(value)
                 # then digest its bytes
                 return digest(value)
-        case bool():
-            m.update(str(value).encode())
-        case None:
-            m.update(b"__None__")
-        case np.bool_():
-            return digest(bool(value))
-        case np.integer():
-            return digest(int(value))
-        case np.floating():
-            return digest(float(value))
+        case bytes():
+            m.update(value)
         case np.ndarray():
             m.update(digest(value.dtype.str).encode())
             m.update(digest(value.shape).encode())
             m.update(value.tobytes())
+        case np.bool_():
+            # np.bool_ ∉ Number so this arm is reachable
+            return digest(bool(value))
+        case np.integer():
+            # unreachable: np.integer ⊂ Number, caught above; kept for documentation
+            return digest(int(value))
+        case np.floating():
+            # unreachable: np.floating ⊂ Number, caught above; kept for documentation
+            return digest(float(value))
+        case bool():
+            # unreachable: bool ⊂ int, caught above; kept for documentation
+            m.update(str(value).encode())
         case types.FunctionType():
             return digest(value.__code__)
         case types.CodeType():
