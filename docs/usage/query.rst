@@ -13,7 +13,7 @@ When querying, any field in the template set to ``None`` acts as a wildcard. For
 
 Querying from a wrapper
 -----------------------
-The wrapper-based API builds the correct Call template for you and decodes values on return.
+The wrapper-based API builds the correct Call template for you.
 
 Example::
 
@@ -34,8 +34,11 @@ Example::
     for call in add.query(1, 2, metadata={"tags": {"project": "alpha"}}):
         assert call.name == "add"
         assert call.metadata["tags"]["project"] == "alpha"
-        # arguments and result are decoded from the value storage
-        print(call.arguments, call.result)
+        # call.result is decoded immediately on access
+        print(call.result)                # e.g. 3
+        # call.arguments is a lazy proxy — individual keys are decoded on access
+        print(call.arguments["a"])        # e.g. 1
+        print(dict(call.arguments))       # decode all arguments at once
 
 Notes:
 - ``metadata={"tags": {}}`` matches any call with a "tags" metadata entry (presence check).
