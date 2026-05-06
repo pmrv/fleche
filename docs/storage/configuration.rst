@@ -4,10 +4,9 @@ Configuration
 ``fleche`` looks for a configuration file in the following order:
 
 1. ``fleche.toml`` in the current working directory (local config)
-2. A global config file, determined by the first matching rule:
+2. A global config file:
 
    - If ``$XDG_CONFIG_HOME`` is set: ``$XDG_CONFIG_HOME/fleche/cache.toml``
-   - Otherwise, if ``$HOME`` is set: ``$HOME/.fleche.toml``
    - Otherwise: ``~/.fleche.toml``
 
 The first file found is used. If no configuration file exists, ``fleche`` falls back to a default in-memory cache.
@@ -164,7 +163,10 @@ Key descriptions
     ``FLECHE_SECRET_KEY`` environment variable.
 
 ``url``
-    SQLAlchemy connection URL, e.g. ``"sqlite:///~/.fleche/calls.db"``.
+    SQLAlchemy connection URL, e.g. ``"sqlite:////absolute/path/to/calls.db"``.
+    Unlike ``root``, ``~`` is **not** expanded in SQL URLs — always use an
+    absolute path for SQLite, or configure the cache programmatically when the
+    path must be derived from the home directory at runtime.
 
 ``echo``
     (bool, default ``false``) — log all SQL statements to stderr (useful for
@@ -236,8 +238,9 @@ Below is an example of a complete configuration file demonstrating several featu
    calls.type = "memory"
 
    [hdf5_values]
-   # HDF5 values backend with SQL call index
+   # HDF5 values backend with SQL call index.
+   # Note: unlike 'root', '~' is not expanded in SQL URLs — use an absolute path.
    values.type = "bagofholding_hdf"
    values.root = "~/.cache/fleche/hdf5_values"
    calls.type = "sql"
-   calls.url = "sqlite:///~/.cache/fleche/calls.db"
+   calls.url = "sqlite:////absolute/path/to/calls.db"
