@@ -135,9 +135,7 @@ def load_entry_points():
             logger.error("Failed to load entry point %s: %s", ep.name, e)
 
 
-def _digest_mapping(type_salt: str, contents: dict) -> Digest:
-    m = hashlib.sha256()
-    m.update(type_salt.encode())
+def _digest_mapping(m, contents: dict) -> Digest:
     sorted_items = sorted(
         ((digest(k), k, v) for k, v in contents.items()), key=lambda item: item[0]
     )
@@ -283,7 +281,7 @@ def _digest(value: Any) -> Digest:
             # with the same name + field layout hash identically.
             m.update(digest(dict(_attrs.field_items(value))).encode())
         case Mapping():
-            return _digest_mapping(type(value).__name__, dict(value))
+            return _digest_mapping(m, dict(value))
         case Iterable():
             for v in value:
                 m.update(digest(v).encode())
