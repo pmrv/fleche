@@ -4,10 +4,9 @@ Configuration
 ``fleche`` looks for a configuration file in the following order:
 
 1. ``fleche.toml`` in the current working directory (local config)
-2. A global config file, determined by the first matching rule:
+2. A global config file:
 
    - If ``$XDG_CONFIG_HOME`` is set: ``$XDG_CONFIG_HOME/fleche/cache.toml``
-   - Otherwise, if ``$HOME`` is set: ``$HOME/.fleche.toml``
    - Otherwise: ``~/.fleche.toml``
 
 The first file found is used. If no configuration file exists, ``fleche`` falls back to a default in-memory cache.
@@ -164,7 +163,8 @@ Key descriptions
     ``FLECHE_SECRET_KEY`` environment variable.
 
 ``url``
-    SQLAlchemy connection URL, e.g. ``"sqlite:///~/.fleche/calls.db"``.
+    SQLAlchemy connection URL, e.g. ``"sqlite:///~/.cache/fleche/calls.db"``.
+    Leading ``~`` is expanded to the home directory in ``sqlite:///`` URLs.
 
 ``echo``
     (bool, default ``false``) — log all SQL statements to stderr (useful for

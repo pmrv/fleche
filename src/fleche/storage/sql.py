@@ -108,6 +108,8 @@ def _coerce_sqlite_url(path_or_url: str | None) -> str:
     (passed through, parent dir auto-created), or any other SQLAlchemy URL
     such as ``postgresql://`` / ``mysql+pymysql://`` (passed through
     verbatim). Only sqlite paths get the parent-dir-create convenience.
+    Leading ``~`` is expanded to the home directory in both bare paths and
+    ``sqlite:///`` URLs.
     """
     if path_or_url is None:
         return "sqlite:///:memory:"
@@ -119,13 +121,16 @@ def _coerce_sqlite_url(path_or_url: str | None) -> str:
     if "://" in s or s.startswith("sqlite:"):
         url = s
     else:
-        abs_path = Path(s).absolute()
+        abs_path = Path(s).expanduser().absolute()
         url = f"sqlite:///{abs_path}"
 
     if url.startswith("sqlite:///"):
         db_path = url[len("sqlite:///"):]
         if db_path and db_path != ":memory:":
-            Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+            expanded = Path(db_path).expanduser()
+            if expanded != Path(db_path):
+                url = f"sqlite:///{expanded}"
+            expanded.parent.mkdir(parents=True, exist_ok=True)
 
     return url
 
