@@ -35,8 +35,19 @@ def test_query_iterator_is_iterable(test_cache):
 
 def test_query_iterator_empty():
     """QueryIterator over an empty iterable yields nothing."""
-    it = QueryIterator([])
+    it = QueryIterator(lambda: [])
     assert list(it) == []
+
+
+def test_query_iterator_is_re_iterable(test_cache):
+    """Iterating a QueryIterator twice yields the same results both times."""
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    test_cache.save(Call(name="f", arguments={"x": 2}, result=20))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    qi = test_cache.query(tpl)
+    first = sorted(c.arguments["x"] for c in qi)
+    second = sorted(c.arguments["x"] for c in qi)
+    assert first == second == [1, 2]
 
 
 def test_query_iterator_can_be_iterated_from_wrapper(test_cache):
@@ -70,7 +81,7 @@ def test_query_iterator_results(test_cache):
 
 def test_query_iterator_results_empty():
     """results() on an empty QueryIterator yields nothing."""
-    assert list(QueryIterator([]).results()) == []
+    assert list(QueryIterator(lambda: []).results()) == []
 
 
 def test_query_iterator_results_from_wrapper(test_cache):
@@ -132,7 +143,7 @@ def test_query_iterator_table_no_result_by_default(test_cache):
 
 def test_query_iterator_table_empty():
     """table() on an empty QueryIterator returns an empty DataFrame."""
-    df = QueryIterator([]).table()
+    df = QueryIterator(lambda: []).table()
     assert isinstance(df, pd.DataFrame)
     assert len(df) == 0
 
@@ -350,7 +361,7 @@ def test_only_returns_single_call(test_cache):
 
 def test_only_raises_on_empty():
     with pytest.raises(IndexError):
-        QueryIterator([]).only()
+        QueryIterator(lambda: []).only()
 
 
 def test_only_raises_on_multiple(test_cache):
@@ -380,11 +391,11 @@ def test_any_returns_call(test_cache):
 
 
 def test_any_returns_none_on_empty():
-    assert QueryIterator([]).any() is None
+    assert QueryIterator(lambda: []).any() is None
 
 
 def test_empty_true():
-    assert QueryIterator([]).empty() is True
+    assert QueryIterator(lambda: []).empty() is True
 
 
 def test_empty_false(test_cache):
@@ -402,7 +413,7 @@ def test_take_returns_first_n(test_cache):
         test_cache.save(Call(name="f", arguments={"x": i}, result=i * 10))
     tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
     calls = list(test_cache.query(tpl))
-    qi = QueryIterator(iter(calls))
+    qi = QueryIterator(lambda: iter(calls))
     assert list(qi.take(3)) == calls[:3]
 
 
@@ -424,7 +435,7 @@ def test_skip_drops_first_n(test_cache):
         test_cache.save(Call(name="f", arguments={"x": i}, result=i * 10))
     tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
     calls = list(test_cache.query(tpl))
-    qi = QueryIterator(iter(calls))
+    qi = QueryIterator(lambda: iter(calls))
     assert list(qi.skip(2)) == calls[2:]
 
 
@@ -521,7 +532,7 @@ def test_unique_callable(test_cache):
     tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
     all_calls = list(test_cache.query(tpl))
     assert len(all_calls) == 3, "both x=1 calls must be stored as separate entries"
-    unique = list(QueryIterator(iter(all_calls)).unique(lambda c: c.arguments["x"]))
+    unique = list(QueryIterator(lambda: iter(all_calls)).unique(lambda c: c.arguments["x"]))
     assert len(unique) == 2
 
 
@@ -590,12 +601,12 @@ def test_oldest_returns_earliest(test_cache):
 
 def test_latest_raises_on_empty():
     with pytest.raises(IndexError):
-        QueryIterator([]).latest()
+        QueryIterator(lambda: []).latest()
 
 
 def test_oldest_raises_on_empty():
     with pytest.raises(IndexError):
-        QueryIterator([]).oldest()
+        QueryIterator(lambda: []).oldest()
 
 
 # ---------------------------------------------------------------------------
