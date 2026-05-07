@@ -24,11 +24,11 @@ def _resolve_key(key: "str | Callable[[call.LazyCall], Any]") -> "Callable[[call
 class QueryIterator(Iterable[call.LazyCall]):
     """Re-iterable view over a lazy query result.
 
-    ``calls`` must be a zero-argument callable that returns a fresh iterable
-    each time it is invoked.  This makes ``QueryIterator`` itself re-iterable:
-    every ``for`` loop, ``list()``, or consuming method starts a new traversal
-    of the underlying source rather than silently seeing an empty sequence on
-    the second call.
+    ``calls`` is a zero-argument callable that returns a fresh iterable each
+    time it is invoked.  Every ``for`` loop, ``list()``, or consuming method
+    therefore starts a new traversal of the underlying source, so the same
+    ``QueryIterator`` can be used multiple times and will reflect the current
+    state of the cache on each pass.
 
     Args:
         calls: factory returning an iterable of :class:`~fleche.call.LazyCall`

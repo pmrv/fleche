@@ -50,6 +50,20 @@ def test_query_iterator_is_re_iterable(test_cache):
     assert first == second == [1, 2]
 
 
+def test_query_iterator_reflects_cache_changes(test_cache):
+    """Re-iterating a QueryIterator picks up calls added to the cache after it was created."""
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    qi = test_cache.query(tpl)
+
+    first = sorted(c.arguments["x"] for c in qi)
+    test_cache.save(Call(name="f", arguments={"x": 2}, result=20))
+    second = sorted(c.arguments["x"] for c in qi)
+
+    assert first == [1]
+    assert second == [1, 2]
+
+
 def test_query_iterator_can_be_iterated_from_wrapper(test_cache):
     """The iterator returned by a fleche-decorated function's .query() method is a QueryIterator."""
     with cache(test_cache):
