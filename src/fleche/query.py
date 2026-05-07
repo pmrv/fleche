@@ -22,15 +22,22 @@ def _resolve_key(key: "str | Callable[[call.LazyCall], Any]") -> "Callable[[call
 
 @dataclass(frozen=True)
 class QueryIterator(Iterable[call.LazyCall]):
-    """Iterator that adds some convenience to plain iterators over calls of query result.
+    """Re-iterable view over a lazy query result.
+
+    ``calls`` is a zero-argument callable that returns a fresh iterable each
+    time it is invoked.  Every ``for`` loop, ``list()``, or consuming method
+    therefore starts a new traversal of the underlying source, so the same
+    ``QueryIterator`` can be used multiple times and will reflect the current
+    state of the cache on each pass.
 
     Args:
-        calls: (iterable of call.LazyCall): underlying results of the query"""
+        calls: factory returning an iterable of :class:`~fleche.call.LazyCall`
+    """
 
-    calls: Iterable[call.LazyCall]
+    calls: Callable[[], Iterable[call.LazyCall]]
 
     def __iter__(self) -> Iterator[call.LazyCall]:
-        yield from self.calls
+        yield from self.calls()
 
     def only(self) -> call.LazyCall:
         """Return the single matching call.
@@ -71,15 +78,15 @@ class QueryIterator(Iterable[call.LazyCall]):
 
     def take(self, n: int) -> "QueryIterator":
         """Return first n results as a new QueryIterator (lazy)."""
-        return QueryIterator(itertools.islice(iter(self), n))
+        return QueryIterator(lambda: itertools.islice(iter(self), n))
 
     def skip(self, n: int) -> "QueryIterator":
         """Skip first n results and return the rest as a new QueryIterator (lazy)."""
-        return QueryIterator(itertools.islice(iter(self), n, None))
+        return QueryIterator(lambda: itertools.islice(iter(self), n, None))
 
     def filter(self, predicate: Callable[[call.LazyCall], bool]) -> "QueryIterator":
         """Return a new QueryIterator keeping only calls where predicate(call) is truthy (lazy)."""
-        return QueryIterator(c for c in self.calls if predicate(c))
+        return QueryIterator(lambda: (c for c in self if predicate(c)))
 
     def sorted(
         self,
@@ -93,7 +100,7 @@ class QueryIterator(Iterable[call.LazyCall]):
             reverse: if True, sort in descending order
         """
         key = _resolve_key(key) if key is not None else None
-        return QueryIterator(builtins.sorted(self, key=key, reverse=reverse))
+        return QueryIterator(lambda: builtins.sorted(self, key=key, reverse=reverse))
 
     def unique(self, key: "str | Callable[[call.LazyCall], Any]") -> "QueryIterator":
         """Return a new QueryIterator with duplicates removed, keeping the first per group (lazy).
@@ -111,7 +118,7 @@ class QueryIterator(Iterable[call.LazyCall]):
                     seen.add(v)
                     yield c
 
-        return QueryIterator(_unique(self.calls, key))
+        return QueryIterator(lambda: _unique(self, key))
 
     def groupby(self, key: "str | Callable[[call.LazyCall], Any]") -> "dict[Any, QueryIterator]":
         """Partition calls into a dict of QueryIterators keyed by group value.
@@ -126,7 +133,7 @@ class QueryIterator(Iterable[call.LazyCall]):
             if k not in groups:
                 groups[k] = []
             groups[k].append(c)
-        return {k: QueryIterator(v) for k, v in groups.items()}
+        return {k: QueryIterator(lambda v=v: v) for k, v in groups.items()}
 
     def _timestop_extremum(self, *, reverse: bool) -> call.LazyCall:
         sentinel = float("-inf") if reverse else float("inf")
@@ -197,7 +204,7 @@ class QueryIterator(Iterable[call.LazyCall]):
             arguments = tuple(arguments)
 
         rows: dict[str, dict[str, Any]] = {}
-        for c in self.calls:
+        for c in self:
             row = {
                     prop: getattr(c, prop) for prop in ("name", "module", "metadata")
             }
@@ -227,5 +234,5 @@ class QueryIterator(Iterable[call.LazyCall]):
 
     def results(self) -> Iterator[Any]:
         """Returns an iterator over the results of queried calls."""
-        for c in self.calls:
+        for c in self:
             yield c.result

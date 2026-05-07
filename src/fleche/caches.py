@@ -156,7 +156,7 @@ class BaseCache(ABC):
                 yield from self._query(template)
             except _digest.Unhashable as e:
                 logger.warning("No hash for query argument: %s", e.args[0])
-        return query.QueryIterator(_safe_iter())
+        return query.QueryIterator(_safe_iter)
 
     def table(self, arguments: Iterable[str] | str | Literal[True] = (), results=False) -> pd.DataFrame:
         """Return a pandas DataFrame summarizing cached calls via query().
