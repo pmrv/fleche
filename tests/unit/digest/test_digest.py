@@ -353,14 +353,14 @@ def test_numpy_explicit_cases():
 
 
 def test_lambda_can_be_digested():
-    """Test that lambda functions can be digested without raising Unhashable."""
+    """Test that lambda functions can be digested without raising Indigestable."""
     f = lambda x: x + 1
     result = digest(f)
     assert isinstance(result, Digest)
 
 
 def test_locally_defined_function_can_be_digested():
-    """Test that locally defined functions can be digested without raising Unhashable."""
+    """Test that locally defined functions can be digested without raising Indigestable."""
     def local_func(x):
         return x * 2
 
@@ -420,7 +420,7 @@ def test_local_function_digests_same_as_module_level():
 
 
 def test_staticmethod_can_be_digested():
-    """staticmethod objects must be digestible without raising Unhashable."""
+    """staticmethod objects must be digestible without raising Indigestable."""
 
     def func(x):
         return x + 1
@@ -431,7 +431,7 @@ def test_staticmethod_can_be_digested():
 
 
 def test_classmethod_can_be_digested():
-    """classmethod objects must be digestible without raising Unhashable."""
+    """classmethod objects must be digestible without raising Indigestable."""
 
     def func(cls, x):
         return x + 1
@@ -442,7 +442,7 @@ def test_classmethod_can_be_digested():
 
 
 def test_property_can_be_digested():
-    """property objects must be digestible without raising Unhashable."""
+    """property objects must be digestible without raising Indigestable."""
 
     def getter(self):
         return self._x

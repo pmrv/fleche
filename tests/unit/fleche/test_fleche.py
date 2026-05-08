@@ -151,17 +151,17 @@ def test_fleche_with_module():
         assert key_m1 != key_m2
 
 
-def test_fleche_with_unhashable_callable():
+def test_fleche_with_indigestable_callable():
     # Callable instance with __hash__ = None.  Per-function caches in
     # call.py would raise TypeError on lookup; the wrapper must fall
     # back to direct introspection rather than crash.
-    class UnhashableCallable:
+    class IndigestableCallable:
         __hash__ = None
 
         def __call__(self, x):
             return x * 2
 
-    fn = UnhashableCallable()
+    fn = IndigestableCallable()
 
     with cache(Cache(ValueMemory({}), CallMemory({}))):
         wrapped = fleche()(fn)

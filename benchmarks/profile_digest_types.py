@@ -83,7 +83,7 @@ def _categorize(value) -> str:
         return "Mapping"
     if isinstance(value, Iterable):
         return "Iterable"
-    return "Unhashable"
+    return "Indigestable"
 
 
 # ---------------------------------------------------------------------------

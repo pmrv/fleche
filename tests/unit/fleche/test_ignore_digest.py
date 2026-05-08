@@ -4,11 +4,11 @@ import pytest
 
 from fleche import fleche, cache
 from fleche.caches import Cache
-from fleche.digest import Unhashable
+from fleche.digest import Indigestable
 from fleche.storage import ValueMemory, CallMemory
 
 
-class UnhashableThing:
+class IndigestableThing:
     pass
 
 
@@ -96,23 +96,23 @@ def test_ignore_string_list_tuple_equivalent():
     assert k3a == k3b
 
 
-def test_unignored_unhashable_raises_but_ignored_is_ok():
-    # Without ignore, an unhashable argument should cause digest to raise
+def test_unignored_indigestable_raises_but_ignored_is_ok():
+    # Without ignore, an indigestable argument should cause digest to raise
     @fleche
     def g(x):
         return 1
 
-    with pytest.raises(Unhashable):
-        _ = g.fleche.digest(UnhashableThing())
+    with pytest.raises(Indigestable):
+        _ = g.fleche.digest(IndigestableThing())
 
-    # With ignore, the same unhashable value should be fine and not affect digest
+    # With ignore, the same indigestable value should be fine and not affect digest
     @fleche(ignore=("x",))
     def h(x, y):
         return y
 
     try:
-        h.fleche.digest(UnhashableThing(), y=2)
-    except Unhashable:
+        h.fleche.digest(IndigestableThing(), y=2)
+    except Indigestable:
         assert False
 
 
@@ -150,7 +150,7 @@ def test_defaults_with_ignored_argument():
     assert k_default == k_override_ignored
 
 
-def test_unhashable_call_warns_and_calls_through(caplog):
+def test_indigestable_call_warns_and_calls_through(caplog):
     call_count = [0]
 
     @fleche
@@ -161,14 +161,14 @@ def test_unhashable_call_warns_and_calls_through(caplog):
     c = Cache(ValueMemory({}), CallMemory({}))
     with caplog.at_level(logging.WARNING, logger="fleche"):
         with cache(c):
-            result = f(UnhashableThing())
+            result = f(IndigestableThing())
 
     assert result == 42
     assert call_count[0] == 1
     assert any("No hash for argument" in r.message for r in caplog.records)
 
 
-def test_unhashable_query_warns_and_returns_empty(caplog):
+def test_indigestable_query_warns_and_returns_empty(caplog):
     @fleche
     def f(x):
         return x
@@ -178,7 +178,7 @@ def test_unhashable_query_warns_and_returns_empty(caplog):
         with cache(c):
             f(1)
             f(2)
-            results = list(f.fleche.query(UnhashableThing()))
+            results = list(f.fleche.query(IndigestableThing()))
 
     assert results == []
     assert any("No hash for query argument" in r.message for r in caplog.records)
