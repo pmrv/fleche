@@ -29,6 +29,7 @@ with ImportAlarm(
         and_,
     )
     from sqlalchemy import event
+    from sqlalchemy.exc import IntegrityError
     from sqlalchemy.orm import (
         declarative_base,
         sessionmaker,
@@ -218,16 +219,8 @@ class Sql(PerKeyLockMixin, CallStorage):
             with super()._operation_context(key):
                 yield
 
-    def put(self, call: DigestedCall, key: Digest) -> Digest:
-        session = self._local.session
-        existing = session.get(CallModel, str(key))
-        if existing is not None:
-            if self.get(key) == call:
-                return key
-
-            session.delete(existing)
-            session.flush()
-
+    def _stage_call(self, session, call: DigestedCall, key: Digest) -> None:
+        """Add ORM objects for *call* to *session* without committing."""
         call_model = CallModel(
             key=str(key),
             name=call.name,
@@ -237,14 +230,12 @@ class Sql(PerKeyLockMixin, CallStorage):
             result=call.result if call.result is None else str(call.result),
         )
         session.add(call_model)
-
         for i, (k, v) in enumerate(call.arguments.items()):
             session.add(
                 ArgumentModel(
                     call_key=str(key), position=i, name=str(k), value=str(v)
                 )
             )
-
         if call.metadata:
             session.add_all(
                 [
@@ -252,8 +243,33 @@ class Sql(PerKeyLockMixin, CallStorage):
                     for name, data in call.metadata.items()
                 ]
             )
+
+    def put(self, call: DigestedCall, key: Digest) -> Digest:
+        session = self._local.session
+        # Fast path: optimistically INSERT without a pre-check SELECT.  In the
+        # common (no-collision) benchmark case this eliminates the round-trip
+        # entirely; the slow collision path is only reached when a PK violation
+        # surfaces, which is rare and was already serialised by PerKeyLockMixin.
+        self._stage_call(session, call, key)
+        try:
+            session.commit()
+            return key
+        except IntegrityError:
+            session.rollback()
+
+        # Collision path: check whether the stored call is identical.
+        existing_call = self.get(key)
+        if existing_call == call:
+            return key
+
+        # Different content at the same key: evict and replace.
+        existing = session.get(CallModel, str(key))
+        if existing is not None:
+            session.delete(existing)
+            session.flush()
+
+        self._stage_call(session, call, key)
         session.commit()
-        # Always return a Digest instance, not a plain str
         return key
 
     def get(self, key: Digest) -> DigestedCall:
