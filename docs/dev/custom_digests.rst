@@ -94,7 +94,7 @@ which returns the object at the given path directly — it does **not** call it.
 Lazy Loading and Retries
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-To avoid unnecessary overhead, ``fleche`` loads entry points lazily. If ``digest()`` encounters an object it doesn't know how to handle (an ``Unhashable`` error), it will:
+To avoid unnecessary overhead, ``fleche`` loads entry points lazily. If ``digest()`` encounters an object it doesn't know how to handle (an ``Indigestible`` error), it will:
 1. Load all registered entry points.
 2. Retry the digestion.
 

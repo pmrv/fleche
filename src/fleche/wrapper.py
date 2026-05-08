@@ -186,7 +186,7 @@ def make_wrapper(func, policy, meta, isolate, get_call):
         try:
             call = get_call(*args, **kwargs)
             key = call.to_lookup_key()
-        except digest.Unhashable as e:
+        except digest.Indigestible as e:
             logger.warning("No hash for argument: %s", e.args[0])
             return func(*args, **kwargs)
 

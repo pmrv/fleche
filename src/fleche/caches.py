@@ -154,7 +154,7 @@ class BaseCache(ABC):
         def _safe_iter():
             try:
                 yield from self._query(template)
-            except _digest.Unhashable as e:
+            except _digest.Indigestible as e:
                 logger.warning("No hash for query argument: %s", e.args[0])
         return query.QueryIterator(_safe_iter)
 

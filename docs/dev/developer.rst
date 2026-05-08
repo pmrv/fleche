@@ -23,7 +23,7 @@ in one place:
   ``Required`` annotations (populates ``ignored`` / ``required`` fields)
 
 The result is stored by ``_profile``, a module-level
-``lru_cache(maxsize=1000)`` keyed on the callable's identity.  Unhashable
+``lru_cache(maxsize=1000)`` keyed on the callable's identity.  Indigestible
 callables fall back to ``_profile.__wrapped__`` (bypassing the LRU cache) so
 they are handled correctly without special-casing at call sites.
 
