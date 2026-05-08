@@ -841,3 +841,178 @@ def test_module_digest_function_content_independence():
     m2.__all__ = ["func"]
 
     assert digest(m1) == digest(m2)
+
+
+# --- Tests for digesting types (classes themselves, not instances) ---
+
+
+def test_plain_class_type_can_be_digested():
+    """Digesting a plain class must not raise."""
+    class Foo:
+        pass
+
+    assert isinstance(digest(Foo), Digest)
+
+
+def test_builtin_types_can_be_digested():
+    """Built-in types like int, str, list must be digestible."""
+    for t in (int, str, float, bool, list, dict, tuple, bytes, type(None)):
+        result = digest(t)
+        assert isinstance(result, Digest), f"digest({t}) did not return a Digest"
+
+
+def test_dataclass_type_can_be_digested():
+    """Digesting a dataclass class (not an instance) must not raise."""
+    @dataclass
+    class MyData:
+        x: int
+        y: str
+
+    assert isinstance(digest(MyData), Digest)
+
+
+def test_dataclass_type_digest_differs_from_instance_digest():
+    """The digest of a dataclass class must differ from any of its instances."""
+    @dataclass
+    class Point:
+        x: int = 0
+        y: int = 0
+
+    assert digest(Point) != digest(Point(x=0, y=0))
+
+
+def test_same_type_always_produces_same_digest():
+    """Digesting the same type multiple times must return the same value."""
+    class Stable:
+        x: int = 1
+
+    assert digest(Stable) == digest(Stable)
+
+
+def test_type_digest_reflects_added_attribute():
+    """Adding a class attribute changes the type digest."""
+    class WithoutAttr:
+        pass
+
+    class WithAttr:
+        extra = 42
+
+    assert digest(WithAttr) != digest(WithoutAttr)
+
+
+def test_type_digest_reflects_attribute_value():
+    """Changing a class attribute value changes the type digest."""
+    class A:
+        x = 1
+
+    class B:
+        x = 999
+
+    assert digest(A) != digest(B)
+
+
+def test_type_digest_reflects_method_presence():
+    """Adding a method changes the type digest."""
+    class WithoutMethod:
+        pass
+
+    class WithMethod:
+        def compute(self):
+            return 1
+
+    assert digest(WithMethod) != digest(WithoutMethod)
+
+
+def test_type_digest_different_names_differ():
+    """Two classes with the same structure but different names produce different digests.
+
+    Each class's __dict__ contains __dict__ and __weakref__ descriptors whose
+    __qualname__ encodes the class name, so name differences propagate to the digest.
+    """
+    class ClassA:
+        x = 1
+
+    class ClassB:
+        x = 1
+
+    assert digest(ClassA) != digest(ClassB)
+
+
+def test_type_digest_equals_digest_of_dict():
+    """digest(T) == digest(dict(T.__dict__)) for a plain user-defined class."""
+    from fleche.digest import _digest_bytes
+
+    class MyClass:
+        x = 1
+        def method(self): return self.x
+
+    assert digest(MyClass) == digest(dict(MyClass.__dict__))
+
+
+def test_builtin_type_digest_equals_digest_of_dict():
+    """digest(int) == digest(dict(int.__dict__)) — strict equivalence holds for stdlib types."""
+    assert digest(int) == digest(dict(int.__dict__))
+
+
+def test_D_on_dataclass_type():
+    """fl.D(C) where C is a dataclass type must work (regression for issue #469)."""
+    from fleche import D
+
+    @dataclass
+    class Config:
+        n: int
+        label: str
+
+    assert isinstance(D(Config), Digest)
+
+
+def test_c_descriptor_digestible():
+    """C-level descriptor types (wrapper_descriptor, method_descriptor, etc.) must be digestible."""
+    assert isinstance(digest(int.__add__), Digest)        # wrapper_descriptor
+    assert isinstance(digest(str.upper), Digest)          # method_descriptor
+    assert isinstance(digest(int.from_bytes), Digest)     # classmethod_descriptor
+    assert isinstance(digest(len), Digest)                # builtin_function_or_method
+
+
+def test_c_descriptor_qualname_stability():
+    """The same C descriptor always produces the same digest."""
+    assert digest(int.__add__) == digest(int.__add__)
+    assert digest(str.upper) == digest(str.upper)
+
+
+def test_c_descriptor_different_qualnames_differ():
+    """Two different C descriptors with different qualnames produce different digests."""
+    assert digest(int.__add__) != digest(int.__mul__)
+    assert digest(str.upper) != digest(str.lower)
+
+
+def test_type_digest_stable_across_dill_roundtrip():
+    """A transient class has the same digest after a dill round-trip."""
+    import dill
+
+    def make_class():
+        class LocalClass:
+            x = 1
+            def method(self): return self.x
+        return LocalClass
+
+    cls = make_class()
+    original = digest(cls)
+    reloaded = dill.loads(dill.dumps(cls))
+    assert digest(reloaded) == original
+
+
+def test_type_digest_stable_across_cloudpickle_roundtrip():
+    """A transient class has the same digest after a cloudpickle round-trip."""
+    import cloudpickle
+
+    def make_class():
+        class LocalClass:
+            y = "hello"
+            def double(self, v): return v * 2
+        return LocalClass
+
+    cls = make_class()
+    original = digest(cls)
+    reloaded = cloudpickle.loads(cloudpickle.dumps(cls))
+    assert digest(reloaded) == original

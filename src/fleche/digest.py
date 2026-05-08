@@ -1,5 +1,6 @@
 import cmath
 import datetime
+import enum
 import hashlib
 import logging
 import dataclasses
@@ -77,6 +78,17 @@ _EP_HOOKS = []
 # ``hasattr`` MRO walk entirely.  No semantic change for class-defined
 # ``__digest__`` (instance-level dunders are not supported anyway).
 _TYPES_WITHOUT_DIGEST: set[type] = set()
+
+# C-level descriptor types from stdlib/builtins — no Python code object to inspect,
+# so use __qualname__ (e.g. "int.__add__", "Foo.__dict__") as the stable identifier.
+_C_DESCRIPTOR_TYPES = (
+    types.WrapperDescriptorType,
+    types.MethodDescriptorType,
+    types.ClassMethodDescriptorType,
+    types.BuiltinFunctionType,
+    types.GetSetDescriptorType,
+    types.MemberDescriptorType,
+)
 
 
 def get_hooks():
@@ -273,6 +285,15 @@ def _digest_bytes(value: Any) -> bytes:
             m.update(_digest_bytes(value.__func__))
         case property():
             m.update(_digest_bytes((value.fget, value.fset, value.fdel)))
+        case _ if isinstance(value, _C_DESCRIPTOR_TYPES):
+            m.update(getattr(value, "__qualname__", repr(value)).encode())
+        case _ if isinstance(value, type) and dataclasses.is_dataclass(value):
+            # digest dataclass classes by their field schema; dict(cls.__dict__)
+            # contains Python-internal _FieldType sentinels that are not
+            # independently digestible.
+            return _digest_bytes([(f.name, f.type) for f in dataclasses.fields(value)])
+        case _ if isinstance(value, type):
+            return _digest_bytes(dict(value.__dict__))
         case _ if dataclasses.is_dataclass(value):
             # cannot use asdict because it recursively converts values which destroys digests
             # instead (flat-) convert to dictionaries, salt with type name, then fallback to dictionary case.
@@ -284,6 +305,20 @@ def _digest_bytes(value: Any) -> bytes:
             # mirror the dataclass digest format so an attrs class and a dataclass
             # with the same name + field layout hash identically.
             m.update(_digest_bytes(dict(_attrs.field_items(value))))
+        case _ if value is dataclasses.MISSING:
+            m.update(b"__MISSING__")
+        case _ if isinstance(value, enum.Enum):
+            return _digest_bytes((type(value).__qualname__, value.value))
+        case _ if (
+            not isinstance(value, type)
+            and not hasattr(value, "__dict__")
+            and hasattr(type(value), "__slots__")
+            and type(value).__slots__
+        ):
+            t = type(value)
+            return _digest_bytes(
+                {s: getattr(value, s) for s in t.__slots__ if hasattr(value, s)}
+            )
         case _ if isinstance(value, types.ModuleType):
             names = getattr(value, "__all__", None)
             if names is None:
