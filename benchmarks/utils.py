@@ -60,7 +60,7 @@ key_strategies = [
 ]
 key_strategies.append(dataclasses(st.one_of(*key_strategies), frozen=True))
 
-# Base values include all key strategies plus indigestable types like Call
+# Base values include all key strategies plus indigestible types like Call
 value_strategies = key_strategies.copy()
 value_strategies.append(calls(st.one_of(*key_strategies)))
 

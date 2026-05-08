@@ -17,7 +17,7 @@ from . import _attrs
 logger = logging.getLogger("fleche.digest")
 
 
-class Indigestable(Exception):
+class Indigestible(Exception):
     """Exception raised when an object cannot be digested."""
 
     pass
@@ -148,7 +148,7 @@ def _digest_mapping(m, contents: Mapping) -> bytes:
 def digest(value: Any) -> Digest:
     try:
         return Digest(_digest_bytes(value).decode())
-    except Indigestable:
+    except Indigestible:
         load_entry_points()
     return Digest(_digest_bytes(value).decode())
 
@@ -295,7 +295,7 @@ def _digest_bytes(value: Any) -> bytes:
             for v in value:
                 m.update(_digest_bytes(v))
         case _:
-            raise Indigestable(value)
+            raise Indigestible(value)
 
     # To gain the raw-bytes speedup (Issue #440): change to m.digest() here,
     # update digest() to use .hex() instead of .decode(), and change the

@@ -124,7 +124,7 @@ def _profile(func) -> FunctionProfile:
 
 
 def _get_profile(func) -> FunctionProfile:
-    """Return the :class:`FunctionProfile` for *func*, handling indigestable callables.
+    """Return the :class:`FunctionProfile` for *func*, handling indigestible callables.
 
     Falls back to the unwrapped function directly when *func* is not
     hashable (i.e. when ``_profile(func)`` raises :exc:`TypeError`).

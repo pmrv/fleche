@@ -18,7 +18,7 @@ class MemoryBackend(StorageBackend):
 
     # Each storage instance is its own world: hash on identity so that frozen
     # dataclass subclasses can serve as WeakKeyDictionary keys in PerKeyLockMixin
-    # without the indigestable dict field causing a TypeError.
+    # without the indigestible dict field causing a TypeError.
     __hash__ = object.__hash__
 
     def list(self) -> Iterable[Digest]:

@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 from fleche.digest import (
     digest,
-    Indigestable,
+    Indigestible,
     Hook,
     _HOOKS,
     _EP_HOOKS,
@@ -34,12 +34,12 @@ def custom_digest(obj):
 def test_entry_point_discovery():
     """
     Test that entry points are automatically discovered and loaded when an
-    Indigestable error occurs.
+    Indigestible error occurs.
     """
     obj = CustomType("test")
 
     # Initially it should fail
-    with pytest.raises(Indigestable):
+    with pytest.raises(Indigestible):
         digest(obj)
 
     # Mock entry point
