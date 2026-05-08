@@ -71,9 +71,9 @@ _EP_HOOKS = []
 # Types confirmed *not* to define ``__digest__``.  ``__digest__`` is the opt-in
 # protocol that lets user types (including subclasses of dict/list/...) take
 # over their own digest, so the check has to run before the built-in ``match``
-# cases — which means it executes on every recursive ``_digest`` call for plain
-# ints, strs, dicts, lists, etc., where the answer is always False.  After the
-# first sighting of each built-in type, a set-membership check skips the
+# cases — which means it executes on every recursive ``_digest_bytes`` call for
+# plain ints, strs, dicts, lists, etc., where the answer is always False.  After
+# the first sighting of each built-in type, a set-membership check skips the
 # ``hasattr`` MRO walk entirely.  No semantic change for class-defined
 # ``__digest__`` (instance-level dunders are not supported anyway).
 _TYPES_WITHOUT_DIGEST: set[type] = set()
@@ -135,49 +135,49 @@ def load_entry_points():
             logger.error("Failed to load entry point %s: %s", ep.name, e)
 
 
-def _digest_mapping(m, contents: Mapping) -> None:
+def _digest_mapping(m, contents: Mapping) -> bytes:
     sorted_items = sorted(
-        ((digest(k), k, v) for k, v in contents.items()), key=lambda item: item[0]
+        ((_digest_bytes(k), k, v) for k, v in contents.items()), key=lambda item: item[0]
     )
-    for k_digest, k, v in sorted_items:
-        m.update(k_digest.encode())
-        m.update(digest(v).encode())
+    for k_bytes, k, v in sorted_items:
+        m.update(k_bytes)
+        m.update(_digest_bytes(v))
+    return m.hexdigest().encode()
 
 
 def digest(value: Any) -> Digest:
     try:
-        return _digest(value)
+        return Digest(_digest_bytes(value).decode())
     except Unhashable:
         load_entry_points()
-    return _digest(value)
+    return Digest(_digest_bytes(value).decode())
 
 
-def _digest(value: Any) -> Digest:
+def _digest_bytes(value: Any) -> bytes:
     """
-    Generates a SHA256 digest for a given Python object.
+    Returns bytes representing the SHA-256 digest of *value*.
 
-    This function handles various types including strings, bytes, integers, floats, booleans,
-    None, dictionaries, numpy arrays, dataclasses, and iterables.
-    If an unhashable type is encountered, an Unhashable exception is raised.
+    All recursive call sites pass the result directly to ``m.update()``.
 
-    Args:
-        value (Any): The object to be digested.
-
-    Returns:
-        str: The SHA256 hexdigest of the object.
-
-    Raises:
-        Unhashable: If the provided value cannot be digested.
+    **Wire-format note**: currently returns ``m.hexdigest().encode()`` (64 UTF-8
+    hex bytes) so the bytes fed into parent hashes are identical to the previous
+    ``digest(v).encode()`` calls — no backwards-incompatible change.  To gain
+    the raw-bytes speedup (Issue #440), change **only** the final ``return``
+    here to ``m.digest()`` (32 bytes), update ``digest()`` to call ``.hex()``
+    instead of ``.decode()``, and change the ``encode()`` calls on the
+    early-return paths (Digest pass-through, hooks, ``__digest__``) to
+    ``bytes.fromhex(...)``.  That must be coordinated with a ``hash_version``
+    bump and a ``Cache.redigest`` migration.
     """
     m = hashlib.sha256()
 
     # Fast-path: in the common case both hook lists are empty, so skip the
     # ``get_hooks()`` call which would otherwise allocate a fresh combined list
-    # on every recursive ``_digest`` invocation (hot for large iterables).
+    # on every recursive ``_digest_bytes`` invocation (hot for large iterables).
     if _HOOKS or _EP_HOOKS:
         for h in get_hooks():
             if isinstance(value, h.type):
-                return h.digest(value)
+                return h.digest(value).encode()
 
     # ``__digest__`` opt-in protocol must win over the built-in ``match`` cases
     # so dict/list subclasses can override their own digest.  Avoid the
@@ -186,7 +186,8 @@ def _digest(value: Any) -> Digest:
     t = type(value)
     if t not in _TYPES_WITHOUT_DIGEST:
         if hasattr(t, "__digest__"):
-            return Digest(value.__digest__())
+            # For raw-bytes speedup (Issue #440): bytes.fromhex(value.__digest__())
+            return value.__digest__().encode()
         _TYPES_WITHOUT_DIGEST.add(t)
 
     m.update(t.__name__.encode())
@@ -200,7 +201,7 @@ def _digest(value: Any) -> Digest:
             )
         case Digest():
             # Must precede str (Digest ⊂ str)
-            return value
+            return value.encode()
         case str():
             m.update(value.encode())
         case None:
@@ -227,18 +228,18 @@ def _digest(value: Any) -> Digest:
                 # rely on python's 'generic' hash semantics for all numbers to translate all of them to an integer
                 value = hash(value)
                 # then digest its bytes
-                return digest(value)
+                return _digest_bytes(value)
         case bytes():
             m.update(value)
         case np.ndarray():
-            m.update(digest(value.dtype.str).encode())
-            m.update(digest(value.shape).encode())
+            m.update(_digest_bytes(value.dtype.str))
+            m.update(_digest_bytes(value.shape))
             m.update(value.tobytes())
         case np.bool_():
             # np.bool_ ∉ Number so this arm is reachable
-            return digest(bool(value))
+            return _digest_bytes(bool(value))
         case types.FunctionType():
-            return digest(value.__code__)
+            return _digest_bytes(value.__code__)
         case types.CodeType():
             # captured properties for behavior stability
             props = [
@@ -255,11 +256,11 @@ def _digest(value: Any) -> Digest:
             ]
             if hasattr(value, "co_exceptiontable"):
                 props.append(value.co_exceptiontable)
-            m.update(digest(tuple(props)).encode())
+            m.update(_digest_bytes(tuple(props)))
         case datetime.timezone():
-            m.update(digest(value.utcoffset(None)).encode())
+            m.update(_digest_bytes(value.utcoffset(None)))
         case datetime.timedelta():
-            m.update(digest(value.total_seconds()).encode())
+            m.update(_digest_bytes(value.total_seconds()))
         case datetime.datetime():  # datetime subclasses date; must precede date case
             m.update(value.isoformat().encode())
         case datetime.date():
@@ -267,33 +268,36 @@ def _digest(value: Any) -> Digest:
         case datetime.time():
             m.update(value.isoformat().encode())
         case staticmethod():
-            m.update(digest(value.__func__).encode())
+            m.update(_digest_bytes(value.__func__))
         case classmethod():
-            m.update(digest(value.__func__).encode())
+            m.update(_digest_bytes(value.__func__))
         case property():
-            m.update(digest((value.fget, value.fset, value.fdel)).encode())
+            m.update(_digest_bytes((value.fget, value.fset, value.fdel)))
         case _ if dataclasses.is_dataclass(value):
             # cannot use asdict because it recursively converts values which destroys digests
             # instead (flat-) convert to dictionaries, salt with type name, then fallback to dictionary case.
             fields = map(
                 lambda f: (f.name, getattr(value, f.name)), dataclasses.fields(value)
             )
-            m.update(digest(dict(fields)).encode())
+            m.update(_digest_bytes(dict(fields)))
         case _ if _attrs.is_attrs_instance(value):
             # mirror the dataclass digest format so an attrs class and a dataclass
             # with the same name + field layout hash identically.
-            m.update(digest(dict(_attrs.field_items(value))).encode())
+            m.update(_digest_bytes(dict(_attrs.field_items(value))))
         case _ if isinstance(value, types.ModuleType):
             names = getattr(value, "__all__", None)
             if names is None:
                 names = dir(value)
             _digest_mapping(m, {name: getattr(value, name) for name in names})
         case Mapping():
-            _digest_mapping(m, value)
+            _digest_mapping(m, dict(value))
         case Iterable():
             for v in value:
-                m.update(digest(v).encode())
+                m.update(_digest_bytes(v))
         case _:
             raise Unhashable(value)
 
-    return Digest(m.hexdigest())
+    # To gain the raw-bytes speedup (Issue #440): change to m.digest() here,
+    # update digest() to use .hex() instead of .decode(), and change the
+    # encode()/bytes.fromhex() calls on the early-return paths above.
+    return m.hexdigest().encode()
