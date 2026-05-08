@@ -142,8 +142,6 @@ def _digest_mapping(m, contents: Mapping) -> bytes:
     for k_bytes, k, v in sorted_items:
         m.update(k_bytes)
         m.update(_digest_bytes(v))
-    # To gain the raw-bytes speedup (Issue #440), change this to m.digest() in
-    # sync with the return at the end of _digest_bytes.
     return m.hexdigest().encode()
 
 
@@ -188,6 +186,7 @@ def _digest_bytes(value: Any) -> bytes:
     t = type(value)
     if t not in _TYPES_WITHOUT_DIGEST:
         if hasattr(t, "__digest__"):
+            # For raw-bytes speedup (Issue #440): bytes.fromhex(value.__digest__())
             return value.__digest__().encode()
         _TYPES_WITHOUT_DIGEST.add(t)
 
@@ -202,7 +201,7 @@ def _digest_bytes(value: Any) -> bytes:
             )
         case Digest():
             # Must precede str (Digest ⊂ str)
-            return value.encode()
+            m.update(value.encode())
         case str():
             m.update(value.encode())
         case None:
@@ -289,9 +288,9 @@ def _digest_bytes(value: Any) -> bytes:
             names = getattr(value, "__all__", None)
             if names is None:
                 names = dir(value)
-            return _digest_mapping(m, {name: getattr(value, name) for name in names})
+            _digest_mapping(m, {name: getattr(value, name) for name in names})
         case Mapping():
-            return _digest_mapping(m, dict(value))
+            _digest_mapping(m, dict(value))
         case Iterable():
             for v in value:
                 m.update(_digest_bytes(v))
