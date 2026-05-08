@@ -201,7 +201,7 @@ def _digest_bytes(value: Any) -> bytes:
             )
         case Digest():
             # Must precede str (Digest ⊂ str)
-            m.update(value.encode())
+            return value.encode()
         case str():
             m.update(value.encode())
         case None:
