@@ -1,5 +1,5 @@
 import pytest
-from fleche.storage.pickle_file import ValuePickleFile as PickleFile
+from fleche.storage.pickle_file import ValuePickleFile as PickleFile, CallPickleFile
 from fleche.digest import Digest
 
 
@@ -160,3 +160,31 @@ def test_compress_then_decompress_roundtrip(tmp_path):
 
     for key, value in values.items():
         assert storage.load(key) == value
+
+
+def test_rewrite_all_custom_transform(tmp_path):
+    """_rewrite_all() applies an arbitrary byte transform to every file."""
+    # Use CallPickleFile (no DestructuringMixin) so exactly one file is created.
+    storage = CallPickleFile.with_pickle(root=tmp_path, compress=False)
+    key = Digest("a" * 64)
+    value = {"x": 1}
+    storage.put(value, key)
+    original = (tmp_path / str(key)).read_bytes()
+
+    seen = []
+    storage._rewrite_all(lambda c: seen.append(c) or None)
+
+    assert seen == [original]
+    assert (tmp_path / str(key)).read_bytes() == original  # file unchanged when None returned
+
+
+def test_rewrite_all_skips_missing_files(tmp_path):
+    """_rewrite_all() silently skips files deleted between list() and read."""
+    storage = CallPickleFile.with_pickle(root=tmp_path, compress=False)
+    key = Digest("a" * 64)
+    storage.put({"x": 1}, key)
+    (tmp_path / str(key)).unlink()
+
+    called = []
+    storage._rewrite_all(lambda c: called.append(c) or None)
+    assert called == []

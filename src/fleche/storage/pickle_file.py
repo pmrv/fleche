@@ -85,8 +85,12 @@ class PickleFileBackend(FileStorage):
         except SignatureError:
             raise KeyError(path, "Value present but failed signature check.")
 
-    def compress_all(self) -> None:
-        """Rewrite all stored files in gzip-compressed form."""
+    def _rewrite_all(self, transform: Callable[[bytes], bytes | None]) -> None:
+        """Lock, read, and conditionally rewrite every stored file via *transform*.
+
+        *transform* receives the raw file bytes and returns the new bytes to
+        write, or ``None`` to leave the file unchanged.
+        """
         for key in list(self.list()):
             path = self._path(key)
             lock_path = self._path(f"{key}.lock")
@@ -95,21 +99,21 @@ class PickleFileBackend(FileStorage):
                     content = path.read_bytes()
                 except FileNotFoundError:
                     continue
-                if content[:2] != b"\x1f\x8b":
-                    path.write_bytes(gzip.compress(content))
+                result = transform(content)
+                if result is not None:
+                    path.write_bytes(result)
+
+    def compress_all(self) -> None:
+        """Rewrite all stored files in gzip-compressed form."""
+        self._rewrite_all(
+            lambda c: None if c[:2] == b"\x1f\x8b" else gzip.compress(c)
+        )
 
     def decompress_all(self) -> None:
         """Rewrite all stored files in uncompressed form."""
-        for key in list(self.list()):
-            path = self._path(key)
-            lock_path = self._path(f"{key}.lock")
-            with filelock.FileLock(lock_path, timeout=self.lock_timeout):
-                try:
-                    content = path.read_bytes()
-                except FileNotFoundError:
-                    continue
-                if content[:2] == b"\x1f\x8b":
-                    path.write_bytes(gzip.decompress(content))
+        self._rewrite_all(
+            lambda c: gzip.decompress(c) if c[:2] == b"\x1f\x8b" else None
+        )
 
 
 @dataclass(frozen=True)
