@@ -90,6 +90,11 @@ _C_DESCRIPTOR_TYPES = (
     types.MemberDescriptorType,
 )
 
+# dataclasses._FIELD_BASE is a private sentinel class (Python 3.10+).  Access via
+# getattr to avoid type-checker errors on an unresolved private attribute; None
+# disables the match arm gracefully if a future Python removes it.
+_DATACLASSES_FIELD_BASE: type | None = getattr(dataclasses, "_FIELD_BASE", None)
+
 
 def get_hooks():
     return list(reversed(_HOOKS)) + _EP_HOOKS
@@ -307,7 +312,7 @@ def _digest_bytes(value: Any) -> bytes:
             m.update(_digest_bytes(dict(_attrs.field_items(value))))
         case _ if value is dataclasses.MISSING:
             m.update(b"__MISSING__")
-        case _ if isinstance(value, dataclasses._FIELD_BASE):
+        case _ if _DATACLASSES_FIELD_BASE is not None and isinstance(value, _DATACLASSES_FIELD_BASE):
             # _FIELD_BASE singletons (_FIELD, _FIELD_CLASSVAR, _FIELD_INITVAR) carry
             # a stable .name attribute; use it as the digest key.
             m.update(value.name.encode())
