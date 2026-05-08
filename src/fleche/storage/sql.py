@@ -135,23 +135,30 @@ def _coerce_sqlite_url(path_or_url: str | None) -> str:
     return url
 
 
-# Use a constant for the PRAGMA execution to avoid raw string injection risks.
+# Use constants for the PRAGMA executions to avoid raw string injection risks.
 SQLITE_FOREIGN_KEYS_ON = "PRAGMA foreign_keys=ON"
+SQLITE_WAL_MODE = "PRAGMA journal_mode=WAL"
 
 
-def _enable_sqlite_foreign_keys(engine) -> None:
+def _configure_sqlite_pragmas(engine) -> None:
     # PRAGMA is sqlite-only; running it on Postgres/MySQL connections would
     # raise at connect time, so gate the listener on the dialect.
     if engine.dialect.name != "sqlite":
         return
 
+    # WAL mode requires a real file; skip it for in-memory databases where it
+    # is a silent no-op but adds an unnecessary round-trip.
+    is_memory = str(engine.url).endswith(":memory:")
+
     @event.listens_for(engine, "connect")
     def _set_sqlite_pragma(dbapi_connection, connection_record):
         cursor = dbapi_connection.cursor()
         try:
-            # We use a static constant string here. We cannot use sqlalchemy.text()
+            # We use static constant strings here. We cannot use sqlalchemy.text()
             # because we are operating on a raw DBAPI cursor at the 'connect' event.
             cursor.execute(SQLITE_FOREIGN_KEYS_ON)
+            if not is_memory:
+                cursor.execute(SQLITE_WAL_MODE)
         finally:
             cursor.close()
 
@@ -177,7 +184,7 @@ class Sql(PerKeyLockMixin, CallStorage):
         is_sqlite = coerced_url.startswith("sqlite:")
         connect_args = {"check_same_thread": False} if is_sqlite else {}
         engine = create_engine(coerced_url, echo=self.echo, future=True, connect_args=connect_args)
-        _enable_sqlite_foreign_keys(engine)
+        _configure_sqlite_pragmas(engine)
         Base.metadata.create_all(engine)
         object.__setattr__(self, "engine", engine)
         object.__setattr__(self, "session", sessionmaker(

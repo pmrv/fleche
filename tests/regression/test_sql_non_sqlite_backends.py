@@ -15,7 +15,7 @@ backend on non-sqlite dialects").
 Why these specific assertions:
   * URL pass-through: regression for ``_coerce_sqlite_url`` rewriting any
     non-``sqlite:`` URL into a sqlite file path.
-  * No PRAGMA on connect: regression for ``_enable_sqlite_foreign_keys``
+  * No PRAGMA on connect: regression for ``_configure_sqlite_pragmas``
     being registered unconditionally and crashing Postgres on the first
     connection.
   * Save / load / list / contains / evict: covers the backend's CRUD path
