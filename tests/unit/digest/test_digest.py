@@ -1016,3 +1016,54 @@ def test_type_digest_stable_across_cloudpickle_roundtrip():
     original = digest(cls)
     reloaded = cloudpickle.loads(cloudpickle.dumps(cls))
     assert digest(reloaded) == original
+
+
+# --- Tests for dataclasses._FIELD_BASE (Python 3.12: _FIELD / _FIELD_CLASSVAR / _FIELD_INITVAR) ---
+
+
+def test_field_base_singletons_are_digestible():
+    """The three _FIELD_BASE singletons must be digestible."""
+    import dataclasses as dc
+    assert isinstance(digest(dc._FIELD), Digest)
+    assert isinstance(digest(dc._FIELD_CLASSVAR), Digest)
+    assert isinstance(digest(dc._FIELD_INITVAR), Digest)
+
+
+def test_field_base_singletons_have_distinct_digests():
+    """The three singletons must produce different digests."""
+    import dataclasses as dc
+    assert digest(dc._FIELD) != digest(dc._FIELD_CLASSVAR)
+    assert digest(dc._FIELD) != digest(dc._FIELD_INITVAR)
+    assert digest(dc._FIELD_CLASSVAR) != digest(dc._FIELD_INITVAR)
+
+
+def test_field_base_digest_is_stable():
+    """Digesting the same singleton twice returns the same value."""
+    import dataclasses as dc
+    assert digest(dc._FIELD) == digest(dc._FIELD)
+    assert digest(dc._FIELD_CLASSVAR) == digest(dc._FIELD_CLASSVAR)
+
+
+def test_field_instance_is_digestible():
+    """A dataclasses.Field instance (which carries _field_type) must be digestible."""
+    import dataclasses as dc
+
+    @dataclass
+    class Simple:
+        x: int = 0
+
+    field_obj = dc.fields(Simple)[0]
+    assert isinstance(digest(field_obj), Digest)
+
+
+def test_field_instance_digest_changes_with_value():
+    """Two Field instances for different field names must differ."""
+    import dataclasses as dc
+
+    @dataclass
+    class TwoFields:
+        a: int = 1
+        b: str = "hi"
+
+    fa, fb = dc.fields(TwoFields)
+    assert digest(fa) != digest(fb)
