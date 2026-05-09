@@ -57,7 +57,7 @@ def benchmark_storage_ops(storage_name, storage_factory, values_to_store):
         keys = [digest(val) for val in values_to_store]
         valid_items = list(zip(values_to_store, keys))
 
-        # Benchmark Save
+        # Benchmark Save (re-save of existing key — collision path)
         save_times = []
         for val, key in valid_items:
             timer = timeit.Timer(partial(storage.save, val, key))
@@ -71,6 +71,24 @@ def benchmark_storage_ops(storage_name, storage_factory, values_to_store):
                 "storage": storage_name,
                 "iterations": len(valid_items) * 30,
                 "time": min(save_times),
+            }
+        )
+
+        # Benchmark Fresh Save (first-time insert per key)
+        save_fresh_times = []
+        for val, key in valid_items:
+            storage.evict(key)
+            start = time.perf_counter()
+            storage.save(val, key)
+            end = time.perf_counter()
+            save_fresh_times.append(end - start)
+
+        results.append(
+            {
+                "benchmark": "storage_save_fresh",
+                "storage": storage_name,
+                "iterations": len(valid_items),
+                "time": min(save_fresh_times),
             }
         )
 
@@ -155,7 +173,7 @@ def benchmark_sql_ops(storage_label, url, calls_data):
     results = []
     storage = Sql(url)
 
-    # Save
+    # Save (re-save of existing key — collision path)
     save_times = []
     keys = []
     for c in calls_data:
@@ -171,6 +189,24 @@ def benchmark_sql_ops(storage_label, url, calls_data):
             "storage": storage_label,
             "iterations": len(calls_data) * 30,
             "time": min(save_times),
+        }
+    )
+
+    # Fresh Save (first-time insert per key)
+    save_fresh_times = []
+    for c, key in zip(calls_data, keys):
+        storage.evict(key)
+        start = time.perf_counter()
+        storage.save(c)
+        end = time.perf_counter()
+        save_fresh_times.append(end - start)
+
+    results.append(
+        {
+            "benchmark": "storage_save_fresh",
+            "storage": storage_label,
+            "iterations": len(calls_data),
+            "time": min(save_fresh_times),
         }
     )
 
