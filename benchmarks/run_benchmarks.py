@@ -174,6 +174,13 @@ def main():
             workload = ""
             function = b
 
+        # Fold contains_hit/contains_miss into a single "contains" column
+        # showing the hit case; drop the miss case from display.
+        if function == "contains_miss":
+            continue
+        if function == "contains_hit":
+            function = "contains"
+
         # Apply formatting and color mapping
         colored_config = f"{get_storage_color(config)} {config}" if config else config
 
