@@ -10,9 +10,15 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
+      actions: read
+      contents: read
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -24,9 +30,81 @@ jobs:
         python -m pip install --upgrade pip
         pip install -e .[tests]
 
+    - name: Resolve baseline SHAs
+      id: shas
+      run: |
+        git fetch origin main --depth=200 || true
+        MERGE_BASE=$(git merge-base origin/main HEAD)
+        echo "MERGE_BASE=$MERGE_BASE" >> "$GITHUB_ENV"
+        echo "MERGE_BASE_SHORT=$(git rev-parse --short "$MERGE_BASE")" >> "$GITHUB_ENV"
+        PREV_SHA=$(git rev-parse HEAD~ 2>/dev/null || echo "")
+        if [ -n "$PREV_SHA" ] && [ "$PREV_SHA" != "$MERGE_BASE" ]; then
+          echo "PREV_SHA=$PREV_SHA" >> "$GITHUB_ENV"
+          echo "PREV_SHORT=$(git rev-parse --short "$PREV_SHA")" >> "$GITHUB_ENV"
+        fi
+
+    - name: Look up baseline run-id
+      run: |
+        RUN_ID=$(gh run list --commit "$MERGE_BASE" --status success \
+          --json databaseId,name \
+          --jq '[.[] | select(.name | startswith("Benchmarks"))][0].databaseId // ""')
+        echo "BASELINE_RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
+        if [ -n "${PREV_SHA:-}" ]; then
+          PRUN=$(gh run list --commit "$PREV_SHA" --status success \
+            --json databaseId,name \
+            --jq '[.[] | select(.name | startswith("Benchmarks"))][0].databaseId // ""')
+          echo "PREV_RUN_ID=$PRUN" >> "$GITHUB_ENV"
+        fi
+
+    - name: Download baseline artifact
+      if: env.BASELINE_RUN_ID != ''
+      uses: actions/download-artifact@v4
+      with:
+        name: benchmark-${{ env.MERGE_BASE }}
+        run-id: ${{ env.BASELINE_RUN_ID }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        path: baseline/
+
+    - name: Recompute baseline (fallback)
+      if: env.BASELINE_RUN_ID == ''
+      run: |
+        git worktree add /tmp/base "$MERGE_BASE"
+        cd /tmp/base
+        pip install -e .[tests]
+        python benchmarks/run_benchmarks.py > /dev/null
+        mkdir -p "$GITHUB_WORKSPACE/baseline"
+        cp benchmarks/results.csv "$GITHUB_WORKSPACE/baseline/results.csv"
+        echo "BASELINE_RECOMPUTED=1" >> "$GITHUB_ENV"
+
+    - name: Download HEAD~ artifact
+      if: env.PREV_RUN_ID != ''
+      uses: actions/download-artifact@v4
+      with:
+        name: benchmark-${{ env.PREV_SHA }}
+        run-id: ${{ env.PREV_RUN_ID }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        path: prev/
+
     - name: Run benchmarks
       run: |
         python benchmarks/run_benchmarks.py > benchmark_output.txt
+
+    - name: Upload PR results
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-${{ github.event.pull_request.head.sha }}
+        path: benchmarks/results.csv
+        retention-days: 90
+
+    - name: Compute delta
+      run: |
+        ARGS=(--baseline baseline/results.csv \
+              --head benchmarks/results.csv \
+              --baseline-label "$MERGE_BASE_SHORT")
+        if [ -f prev/results.csv ]; then
+          ARGS+=(--prev prev/results.csv --prev-label "$PREV_SHORT")
+        fi
+        python benchmarks/compare_results.py "${ARGS[@]}" > delta.md
 
     - name: Comment PR
       uses: actions/github-script@v7
@@ -35,12 +113,18 @@ jobs:
         script: |
           const fs = require('fs');
           const output = fs.readFileSync('benchmark_output.txt', 'utf8');
+          const delta = fs.existsSync('delta.md') ? fs.readFileSync('delta.md', 'utf8') : '';
+          const baseShort = process.env.MERGE_BASE_SHORT || '';
+          const recomputed = process.env.BASELINE_RECOMPUTED === '1';
+          const prevShort = process.env.PREV_SHORT || '';
+          const baseLine = `**Baseline:** ${baseShort} (${recomputed ? 'recomputed' : 'cached'})`
+            + (prevShort ? ` · **HEAD~:** ${prevShort}` : '');
           const issue_number = context.issue.number;
           if (issue_number) {
             github.rest.issues.createComment({
               issue_number: issue_number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `## Benchmark Results\n\n${output}`
+              body: `## Benchmark Results\n\n${baseLine}\n\n### Delta\n\n${delta}\n\n### Full results\n\n${output}`
             });
           }
