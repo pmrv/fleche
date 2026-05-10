@@ -72,7 +72,11 @@ def main():
             has_prev = True
 
     df["abs_pct"] = df["pct_base"].abs().fillna(0)
+    if has_prev:
+        df["abs_pct"] = df[["abs_pct", "pct_prev"]].abs().max(axis=1).fillna(0)
     df = df.sort_values("abs_pct", ascending=False)
+    significant = df[df["abs_pct"] > THRESHOLD]
+    skipped = len(df) - len(significant)
 
     cols = [
         "topic",
@@ -87,7 +91,7 @@ def main():
         cols.append(f"Δ vs {args.prev_label}")
 
     rows = []
-    for _, r in df.iterrows():
+    for _, r in significant.iterrows():
         row = {
             "topic": r["topic"],
             "configuration": r["configuration"],
@@ -104,7 +108,15 @@ def main():
         rows.append(row)
 
     out = pd.DataFrame(rows, columns=cols)
-    print(out.to_markdown(index=False))
+    summary = f"Significant changes (|Δ| > {int(THRESHOLD * 100)}%): {len(out)}"
+    if skipped:
+        summary += f" — {skipped} other rows hidden"
+    print(f"<details><summary>{summary}</summary>\n")
+    if len(out):
+        print(out.to_markdown(index=False))
+    else:
+        print("_no significant changes_")
+    print("\n</details>")
 
 
 if __name__ == "__main__":
