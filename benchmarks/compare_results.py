@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from run_benchmarks import format_time  # noqa: E402
 
 KEY = ["topic", "configuration", "workload", "function"]
-THRESHOLD = 0.05
+THRESHOLD = 0.10
 
 
 def load(path):
@@ -78,44 +78,45 @@ def main():
     significant = df[df["abs_pct"] > THRESHOLD]
     skipped = len(df) - len(significant)
 
-    cols = [
-        "topic",
-        "configuration",
-        "workload",
-        "function",
-        f"time @ {args.baseline_label}",
-        "time @ head",
-        "Δ vs base",
-    ]
-    if has_prev:
-        cols.append(f"Δ vs {args.prev_label}")
+    base_col = f"time @ {args.baseline_label}"
+    head_col = "time @ head"
+    delta_col = "Δ vs base"
+    prev_delta = f"Δ vs {args.prev_label}" if has_prev else None
 
-    rows = []
-    for _, r in significant.iterrows():
+    def render_row(r):
         row = {
-            "topic": r["topic"],
             "configuration": r["configuration"],
             "workload": r["workload"],
             "function": r["function"],
-            f"time @ {args.baseline_label}": format_time(r["t_base"])
-            if pd.notna(r["t_base"]) else "",
-            "time @ head": format_time(r["t_head"])
-            if pd.notna(r["t_head"]) else "",
-            "Δ vs base": flag(r["pct_base"]),
+            base_col: format_time(r["t_base"]) if pd.notna(r["t_base"]) else "",
+            head_col: format_time(r["t_head"]) if pd.notna(r["t_head"]) else "",
+            delta_col: flag(r["pct_base"]),
         }
         if has_prev:
-            row[f"Δ vs {args.prev_label}"] = flag(r.get("pct_prev"))
-        rows.append(row)
+            row[prev_delta] = flag(r.get("pct_prev"))
+        return row
 
-    out = pd.DataFrame(rows, columns=cols)
-    summary = f"Significant changes (|Δ| > {int(THRESHOLD * 100)}%): {len(out)}"
+    summary = f"Significant changes (|Δ| > {int(THRESHOLD * 100)}%): {len(significant)}"
     if skipped:
         summary += f" — {skipped} other rows hidden"
     print(f"<details><summary>{summary}</summary>\n")
-    if len(out):
-        print(out.to_markdown(index=False))
-    else:
+
+    if not len(significant):
         print("_no significant changes_")
+    else:
+        for topic, topic_df in significant.groupby("topic", sort=False):
+            print(f"\n#### {topic}\n")
+            cols = ["configuration", "workload", "function",
+                    base_col, head_col, delta_col]
+            if has_prev:
+                cols.append(prev_delta)
+            # Drop columns that carry no information within this topic.
+            constant = [c for c in ("configuration", "workload")
+                        if topic_df[c].nunique() <= 1
+                        and (topic_df[c] == "").all()]
+            cols = [c for c in cols if c not in constant]
+            out = pd.DataFrame([render_row(r) for _, r in topic_df.iterrows()])
+            print(out[cols].to_markdown(index=False))
     print("\n</details>")
 
 
