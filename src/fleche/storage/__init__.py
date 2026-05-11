@@ -14,7 +14,7 @@ from .base import (
     CallStorage,
     CallMixin,
 )
-from .destructuring import DestructuringMixin
+from .destructuring import DestructuringMixin, register_destructurer
 from .memory import ValueMemory, CallMemory
 from .void import ValueVoid, CallVoid
 from .file import FileStorage
@@ -33,6 +33,7 @@ __all__ = [
     "CallStorage",
     "CallMixin",
     "DestructuringMixin",
+    "register_destructurer",
     "ValueMemory",
     "CallMemory",
     "ValueVoid",
