@@ -105,11 +105,11 @@ Shared fixtures (in `fixtures.py`):
 
 ## Other directories
 
-- `benchmarks/` — `benchmark_{digest,integration,storage}.py`, `run_benchmarks.py`, `utils.py`, `profile_digest_types.py` (per-type cProfile harness), `results.csv`.
+- `benchmarks/` — `benchmark_{digest,integration,storage}.py`, `run_benchmarks.py`, `compare_results.py` (diff two `results.csv` runs), `utils.py`, `profile_digest_types.py` (per-type cProfile harness), `results.csv`.
 - `devnotes/storage-hierarchy.{dot,md,svg}` — rendered inheritance diagram for the storage classes.
 - `docs/` — Sphinx sources, grouped by topic: root holds `index`, `installation`, `parallel_execution`; `usage/` holds `helpers`, `lazy_call`, `query`; `digests/` holds `digests_as_args`, `digest_equivalence`; `storage/` holds `configuration`, `cache_stack`, `security`; `dev/` holds `custom_digests`, `developer`. `docs/notebooks/` is **symlinks** into `../../notebooks/` (six entries — `Caches` and `TransferWorkflow` are not exposed in docs); the `rendernb.yml` workflow re-executes `notebooks/*.ipynb` in place when a PR carries the `rendernb` label.
 - `notebooks/` — usage examples (`GettingStarted`, `Caches`, `CacheStack`, `StorageBackends`, `SecureStorage`, `ConcurrentExecution`, `ExtraMethods`, `TransferWorkflow`); five of these (all except `Caches`, `ConcurrentExecution`, `TransferWorkflow`) are executed by `tests/integration/test_notebooks.py`.
-- `.github/workflows/` — CI: `tests.yml`, `ty.yml`, `benchmarks.yml`/`updatebenchmarks.yml`, `rendernb.yml`, `pypi-publish.yml`.
+- `.github/workflows/` — CI: `tests.yml` (PR sweep across 3.11–3.14 + `sql-backends` job that boots Postgres 16 + MariaDB 11 service containers and sets `FLECHE_TEST_{POSTGRES,MYSQL}_URL`), `ty.yml`, `benchmarks.yml`/`benchmarks-main.yml`/`updatebenchmarks.yml`, `rendernb.yml` (re-executes `notebooks/*.ipynb` on PRs labelled `rendernb`), `release-please.yml`, `pypi-publish.yml`. Releases use **release-please** (`release-please-config.json`, `.release-please-manifest.json`) — release PRs are opened automatically from conventional-commit history on `main`.
 
 ## PR and Issue notes
 
