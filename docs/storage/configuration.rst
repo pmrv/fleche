@@ -182,20 +182,24 @@ Key descriptions
 Destructuring
 ^^^^^^^^^^^^^
 
-All value backends except ``"sql"`` (which is call-only) store collections
-(:class:`list`, :class:`tuple`, :class:`dict`) by *destructuring* them: each element is
-stored independently under its own cache key, and on load the original structure is
-reassembled.  This avoids redundant storage of shared sub-structures across different
-cached calls.
+All persistent value backends (``"memory"``, ``"pickle"``, ``"cloudpickle"``,
+``"dill"``, ``"bagofholding_hdf"``) store collections (:class:`list`,
+:class:`tuple`, :class:`dict`) by *destructuring* them: each element is stored
+independently under its own cache key, and on load the original structure is
+reassembled.  This avoids redundant storage of shared sub-structures across
+different cached calls.
 
 The optional ``remaining_depth`` key (integer, default ``0``) controls the granularity:
 
 * ``remaining_depth = 0`` — maximum splitting: every element at every nesting level is
   stored as a separate entry.
-* ``remaining_depth = N`` (positive) — elements at nesting levels shallower than *N* are
-  stored inline within their parent entry rather than as separate entries.
-  For example, ``remaining_depth = 1`` inlines scalars within their parent list or dict
-  so each top-level collection is stored as a single entry.
+* ``remaining_depth = N`` (positive) — elements whose structural depth is less than *N*
+  are stored inline within their parent entry rather than as separate entries.
+  Depth is measured from the deepest scalar leaf: scalars (:class:`int`, :class:`str`,
+  etc.) have depth 0; a container has depth ``1 + max(children depths)``.
+  With ``remaining_depth = 1``, scalars (depth 0) are inlined into their parent
+  container, so a flat list or dict of only scalars becomes a single cache entry.
+  Nested sub-collections (depth ≥ 1) are still stored as separate entries.
 
 Higher values mean fewer, larger storage entries and less structural sharing between calls.
 
@@ -206,7 +210,7 @@ Example:
    [mycache]
    values.type = "cloudpickle"
    values.root = "~/.cache/fleche/values"
-   values.remaining_depth = 1   # inline scalars; one entry per top-level collection
+   values.remaining_depth = 1   # inline scalars into their parent container
    calls.type = "cloudpickle"
    calls.root = "~/.cache/fleche/calls"
 
