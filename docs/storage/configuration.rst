@@ -187,8 +187,7 @@ All persistent value backends (``"memory"``, ``"pickle"``, ``"cloudpickle"``,
 :class:`tuple`, :class:`dict`) by *destructuring* them: each element is stored
 independently under its own cache key, and on load the original structure is
 reassembled.  This avoids redundant storage of shared sub-structures across
-different cached calls.  The ``"void"`` backend discards everything and performs
-no splitting.
+different cached calls.
 
 The optional ``remaining_depth`` key (integer, default ``0``) controls the granularity:
 
