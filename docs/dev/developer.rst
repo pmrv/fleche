@@ -32,6 +32,55 @@ they are handled correctly without special-casing at call sites.
 code then reads it from the profile instead of calling introspection APIs
 directly.
 
+.. _extending-destructurer:
+
+Extending the destructurer
+--------------------------
+
+The ``DestructuringMixin`` type-dispatch table, ``_DESTRUCTURERS``, is a
+module-level list of ``(predicate, sunder_fn)`` pairs.  It ships with four
+built-in entries — lists/tuples, dicts, dataclasses, and attrs instances — and
+can be extended at import time via
+:func:`~fleche.storage.destructuring.register_destructurer`.
+
+.. warning::
+
+   ``_DESTRUCTURERS`` is a global, mutable list.  Every
+   :class:`~fleche.storage.destructuring.DestructuringMixin` instance shares it.
+   Registering a destructurer after storage instances have already been used
+   produces undefined behaviour because ``_intern_rec`` closes over the list
+   state at call time.
+
+Before reaching for this function, consider whether implementing
+``__digest__`` (or ``add_hook``) on the type in question is sufficient.
+Destructurer registration is only necessary when a container type must have
+its *children* stored as independent, reusable keys rather than being pickled
+as a single opaque blob.
+
+**Contract for** ``sunder_fn``
+
+The function must have the signature ``(intern, value) -> (result, depth)``
+where:
+
+- ``intern`` is :meth:`~fleche.storage.destructuring.DestructuringMixin._intern_rec`
+  — call it on each child value and collect the returned ``(child, depth)``
+  pairs.
+- ``result`` must be either the plain value (when all children are inlined,
+  i.e. no child returned a :class:`~fleche.digest.Digest`) or a new
+  :class:`~fleche.storage.destructuring.Digested` subclass instance wrapping
+  the children.
+- ``depth`` must be ``1 + max(child_depths)`` when children were processed,
+  or ``float("inf")`` when the value cannot be handled.
+
+The ``Digested`` subclass must implement :meth:`~fleche.storage.destructuring.Digested.mend`
+(reconstruction from storage), :meth:`~fleche.storage.destructuring.Digested.underlying`
+(for hashing), and the class-method
+:meth:`~fleche.storage.destructuring.Digested.sunder` (the ``sunder_fn``
+itself, as a classmethod).  Study
+:class:`~fleche.storage.destructuring.DigestedIterable` or
+:class:`~fleche.storage.destructuring.DigestedDict` as the canonical
+reference implementations before writing your own.
+
 .. _testing-non-sqlite-backends:
 
 Testing the SQL backend on non-sqlite dialects

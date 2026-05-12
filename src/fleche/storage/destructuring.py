@@ -155,6 +155,27 @@ class DigestedAttrs(DigestedFields):
         return _attrs.field_items(value)
 
 
+_DESTRUCTURERS: list[tuple[Callable[[Any], bool], Callable]] = [
+    (lambda v: isinstance(v, (list, tuple)), DigestedIterable.sunder),
+    (lambda v: isinstance(v, dict), DigestedDict.sunder),
+    (lambda v: _dataclasses.is_dataclass(v) and not isinstance(v, type), DigestedDataclass.sunder),
+    (_attrs.is_attrs_instance, DigestedAttrs.sunder),
+]
+
+
+def register_destructurer(pred: Callable[[Any], bool], fn: Callable) -> None:
+    """Register a custom container destructurer.
+
+    *pred(value)* should return ``True`` for values this destructurer handles.
+    *fn* must accept ``(intern, value)`` where *intern* is
+    :meth:`DestructuringMixin._intern_rec`.  Entries are appended after the
+    built-in ones; first match wins, so registering a handler for an entirely
+    new container type is safe without displacing list/dict/dataclass/attrs.
+    Call before any :class:`DestructuringMixin` instance is used.
+    """
+    _DESTRUCTURERS.append((pred, fn))
+
+
 @runtime_checkable
 class HasChildDigests(Protocol):
     """Structural protocol for value storages that expose a reference-graph edge query.
@@ -212,73 +233,38 @@ class DestructuringMixin(base.ValueStorage):
             return value, -1
 
         depth = float("inf")
-        match value:
-            case Number() | str() | bytes():
-                depth = 0
 
-            # treat exactly like scalars, but guard syntax gets a bit weird if we try to join
-            # technically this violates our recursion of 1 + max children depth, but I just can't see a use for
-            # destructuring the empty container
-            case dict() | list() | tuple() if not value:
-                depth = 0
-
-            # because nothing is ever simple, namedtuple break LSP by not accepting a single iterable
-            # this is considered highly annoying, because e.g. a lot of numpy functions we'd like to wrap return
-            # NamedTuple
-            case tuple() if self._is_trojan_tuple(value):
-                pass
-
-            case list() | tuple():
-                value, depth = DigestedIterable.sunder(self._intern_rec, value)
-
-            case dict():
-                value, depth = DigestedDict.sunder(self._intern_rec, value)
-
-            case _ if _dataclasses.is_dataclass(value) and not isinstance(value, type):
-                value, depth = DigestedDataclass.sunder(self._intern_rec, value)
-
-            case _ if _attrs.is_attrs_instance(value):
-                value, depth = DigestedAttrs.sunder(self._intern_rec, value)
+        if isinstance(value, (Number, str, bytes)):
+            depth = 0
+        elif isinstance(value, (dict, list, tuple)) and not value:
+            # empty containers treated like scalars; no point destructuring nothing
+            depth = 0
+        elif isinstance(value, tuple) and self._is_trojan_tuple(value):
+            # namedtuples break LSP by not accepting a single iterable — treat as opaque scalar
+            pass
+        else:
+            for pred, sunder_fn in _DESTRUCTURERS:
+                if pred(value):
+                    value, depth = sunder_fn(self._intern_rec, value)
+                    break
 
         if depth < self.remaining_depth:
             return value, depth
         return super().save(value, key), depth
 
     def save(self, value: Any, key: digest.Digest | None = None) -> digest.Digest:
+        # Empty list/tuple/dict: stored as-is (no point destructuring nothing)
+        if isinstance(value, (list, tuple, dict)) and not value:
+            return super().save(value, key)
 
-        match value:
-            case list() | tuple() | dict() if not value:
-                return super().save(value, key)
-
-            case list() | tuple() | dict():
-                value_or_digest, depth = self._intern_rec(value, key)
-                # if given value is nominally not deep enough to be destructured/saved during recursion
-                # we do it here manually as the recursion base case
-                if depth < self.remaining_depth:
-                    return super().save(value_or_digest, key)
-                else:
-                    return value_or_digest
-
-            case _ if _dataclasses.is_dataclass(value) and not isinstance(value, type):
-                if not _dataclasses.fields(value):
-                    return super().save(value, key)
+        for pred, _ in _DESTRUCTURERS:
+            if pred(value):
                 value_or_digest, depth = self._intern_rec(value, key)
                 if depth < self.remaining_depth:
                     return super().save(value_or_digest, key)
-                else:
-                    return value_or_digest
+                return value_or_digest
 
-            case _ if _attrs.is_attrs_instance(value):
-                if not _attrs.field_items(value):
-                    return super().save(value, key)
-                value_or_digest, depth = self._intern_rec(value, key)
-                if depth < self.remaining_depth:
-                    return super().save(value_or_digest, key)
-                else:
-                    return value_or_digest
-
-            case _:
-                return super().save(value, key)
+        return super().save(value, key)
 
     def load(self, key: digest.Digest | str) -> Any:
         value = super().load(key)
