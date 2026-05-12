@@ -27,7 +27,33 @@ Three complementary APIs cover the common cases:
 ThreadPoolExecutor
 ------------------
 
-Use :class:`~fleche.BoundWrapper` with a ``with cache(...)`` block.
+For the most compact call site, use :func:`~fleche.wrap_executor` — it patches
+the executor's ``submit`` once and then handles any fleche-decorated function
+automatically, serving cache hits from a pre-completed
+:class:`~concurrent.futures.Future` without ever submitting a task:
+
+.. code-block:: python
+
+   import concurrent.futures
+   import fleche
+   from fleche.caches import Cache
+   from fleche.storage.memory import ValueMemory, CallMemory
+
+   @fleche.fleche
+   def compute(x):
+       return x ** 2
+
+   my_cache = Cache(ValueMemory({}), CallMemory({}))
+
+   with fleche.cache(my_cache):
+       with concurrent.futures.ThreadPoolExecutor() as executor:
+           fleche.wrap_executor(executor)
+           futures = [executor.submit(compute, i) for i in range(4)]
+           results = [f.result() for f in futures]  # all cached in my_cache
+
+Alternatively, use :class:`~fleche.BoundWrapper` when you need explicit
+control over which callable is submitted — for example, to share a single
+bound callable across multiple pools or helper modules.
 ``BoundWrapper.bind(func)`` captures the active cache at bind time and
 restores it on every call — including inside worker threads — so all tasks
 write to the same store:
