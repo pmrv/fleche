@@ -75,7 +75,7 @@ Optional dep extras: `cloudpickle`, `dill`, `sqlalchemy`, `bagofholding`, `execu
 
 ### Cache key control
 
-Decorator kwargs (`wrapper.py`): `version`, `meta`, `hash_version`, `hash_module`, `hash_code` (hashes `func.__code__`), `require`/`ignore` (arg name lists), `isolate` (runs in a unique tempdir under `$XDG_CACHE_HOME/fleche/cwd/`, defaulting to `~/.cache/fleche/cwd/` when the env var is unset — **not thread-safe**, uses `os.chdir`). Per-argument markers are `Ignored[T]` / `Required[T]`. Bump `version=` to invalidate without changing code; `Required` kwargs not explicitly passed make a call run uncached (warning logged).
+Decorator kwargs (`wrapper.py`): `version`, `meta`, `hash_version`, `hash_module`, `hash_code` (hashes `func.__code__`), `require`/`ignore` (arg name lists). Per-argument markers are `Ignored[T]` / `Required[T]`. Bump `version=` to invalidate without changing code; `Required` kwargs not explicitly passed make a call run uncached (warning logged).
 
 ### Config
 
