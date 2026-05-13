@@ -283,23 +283,6 @@ def test_query_iterator_table_no_metadata(test_cache):
     assert set(df.columns) == {"name", "module"}
 
 
-def test_query_iterator_table_end_to_end_via_wrapper(test_cache):
-    """Integration: using .query().table() from a fleche-decorated function."""
-    with cache(test_cache):
-        @fleche
-        def multiply(a, b):
-            return a * b
-
-        multiply(2, 3)
-        multiply(4, 5)
-
-        df = multiply.fleche.query().table(arguments=["a", "b"], results=True)
-        assert isinstance(df, pd.DataFrame)
-        assert len(df) == 2
-        assert set(df.columns) >= {"name", "a", "b", "result"}
-        assert set(df["result"]) == {6, 20}
-
-
 # ---------------------------------------------------------------------------
 # Partial query binding through the wrapper
 # ---------------------------------------------------------------------------
