@@ -1,6 +1,6 @@
 from unittest.mock import Mock
 import pytest
-from fleche.caches import CacheStack, Cache
+from fleche.caches import CacheStack, Cache, ReadOnlyCache
 from fleche.call import Call
 from fleche.storage import ValueMemory, CallMemory
 from fleche.digest import digest
@@ -210,3 +210,60 @@ def test_cache_stack_multi_level_transfer():
     assert c1.contains(key)
     # c2 should STILL NOT have it
     assert not c2.contains(key)
+
+
+def test_cache_stack_contains_true_if_any_layer_has_key():
+    c1 = Cache(ValueMemory({}), CallMemory({}))
+    c2 = Cache(ValueMemory({}), CallMemory({}))
+    call = Call(name="f", arguments={"x": 1}, result="r")
+    key = c2.save(call)
+    stack = CacheStack((c1, c2))
+
+    assert stack.contains(key)
+
+
+def test_cache_stack_contains_false_if_no_layer_has_key():
+    stack = CacheStack((
+        Cache(ValueMemory({}), CallMemory({})),
+        Cache(ValueMemory({}), CallMemory({})),
+    ))
+    assert not stack.contains("a" * 64)
+
+
+def test_cache_stack_load_value_raises_keyerror_when_missing_everywhere():
+    stack = CacheStack((
+        Cache(ValueMemory({}), CallMemory({})),
+        Cache(ValueMemory({}), CallMemory({})),
+    ))
+    with pytest.raises(KeyError):
+        stack.load_value(digest("nope"))
+
+
+def test_cache_stack_rejects_nested_cache_stack():
+    inner = CacheStack((Cache(ValueMemory({}), CallMemory({})),))
+    with pytest.raises(ValueError, match="cannot be nested"):
+        CacheStack((inner,))
+
+
+def test_cache_stack_load_with_readonly_base_logs_warning_but_returns_hit(caplog):
+    """A hit in a higher cache must still be returned when the base rejects the transfer.
+
+    When the base of a stack is read-only, the back-fill ``save`` raises
+    :class:`Rejected`; the load itself must still succeed (the higher
+    cache's hit is propagated to the caller) and a warning is logged.
+    """
+    import logging
+
+    backing = Cache(ValueMemory({}), CallMemory({}))
+    base = ReadOnlyCache(backing)
+    top = Cache(ValueMemory({}), CallMemory({}))
+
+    call = Call(name="f", arguments={"x": 1}, result="r")
+    key = top.save(call)
+    stack = CacheStack((base, top))
+
+    with caplog.at_level(logging.WARNING, logger="fleche.caches"):
+        lc = stack.load(key)
+
+    assert lc.result == "r"
+    assert any("Failed to transfer" in rec.message for rec in caplog.records)
