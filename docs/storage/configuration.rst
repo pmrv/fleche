@@ -182,7 +182,7 @@ Key descriptions
 Destructuring
 ^^^^^^^^^^^^^
 
-All persistent value backends (``"memory"``, ``"pickle"``, ``"cloudpickle"``,
+All non-void value backends (``"memory"``, ``"pickle"``, ``"cloudpickle"``,
 ``"dill"``, ``"bagofholding_hdf"``) store collections (:class:`list`,
 :class:`tuple`, :class:`dict`) by *destructuring* them: each element is stored
 independently under its own cache key, and on load the original structure is
