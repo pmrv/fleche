@@ -65,7 +65,7 @@ You can also construct a ``QueryCall`` template manually and query against the a
 Behavior details
 ----------------
 - None is a wildcard for name/module/version and also for individual argument values (interpreted as "key present").
-- For arguments and result, equality is by digest (so Digest objects and matching 64-char hex strings are treated equivalently).
+- For arguments and result, equality is by digest: the template value and the stored value are each passed through :func:`~fleche.digest.digest` and the resulting hex strings are compared.  Pass a :class:`~fleche.digest.Digest` instance (e.g. via :func:`~fleche.D`) to match by a known digest without re-hashing; a plain ``str`` — even one that looks like a hex digest — is hashed as a string value and will not match.
 - Metadata filtering supports presence checks (empty dict) and equality on simple types (str, bool, int, float). Complex types (e.g., lists) are handled correctly via client-side filtering.
 
 
