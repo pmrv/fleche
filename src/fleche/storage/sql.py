@@ -27,6 +27,7 @@ with ImportAlarm(
         UniqueConstraint,
         select,
         and_,
+        delete,
     )
     from sqlalchemy import event
     from sqlalchemy.orm import (
@@ -313,10 +314,12 @@ class Sql(PerKeyLockMixin, CallStorage):
 
     def _evict(self, key: Digest) -> None:
         session = self._local.session
-        instance = session.get(CallModel, str(key))
-        if instance is None:
-            return
-        session.delete(instance)
+        # Bypass ORM object loading and cascade-via-Python; rely on DB-level
+        # ON DELETE CASCADE (foreign_keys=ON is set for SQLite via PRAGMA at
+        # connect time; Postgres/MySQL enforce FK cascades natively).
+        session.execute(
+            delete(CallModel).where(CallModel.key == str(key))
+        )
         session.commit()
 
     def save(self, call: DigestedCall) -> Digest:
