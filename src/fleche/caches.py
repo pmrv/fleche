@@ -562,7 +562,7 @@ class CacheStack(BaseCache):
     # expressed as a one-liner over whichever helper fits.
     # ------------------------------------------------------------------
 
-    def _first_hit(self, op: Callable[["BaseCache"], Any], *, exc: type = KeyError) -> Any:
+    def _first_hit(self, op: Callable[["BaseCache"], Any], *, exc: type[BaseException] = KeyError) -> Any:
         """Return the first successful result from iterating the stack.
 
         Invokes ``op(cache)`` on each cache in ``self.stack`` in order and
@@ -592,7 +592,7 @@ class CacheStack(BaseCache):
                 continue
         raise exc
 
-    def _collect(self, op: Callable[["BaseCache"], Any], *, exc: type = KeyError) -> list:
+    def _collect(self, op: Callable[["BaseCache"], Any], *, exc: type[BaseException] = KeyError) -> list:
         """Collect one result per cache, skipping misses.
 
         Invokes ``op(cache)`` on every cache in ``self.stack`` and appends
@@ -627,7 +627,7 @@ class CacheStack(BaseCache):
         self,
         op: Callable[["BaseCache"], None],
         *,
-        exc: type | tuple = (Rejected, KeyError),
+        exc: type[BaseException] | tuple[type[BaseException], ...] = (Rejected, KeyError),
     ) -> None:
         """Apply an operation to every cache in the stack, swallowing refusals.
 
