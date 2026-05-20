@@ -219,11 +219,11 @@ class Sql(PerKeyLockMixin, CallStorage):
             with super()._operation_context(key):
                 yield
 
-    def put(self, value: DigestedCall, key: Digest) -> Digest:
+    def _persist_call(self, call: DigestedCall, key: Digest) -> Digest:
         session = self._local.session
         existing = session.get(CallModel, str(key))
         if existing is not None:
-            if self.get(key) == value:
+            if self._fetch_call(key) == call:
                 return key
 
             session.delete(existing)
@@ -231,33 +231,32 @@ class Sql(PerKeyLockMixin, CallStorage):
 
         call_model = CallModel(
             key=str(key),
-            name=value.name,
-            module=value.module,
-            version=json.dumps(value.version) if value.version is not None else None,
-            code_digest=value.code_digest,
-            result=value.result if value.result is None else str(value.result),
+            name=call.name,
+            module=call.module,
+            version=json.dumps(call.version) if call.version is not None else None,
+            code_digest=call.code_digest,
+            result=call.result if call.result is None else str(call.result),
         )
         session.add(call_model)
 
-        for i, (k, v) in enumerate(value.arguments.items()):
+        for i, (k, v) in enumerate(call.arguments.items()):
             session.add(
                 ArgumentModel(
                     call_key=str(key), position=i, name=str(k), value=str(v)
                 )
             )
 
-        if value.metadata:
+        if call.metadata:
             session.add_all(
                 [
                     MetaModel(call_key=str(key), name=name, data=data)
-                    for name, data in value.metadata.items()
+                    for name, data in call.metadata.items()
                 ]
             )
         session.commit()
-        # Always return a Digest instance, not a plain str
         return key
 
-    def get(self, key: Digest) -> DigestedCall:
+    def _fetch_call(self, key: Digest) -> DigestedCall:
         session = self._local.session
         call_model = session.execute(
             select(CallModel).where(CallModel.key == str(key))
@@ -326,20 +325,19 @@ class Sql(PerKeyLockMixin, CallStorage):
         key = call.to_lookup_key()
         with self._operation_context(key):
             logger.debug("Saving call %s", key)
-            # ``put`` already runs a SELECT for the existing row and handles
-            # the overwrite-vs-no-op decision in a single transaction, so the
-            # earlier ``contains`` / ``evict`` pre-check was a redundant SELECT
-            # plus an extra DELETE+COMMIT round-trip on collisions.  Per-key
-            # locking via ``PerKeyLockMixin`` keeps concurrent saves serialised,
-            # so the simplification preserves the regression-tested behaviour
-            # (see ``test_sql_concurrent_save.py``).
-            return self.put(call, key)
+            # ``_persist_call`` runs a SELECT for the existing row and folds the
+            # overwrite-vs-no-op decision into a single transaction; ``CallMixin``'s
+            # ``contains`` / ``evict`` pre-check would be a redundant SELECT plus
+            # an extra DELETE+COMMIT round-trip on collisions. Per-key locking via
+            # ``PerKeyLockMixin`` keeps concurrent saves serialised (see
+            # ``test_sql_concurrent_save.py``).
+            return self._persist_call(call, key)
 
     def load(self, key: Digest | str) -> DigestedCall:
         with self._operation_context(key):
             key = self._normalize_key(key)
             logger.debug("Loading call with key %s", key)
-            return self.get(key)
+            return self._fetch_call(key)
 
     def _normalize_value(self, v: Any) -> str:
         """Return the stored form used in SQL for argument/result matching.
