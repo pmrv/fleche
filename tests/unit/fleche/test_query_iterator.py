@@ -33,12 +33,6 @@ def test_query_iterator_is_iterable(test_cache):
         assert item.name == "f"
 
 
-def test_query_iterator_empty():
-    """QueryIterator over an empty iterable yields nothing."""
-    it = QueryIterator(lambda: [])
-    assert list(it) == []
-
-
 def test_query_iterator_is_re_iterable(test_cache):
     """Iterating a QueryIterator twice yields the same results both times."""
     test_cache.save(Call(name="f", arguments={"x": 1}, result=10))

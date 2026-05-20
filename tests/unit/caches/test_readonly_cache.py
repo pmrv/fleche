@@ -12,6 +12,21 @@ def test_readonly_cache_save():
         c.save(call)
 
 
+def test_readonly_cache_evict_rejected():
+    """ReadOnlyCache.evict must raise :class:`Rejected` without touching the wrapped cache.
+
+    Contract: "read-only" must extend to deletion as well as writes — otherwise
+    a read-only view could still mutate the underlying storage. This test guards
+    that invariant and ensures the rejection happens *before* the wrapped cache
+    is consulted (no ``evict`` call should reach the inner mock).
+    """
+    inner = Mock()
+    c = ReadOnlyCache(inner)
+    with pytest.raises(Rejected):
+        c.evict("any-key")
+    inner.evict.assert_not_called()
+
+
 def test_readonlycache_query_forwards_to_wrapped():
     """ReadOnlyCache.query should forward the call to the wrapped cache.
 
