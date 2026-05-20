@@ -219,11 +219,11 @@ class Sql(PerKeyLockMixin, CallStorage):
             with super()._operation_context(key):
                 yield
 
-    def put(self, value: DigestedCall, key: Digest) -> Digest:
+    def put(self, call: DigestedCall, key: Digest) -> Digest:
         session = self._local.session
         existing = session.get(CallModel, str(key))
         if existing is not None:
-            if self.get(key) == value:
+            if self.get(key) == call:
                 return key
 
             session.delete(existing)
@@ -231,26 +231,26 @@ class Sql(PerKeyLockMixin, CallStorage):
 
         call_model = CallModel(
             key=str(key),
-            name=value.name,
-            module=value.module,
-            version=json.dumps(value.version) if value.version is not None else None,
-            code_digest=value.code_digest,
-            result=value.result if value.result is None else str(value.result),
+            name=call.name,
+            module=call.module,
+            version=json.dumps(call.version) if call.version is not None else None,
+            code_digest=call.code_digest,
+            result=call.result if call.result is None else str(call.result),
         )
         session.add(call_model)
 
-        for i, (k, v) in enumerate(value.arguments.items()):
+        for i, (k, v) in enumerate(call.arguments.items()):
             session.add(
                 ArgumentModel(
                     call_key=str(key), position=i, name=str(k), value=str(v)
                 )
             )
 
-        if value.metadata:
+        if call.metadata:
             session.add_all(
                 [
                     MetaModel(call_key=str(key), name=name, data=data)
-                    for name, data in value.metadata.items()
+                    for name, data in call.metadata.items()
                 ]
             )
         session.commit()
