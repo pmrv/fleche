@@ -40,7 +40,7 @@ jobs:
         if: needs.changes.outputs.run == 'true'
         shell: bash -l {0}
         run: |
-          pip install -e .[tests] ty
+          pip install -e .[tests,ty]
       - name: Run ty
         if: needs.changes.outputs.run == 'true'
         run: ty check src/
