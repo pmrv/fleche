@@ -65,3 +65,6 @@ tests = [
 executorlib = [
     "executorlib",
 ]
+ty = [
+    "ty == 0.0.38",
+]
