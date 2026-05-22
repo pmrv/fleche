@@ -2,7 +2,7 @@ import logging
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from typing import Any, Callable, get_type_hints, get_origin, get_args, Annotated
-from inspect import Signature, signature
+from inspect import Parameter, Signature, signature
 from collections.abc import Mapping
 
 from pyiron_snippets.versions import VersionInfo, get_module, get_qualname
@@ -59,7 +59,13 @@ class FunctionProfile:
     @classmethod
     def of(cls, func) -> "FunctionProfile":
         """Compute a :class:`FunctionProfile` for *func* without caching."""
-        sig = signature(func)
+        try:
+            sig = signature(func)
+        except ValueError:
+            sig = Signature(parameters=[
+                Parameter("args", Parameter.VAR_POSITIONAL),
+                Parameter("kwargs", Parameter.VAR_KEYWORD),
+            ])
 
         try:
             info = VersionInfo.of(func)
