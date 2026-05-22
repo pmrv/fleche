@@ -113,6 +113,19 @@ Example fleche.toml
     calls.type = "cloudpickle"
     calls.root = "~/.fleche/calls"
 
+Config file discovery
+---------------------
+
+When the active cache or default metadata is loaded, fleche walks from the
+current working directory upward, picking up every ``fleche.toml`` and
+``.fleche.toml`` it encounters.  The walk stops at ``$HOME`` (inclusive) or
+at the filesystem root, whichever comes first.  If ``XDG_CONFIG_HOME`` is
+set, ``$XDG_CONFIG_HOME/fleche/cache.toml`` is appended as a final
+lowest-priority layer.
+
+All discovered files are **shallow-merged** at the top level: files closer
+to the CWD win, and a closer file's top-level table fully replaces the
+same key in a farther file (tables are *not* recursively merged).
 """
 
 import dataclasses
@@ -140,33 +153,63 @@ def _load_config(path: Path) -> dict[str, Any]:
         return {}
 
 
-def _get_config_path() -> Path | None:
-    path = Path("fleche.toml")
-    if path.exists():
-        return path.absolute()
-    logger.info("Local config %s does not exist, trying global", path)
+def _collect_config_paths() -> list[Path]:
+    """Return config paths in priority order (closest first, lowest last).
+
+    Walks from the current working directory up to ``$HOME`` (inclusive),
+    collecting any ``fleche.toml`` or ``.fleche.toml`` files encountered.  If
+    the walk reaches the filesystem root without crossing ``$HOME`` (or
+    ``$HOME`` is unset), it stops at the root.  Finally,
+    ``$XDG_CONFIG_HOME/fleche/cache.toml`` is appended as the lowest-priority
+    fallback when ``XDG_CONFIG_HOME`` is set.
+    """
+    paths: list[Path] = []
+
+    try:
+        home = Path.home().absolute()
+    except (RuntimeError, KeyError):
+        home = None
+
+    current = Path.cwd().absolute()
+    while True:
+        for name in ("fleche.toml", ".fleche.toml"):
+            candidate = current / name
+            if candidate.exists():
+                paths.append(candidate)
+        if home is not None and current == home:
+            break
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
 
     if "XDG_CONFIG_HOME" in os.environ:
-        path = Path(os.environ["XDG_CONFIG_HOME"]) / "fleche" / "cache.toml"
-    elif "HOME" in os.environ:
-        path = Path(os.environ["HOME"]) / ".fleche.toml"
-    else:
-        path = Path("~").expanduser() / ".fleche.toml"
+        xdg_path = Path(os.environ["XDG_CONFIG_HOME"]) / "fleche" / "cache.toml"
+        if xdg_path.exists() and xdg_path not in paths:
+            paths.append(xdg_path)
 
-    if path.exists():
-        return path
-    logger.info("Global config %s does not exist", path)
+    return paths
+
+
+def _load_merged_config() -> dict[str, Any]:
+    """Load and shallow-merge all config files on the walk path.
+
+    Files closer to the CWD override files farther away.  Top-level keys
+    from the closest file fully replace the same key from any farther file
+    (no recursive table merging).
+    """
+    merged: dict[str, Any] = {}
+    for path in reversed(_collect_config_paths()):
+        config = _load_config(path)
+        merged.update(config)
+    return merged
 
 
 def load_default_metadata():
     """
-    Load the default metadata from the configuration file.
+    Load the default metadata from the merged configuration files.
     """
-    path = _get_config_path()
-    if path is None or not path.exists():
-        return (metadata.Runtime(),)
-
-    config = _load_config(path)
+    config = _load_merged_config()
 
     if "default" not in config or "metadata" not in config["default"]:
         return (metadata.Runtime(),)
@@ -438,12 +481,10 @@ def load_cache_config(name: str | None = None) -> caches.BaseCache:
         _live_caches[name] = cache
         return cache
 
-    path = _get_config_path()
-    if path is None:
+    config = _load_merged_config()
+    if not config:
         reason = f"no config file found (name={name!r})" if name is not None else "no config file found"
         return _default_memory_cache(name, reason)
-
-    config = _load_config(path)
 
     if name is None:
         if "default" not in config or "cache" not in config["default"]:
