@@ -16,7 +16,7 @@ def test_wrapping_builtin_sleep_does_not_crash():
     cache = Cache(values=memory.ValueMemory(storage={}), calls=memory.CallMemory(storage={}))
     token = state._CACHE.set(cache)
     try:
-        cached_sleep = fleche()(time.sleep)
+        cached_sleep = fleche(time.sleep)
         # Decoration and call both succeed despite sleep lacking a signature.
         assert cached_sleep(0) is None
     finally:
@@ -30,7 +30,7 @@ def test_wrapping_builtin_with_return_value_caches():
     token = state._CACHE.set(cache)
     try:
         # int() is a builtin that lacks an inspect-friendly signature in some versions
-        cached_abs = fleche()(abs)
+        cached_abs = fleche(abs)
         assert cached_abs(-3) == 3
         assert cached_abs(-3) == 3  # cache hit
         assert len(calls_storage.storage) == 1
