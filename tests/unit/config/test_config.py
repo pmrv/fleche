@@ -474,7 +474,7 @@ def test_walk_picks_up_local_fleche_toml(monkeypatch, tmp_path):
 
 
 def test_walk_picks_up_dotfile_in_home(monkeypatch, tmp_path):
-    """A .fleche.toml in $HOME is discovered as the walk reaches it."""
+    """A fleche.toml in $HOME is discovered as the walk reaches it."""
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     home = tmp_path
     sub = home / "project"
@@ -482,7 +482,7 @@ def test_walk_picks_up_dotfile_in_home(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.chdir(sub)
 
-    (home / ".fleche.toml").write_text(textwrap.dedent("""
+    (home / "fleche.toml").write_text(textwrap.dedent("""
         [default]
         cache = "fromhome"
 
@@ -505,8 +505,8 @@ def test_walk_closer_overrides_farther(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.chdir(sub)
 
-    # Farther file: $HOME/.fleche.toml — picks 'far' (Void) as default
-    (home / ".fleche.toml").write_text(textwrap.dedent("""
+    # Farther file: $HOME/fleche.toml — picks 'far' (Void) as default
+    (home / "fleche.toml").write_text(textwrap.dedent("""
         [default]
         cache = "far"
 
@@ -539,7 +539,7 @@ def test_walk_merges_disjoint_tables(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.chdir(sub)
 
-    (home / ".fleche.toml").write_text(textwrap.dedent("""
+    (home / "fleche.toml").write_text(textwrap.dedent("""
         [home_only]
         values.type = "void"
         calls.type = "void"
@@ -646,7 +646,7 @@ def test_walk_merged_metadata(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.chdir(sub)
 
-    (home / ".fleche.toml").write_text(textwrap.dedent("""
+    (home / "fleche.toml").write_text(textwrap.dedent("""
         [default]
         metadata = ["Runtime"]
     """))

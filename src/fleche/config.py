@@ -117,10 +117,10 @@ Config file discovery
 ---------------------
 
 When the active cache or default metadata is loaded, fleche walks from the
-current working directory upward, picking up every ``fleche.toml`` and
-``.fleche.toml`` it encounters.  The walk stops at ``$HOME`` (inclusive) or
-at the filesystem root, whichever comes first.  If ``XDG_CONFIG_HOME`` is
-set, ``$XDG_CONFIG_HOME/fleche/cache.toml`` is appended as a final
+current working directory upward, picking up every ``fleche.toml`` it
+encounters.  The walk stops at ``$HOME`` (inclusive) or at the filesystem
+root, whichever comes first.  If ``XDG_CONFIG_HOME`` is set,
+``$XDG_CONFIG_HOME/fleche/cache.toml`` is appended as a final
 lowest-priority layer.
 
 All discovered files are **shallow-merged** at the top level: files closer
@@ -157,9 +157,9 @@ def _collect_config_paths() -> list[Path]:
     """Return config paths in priority order (closest first, lowest last).
 
     Walks from the current working directory up to ``$HOME`` (inclusive),
-    collecting any ``fleche.toml`` or ``.fleche.toml`` files encountered.  If
-    the walk reaches the filesystem root without crossing ``$HOME`` (or
-    ``$HOME`` is unset), it stops at the root.  Finally,
+    collecting any ``fleche.toml`` files encountered.  If the walk reaches
+    the filesystem root without crossing ``$HOME`` (or ``$HOME`` is unset),
+    it stops at the root.  Finally,
     ``$XDG_CONFIG_HOME/fleche/cache.toml`` is appended as the lowest-priority
     fallback when ``XDG_CONFIG_HOME`` is set.
     """
@@ -172,10 +172,9 @@ def _collect_config_paths() -> list[Path]:
 
     current = Path.cwd().absolute()
     while True:
-        for name in ("fleche.toml", ".fleche.toml"):
-            candidate = current / name
-            if candidate.exists():
-                paths.append(candidate)
+        candidate = current / "fleche.toml"
+        if candidate.exists():
+            paths.append(candidate)
         if home is not None and current == home:
             break
         parent = current.parent
