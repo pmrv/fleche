@@ -1,15 +1,22 @@
 Configuration
 =============
 
-``fleche`` looks for a configuration file in the following order:
+``fleche`` discovers configuration by walking the filesystem from the
+current working directory upward, collecting every ``fleche.toml`` it
+encounters.  The walk stops at ``$HOME`` (inclusive) or at the filesystem
+root, whichever comes first.  If ``$XDG_CONFIG_HOME`` is set,
+``$XDG_CONFIG_HOME/fleche/cache.toml`` is appended as a final
+lowest-priority layer.
 
-1. ``fleche.toml`` in the current working directory (local config)
-2. A global config file:
+All discovered files are **shallow-merged** at the top level: files closer
+to the current directory win, and a closer file's top-level table fully
+replaces the same key in a farther file (tables are *not* recursively
+merged).  This makes it easy to keep a base config at ``~/fleche.toml``
+(or in XDG) and override individual cache definitions in project
+subdirectories.
 
-   - If ``$XDG_CONFIG_HOME`` is set: ``$XDG_CONFIG_HOME/fleche/cache.toml``
-   - Otherwise: ``~/.fleche.toml``
-
-The first file found is used. If no configuration file exists, ``fleche`` falls back to a default in-memory cache.
+If no configuration file is discovered, ``fleche`` falls back to a default
+in-memory cache.
 
 Reserved Cache Names
 --------------------
