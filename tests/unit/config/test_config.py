@@ -448,3 +448,209 @@ def test_load_cache_config_cache_stack_by_name(monkeypatch, config_file_cache_st
 
     assert isinstance(cache_obj, CacheStack)
     assert len(cache_obj.stack) == 2
+
+
+# --- Walking config discovery (CWD → HOME → XDG fallback) ---
+
+
+def test_walk_picks_up_local_fleche_toml(monkeypatch, tmp_path):
+    """A fleche.toml in the CWD is discovered without XDG."""
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+
+    (tmp_path / "fleche.toml").write_text(textwrap.dedent("""
+        [default]
+        cache = "local"
+
+        [local]
+        values.type = "memory"
+        calls.type = "memory"
+    """))
+
+    cache_obj = load_cache_config()
+    assert isinstance(cache_obj, Cache)
+    assert isinstance(cache_obj.values, storage.ValueMemory)
+
+
+def test_walk_picks_up_dotfile_in_home(monkeypatch, tmp_path):
+    """A fleche.toml in $HOME is discovered as the walk reaches it."""
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    home = tmp_path
+    sub = home / "project"
+    sub.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(sub)
+
+    (home / "fleche.toml").write_text(textwrap.dedent("""
+        [default]
+        cache = "fromhome"
+
+        [fromhome]
+        values.type = "void"
+        calls.type = "void"
+    """))
+
+    cache_obj = load_cache_config()
+    assert isinstance(cache_obj, Cache)
+    assert isinstance(cache_obj.values, storage.ValueVoid)
+
+
+def test_walk_closer_overrides_farther(monkeypatch, tmp_path):
+    """A fleche.toml closer to CWD overrides a farther one (shallow merge)."""
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    home = tmp_path
+    sub = home / "project"
+    sub.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(sub)
+
+    # Farther file: $HOME/fleche.toml — picks 'far' (Void) as default
+    (home / "fleche.toml").write_text(textwrap.dedent("""
+        [default]
+        cache = "far"
+
+        [far]
+        values.type = "void"
+        calls.type = "void"
+    """))
+
+    # Closer file: CWD/fleche.toml — overrides [default] to point at 'near'
+    (sub / "fleche.toml").write_text(textwrap.dedent("""
+        [default]
+        cache = "near"
+
+        [near]
+        values.type = "memory"
+        calls.type = "memory"
+    """))
+
+    cache_obj = load_cache_config()
+    # closer file's [default] wins → 'near' (memory)
+    assert isinstance(cache_obj.values, storage.ValueMemory)
+
+
+def test_walk_merges_disjoint_tables(monkeypatch, tmp_path):
+    """A cache defined only in a farther file is still accessible by name."""
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    home = tmp_path
+    sub = home / "project"
+    sub.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(sub)
+
+    (home / "fleche.toml").write_text(textwrap.dedent("""
+        [home_only]
+        values.type = "void"
+        calls.type = "void"
+    """))
+
+    (sub / "fleche.toml").write_text(textwrap.dedent("""
+        [default]
+        cache = "home_only"
+    """))
+
+    cache_obj = load_cache_config()
+    assert isinstance(cache_obj.values, storage.ValueVoid)
+
+
+def test_walk_xdg_is_lowest_priority(monkeypatch, tmp_path):
+    """XDG config is the lowest-priority layer; closer fleche.toml overrides."""
+    home = tmp_path / "home"
+    home.mkdir()
+    sub = home / "project"
+    sub.mkdir()
+    xdg = tmp_path / "xdg"
+    (xdg / "fleche").mkdir(parents=True)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(sub)
+
+    (xdg / "fleche" / "cache.toml").write_text(textwrap.dedent("""
+        [default]
+        cache = "from_xdg"
+
+        [from_xdg]
+        values.type = "void"
+        calls.type = "void"
+    """))
+
+    (sub / "fleche.toml").write_text(textwrap.dedent("""
+        [default]
+        cache = "local"
+
+        [local]
+        values.type = "memory"
+        calls.type = "memory"
+    """))
+
+    cache_obj = load_cache_config()
+    assert isinstance(cache_obj.values, storage.ValueMemory)
+
+
+def test_walk_stops_at_home(monkeypatch, tmp_path):
+    """A fleche.toml above $HOME is not picked up by the walk."""
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    above_home = tmp_path
+    home = above_home / "home"
+    home.mkdir()
+    sub = home / "project"
+    sub.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(sub)
+
+    # This file sits ABOVE $HOME — must be ignored.
+    (above_home / "fleche.toml").write_text(textwrap.dedent("""
+        [default]
+        cache = "above"
+
+        [above]
+        values.type = "void"
+        calls.type = "void"
+    """))
+
+    cache_obj = load_cache_config()
+    # No config found within walk → default memory fallback
+    assert isinstance(cache_obj.values, storage.ValueMemory)
+
+
+def test_walk_xdg_used_when_no_walk_hits(monkeypatch, tmp_path):
+    """If nothing is found in the walk, XDG still works (back-compat)."""
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(home)
+
+    xdg = tmp_path / "xdg"
+    (xdg / "fleche").mkdir(parents=True)
+    (xdg / "fleche" / "cache.toml").write_text(textwrap.dedent("""
+        [default]
+        cache = "from_xdg"
+
+        [from_xdg]
+        values.type = "void"
+        calls.type = "void"
+    """))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
+
+    cache_obj = load_cache_config()
+    assert isinstance(cache_obj.values, storage.ValueVoid)
+
+
+def test_walk_merged_metadata(monkeypatch, tmp_path):
+    """load_default_metadata also consults the merged config."""
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    home = tmp_path
+    sub = home / "project"
+    sub.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(sub)
+
+    (home / "fleche.toml").write_text(textwrap.dedent("""
+        [default]
+        metadata = ["Runtime"]
+    """))
+
+    meta = load_default_metadata()
+    assert len(meta) == 1
+    assert isinstance(meta[0], Runtime)
