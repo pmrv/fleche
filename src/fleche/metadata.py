@@ -1,5 +1,8 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+import getpass
+import os
+import socket
 import time
 from typing import Any, TypeAlias
 
@@ -98,6 +101,29 @@ class Runtime(MetaData):
             'timestart': float,
             'timestop': float,
             'walltime': float,
+    }
+
+
+class Environment(MetaData):
+    """Metadata type for capturing the execution environment.
+
+    Keys:
+        hostname (str): The machine hostname (``socket.gethostname()``).
+        username (str): The current user (``getpass.getuser()``).
+        cwd (str): The working directory at call time (``os.getcwd()``).
+    """
+    def pre(self, call: Call) -> dict[str, Any]:
+        return {
+            'hostname': socket.gethostname(),
+            'username': getpass.getuser(),
+            'cwd': os.getcwd(),
+        }
+
+    name: str = 'environment'
+    keys: dict[str, type] = {
+            'hostname': str,
+            'username': str,
+            'cwd': str,
     }
 
 

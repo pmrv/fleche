@@ -1,10 +1,13 @@
+import getpass
+import os
+import socket
 import time
 
 import pytest
 
 from fleche import fleche, cache, tags, project, meta
 from fleche.caches import Cache
-from fleche.metadata import MetaData, Call
+from fleche.metadata import Environment, MetaData, Call
 from fleche.storage import ValueMemory, CallMemory
 
 
@@ -184,6 +187,22 @@ def test_tags():
             key2 = my_func.fleche.digest(2, 1)
             call2 = cache().calls.load(key2)
             assert call2.metadata.get("tags", {}).get("project") == "example"
+
+
+def test_environment_metadata(cache_it: Cache):
+    @fleche(meta=(Environment(),))
+    def my_function(a: int, b: int) -> int:
+        return a + b
+
+    with cache(cache_it):
+        my_function(1, 2)
+        key = my_function.fleche.digest(1, 2)
+        call = cache().calls.load(key)
+
+    env = call.metadata["environment"]
+    assert env["hostname"] == socket.gethostname()
+    assert env["username"] == getpass.getuser()
+    assert env["cwd"] == os.getcwd()
 
 
 def test_metadata_default_methods():
