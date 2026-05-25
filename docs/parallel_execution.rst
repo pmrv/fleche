@@ -189,6 +189,9 @@ processes, the same rules as ``ProcessPoolExecutor`` apply:
 
 .. code-block:: python
 
+   # file_cache and heavy_computation as set up in the ProcessPoolExecutor example above
+   import fleche
+   from fleche import BoundWrapper
    from executorlib import SingleNodeExecutor
 
    with fleche.cache(file_cache):
@@ -252,27 +255,35 @@ automatically:
 
 .. code-block:: python
 
-   import concurrent.futures
+   import concurrent.futures, tempfile, os
    import fleche
+   from fleche.caches import Cache
+   from fleche.storage.pickle_file import ValuePickleFile, CallPickleFile
 
    @fleche.fleche
    def heavy_computation(x):
        return x ** 3
 
-   with fleche.cache(file_cache):
-       with concurrent.futures.ProcessPoolExecutor() as executor:
-           fleche.wrap_executor(executor)             # patch once
+   with tempfile.TemporaryDirectory() as tmpdir:
+       file_cache = Cache(
+           ValuePickleFile.with_pickle(root=os.path.join(tmpdir, "values")),
+           CallPickleFile.with_pickle(root=os.path.join(tmpdir, "calls")),
+       )
 
-           # Submit exactly as you would a plain function.
-           futures = [executor.submit(heavy_computation, i) for i in range(8)]
-           results = [f.result() for f in futures]
+       with fleche.cache(file_cache):
+           with concurrent.futures.ProcessPoolExecutor() as executor:
+               fleche.wrap_executor(executor)             # patch once
 
-       # A second round with the same inputs never enters the worker pool:
-       with concurrent.futures.ProcessPoolExecutor() as executor:
-           fleche.wrap_executor(executor)
-           fut = executor.submit(heavy_computation, 3)
-           assert fut.done()                          # already-completed future
-           assert fut.result() == 27
+               # Submit exactly as you would a plain function.
+               futures = [executor.submit(heavy_computation, i) for i in range(8)]
+               results = [f.result() for f in futures]
+
+           # A second round with the same inputs never enters the worker pool:
+           with concurrent.futures.ProcessPoolExecutor() as executor:
+               fleche.wrap_executor(executor)
+               fut = executor.submit(heavy_computation, 3)
+               assert fut.done()                          # already-completed future
+               assert fut.result() == 27
 
 Executor-specific keyword arguments
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -287,6 +298,7 @@ payload:
 
 .. code-block:: python
 
+   # file_cache and heavy_computation as set up in the wrap_executor example above
    from executorlib import SingleNodeExecutor
 
    with fleche.cache(file_cache):
