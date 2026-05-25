@@ -167,6 +167,23 @@ class QueryIterator(Iterable[call.LazyCall]):
         for c in self:
             c._cache.evict(c.to_lookup_key())
 
+    def transfer(self, target, pop: bool = False, overwrite: bool = False) -> None:
+        """Replay matching calls into the target cache.
+
+        Args:
+            target: destination :class:`~fleche.caches.BaseCache`.
+            pop: if True, evict transferred calls from the source cache.
+            overwrite: if True, overwrite entries already present in the target.
+                If False (default), conflicts are skipped.
+        """
+        for c in self:
+            key = c.to_lookup_key()
+            conflict = not overwrite and target.contains(key)
+            if not conflict:
+                target.save(c.fetch())
+            if pop and not conflict:
+                c._cache.evict(key)
+
     def table(self, arguments: Iterable[str] | str | Literal[True] = (), results=False) -> pd.DataFrame:
         """Return a pandas DataFrame summarizing queried calls.
 
