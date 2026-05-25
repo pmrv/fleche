@@ -23,9 +23,10 @@ in one place:
   ``Required`` annotations (populates ``ignored`` / ``required`` fields)
 
 The result is stored by ``_profile``, a module-level
-``lru_cache(maxsize=1000)`` keyed on the callable's identity.  Indigestible
-callables fall back to ``_profile.__wrapped__`` (bypassing the LRU cache) so
-they are handled correctly without special-casing at call sites.
+``lru_cache(maxsize=1000)`` keyed on the callable's identity.  Unhashable
+callables (those that cannot serve as an ``lru_cache`` key) fall back to
+``_profile.__wrapped__`` (bypassing the LRU cache) so they are handled
+correctly without special-casing at call sites.
 
 **Adding new per-function metadata** is a two-step operation: add a field to
 ``FunctionProfile`` and populate it inside ``FunctionProfile.of``.  Downstream
@@ -45,11 +46,13 @@ can be extended at import time via
 
 .. warning::
 
-   ``_DESTRUCTURERS`` is a global, mutable list.  Every
-   :class:`~fleche.storage.destructuring.DestructuringMixin` instance shares it.
-   Registering a destructurer after storage instances have already been used
-   produces undefined behaviour because ``_intern_rec`` closes over the list
-   state at call time.
+   ``_DESTRUCTURERS`` is a global, mutable list shared by every
+   :class:`~fleche.storage.destructuring.DestructuringMixin` instance.
+   ``_intern_rec`` reads it on every call, so a newly registered destructurer
+   applies immediately to all subsequent saves — but entries already stored
+   were split with the old logic.  Loading those entries after registration
+   may produce inconsistent results.  Register all destructurers before any
+   storage instance is first used.
 
 Before reaching for this function, consider whether implementing
 ``__digest__`` (or ``add_hook``) on the type in question is sufficient.
