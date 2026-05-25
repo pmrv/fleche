@@ -183,13 +183,9 @@ class QueryIterator(Iterable[call.LazyCall]):
             key = c.to_lookup_key()
             conflict = not overwrite and target.contains(key)
             if conflict:
-                try:
-                    short = target.shrink(key)
-                except KeyError:
-                    short = key
                 logger.warning(
                     "Not transferring %s: already exists in target and overwrite=False",
-                    short,
+                    target.shrink(key),
                 )
                 continue
             target.save(c.fetch())
