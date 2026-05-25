@@ -621,3 +621,97 @@ def test_evict_only_removes_matched(test_cache):
     test_cache.query(tpl_f).evict()
     assert test_cache.query(tpl_f).count() == 0
     assert test_cache.query(tpl_g).count() == 1
+
+
+# ---------------------------------------------------------------------------
+# .transfer()
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def other_cache():
+    return Cache(values=ValueMemory({}), calls=CallMemory({}))
+
+
+def test_transfer_copies_matched_calls(test_cache, other_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    test_cache.save(Call(name="f", arguments={"x": 2}, result=20))
+    test_cache.save(Call(name="g", arguments={"x": 3}, result=30))
+
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    test_cache.query(tpl).transfer(other_cache)
+
+    assert other_cache.query(tpl).count() == 2
+    # Non-matching call not copied
+    tpl_g = QueryCall(name="g", arguments=None, metadata=None, module=None, version=None, result=None)
+    assert other_cache.query(tpl_g).count() == 0
+    # Source untouched
+    assert test_cache.query(tpl).count() == 2
+
+
+def test_transfer_pop_evicts_source(test_cache, other_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    test_cache.save(Call(name="f", arguments={"x": 2}, result=20))
+
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    test_cache.query(tpl).transfer(other_cache, pop=True)
+
+    assert test_cache.query(tpl).count() == 0
+    assert other_cache.query(tpl).count() == 2
+
+
+def test_transfer_skips_existing_by_default(test_cache, other_cache, caplog):
+    c = Call(name="f", arguments={"x": 1}, result=10)
+    test_cache.save(c)
+    # Pre-populate target with the same key but a different stored result
+    other_cache.calls.save(Call(name="f", arguments={"x": 1}, result=999).stash(other_cache.values))
+
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    with caplog.at_level("WARNING", logger="fleche.query"):
+        test_cache.query(tpl).transfer(other_cache)
+
+    # Target value not overwritten
+    assert other_cache.load(c.to_lookup_key()).result == 999
+    # Exactly one warning, naming the shrunk key and the overwrite=False reason
+    warnings = [r for r in caplog.records if r.name == "fleche.query"]
+    assert len(warnings) == 1
+    short = other_cache.shrink(c.to_lookup_key())
+    assert warnings[0].getMessage() == (
+        f"Not transferring {short}: already exists in target and overwrite=False"
+    )
+
+
+def test_transfer_overwrite_replaces_existing(test_cache, other_cache):
+    c = Call(name="f", arguments={"x": 1}, result=10)
+    test_cache.save(c)
+    other_cache.calls.save(Call(name="f", arguments={"x": 1}, result=999).stash(other_cache.values))
+
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    test_cache.query(tpl).transfer(other_cache, overwrite=True)
+
+    assert other_cache.load(c.to_lookup_key()).result == 10
+
+
+def test_transfer_pop_skips_conflicts(test_cache, other_cache):
+    c = Call(name="f", arguments={"x": 1}, result=10)
+    test_cache.save(c)
+    other_cache.calls.save(Call(name="f", arguments={"x": 1}, result=999).stash(other_cache.values))
+
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    test_cache.query(tpl).transfer(other_cache, pop=True)
+
+    # Conflicting call left in source, target untouched
+    assert test_cache.query(tpl).count() == 1
+    assert other_cache.load(c.to_lookup_key()).result == 999
+
+
+def test_transfer_respects_filter(test_cache, other_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    test_cache.save(Call(name="f", arguments={"x": 2}, result=20))
+    test_cache.save(Call(name="f", arguments={"x": 3}, result=30))
+
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    test_cache.query(tpl).filter(lambda c: c.arguments["x"] > 1).transfer(other_cache)
+
+    xs = sorted(c.arguments["x"] for c in other_cache.query(tpl))
+    assert xs == [2, 3]

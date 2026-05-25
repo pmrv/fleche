@@ -1,12 +1,15 @@
 import builtins
 import datetime
 import itertools
+import logging
 from dataclasses import dataclass
 from typing import Iterable, Iterator, Any, Literal, Callable
 
 import pandas as pd
 
 from . import call
+
+logger = logging.getLogger("fleche.query")
 
 
 def _resolve_key(key: "str | Callable[[call.LazyCall], Any]") -> "Callable[[call.LazyCall], Any]":
@@ -166,6 +169,28 @@ class QueryIterator(Iterable[call.LazyCall]):
         """Remove all matched calls from the cache."""
         for c in self:
             c._cache.evict(c.to_lookup_key())
+
+    def transfer(self, target, pop: bool = False, overwrite: bool = False) -> None:
+        """Replay matching calls into the target cache.
+
+        Args:
+            target: destination :class:`~fleche.caches.BaseCache`.
+            pop: if True, evict transferred calls from the source cache.
+            overwrite: if True, overwrite entries already present in the target.
+                If False (default), conflicts are skipped.
+        """
+        for c in self:
+            key = c.to_lookup_key()
+            conflict = not overwrite and target.contains(key)
+            if conflict:
+                logger.warning(
+                    "Not transferring %s: already exists in target and overwrite=False",
+                    target.shrink(key),
+                )
+                continue
+            target.save(c.fetch())
+            if pop:
+                c._cache.evict(key)
 
     def table(self, arguments: Iterable[str] | str | Literal[True] = (), results=False) -> pd.DataFrame:
         """Return a pandas DataFrame summarizing queried calls.
