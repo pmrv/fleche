@@ -660,17 +660,20 @@ def test_transfer_pop_evicts_source(test_cache, other_cache):
     assert other_cache.query(tpl).count() == 2
 
 
-def test_transfer_skips_existing_by_default(test_cache, other_cache):
+def test_transfer_skips_existing_by_default(test_cache, other_cache, caplog):
     c = Call(name="f", arguments={"x": 1}, result=10)
     test_cache.save(c)
     # Pre-populate target with the same key but a different stored result
     other_cache.calls.save(Call(name="f", arguments={"x": 1}, result=999).stash(other_cache.values))
 
     tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
-    test_cache.query(tpl).transfer(other_cache)
+    with caplog.at_level("WARNING", logger="fleche.query"):
+        test_cache.query(tpl).transfer(other_cache)
 
     # Target value not overwritten
     assert other_cache.load(c.to_lookup_key()).result == 999
+    # Conflict is announced
+    assert any("already exists in target" in rec.message for rec in caplog.records)
 
 
 def test_transfer_overwrite_replaces_existing(test_cache, other_cache):

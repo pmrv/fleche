@@ -1,12 +1,15 @@
 import builtins
 import datetime
 import itertools
+import logging
 from dataclasses import dataclass
 from typing import Iterable, Iterator, Any, Literal, Callable
 
 import pandas as pd
 
 from . import call
+
+logger = logging.getLogger("fleche.query")
 
 
 def _resolve_key(key: "str | Callable[[call.LazyCall], Any]") -> "Callable[[call.LazyCall], Any]":
@@ -179,9 +182,14 @@ class QueryIterator(Iterable[call.LazyCall]):
         for c in self:
             key = c.to_lookup_key()
             conflict = not overwrite and target.contains(key)
-            if not conflict:
-                target.save(c.fetch())
-            if pop and not conflict:
+            if conflict:
+                logger.warning(
+                    "Not transferring %s: already exists in target and overwrite=False",
+                    key,
+                )
+                continue
+            target.save(c.fetch())
+            if pop:
                 c._cache.evict(key)
 
     def table(self, arguments: Iterable[str] | str | Literal[True] = (), results=False) -> pd.DataFrame:
