@@ -672,8 +672,13 @@ def test_transfer_skips_existing_by_default(test_cache, other_cache, caplog):
 
     # Target value not overwritten
     assert other_cache.load(c.to_lookup_key()).result == 999
-    # Conflict is announced
-    assert any("already exists in target" in rec.message for rec in caplog.records)
+    # Exactly one warning, naming the shrunk key and the overwrite=False reason
+    warnings = [r for r in caplog.records if r.name == "fleche.query"]
+    assert len(warnings) == 1
+    short = other_cache.shrink(c.to_lookup_key())
+    assert warnings[0].getMessage() == (
+        f"Not transferring {short}: already exists in target and overwrite=False"
+    )
 
 
 def test_transfer_overwrite_replaces_existing(test_cache, other_cache):
