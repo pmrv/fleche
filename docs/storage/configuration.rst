@@ -221,6 +221,74 @@ Example:
    calls.type = "cloudpickle"
    calls.root = "~/.cache/fleche/calls"
 
+Cache type
+~~~~~~~~~~
+
+The cache type is selected **implicitly** from the shape of the section.
+The default is a plain :class:`~fleche.caches.Cache`; additional top-level
+keys turn the section into a wrapper or specialised variant.
+
+``read_only``
+^^^^^^^^^^^^^
+
+(bool, default ``false``) — wrap the section in a
+:class:`~fleche.caches.ReadOnlyCache`.  Loads continue to work, but saving
+or evicting raises :class:`~fleche.caches.Rejected`.  Useful for pinning a
+shared, immutable cache that should never be modified from the local
+process.
+
+.. code-block:: toml
+
+   [readonly]
+   values.type = "cloudpickle"
+   values.root = "~/.cache/fleche/values"
+   calls.type = "cloudpickle"
+   calls.root = "~/.cache/fleche/calls"
+   read_only = true
+
+``max_size``
+^^^^^^^^^^^^
+
+(int, optional) — turn the section into a
+:class:`~fleche.caches.SizeLimitedCache` that keeps at most ``max_size``
+call records.  When the limit is exceeded a record is selected for
+eviction (uniformly at random by default — subclass to change the
+policy).  Value storage is not pruned.
+
+.. code-block:: toml
+
+   [limited]
+   values.type = "memory"
+   calls.type = "memory"
+   max_size = 100
+
+``read_only`` and ``max_size`` can be combined; the resulting cache is a
+``ReadOnlyCache`` wrapping a ``SizeLimitedCache``.
+
+CacheStack via array-of-tables
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A TOML *array of tables* (``[[name]]``) defines a
+:class:`~fleche.caches.CacheStack`.  Each element is configured exactly
+like a normal cache section (including ``read_only`` / ``max_size``).
+The first element is the base cache (saves go here; fallback hits are
+back-filled into it); subsequent elements are the fallback layers,
+checked in order.  See :doc:`cache_stack` for the runtime behaviour.
+
+.. code-block:: toml
+
+   # Saves go to the first layer; loads fall through to the second,
+   # and hits there are copied back into the first.
+   [[mystack]]
+   values.type = "memory"
+   calls.type = "memory"
+
+   [[mystack]]
+   values.type = "cloudpickle"
+   values.root = "~/.cache/fleche/values"
+   calls.type = "cloudpickle"
+   calls.root = "~/.cache/fleche/calls"
+
 Full Configuration Example
 --------------------------
 
@@ -252,3 +320,28 @@ Below is an example of a complete configuration file demonstrating several featu
    values.root = "~/.cache/fleche/hdf5_values"
    calls.type = "sql"
    calls.url = "sqlite:///~/.cache/fleche/calls.db"
+
+   # Size-limited in-memory cache (evicts random call records past 100)
+   [limited]
+   values.type = "memory"
+   calls.type = "memory"
+   max_size = 100
+
+   # Read-only view of a shared on-disk cache
+   [readonly]
+   values.type = "cloudpickle"
+   values.root = "~/.cache/fleche/values"
+   calls.type = "cloudpickle"
+   calls.root = "~/.cache/fleche/calls"
+   read_only = true
+
+   # CacheStack: fast in-memory layer in front of a persistent layer
+   [[layered]]
+   values.type = "memory"
+   calls.type = "memory"
+
+   [[layered]]
+   values.type = "cloudpickle"
+   values.root = "~/.cache/fleche/values"
+   calls.type = "cloudpickle"
+   calls.root = "~/.cache/fleche/calls"
