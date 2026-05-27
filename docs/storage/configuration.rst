@@ -251,9 +251,8 @@ process.
 
 (int, optional) — turn the section into a
 :class:`~fleche.caches.SizeLimitedCache` that keeps at most ``max_size``
-call records.  When the limit is exceeded a record is selected for
-eviction (uniformly at random by default — subclass to change the
-policy).  Value storage is not pruned.
+call records.  When the limit is exceeded a record is randomly selected for
+eviction.  Value storage is not pruned.
 
 .. code-block:: toml
 
