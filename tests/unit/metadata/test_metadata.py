@@ -1,6 +1,7 @@
 import getpass
 import os
 import socket
+import subprocess
 import time
 
 import pytest
@@ -237,6 +238,42 @@ def test_git_metadata_outside_repo(tmp_path, monkeypatch, cache_it: Cache):
 
     assert call.metadata["git"] == {
             "root": None, "commit": None, "branch": None, "dirty": None,
+    }
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        FileNotFoundError("git not installed"),
+        subprocess.TimeoutExpired(cmd="git", timeout=2),
+    ],
+    ids=["missing-binary", "timeout"],
+)
+def test_git_metadata_when_subprocess_fails(failure, monkeypatch, cache_it: Cache):
+    """Git metadata must degrade to all-``None`` when ``git`` cannot run.
+
+    Contract (Git docstring): "All keys are ``None`` when not inside a git
+    repository or when the ``git`` executable is missing." A hung or missing
+    ``git`` binary must not be allowed to propagate out of metadata collection
+    and break the cached call — fleche calls have to remain usable on
+    machines without git or when ``git`` itself is unresponsive.
+    """
+    def raise_failure(*args, **kwargs):
+        raise failure
+
+    monkeypatch.setattr("fleche.metadata.subprocess.run", raise_failure)
+
+    @fleche(meta=(Git(),))
+    def my_function(a: int, b: int) -> int:
+        return a + b
+
+    with cache(cache_it):
+        my_function(1, 2)
+        key = my_function.fleche.digest(1, 2)
+        call = cache().calls.load(key)
+
+    assert call.metadata["git"] == {
+        "root": None, "commit": None, "branch": None, "dirty": None,
     }
 
 
