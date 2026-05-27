@@ -1,5 +1,6 @@
 import getpass
 import os
+import platform
 import socket
 import subprocess
 import time
@@ -206,6 +207,7 @@ def test_environment_metadata(cache_it: Cache):
     assert env["username"] == getpass.getuser()
     assert env["cwd"] == os.getcwd()
     assert env["fleche_version"] == fleche_pkg.__version__
+    assert env["python_version"] == platform.python_version()
 
 
 def test_git_metadata_inside_repo(cache_it: Cache):

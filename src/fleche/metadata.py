@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import getpass
 import os
+import platform
 import socket
 import subprocess
 import time
@@ -120,6 +121,7 @@ class Environment(MetaData):
         fleche_version (str): The fleche package version (``fleche.__version__``);
             ``"unknown"`` when the package was imported without an installed
             ``_version.py`` (e.g. an editable checkout without a build).
+        python_version (str): The CPython runtime version (``platform.python_version()``).
     """
     def pre(self, call: Call) -> dict[str, Any]:
         return {
@@ -127,6 +129,7 @@ class Environment(MetaData):
             'username': getpass.getuser(),
             'cwd': os.getcwd(),
             'fleche_version': _fleche_version,
+            'python_version': platform.python_version(),
         }
 
     name: str = 'environment'
@@ -135,6 +138,7 @@ class Environment(MetaData):
             'username': str,
             'cwd': str,
             'fleche_version': str,
+            'python_version': str,
     }
 
 
