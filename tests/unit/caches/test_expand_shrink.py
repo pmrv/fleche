@@ -58,16 +58,44 @@ def test_cache_shrink_unknown_key_raises_keyerror():
         cache.shrink("a" * 64)
 
 
-def test_cache_shrink_returns_longest_of_two_storages():
-    """When calls and values disagree on how short they can go, the Cache
-    must return the longer (safer) prefix so it remains unambiguous in both."""
+def test_cache_shrink_dispatches_to_call_storage_when_key_is_a_call():
+    """A key that exists in ``calls`` is shrunk against the call keyspace only."""
     calls = Mock()
     values = Mock()
+    calls.contains.return_value = True
     calls.shrink.return_value = Digest("abcd")
-    values.shrink.return_value = Digest("abcdef")
     cache = Cache(values, calls)
 
-    assert cache.shrink("a" * 64) == "abcdef"
+    assert cache.shrink("a" * 64) == "abcd"
+    values.contains.assert_not_called()
+    values.shrink.assert_not_called()
+
+
+def test_cache_shrink_dispatches_to_value_storage_when_key_is_a_value():
+    """A key that exists only in ``values`` is shrunk against the value keyspace."""
+    calls = Mock()
+    values = Mock()
+    calls.contains.return_value = False
+    values.contains.return_value = True
+    values.shrink.return_value = Digest("beef")
+    cache = Cache(values, calls)
+
+    assert cache.shrink("b" * 64) == "beef"
+    calls.shrink.assert_not_called()
+
+
+def test_cache_shrink_missing_key_raises_keyerror():
+    """If neither storage contains the key, ``shrink`` raises ``KeyError``."""
+    calls = Mock()
+    values = Mock()
+    calls.contains.return_value = False
+    values.contains.return_value = False
+    cache = Cache(values, calls)
+
+    with pytest.raises(KeyError):
+        cache.shrink("c" * 64)
+    calls.shrink.assert_not_called()
+    values.shrink.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

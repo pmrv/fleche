@@ -274,13 +274,11 @@ class Cache(BaseCache):
         return _combine_expand(key, results)
 
     def shrink(self, key: Digest | str) -> Digest:
-        results = []
-        for sub in (self.calls, self.values):
-            try:
-                results.append(sub.shrink(key))
-            except KeyError:
-                pass
-        return _combine_shrink(key, results)
+        if self.calls.contains(key):
+            return self.calls.shrink(key)
+        if self.values.contains(key):
+            return self.values.shrink(key)
+        raise KeyError(key)
 
     def _query(self, call: call.QueryCall) -> Iterable[LazyCall]:
         """Query for cached calls that match a template and return decoded results.
