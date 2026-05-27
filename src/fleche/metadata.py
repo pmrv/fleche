@@ -117,12 +117,16 @@ class Environment(MetaData):
         hostname (str): The machine hostname (``socket.gethostname()``).
         username (str): The current user (``getpass.getuser()``).
         cwd (str): The working directory at call time (``os.getcwd()``).
+        fleche_version (str): The fleche package version (``fleche.__version__``);
+            ``"unknown"`` when the package was imported without an installed
+            ``_version.py`` (e.g. an editable checkout without a build).
     """
     def pre(self, call: Call) -> dict[str, Any]:
         return {
             'hostname': socket.gethostname(),
             'username': getpass.getuser(),
             'cwd': os.getcwd(),
+            'fleche_version': _fleche_version,
         }
 
     name: str = 'environment'
@@ -130,6 +134,7 @@ class Environment(MetaData):
             'hostname': str,
             'username': str,
             'cwd': str,
+            'fleche_version': str,
     }
 
 
@@ -180,23 +185,6 @@ class Git(MetaData):
             'commit': str,
             'branch': str,
             'dirty': bool,
-    }
-
-
-class Version(MetaData):
-    """Metadata type for capturing the fleche version used to record the call.
-
-    Keys:
-        fleche (str): The fleche package version (``fleche.__version__``).
-            ``"unknown"`` when the package was imported without an installed
-            ``_version.py`` (e.g. an editable checkout without a build).
-    """
-    def pre(self, call: Call) -> dict[str, Any]:
-        return {'fleche': _fleche_version}
-
-    name: str = 'version'
-    keys: dict[str, type] = {
-            'fleche': str,
     }
 
 

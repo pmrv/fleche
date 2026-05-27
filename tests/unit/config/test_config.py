@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from fleche import storage, cache
 from fleche.config import load_cache_config, load_default_metadata, _live_caches
 from fleche.caches import Cache, BaseCache, SizeLimitedCache, ReadOnlyCache, CacheStack
-from fleche.metadata import Runtime, Version
+from fleche.metadata import Runtime
 
 
 @pytest.fixture
@@ -654,19 +654,3 @@ def test_walk_merged_metadata(monkeypatch, tmp_path):
     meta = load_default_metadata()
     assert len(meta) == 1
     assert isinstance(meta[0], Runtime)
-
-
-def test_load_default_metadata_version(monkeypatch, tmp_path):
-    """``Version`` is resolvable from a config file like the other built-ins."""
-    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
-    monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.chdir(tmp_path)
-
-    (tmp_path / "fleche.toml").write_text(textwrap.dedent("""
-        [default]
-        metadata = ["Version"]
-    """))
-
-    meta = load_default_metadata()
-    assert len(meta) == 1
-    assert isinstance(meta[0], Version)
