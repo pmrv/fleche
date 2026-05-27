@@ -98,6 +98,44 @@ def test_cache_shrink_missing_key_raises_keyerror():
     values.shrink.assert_not_called()
 
 
+def test_cache_shrink_multiple_keys_returns_tuple_in_order():
+    """``shrink(k1, k2, ...)`` returns a tuple in the original order, even
+    when keys come from different sub-storages (each sub-storage's batch
+    runs once)."""
+    c = Cache(ValueMemory({}), CallMemory({}))
+    call1 = Call(name="f", arguments={"x": 1}, result="A", module="m", version="1.0", metadata={})
+    call2 = Call(name="g", arguments={"y": 2}, result="B", module="m", version="1.0", metadata={})
+    k1 = c.save(call1)
+    k2 = c.save(call2)
+
+    shrunk = c.shrink(k1, k2)
+    assert isinstance(shrunk, tuple)
+    assert len(shrunk) == 2
+    # Each shrunk prefix expands back to the original key.
+    assert c.expand(shrunk[0]) == k1
+    assert c.expand(shrunk[1]) == k2
+
+
+def test_cache_shrink_no_args_raises_typeerror():
+    cache = Cache(ValueMemory({}), CallMemory({}))
+    with pytest.raises(TypeError):
+        cache.shrink()
+
+
+def test_cache_shrink_batches_per_sub_storage():
+    """Each sub-storage receives a single batched call, not one per key."""
+    calls = Mock()
+    values = Mock()
+    calls.contains.return_value = True
+    calls.shrink.return_value = (Digest("aaaa"), Digest("bbbb"))
+    cache = Cache(values, calls)
+
+    result = cache.shrink("a" * 64, "b" * 64)
+    assert result == (Digest("aaaa"), Digest("bbbb"))
+    calls.shrink.assert_called_once_with("a" * 64, "b" * 64)
+    values.shrink.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # CacheStack.evict
 # ---------------------------------------------------------------------------

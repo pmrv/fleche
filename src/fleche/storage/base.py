@@ -1,3 +1,4 @@
+import bisect
 import contextlib
 import logging
 
@@ -118,18 +119,39 @@ class KeyManagement(ABC):
             candidates = sorted(k for k in self.list() if k.startswith(key))
             return _resolve_prefix(str(key), candidates[:2])
 
-    def shrink(self, key: Digest | str) -> Digest:
-        """Find the shortest substring that is still an unambiguous reference to the same value."""
-        with self._operation_context(key):
-            for ln in range(4, len(key)):
-                try:
-                    self.expand(key[:ln])
-                    return Digest(key[:ln])
-                except AmbiguousDigestError:
-                    continue
+    def shrink(self, *keys: Digest | str) -> "Digest | tuple[Digest, ...]":
+        """Find the shortest substring(s) that unambiguously reference each key.
+
+        With a single key, returns one :class:`Digest`.  With multiple keys,
+        returns a tuple of :class:`Digest` in the same order as the inputs;
+        the batched form fetches ``list()`` once instead of per-key, which
+        matters on backends where listing is expensive (e.g. SQL, filesystem).
+        """
+        if not keys:
+            raise TypeError("shrink() requires at least one key")
+        sorted_all = sorted(self.list())
+        out = tuple(self._shrink_one(k, sorted_all) for k in keys)
+        return out[0] if len(keys) == 1 else out
+
+    def _shrink_one(self, key: "Digest | str", sorted_all: "list[str]") -> Digest:
+        s_key = str(key)
+        i = bisect.bisect_left(sorted_all, s_key)
+        if i == len(sorted_all) or sorted_all[i] != s_key:
+            raise KeyError(key)
+        lcp_left = (
+            _longest_common_prefix_length(s_key, sorted_all[i - 1]) if i > 0 else 0
+        )
+        lcp_right = (
+            _longest_common_prefix_length(s_key, sorted_all[i + 1])
+            if i + 1 < len(sorted_all)
+            else 0
+        )
+        n = max(4, max(lcp_left, lcp_right) + 1)
+        if n >= len(s_key):
             raise AmbiguousDigestError(
                 f"Digest {key} cannot be shrunk without becoming ambiguous!"
             )
+        return Digest(s_key[:n])
 
     def _normalize_key(self, key: Digest | str) -> Digest:
         """Expand a short digest prefix to a full key, or wrap a full key as Digest."""

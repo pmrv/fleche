@@ -239,8 +239,19 @@ class QueryIterator(Iterable[call.LazyCall]):
         else:
             arguments = tuple(arguments)
 
+        items = list(self)
+        keys = [c.to_lookup_key() for c in items]
+        if shrink_keys and items:
+            try:
+                shrunk = items[0]._cache.shrink(*keys)
+                if len(keys) == 1:
+                    shrunk = (shrunk,)
+                keys = list(shrunk)
+            except AmbiguousDigestError:
+                pass
+
         rows: dict[str, dict[str, Any]] = {}
-        for c in self:
+        for c, key in zip(items, keys):
             row = {
                     prop: getattr(c, prop) for prop in ("name", "module", "metadata")
             }
@@ -259,12 +270,6 @@ class QueryIterator(Iterable[call.LazyCall]):
                     row[a] = c.arguments.get(a, None)
                 else:
                     row[f"a_{a}"] = c.arguments.get(a, None)
-            key = c.to_lookup_key()
-            if shrink_keys:
-                try:
-                    key = c._cache.shrink(key)
-                except AmbiguousDigestError:
-                    pass
             rows[str(key)] = row
 
         df = pd.DataFrame.from_dict(rows, orient="index")
