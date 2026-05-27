@@ -9,6 +9,11 @@ from typing import Any, TypeAlias
 
 from .call import Call
 
+try:
+    from ._version import __version__ as _fleche_version
+except ImportError:
+    _fleche_version = "unknown"
+
 # Values produced by MetaData.pre/post must be JSON-serializable.
 # This alias documents the expected shape and helps static type checkers.
 JSONValue: TypeAlias = str | int | float | bool | None | list["JSONValue"] | dict[str, "JSONValue"]
@@ -175,6 +180,23 @@ class Git(MetaData):
             'commit': str,
             'branch': str,
             'dirty': bool,
+    }
+
+
+class Version(MetaData):
+    """Metadata type for capturing the fleche version used to record the call.
+
+    Keys:
+        fleche (str): The fleche package version (``fleche.__version__``).
+            ``"unknown"`` when the package was imported without an installed
+            ``_version.py`` (e.g. an editable checkout without a build).
+    """
+    def pre(self, call: Call) -> dict[str, Any]:
+        return {'fleche': _fleche_version}
+
+    name: str = 'version'
+    keys: dict[str, type] = {
+            'fleche': str,
     }
 
 

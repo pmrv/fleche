@@ -6,9 +6,10 @@ import time
 
 import pytest
 
+import fleche as fleche_pkg
 from fleche import fleche, cache, tags, project, meta
 from fleche.caches import Cache
-from fleche.metadata import Environment, Git, MetaData, Call
+from fleche.metadata import Environment, Git, MetaData, Call, Version
 from fleche.storage import ValueMemory, CallMemory
 
 
@@ -275,6 +276,19 @@ def test_git_metadata_when_subprocess_fails(failure, monkeypatch, cache_it: Cach
     assert call.metadata["git"] == {
         "root": None, "commit": None, "branch": None, "dirty": None,
     }
+
+
+def test_version_metadata(cache_it: Cache):
+    @fleche(meta=(Version(),))
+    def my_function(a: int, b: int) -> int:
+        return a + b
+
+    with cache(cache_it):
+        my_function(1, 2)
+        key = my_function.fleche.digest(1, 2)
+        call = cache().calls.load(key)
+
+    assert call.metadata["version"]["fleche"] == fleche_pkg.__version__
 
 
 def test_metadata_default_methods():
