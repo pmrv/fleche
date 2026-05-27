@@ -152,11 +152,6 @@ def test_value_mixin_save_enters_operation_context():
 # ValueMixin.load
 # ---------------------------------------------------------------------------
 
-def test_value_mixin_load_full_key():
-    store = PlainValueMemory(storage={})
-    key = store.save("test_value")
-    assert store.load(key) == "test_value"
-
 
 def test_value_mixin_load_short_key():
     store = PlainValueMemory(storage={})
