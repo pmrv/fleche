@@ -3,7 +3,7 @@ import logging
 import random
 import threading
 from dataclasses import dataclass, replace, field
-from typing import Iterable, Any, Callable, Literal
+from typing import Iterable, Any, Callable, Literal, overload
 
 import pandas as pd
 
@@ -103,6 +103,10 @@ class BaseCache(ABC):
         """
         ...
 
+    @overload
+    def shrink(self, key: Digest | str, /) -> Digest: ...
+    @overload
+    def shrink(self, key: Digest | str, /, *keys: Digest | str) -> "tuple[Digest, ...]": ...
     @abstractmethod
     def shrink(self, *keys: Digest | str) -> "Digest | tuple[Digest, ...]":
         """
@@ -113,6 +117,11 @@ class BaseCache(ABC):
         the batched form lets sub-storages list their keys once instead of
         per-key, which matters on backends where listing is expensive (e.g.
         SQL, filesystem).
+
+        Each input key must belong to *one* of the sub-storages (call or
+        value).  Mixing call keys and value keys in a single call is
+        undefined behaviour — the result depends on internal partitioning
+        order and may change without notice.
 
         .. warning::
 
@@ -162,7 +171,7 @@ class BaseCache(ABC):
                 yield from self._query(template)
             except _digest.Indigestible as e:
                 logger.warning("No hash for query argument: %s", e.args[0])
-        return query.QueryIterator(_safe_iter)
+        return query.QueryIterator(_safe_iter, cache=self)
 
     def table(
         self,
@@ -287,6 +296,10 @@ class Cache(BaseCache):
                 pass
         return _combine_expand(key, results)
 
+    @overload
+    def shrink(self, key: Digest | str, /) -> Digest: ...
+    @overload
+    def shrink(self, key: Digest | str, /, *keys: Digest | str) -> "tuple[Digest, ...]": ...
     def shrink(self, *keys: Digest | str) -> "Digest | tuple[Digest, ...]":
         if not keys:
             raise TypeError("shrink() requires at least one key")
@@ -441,6 +454,10 @@ class CacheWrapper(BaseCache):
     def expand(self, key: Digest | str) -> Digest:
         return self.cache.expand(key)
 
+    @overload
+    def shrink(self, key: Digest | str, /) -> Digest: ...
+    @overload
+    def shrink(self, key: Digest | str, /, *keys: Digest | str) -> "tuple[Digest, ...]": ...
     def shrink(self, *keys: Digest | str) -> "Digest | tuple[Digest, ...]":
         return self.cache.shrink(*keys)
 
@@ -560,6 +577,10 @@ class CacheStack(BaseCache):
     def expand(self, key: Digest | str) -> Digest:
         return _combine_expand(key, self._collect(lambda c: c.expand(key)))
 
+    @overload
+    def shrink(self, key: Digest | str, /) -> Digest: ...
+    @overload
+    def shrink(self, key: Digest | str, /, *keys: Digest | str) -> "tuple[Digest, ...]": ...
     def shrink(self, *keys: Digest | str) -> "Digest | tuple[Digest, ...]":
         if not keys:
             raise TypeError("shrink() requires at least one key")

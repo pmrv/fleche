@@ -3,7 +3,7 @@ import contextlib
 import logging
 
 from abc import ABC, abstractmethod
-from typing import Iterable, Any, Callable, Sequence
+from typing import Iterable, Any, Callable, Sequence, overload
 
 from ..digest import digest, Digest, DIGEST_LENGTH
 from ..call import DigestedCall, QueryCall
@@ -119,6 +119,10 @@ class KeyManagement(ABC):
             candidates = sorted(k for k in self.list() if k.startswith(key))
             return _resolve_prefix(str(key), candidates[:2])
 
+    @overload
+    def shrink(self, key: Digest | str, /) -> Digest: ...
+    @overload
+    def shrink(self, key: Digest | str, /, *keys: Digest | str) -> "tuple[Digest, ...]": ...
     def shrink(self, *keys: Digest | str) -> "Digest | tuple[Digest, ...]":
         """Find the shortest substring(s) that unambiguously reference each key.
 
@@ -129,11 +133,24 @@ class KeyManagement(ABC):
         """
         if not keys:
             raise TypeError("shrink() requires at least one key")
-        sorted_all = sorted(self.list())
-        out = tuple(self._shrink_one(k, sorted_all) for k in keys)
+        # Enter _operation_context for each key so subclasses with locks
+        # (e.g. PerKeyLockMixin) still observe the read.  The list() snapshot
+        # is taken once inside the combined context.
+        with contextlib.ExitStack() as stack:
+            for k in keys:
+                stack.enter_context(self._operation_context(k))
+            sorted_all = sorted(self.list())
+            out = tuple(self._shrink_one(k, sorted_all) for k in keys)
         return out[0] if len(keys) == 1 else out
 
     def _shrink_one(self, key: "Digest | str", sorted_all: Sequence[str]) -> Digest:
+        # Correctness: in a sorted key list, the longest prefix any *other*
+        # stored key shares with `key` is the LCP with one of `key`'s two
+        # immediate sorted neighbours.  Lexicographic adjacency implies
+        # prefix adjacency, so any third key with a longer shared prefix
+        # would have to sit strictly between `key` and the neighbour in the
+        # sort order — contradicting "immediate neighbour".  Therefore
+        # `max(lcp_left, lcp_right) + 1` is the shortest unambiguous length.
         s_key = str(key)
         i = bisect.bisect_left(sorted_all, s_key)
         if i == len(sorted_all) or sorted_all[i] != s_key:
