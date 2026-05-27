@@ -225,6 +225,8 @@ def load_default_metadata():
             meta_objects.append(metadata.Environment())
         elif name == "Git":
             meta_objects.append(metadata.Git())
+        elif name == "Version":
+            meta_objects.append(metadata.Version())
         else:
             raise ValueError(f"Unknown metadata type in config: {name}")
 
