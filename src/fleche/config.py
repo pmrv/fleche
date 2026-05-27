@@ -119,9 +119,10 @@ Config file discovery
 When the active cache or default metadata is loaded, fleche walks from the
 current working directory upward, picking up every ``fleche.toml`` it
 encounters.  The walk stops at ``$HOME`` (inclusive) or at the filesystem
-root, whichever comes first.  If ``XDG_CONFIG_HOME`` is set,
-``$XDG_CONFIG_HOME/fleche/cache.toml`` is appended as a final
-lowest-priority layer.
+root, whichever comes first.  ``$XDG_CONFIG_HOME/fleche/cache.toml``
+(defaulting to ``~/.config/fleche/cache.toml`` per the XDG base
+directory spec when ``XDG_CONFIG_HOME`` is unset or empty) is appended
+as a final lowest-priority layer.
 
 All discovered files are **shallow-merged** at the top level: files closer
 to the CWD win, and a closer file's top-level table fully replaces the
@@ -161,7 +162,8 @@ def _collect_config_paths() -> list[Path]:
     the filesystem root without crossing ``$HOME`` (or ``$HOME`` is unset),
     it stops at the root.  Finally,
     ``$XDG_CONFIG_HOME/fleche/cache.toml`` is appended as the lowest-priority
-    fallback when ``XDG_CONFIG_HOME`` is set.
+    fallback.  Per the XDG base directory spec, an unset or empty
+    ``XDG_CONFIG_HOME`` defaults to ``$HOME/.config``.
     """
     paths: list[Path] = []
 
@@ -182,8 +184,11 @@ def _collect_config_paths() -> list[Path]:
             break
         current = parent
 
-    if "XDG_CONFIG_HOME" in os.environ:
-        xdg_path = Path(os.environ["XDG_CONFIG_HOME"]) / "fleche" / "cache.toml"
+    xdg_base = os.environ.get("XDG_CONFIG_HOME") or (
+        str(home / ".config") if home is not None else ""
+    )
+    if xdg_base:
+        xdg_path = Path(xdg_base) / "fleche" / "cache.toml"
         if xdg_path.exists() and xdg_path not in paths:
             paths.append(xdg_path)
 

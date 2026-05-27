@@ -637,6 +637,50 @@ def test_walk_xdg_used_when_no_walk_hits(monkeypatch, tmp_path):
     assert isinstance(cache_obj.values, storage.ValueVoid)
 
 
+def test_walk_xdg_defaults_to_home_config_when_unset(monkeypatch, tmp_path):
+    """Per the XDG spec, an unset XDG_CONFIG_HOME means $HOME/.config."""
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(home)
+
+    (home / ".config" / "fleche").mkdir(parents=True)
+    (home / ".config" / "fleche" / "cache.toml").write_text(textwrap.dedent("""
+        [default]
+        cache = "from_default_xdg"
+
+        [from_default_xdg]
+        values.type = "void"
+        calls.type = "void"
+    """))
+
+    cache_obj = load_cache_config()
+    assert isinstance(cache_obj.values, storage.ValueVoid)
+
+
+def test_walk_xdg_defaults_to_home_config_when_empty(monkeypatch, tmp_path):
+    """Per the XDG spec, an empty XDG_CONFIG_HOME also falls back to $HOME/.config."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", "")
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(home)
+
+    (home / ".config" / "fleche").mkdir(parents=True)
+    (home / ".config" / "fleche" / "cache.toml").write_text(textwrap.dedent("""
+        [default]
+        cache = "from_default_xdg"
+
+        [from_default_xdg]
+        values.type = "void"
+        calls.type = "void"
+    """))
+
+    cache_obj = load_cache_config()
+    assert isinstance(cache_obj.values, storage.ValueVoid)
+
+
 def test_walk_merged_metadata(monkeypatch, tmp_path):
     """load_default_metadata also consults the merged config."""
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
