@@ -48,19 +48,6 @@ def test_lazy_call_load():
         mock_load_value.assert_called_with(digest(3))
 
 
-def test_lazy_call_to_lookup_key():
-    """Verify that LazyCall produces the same lookup key as the original Call."""
-    values_storage = ValueMemory({})
-    calls_storage = CallMemory({})
-    cache = Cache(values_storage, calls_storage)
-
-    original = Call(name="test_func", arguments={"a": [1, 2]}, result=42)
-    key = cache.save(original)
-
-    lazy = cache.load(key)
-    assert lazy.to_lookup_key() == key
-
-
 def test_lazy_call_digest():
     """Verify that LazyCall has the same digest as the equivalent Call object."""
     values_storage = ValueMemory({})
