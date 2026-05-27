@@ -8,6 +8,7 @@ from typing import Iterable, Iterator, Any, Literal, Callable
 import pandas as pd
 
 from . import call
+from .storage.base import AmbiguousDigestError
 
 logger = logging.getLogger("fleche.query")
 
@@ -192,7 +193,12 @@ class QueryIterator(Iterable[call.LazyCall]):
             if pop:
                 c._cache.evict(key)
 
-    def table(self, arguments: Iterable[str] | str | Literal[True] = (), results=False) -> pd.DataFrame:
+    def table(
+        self,
+        arguments: Iterable[str] | str | Literal[True] = (),
+        results=False,
+        shrink_keys: bool = True,
+    ) -> pd.DataFrame:
         """Return a pandas DataFrame summarizing queried calls.
 
         Arguments and results are elided.
@@ -216,6 +222,11 @@ class QueryIterator(Iterable[call.LazyCall]):
                 Pass ``True`` to add all arguments, or a single string as a shortcut for a
                 one-element tuple.
             results (bool): if True, add results of queried calls to table
+            shrink_keys (bool): if True (default), shrink each lookup key in the
+                index to its shortest unambiguous prefix via the owning cache's
+                ``shrink``.  Falls back to the full digest if shrinking raises
+                :class:`~fleche.storage.base.AmbiguousDigestError`.  Set to
+                ``False`` to keep full-length digests (cheaper on large caches).
 
         Returns:
             :class:`pandas.DataFrame`: table of all calls on cache
@@ -248,7 +259,13 @@ class QueryIterator(Iterable[call.LazyCall]):
                     row[a] = c.arguments.get(a, None)
                 else:
                     row[f"a_{a}"] = c.arguments.get(a, None)
-            rows[str(c.to_lookup_key())] = row
+            key = c.to_lookup_key()
+            if shrink_keys:
+                try:
+                    key = c._cache.shrink(key)
+                except AmbiguousDigestError:
+                    pass
+            rows[str(key)] = row
 
         df = pd.DataFrame.from_dict(rows, orient="index")
         local_tz = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo

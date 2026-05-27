@@ -135,10 +135,37 @@ def test_query_iterator_table_index_is_lookup_key(test_cache):
     test_cache.save(call2)
 
     tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
-    df = test_cache.query(tpl).table()
+    df = test_cache.query(tpl).table(shrink_keys=False)
 
     expected_keys = {str(call1.to_lookup_key()), str(call2.to_lookup_key())}
     assert set(df.index) == expected_keys
+
+
+def test_query_iterator_table_index_shrunk_by_default(test_cache):
+    """By default, the DataFrame index uses shortest unambiguous prefixes."""
+    call1 = Call(name="f", arguments={"x": 1}, result=10)
+    call2 = Call(name="f", arguments={"x": 2}, result=20)
+    test_cache.save(call1)
+    test_cache.save(call2)
+
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    df = test_cache.query(tpl).table()
+
+    expected_keys = {
+        str(test_cache.shrink(call1.to_lookup_key())),
+        str(test_cache.shrink(call2.to_lookup_key())),
+    }
+    assert set(df.index) == expected_keys
+    # Both should be strictly shorter than the full 64-char digest.
+    assert all(len(k) < 64 for k in df.index)
+
+
+def test_query_iterator_table_shrink_keys_false_keeps_full_digest(test_cache):
+    """shrink_keys=False leaves the full-length digest as the index."""
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    df = test_cache.query(tpl).table(shrink_keys=False)
+    assert all(len(k) == 64 for k in df.index)
 
 
 def test_query_iterator_table_no_result_by_default(test_cache):
