@@ -4,6 +4,7 @@ import pandas as pd
 from fleche import fleche, cache
 from fleche.call import Call, LazyCall, QueryCall
 from fleche.caches import Cache
+from fleche.digest import DIGEST_LENGTH
 from fleche.query import QueryIterator
 from fleche.storage import ValueMemory, CallMemory
 
@@ -156,8 +157,7 @@ def test_query_iterator_table_index_shrunk_by_default(test_cache):
         str(test_cache.shrink(call2.to_lookup_key())),
     }
     assert set(df.index) == expected_keys
-    # Both should be strictly shorter than the full 64-char digest.
-    assert all(len(k) < 64 for k in df.index)
+    assert all(len(k) < DIGEST_LENGTH for k in df.index)
 
 
 def test_query_iterator_table_shrink_keys_false_keeps_full_digest(test_cache):
@@ -165,7 +165,7 @@ def test_query_iterator_table_shrink_keys_false_keeps_full_digest(test_cache):
     test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
     tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
     df = test_cache.query(tpl).table(shrink_keys=False)
-    assert all(len(k) == 64 for k in df.index)
+    assert all(len(k) == DIGEST_LENGTH for k in df.index)
 
 
 def test_query_iterator_table_no_result_by_default(test_cache):
