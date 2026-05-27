@@ -158,7 +158,12 @@ class BaseCache(ABC):
                 logger.warning("No hash for query argument: %s", e.args[0])
         return query.QueryIterator(_safe_iter)
 
-    def table(self, arguments: Iterable[str] | str | Literal[True] = (), results=False) -> pd.DataFrame:
+    def table(
+        self,
+        arguments: Iterable[str] | str | Literal[True] = (),
+        results=False,
+        shrink_keys: bool = True,
+    ) -> pd.DataFrame:
         """Return a pandas DataFrame summarizing cached calls via query().
 
         This implementation uses a fully-wildcard Call template to retrieve
@@ -182,6 +187,9 @@ class BaseCache(ABC):
                 Pass ``True`` to add all arguments, or a single string as a shortcut for a
                 one-element tuple.
             results (bool): if True, add results of queried calls to table
+            shrink_keys (bool): if True (default), shrink each index entry to
+                its shortest unambiguous prefix.  Set to ``False`` to keep
+                full-length digests.
 
         Returns:
             :class:`pandas.DataFrame`: table of all calls on cache
@@ -194,7 +202,7 @@ class BaseCache(ABC):
             version=None,
             result=None,
         )
-        return self.query(tpl).table(arguments=arguments, results=results)
+        return self.query(tpl).table(arguments=arguments, results=results, shrink_keys=shrink_keys)
 
     def filter(self, predicate: Callable[[Call | LazyCall], bool] | QueryCall) -> 'FilteredCache':
         """Create a read-only view of this cache that only exposes calls matching the predicate.

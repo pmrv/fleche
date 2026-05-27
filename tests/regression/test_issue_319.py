@@ -68,6 +68,6 @@ def test_sql_table_index_matches_storage_keys(tmp_path):
         my_func(1)
         my_func(2)
 
-    table = c.table()
+    table = c.table(shrink_keys=False)
     storage_keys = set(str(k) for k in c.calls.list())
     assert set(table.index) == storage_keys
