@@ -50,9 +50,7 @@ class Digest(str):
         if cache is None:
             from .state import cache as get_cache
             cache = get_cache()
-        result = cache.shrink(self)
-        assert isinstance(result, Digest)  # single-arg shrink returns a single Digest
-        return result
+        return cache.shrink(self)
 
 
 DIGEST_LENGTH = 64

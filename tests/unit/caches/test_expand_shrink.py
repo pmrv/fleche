@@ -202,8 +202,43 @@ def test_cache_stack_shrink_returns_longest_across_layers():
     """shrink must return the longest (safest) prefix across all layers."""
     c1 = Mock()
     c2 = Mock()
+    c1.contains.return_value = True
+    c2.contains.return_value = True
     c1.shrink.return_value = Digest("abcd")
     c2.shrink.return_value = Digest("abcdef")
     stack = CacheStack((c1, c2))
 
     assert stack.shrink("a" * 64) == "abcdef"
+
+
+def test_cache_stack_shrink_multiple_keys_batches_per_layer():
+    """``shrink(k1, k2)`` makes one batched ``shrink(*present)`` per layer."""
+    c1 = Mock()
+    c2 = Mock()
+    c1.contains.return_value = True
+    c2.contains.return_value = True
+    c1.shrink.return_value = (Digest("aaaa"), Digest("bbbb"))
+    c2.shrink.return_value = (Digest("aaaaaa"), Digest("bbbbbb"))
+    stack = CacheStack((c1, c2))
+
+    out = stack.shrink("a" * 64, "b" * 64)
+    assert out == (Digest("aaaaaa"), Digest("bbbbbb"))
+    c1.shrink.assert_called_once_with("a" * 64, "b" * 64)
+    c2.shrink.assert_called_once_with("a" * 64, "b" * 64)
+
+
+def test_cache_stack_shrink_multiple_keys_skips_layers_without_key():
+    """Layers that don't contain a key are not asked to shrink it."""
+    c1 = Mock()
+    c2 = Mock()
+    # c1 has k1 only; c2 has k2 only.
+    c1.contains.side_effect = lambda k: k == "a" * 64
+    c2.contains.side_effect = lambda k: k == "b" * 64
+    c1.shrink.return_value = Digest("aaaa")
+    c2.shrink.return_value = Digest("bbbb")
+    stack = CacheStack((c1, c2))
+
+    out = stack.shrink("a" * 64, "b" * 64)
+    assert out == (Digest("aaaa"), Digest("bbbb"))
+    c1.shrink.assert_called_once_with("a" * 64)
+    c2.shrink.assert_called_once_with("b" * 64)

@@ -2,13 +2,15 @@ import builtins
 import datetime
 import itertools
 import logging
-from dataclasses import dataclass
-from typing import Iterable, Iterator, Any, Literal, Callable
+from dataclasses import dataclass, field
+from typing import Iterable, Iterator, Any, Literal, Callable, TYPE_CHECKING
 
 import pandas as pd
 
 from . import call
-from .storage.base import AmbiguousDigestError
+
+if TYPE_CHECKING:
+    from .caches import BaseCache
 
 logger = logging.getLogger("fleche.query")
 
@@ -36,9 +38,14 @@ class QueryIterator(Iterable[call.LazyCall]):
 
     Args:
         calls: factory returning an iterable of :class:`~fleche.call.LazyCall`
+        cache: the cache that produced these calls; set by
+            :meth:`~fleche.caches.BaseCache.query` and propagated through
+            chainable methods.  Used by :meth:`table` to call ``shrink``
+            without reaching into ``LazyCall._cache``.
     """
 
     calls: Callable[[], Iterable[call.LazyCall]]
+    cache: "BaseCache | None" = field(default=None, repr=False)
 
     def __iter__(self) -> Iterator[call.LazyCall]:
         yield from self.calls()
@@ -82,15 +89,15 @@ class QueryIterator(Iterable[call.LazyCall]):
 
     def take(self, n: int) -> "QueryIterator":
         """Return first n results as a new QueryIterator (lazy)."""
-        return QueryIterator(lambda: itertools.islice(iter(self), n))
+        return QueryIterator(lambda: itertools.islice(iter(self), n), cache=self.cache)
 
     def skip(self, n: int) -> "QueryIterator":
         """Skip first n results and return the rest as a new QueryIterator (lazy)."""
-        return QueryIterator(lambda: itertools.islice(iter(self), n, None))
+        return QueryIterator(lambda: itertools.islice(iter(self), n, None), cache=self.cache)
 
     def filter(self, predicate: Callable[[call.LazyCall], bool]) -> "QueryIterator":
         """Return a new QueryIterator keeping only calls where predicate(call) is truthy (lazy)."""
-        return QueryIterator(lambda: (c for c in self if predicate(c)))
+        return QueryIterator(lambda: (c for c in self if predicate(c)), cache=self.cache)
 
     def sorted(
         self,
@@ -104,7 +111,7 @@ class QueryIterator(Iterable[call.LazyCall]):
             reverse: if True, sort in descending order
         """
         key = _resolve_key(key) if key is not None else None
-        return QueryIterator(lambda: builtins.sorted(self, key=key, reverse=reverse))
+        return QueryIterator(lambda: builtins.sorted(self, key=key, reverse=reverse), cache=self.cache)
 
     def unique(self, key: "str | Callable[[call.LazyCall], Any]") -> "QueryIterator":
         """Return a new QueryIterator with duplicates removed, keeping the first per group (lazy).
@@ -122,7 +129,7 @@ class QueryIterator(Iterable[call.LazyCall]):
                     seen.add(v)
                     yield c
 
-        return QueryIterator(lambda: _unique(self, key))
+        return QueryIterator(lambda: _unique(self, key), cache=self.cache)
 
     def groupby(self, key: "str | Callable[[call.LazyCall], Any]") -> "dict[Any, QueryIterator]":
         """Partition calls into a dict of QueryIterators keyed by group value.
@@ -137,7 +144,7 @@ class QueryIterator(Iterable[call.LazyCall]):
             if k not in groups:
                 groups[k] = []
             groups[k].append(c)
-        return {k: QueryIterator(lambda v=v: v) for k, v in groups.items()}
+        return {k: QueryIterator(lambda v=v: v, cache=self.cache) for k, v in groups.items()}
 
     def _timestop_extremum(self, *, reverse: bool) -> call.LazyCall:
         sentinel = float("-inf") if reverse else float("inf")
@@ -242,13 +249,14 @@ class QueryIterator(Iterable[call.LazyCall]):
         items = list(self)
         keys = [c.to_lookup_key() for c in items]
         if shrink_keys and items:
-            try:
-                shrunk = items[0]._cache.shrink(*keys)
-                if len(keys) == 1:
-                    shrunk = (shrunk,)
-                keys = list(shrunk)
-            except AmbiguousDigestError:
-                pass
+            # Full 64-char digests are unambiguous modulo SHA-256 collision,
+            # so we let AmbiguousDigestError propagate rather than silently
+            # falling back — a hit here means our hash assumptions are broken.
+            shrink_cache = self.cache or items[0]._cache
+            shrunk = shrink_cache.shrink(*keys)
+            if len(keys) == 1:
+                shrunk = (shrunk,)
+            keys = list(shrunk)
 
         rows: dict[str, dict[str, Any]] = {}
         for c, key in zip(items, keys):
