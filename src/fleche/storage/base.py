@@ -3,7 +3,7 @@ import contextlib
 import logging
 
 from abc import ABC, abstractmethod
-from typing import Iterable, Any, Callable
+from typing import Iterable, Any, Callable, Sequence
 
 from ..digest import digest, Digest, DIGEST_LENGTH
 from ..call import DigestedCall, QueryCall
@@ -133,7 +133,7 @@ class KeyManagement(ABC):
         out = tuple(self._shrink_one(k, sorted_all) for k in keys)
         return out[0] if len(keys) == 1 else out
 
-    def _shrink_one(self, key: "Digest | str", sorted_all: "list[str]") -> Digest:
+    def _shrink_one(self, key: "Digest | str", sorted_all: Sequence[str]) -> Digest:
         s_key = str(key)
         i = bisect.bisect_left(sorted_all, s_key)
         if i == len(sorted_all) or sorted_all[i] != s_key:
