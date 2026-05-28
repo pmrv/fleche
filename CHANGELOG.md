@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.15.0](https://github.com/pmrv/fleche/compare/0.14.0...0.15.0) (2026-05-28)
+
+
+### Features
+
+* **config:** make 'default' a special name resolving to the configured default cache ([#590](https://github.com/pmrv/fleche/issues/590)) ([d6aa58f](https://github.com/pmrv/fleche/commit/d6aa58fe97cb1cd4ebc650518fbf74cde8c88c0c))
+* **remote:** add workdir option to SshCache ([b66f976](https://github.com/pmrv/fleche/commit/b66f9764d2855fadc582cae3b42447570ecc00ee))
+* **remote:** SshCache for sharing fleche caches across machines ([8c6ef49](https://github.com/pmrv/fleche/commit/8c6ef49c9b9c86cec4ffeed08d789bc527afb1f2))
+
+
+### Bug Fixes
+
+* **config:** intern the default cache under None so it is reused ([a3a6c74](https://github.com/pmrv/fleche/commit/a3a6c74356bf6b3658b866c25879210e8f5ad824))
+* **types:** resolve latent ty 0.0.40 errors surfaced by this branch ([9261951](https://github.com/pmrv/fleche/commit/926195124a7db1c7b8b59df0a34bd404591ac482))
+
 ## [0.14.0](https://github.com/pmrv/fleche/compare/0.13.1...0.14.0) (2026-05-27)
 
 
