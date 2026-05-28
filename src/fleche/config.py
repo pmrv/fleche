@@ -536,7 +536,9 @@ def load_cache_config(name: str | None = None) -> caches.BaseCache:
             return _default_memory_cache(None, "no default cache configured")
         default_cache = config["default"]["cache"]
         if isinstance(default_cache, str):
-            return load_cache_config(default_cache)
+            cache = load_cache_config(default_cache)
+            _live_caches[None] = cache
+            return cache
         cache_name, cache_config = "default", default_cache
     else:
         if name not in config:
@@ -545,4 +547,10 @@ def load_cache_config(name: str | None = None) -> caches.BaseCache:
 
     cache = cache_from_config(cache_config)
     _live_caches[cache_name] = cache
+    # Also intern under the requested name (``None`` for the default cache
+    # resolved from an inline ``[default.cache]`` table) so repeated lookups
+    # return the same instance instead of rebuilding it — otherwise the ``None``
+    # key is never populated and every call reconstructs the cache (re-spawning
+    # an SshCache subprocess, reopening file handles, etc.).
+    _live_caches[name] = cache
     return cache
