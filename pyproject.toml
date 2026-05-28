@@ -66,5 +66,5 @@ executorlib = [
     "executorlib",
 ]
 ty = [
-    "ty == 0.0.38",
+    "ty == 0.0.40",
 ]
