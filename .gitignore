@@ -5,5 +5,7 @@ __pycache__/
 .hypothesis/
 notebooks/.*
 notebooks/*.db
+notebooks/*.db-shm
+notebooks/*.db-wal
 docs/_build
 src/fleche/_version.py
