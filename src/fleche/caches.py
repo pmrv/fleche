@@ -263,7 +263,7 @@ def _combine_shrink(key: "Digest | str", results: "Iterable[Digest]") -> "Digest
     all_results = list(results)
     if not all_results:
         raise KeyError(key)
-    return max(all_results, key=len)  # type: ignore
+    return max(all_results, key=len)
 
 
 @dataclass(frozen=True)
