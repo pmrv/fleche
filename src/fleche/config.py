@@ -516,8 +516,9 @@ def load_cache_config(name: str | None = None) -> caches.BaseCache:
 
     If name is None, the default cache is loaded.
     The names 'memory', 'void', and 'default' are special-cased: 'memory'
-    and 'void' return transient backends; 'default' is an alias for the
-    default configured cache (same as calling with no arguments).
+    and 'void' return transient backends; 'default' resolves to whichever
+    cache the config file designates as the default (equivalent to calling
+    this function with ``name=None``).
 
     Note: The `Tags` metadata cannot be configured from the config file.
     """
