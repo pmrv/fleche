@@ -28,6 +28,7 @@ second, composed automatically into a :class:`~fleche.caches.CacheStack`::
                    "-o", "ControlPersist=10m"]
     setup_commands = ["module load python/3.11",
                       "source ~/.venv/bin/activate"]    # optional
+    workdir = "~/project"               # optional: cd before launching server
 
 ControlMaster + ControlPersist in ``~/.ssh/config`` (or via ``ssh_options``)
 mean 2FA is prompted once and then re-used across multiple fleche sessions
@@ -511,6 +512,7 @@ class _SshConnection(_Connection):
         cache_name: str | None,
         ssh_options: tuple[str, ...],
         setup_commands: tuple[str, ...],
+        workdir: str | None = None,
     ) -> None:
         super().__init__()
         self._host = host
@@ -518,6 +520,7 @@ class _SshConnection(_Connection):
         self._cache_name = cache_name
         self._ssh_options = ssh_options
         self._setup_commands = setup_commands
+        self._workdir = workdir
         self._proc: subprocess.Popen | None = None
         self._stderr_thread: threading.Thread | None = None
         # Last few lines of remote stderr, surfaced in RemoteConnectionError
@@ -531,13 +534,21 @@ class _SshConnection(_Connection):
         server_argv = [self._python, "-m", "fleche.remote", "--serve"]
         if self._cache_name is not None:
             server_argv.extend(["--cache", self._cache_name])
-        if self._setup_commands:
-            # Run user setup snippets in the remote shell, then `exec` into the
+        # A `cd` into the working directory runs first so the server process —
+        # and the `python -m` it execs — inherits that cwd; this puts the dir
+        # on sys.path so the remote can import modules referenced by unpickled
+        # calls.  It precedes setup_commands in case those expect to run there.
+        prefix_commands: list[str] = []
+        if self._workdir is not None:
+            prefix_commands.append(f"cd {shlex.quote(self._workdir)}")
+        prefix_commands.extend(self._setup_commands)
+        if prefix_commands:
+            # Run the prefix snippets in the remote shell, then `exec` into the
             # server so stdin/stdout pipe straight through with no shell wrapper.
-            # Any setup failure short-circuits via `&&` and the SSH process exits
+            # Any failure short-circuits via `&&` and the SSH process exits
             # non-zero — the client surfaces this as RemoteConnectionError.
             server_cmd = " ".join(shlex.quote(a) for a in server_argv)
-            remote = " && ".join((*self._setup_commands, f"exec {server_cmd}"))
+            remote = " && ".join((*prefix_commands, f"exec {server_cmd}"))
             cmd.append(remote)
         else:
             cmd.extend(server_argv)
@@ -651,9 +662,15 @@ class SshCache(BaseCache):
         setup_commands: Shell snippets run on the remote *before* the server
             process starts, joined with ``&&`` so any failure aborts the
             launch.  Typical uses are HPC environment setup —
-            ``("module load python/3.11", "source ~/.venv/bin/activate")`` —
-            or ``cd`` into a working directory.  Each snippet is passed to the
-            remote shell verbatim; quote any user-provided values yourself.
+            ``("module load python/3.11", "source ~/.venv/bin/activate")``.
+            Each snippet is passed to the remote shell verbatim; quote any
+            user-provided values yourself.
+        workdir: Optional remote directory to ``cd`` into before launching the
+            server.  Because the server starts the cache via ``python -m``, the
+            working directory lands on ``sys.path``, so setting it lets the
+            remote import the local modules referenced by unpickled calls (the
+            "fudge imports" use case).  The ``cd`` runs ahead of
+            *setup_commands*.
     """
 
     host: str
@@ -661,6 +678,7 @@ class SshCache(BaseCache):
     python: str = "python3"
     ssh_options: tuple[str, ...] = ()
     setup_commands: tuple[str, ...] = ()
+    workdir: str | None = None
     _conn: _Connection = field(init=False, repr=False, compare=False, hash=False)
     _info_cache: "dict[str, Any] | None" = field(
         init=False, default=None, repr=False, compare=False, hash=False
@@ -675,6 +693,7 @@ class SshCache(BaseCache):
             cache_name=self.cache_name,
             ssh_options=self.ssh_options,
             setup_commands=self.setup_commands,
+            workdir=self.workdir,
         )
         object.__setattr__(self, "_conn", conn)
 

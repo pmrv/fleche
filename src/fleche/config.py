@@ -134,6 +134,9 @@ Example fleche.toml
                    "-o", "ControlPersist=10m"]
     setup_commands = ["module load python/3.11",  # optional: shell snippets
                       "source ~/.venv/bin/activate"]  # run before the server
+    workdir = "~/project"               # optional: cd here before launching
+                                        # the server, so the remote can import
+                                        # the project's local modules
 
 Config file discovery
 ---------------------
@@ -492,6 +495,8 @@ def cache_to_config(c: caches.BaseCache) -> "dict[str, Any] | list[dict[str, Any
                     d["ssh_options"] = list(c.ssh_options)
                 if c.setup_commands:
                     d["setup_commands"] = list(c.setup_commands)
+                if c.workdir is not None:
+                    d["workdir"] = c.workdir
                 return d
             raise ValueError(f"Cannot convert cache of type {type(c).__name__!r} to config")
 
