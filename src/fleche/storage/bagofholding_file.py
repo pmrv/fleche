@@ -39,10 +39,9 @@ class BagOfHoldingH5FileBackend(FileStorage):
 
     def _from_file(self, path: Path) -> Any:
         try:
-            kwargs = {}
             if self.version_validator is not None:
-                kwargs["version_validator"] = self.version_validator
-            return H5Bag(path).load(**kwargs)
+                return H5Bag(path).load(version_validator=self.version_validator)
+            return H5Bag(path).load()
         except FileNotFoundError:
             raise KeyError(path) from None
         except OSError as e:
