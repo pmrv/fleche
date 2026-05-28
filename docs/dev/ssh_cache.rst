@@ -275,12 +275,12 @@ the persist window skip the handshake entirely.  Wire it up either in
 Setup-commands chain
 ~~~~~~~~~~~~~~~~~~~~
 
-When the user passes ``setup_commands``, the constructed remote command
-looks like:
+When the user passes ``workdir`` and/or ``setup_commands``, the
+constructed remote command looks like:
 
 .. code-block:: text
 
-   <snippet1> && <snippet2> && ... && exec <python> -m fleche.remote --serve
+   cd <workdir> && <snippet1> && <snippet2> && ... && exec <python> -m fleche.remote --serve
 
 The trailing ``exec`` replaces the wrapping shell so stdin/stdout pipe
 straight through to the server process — no extra layer to corrupt the
@@ -288,9 +288,15 @@ binary RPC stream.  Any setup failure short-circuits via ``&&`` and the
 ssh process exits non-zero; the client's next read raises ``EOFError``
 and the diagnostic captured from stderr surfaces the actual reason.
 
-Without ``setup_commands``, the server argv is passed directly to
-``ssh`` as separate arguments, so SSH ``exec``\\ s it as-is — no remote
-shell is involved at all.
+``workdir`` (when set) contributes the leading ``cd`` so it runs ahead
+of the user's ``setup_commands``.  Because the server boots the cache
+via ``python -m``, that working directory lands on ``sys.path``, letting
+the remote import the project-local modules referenced by unpickled
+calls.
+
+Without ``workdir`` or ``setup_commands``, the server argv is passed
+directly to ``ssh`` as separate arguments, so SSH ``exec``\\ s it as-is
+— no remote shell is involved at all.
 
 Diagnostics: the ``info`` RPC
 -----------------------------

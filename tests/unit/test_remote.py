@@ -593,6 +593,68 @@ def test_sshcache_setup_commands_omitted_from_config_when_empty():
     assert "setup_commands" not in d
 
 
+def test_sshcache_workdir_cds_before_exec():
+    """workdir prepends a `cd` ahead of the server exec."""
+    c = SshCache(
+        host="user@example.com",
+        cache_name="shared",
+        workdir="~/my project",
+    )
+    try:
+        cmd = c._conn._build_command()
+    finally:
+        c.close()
+    assert cmd[:2] == ["ssh", "user@example.com"]
+    assert len(cmd) == 3, f"workdir should collapse into one shell arg, got {cmd!r}"
+    remote = cmd[2]
+    # The workdir is shell-quoted so paths with spaces survive.
+    assert remote.startswith("cd '~/my project' && exec ")
+    assert "python3 -m fleche.remote --serve --cache shared" in remote
+
+
+def test_sshcache_workdir_runs_before_setup_commands():
+    """The `cd` precedes setup_commands in the combined shell snippet."""
+    c = SshCache(
+        host="user@example.com",
+        workdir="/opt/project",
+        setup_commands=("source ~/.venv/bin/activate",),
+    )
+    try:
+        cmd = c._conn._build_command()
+    finally:
+        c.close()
+    remote = cmd[2]
+    assert remote.startswith("cd /opt/project && source ~/.venv/bin/activate && exec ")
+
+
+def test_sshcache_workdir_config_round_trip():
+    from fleche.config import cache_from_config, cache_to_config
+
+    original = {
+        "type": "ssh",
+        "host": "user@example.com",
+        "workdir": "~/project",
+    }
+    c = cache_from_config(original)
+    try:
+        assert c.workdir == "~/project"
+        d = cache_to_config(c)
+    finally:
+        c.close()
+    assert d["workdir"] == "~/project"
+
+
+def test_sshcache_workdir_omitted_from_config_when_unset():
+    from fleche.config import cache_to_config
+
+    c = SshCache(host="user@example.com")
+    try:
+        d = cache_to_config(c)
+    finally:
+        c.close()
+    assert "workdir" not in d
+
+
 def test_cache_stack_with_ssh_layer():
     """A stack of [local, ssh] composes via the existing array-of-tables path."""
     from fleche.config import cache_from_config
