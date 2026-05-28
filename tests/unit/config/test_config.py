@@ -194,6 +194,29 @@ def test_default_cache_is_interned_inline_table(monkeypatch, config_file_explici
     assert load_cache_config() is load_cache_config()
 
 
+def test_default_name_is_alias_for_none_string_alias(monkeypatch, config_file):
+    """``load_cache_config('default')`` returns the same instance as ``load_cache_config()``."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", config_file)
+
+    assert load_cache_config("default") is load_cache_config()
+
+
+def test_default_name_is_alias_for_none_inline_table(monkeypatch, config_file_explicit_default):
+    """``load_cache_config('default')`` returns the same instance as ``load_cache_config()``."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", config_file_explicit_default)
+
+    assert load_cache_config("default") is load_cache_config()
+
+
+def test_cache_default_activates_default_cache(monkeypatch, config_file):
+    """``cache('default')`` sets the active cache to the configured default."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", config_file)
+
+    default = load_cache_config()
+    with cache("default"):
+        assert cache() is default
+
+
 def test_load_default_metadata(restore_fleche_state, monkeypatch, config_file):
     monkeypatch.setenv("XDG_CONFIG_HOME", config_file)
 
