@@ -41,6 +41,9 @@ pip install fleche[cloudpickle,dill]
 # For Bagofholding storage
 pip install fleche[bagofholding]
 
+# For SshCache (sharing caches across machines over SSH) — requires cloudpickle
+pip install fleche[ssh]
+
 # For documentation
 pip install fleche[docs]
 
@@ -125,6 +128,11 @@ def my_function(x):
 - **Call storage only** — stores call records (function name, arguments, metadata) in a SQL database; a separate value backend (file or memory) is still required for results
 - SQLite is the primary tested backend; any SQLAlchemy-supported database should work
 - Enables efficient server-side filtering when querying cached calls
+
+### SSH (remote) Cache
+- **Requires `cloudpickle`** (`pip install fleche[ssh]`) — used as the wire protocol between client and remote server; not optional
+- Forwards every cache operation over a persistent `ssh host python -m fleche.remote --serve` subprocess
+- Stack with a local cache to read-through to a shared remote one — see `fleche.remote.SshCache`
 
 ### In-Memory Storage
 - For testing or temporary caching

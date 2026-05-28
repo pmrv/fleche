@@ -61,7 +61,7 @@ python benchmarks/run_benchmarks.py                    # benchmarks (writes benc
 
 Python `>=3.11,<3.15`. No committed lint config; `pyproject.toml` has no `[tool.ruff]`/`[tool.flake8]`.
 
-Optional dep extras: `cloudpickle`, `dill`, `sqlalchemy`, `bagofholding`, `executorlib`, `docs`, `tests` (the `tests` extra already pulls in cloudpickle/dill/sqlalchemy/bagofholding/attrs). `attrs` itself has no dedicated extra — it is only required to exercise the `attrs`-class digest/destructuring paths in tests; runtime support degrades gracefully when `attrs` is missing. Other optional deps are gated via `pyiron_snippets.import_alarm.ImportAlarm` — importing a backend without its extra installed raises at construction, not at module import.
+Optional dep extras: `cloudpickle`, `dill`, `sqlalchemy`, `bagofholding`, `ssh` (cloudpickle — **hard-required** for `SshCache`'s wire protocol, not optional within that feature), `executorlib`, `docs`, `tests` (the `tests` extra already pulls in cloudpickle/dill/sqlalchemy/bagofholding/attrs). `attrs` itself has no dedicated extra — it is only required to exercise the `attrs`-class digest/destructuring paths in tests; runtime support degrades gracefully when `attrs` is missing. Other optional deps are gated via `pyiron_snippets.import_alarm.ImportAlarm` — importing a backend without its extra installed raises at construction, not at module import.
 
 ## Architecture notes
 

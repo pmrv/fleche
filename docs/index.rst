@@ -61,6 +61,7 @@ Welcome to the **Fleche** library documentation.
 
    dev/custom_digests
    dev/developer
+   dev/ssh_cache
 
 .. toctree::
    :maxdepth: 1
