@@ -174,6 +174,26 @@ def test_cache_instances_are_persistent(monkeypatch, config_file):
     assert cache1 is cache2
 
 
+def test_default_cache_is_interned_string_alias(monkeypatch, config_file):
+    """The default cache (resolved via a string alias) is interned under None."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", config_file)
+
+    assert load_cache_config() is load_cache_config()
+
+
+def test_default_cache_is_interned_inline_table(monkeypatch, config_file_explicit_default):
+    """An inline ``[default.cache]`` table is interned, not rebuilt each call.
+
+    Regression: ``load_cache_config(None)`` used to intern the resolved cache
+    under ``"default"`` only, so the ``None`` lookup never hit and every call
+    reconstructed the cache — re-spawning an SshCache subprocess for a default
+    ssh cache.
+    """
+    monkeypatch.setenv("XDG_CONFIG_HOME", config_file_explicit_default)
+
+    assert load_cache_config() is load_cache_config()
+
+
 def test_load_default_metadata(restore_fleche_state, monkeypatch, config_file):
     monkeypatch.setenv("XDG_CONFIG_HOME", config_file)
 
