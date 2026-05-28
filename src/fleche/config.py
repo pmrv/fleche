@@ -113,6 +113,28 @@ Example fleche.toml
     calls.type = "cloudpickle"
     calls.root = "~/.fleche/calls"
 
+    # SshCache — share results with another machine over SSH.  The remote
+    # runs `python -m fleche.remote --serve` and proxies into its own
+    # configured cache.  Compose with a local cache by stacking two
+    # entries (saves go to the first entry; reads fall back to the SSH
+    # remote and back-fill hits into the local layer).
+    [[shared]]
+    values.type = "cloudpickle"
+    values.root = "~/.fleche/values"
+    calls.type = "cloudpickle"
+    calls.root = "~/.fleche/calls"
+
+    [[shared]]
+    type = "ssh"
+    host = "user@bigpc.example.com"
+    cache_name = "shared"               # optional: named cache on remote
+    python = "python3"                  # optional: remote python interpreter
+    ssh_options = ["-o", "ControlMaster=auto",
+                   "-o", "ControlPath=~/.ssh/cm-%r@%h:%p",
+                   "-o", "ControlPersist=10m"]
+    setup_commands = ["module load python/3.11",  # optional: shell snippets
+                      "source ~/.venv/bin/activate"]  # run before the server
+
 Config file discovery
 ---------------------
 
@@ -139,6 +161,7 @@ import os
 from typing import Any
 
 from . import storage, metadata, caches
+from .remote import SshCache
 
 logger = logging.getLogger("fleche.config")
 
@@ -398,6 +421,9 @@ def cache_from_config(d: "dict[str, Any] | list[dict[str, Any]]") -> caches.Base
         return caches.CacheStack(tuple(cache_from_config(c) for c in d))
 
     d = dict(d)
+    if d.get("type") == "ssh":
+        d.pop("type")
+        return SshCache(**d)
     read_only = d.pop("read_only", False)
     max_size = d.pop("max_size", None)
 
@@ -456,6 +482,17 @@ def cache_to_config(c: caches.BaseCache) -> "dict[str, Any] | list[dict[str, Any
         case caches.CacheStack():
             return cast("list[dict[str, Any]]", [cache_to_config(s) for s in c.stack])
         case _:
+            if isinstance(c, SshCache):
+                d: dict[str, Any] = {"type": "ssh", "host": c.host}
+                if c.cache_name is not None:
+                    d["cache_name"] = c.cache_name
+                if c.python != "python3":
+                    d["python"] = c.python
+                if c.ssh_options:
+                    d["ssh_options"] = list(c.ssh_options)
+                if c.setup_commands:
+                    d["setup_commands"] = list(c.setup_commands)
+                return d
             raise ValueError(f"Cannot convert cache of type {type(c).__name__!r} to config")
 
 

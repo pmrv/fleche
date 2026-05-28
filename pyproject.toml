@@ -50,6 +50,10 @@ sqlalchemy = [
 bagofholding = [
     "bagofholding == 0.1.12",
 ]
+ssh = [
+    # SshCache uses cloudpickle for its wire protocol — required, not optional.
+    "cloudpickle",
+]
 tests = [
     "pytest",
     "hypothesis",
