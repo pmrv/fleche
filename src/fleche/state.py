@@ -56,6 +56,10 @@ def cache(
 
     Args:
         new_cache: Cache object or named cache string to activate, or ``None`` to query.
+            The strings ``'memory'`` and ``'void'`` return transient backends regardless of
+            configuration.  The string ``'default'`` activates whichever cache the config
+            file designates as the default — note that this is **not** the same as passing
+            ``None``, which returns the *currently active* cache without changing anything.
         stack: If ``True``, wrap ``new_cache`` in a :class:`.CacheStack` on top of the current cache.
 
     Returns:
