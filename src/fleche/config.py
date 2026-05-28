@@ -542,20 +542,18 @@ def load_cache_config(name: str | None = None) -> caches.BaseCache:
         default_cache = config["default"]["cache"]
         if isinstance(default_cache, str):
             cache = load_cache_config(default_cache)
-            _live_caches[None] = cache
-            return cache
-        cache_name, cache_config = "default", default_cache
+        else:
+            cache = cache_from_config(default_cache)
     else:
         if name not in config:
             return _default_memory_cache(name, f"cache {name!r} not found in configuration")
-        cache_name, cache_config = name, config[name]
+        cache = cache_from_config(config[name])
 
-    cache = cache_from_config(cache_config)
-    _live_caches[cache_name] = cache
-    # Also intern under the requested name (``None`` for the default cache
-    # resolved from an inline ``[default.cache]`` table) so repeated lookups
-    # return the same instance instead of rebuilding it — otherwise the ``None``
-    # key is never populated and every call reconstructs the cache (re-spawning
-    # an SshCache subprocess, reopening file handles, etc.).
+    # Intern under the requested name (the same key callers look up by, ``None``
+    # for the default cache) so repeated lookups return the same instance rather
+    # than rebuilding it — otherwise resolving the default would reconstruct the
+    # cache every time, re-spawning an SshCache subprocess, reopening file
+    # handles, etc.  A string-alias default also interns under its own name via
+    # the recursive call above, so both keys map to the one instance.
     _live_caches[name] = cache
     return cache
