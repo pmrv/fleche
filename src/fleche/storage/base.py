@@ -52,17 +52,14 @@ def _resolve_prefix(key: str, candidates: list[Digest]) -> Digest:
     )
 
 
-class KeyManagement(ABC):
-    """Abstract base providing key-management helpers for any keyed storage.
+class OperationContext(ABC):
+    """Minimal base that exposes the :meth:`_operation_context` hook.
 
-    Subclasses must implement ``list``, ``_evict``, and ``_contains``.
-    The concrete helpers ``evict``, ``contains``, ``expand``, and ``shrink``
-    are implemented here once and inherited by all storage classes.
-
-    Every public operation enters :meth:`_operation_context` around the
-    compound work it performs, so mixins can inject an operation-scoped
-    resource (e.g. a threading lock, a SQLAlchemy session, a file handle)
-    without overriding every method individually.
+    Both :class:`KeyManagement` (storage layer) and :class:`~fleche.caches.BaseCache`
+    (cache layer) inherit from this class so that the same thread-safety mixins
+    (:class:`~fleche.storage.thread_safe.SerializingMixin`,
+    :class:`~fleche.storage.thread_safe.PerKeyLockMixin`) can attach to either
+    layer without duplication.
     """
 
     @contextlib.contextmanager
@@ -91,6 +88,20 @@ class KeyManagement(ABC):
                         yield
         """
         yield
+
+
+class KeyManagement(OperationContext):
+    """Abstract base providing key-management helpers for any keyed storage.
+
+    Subclasses must implement ``list``, ``_evict``, and ``_contains``.
+    The concrete helpers ``evict``, ``contains``, ``expand``, and ``shrink``
+    are implemented here once and inherited by all storage classes.
+
+    Every public operation enters :meth:`_operation_context` around the
+    compound work it performs, so mixins can inject an operation-scoped
+    resource (e.g. a threading lock, a SQLAlchemy session, a file handle)
+    without overriding every method individually.
+    """
 
     @abstractmethod
     def list(self) -> Iterable[Digest]: ...

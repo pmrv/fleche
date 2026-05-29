@@ -1,10 +1,10 @@
 """Thread-safety mixins for storage classes.
 
-These mixins subclass :class:`~fleche.storage.base.KeyManagement` and override
+These mixins subclass :class:`~fleche.storage.base.OperationContext` and override
 ``_operation_context`` to inject a threading lock around every storage
 operation.  Because every concrete storage class (``ValueMemory``, ``Sql``, …)
-ultimately inherits from ``KeyManagement``, these mixins compose with any
-backend via Python's MRO::
+ultimately inherits from ``OperationContext`` (via ``KeyManagement``), these
+mixins compose with any backend via Python's MRO::
 
     @dataclass(frozen=True)
     class ThreadSafeValueMemory(SerializingMixin, ValueMemory): ...
@@ -30,7 +30,7 @@ import threading
 import weakref
 from dataclasses import dataclass, field
 
-from .base import Intent, KeyManagement
+from .base import Intent, OperationContext
 from ..digest import Digest
 
 
@@ -70,7 +70,7 @@ class _PicklableRLock(_PicklableLock):
 
 
 @dataclass(frozen=True)
-class SerializingMixin(KeyManagement):
+class SerializingMixin(OperationContext):
     """Mixin that serializes all storage operations behind a single reentrant lock.
 
     Place before the concrete storage class in the MRO::
@@ -102,7 +102,7 @@ _per_instance_locks: weakref.WeakKeyDictionary[
 _instances_lock: threading.Lock = threading.Lock()
 
 
-class PerKeyLockMixin(KeyManagement):
+class PerKeyLockMixin(OperationContext):
     """Mixin that locks per-key so concurrent ops on different keys proceed in parallel.
 
     A lightweight ``threading.Lock`` guards the lock-table itself; once the
