@@ -29,6 +29,7 @@ from fleche.digest import Digest, digest
 from fleche.storage.base import (
     AmbiguousDigestError,
     CallMixin,
+    Intent,
     StorageBackend,
     ValueMixin,
     _resolve_prefix,
@@ -78,7 +79,7 @@ class _TrackingValueMemory(ValueMixin, MemoryBackend):
     _ctx_keys: list = field(default_factory=list, init=False, compare=False, repr=False)
 
     @contextlib.contextmanager
-    def _operation_context(self, key, *, intent="write"):
+    def _operation_context(self, key, *, intent=Intent.WRITE):
         self._ctx_keys.append(str(key))
         with super()._operation_context(key, intent=intent):
             yield
@@ -89,7 +90,7 @@ class _TrackingCallMemory(CallMixin, MemoryBackend):
     _ctx_keys: list = field(default_factory=list, init=False, compare=False, repr=False)
 
     @contextlib.contextmanager
-    def _operation_context(self, key, *, intent="write"):
+    def _operation_context(self, key, *, intent=Intent.WRITE):
         self._ctx_keys.append(str(key))
         with super()._operation_context(key, intent=intent):
             yield

@@ -5,7 +5,7 @@ import threading
 from typing import Iterable, Any, List
 from pathlib import Path
 from dataclasses import dataclass, field
-from .base import KeyManagement, CallStorage, _resolve_prefix
+from .base import Intent, KeyManagement, CallStorage, _resolve_prefix
 from .thread_safe import PerKeyLockMixin
 from ..call import DigestedCall, QueryCall
 from ..digest import Digest, DIGEST_LENGTH, digest
@@ -214,7 +214,7 @@ class Sql(PerKeyLockMixin, CallStorage):
             self._local.session = None
 
     @contextlib.contextmanager
-    def _operation_context(self, key, *, intent: str = "write"):
+    def _operation_context(self, key, *, intent: Intent = Intent.WRITE):
         with self._session_context():
             with super()._operation_context(key, intent=intent):
                 yield

@@ -30,7 +30,7 @@ import threading
 import weakref
 from dataclasses import dataclass, field
 
-from .base import KeyManagement
+from .base import Intent, KeyManagement
 from ..digest import Digest
 
 
@@ -84,7 +84,7 @@ class SerializingMixin(KeyManagement):
     )
 
     @contextlib.contextmanager
-    def _operation_context(self, key, *, intent: str = "write"):
+    def _operation_context(self, key, *, intent: Intent = Intent.WRITE):
         with self._lock:
             with super()._operation_context(key, intent=intent):
                 yield
@@ -136,7 +136,7 @@ class PerKeyLockMixin(KeyManagement):
             return lock
 
     @contextlib.contextmanager
-    def _operation_context(self, key, *, intent: str = "write"):
+    def _operation_context(self, key, *, intent: Intent = Intent.WRITE):
         with self._get_key_lock(key):
             with super()._operation_context(key, intent=intent):
                 yield
