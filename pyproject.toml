@@ -13,6 +13,7 @@ fallback_version = "0.0.0"
 [project]
 name = "fleche"
 dynamic = ["version"]
+description = "Hierachical, persistant caches in python"
 authors = [
     { name="Marvin Poul", email="pmrv@posteo.de" },
 ]
