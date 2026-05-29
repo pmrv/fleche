@@ -397,7 +397,7 @@ class LazyCall:
             result=self.result
         )
 
-    def to_digested_call(self) -> "DigestedCall":
+    def detach(self) -> "DigestedCall":
         """Return the cache-free :class:`DigestedCall` shadow of this :class:`LazyCall`.
 
         The inverse of :meth:`DigestedCall.fetch`: strips the ``_cache``
