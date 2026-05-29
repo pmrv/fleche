@@ -7,6 +7,7 @@ for backward compatibility with `from fleche.storage import ...` imports.
 from .base import (
     SaveError,
     AmbiguousDigestError,
+    Intent,
     KeyManagement,
     StorageBackend,
     ValueStorage,
@@ -26,6 +27,7 @@ from .thread_safe import SerializingMixin, PerKeyLockMixin
 __all__ = [
     "SaveError",
     "AmbiguousDigestError",
+    "Intent",
     "KeyManagement",
     "StorageBackend",
     "ValueStorage",

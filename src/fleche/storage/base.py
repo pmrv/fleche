@@ -3,6 +3,7 @@ import contextlib
 import logging
 
 from abc import ABC, abstractmethod
+from enum import StrEnum
 from typing import Iterable, Any, Callable, Sequence, overload
 
 from ..digest import digest, Digest, DIGEST_LENGTH
@@ -17,6 +18,14 @@ class SaveError(Exception):
 
 class AmbiguousDigestError(ValueError):
     pass
+
+
+class Intent(StrEnum):
+    """Describes the kind of operation being performed on storage.
+
+    Mixins may use this to choose between exclusive and shared locks.
+    """
+    WRITE = "write"
 
 
 def _longest_common_prefix_length(s1: str, s2: str) -> int:
@@ -57,7 +66,7 @@ class KeyManagement(ABC):
     """
 
     @contextlib.contextmanager
-    def _operation_context(self, key: Digest | str):
+    def _operation_context(self, key: Digest | str, *, intent: Intent = Intent.WRITE):
         """Context manager entered around every operation on ``key``.
 
         The base implementation is a no-op.  Override in a mixin to inject
@@ -68,13 +77,17 @@ class KeyManagement(ABC):
         resource (ignore the key) or per-key resources (e.g. a striped lock
         table or a key-specific file handle).
 
+        ``intent`` describes the kind of operation being performed.  Mixins
+        may use it to choose between exclusive and shared locks.  Currently
+        the only defined value is :attr:`Intent.WRITE` (the default).
+
         **Composing multiple mixins**: use ``super()`` to chain so that every
         mixin in the MRO gets to wrap the operation::
 
             @contextlib.contextmanager
-            def _operation_context(self, key):
+            def _operation_context(self, key, *, intent=Intent.WRITE):
                 with self._lock:                   # this mixin's resource
-                    with super()._operation_context(key):
+                    with super()._operation_context(key, intent=intent):
                         yield
         """
         yield
