@@ -744,10 +744,9 @@ class SshCache(BaseCache):
 
     def _shrink(self, *keys: Digest | str) -> "tuple[Digest, ...]":
         self._ensure_handshake()
-        r = self._conn.call("shrink", *keys)
         if len(keys) == 1:
-            r = (r,)
-        return r
+            return (self._conn.call("shrink", keys[0]),)
+        return self._conn.call("shrink", *keys)
 
     def _query(self, call: QueryCall) -> Iterable[LazyCall]:
         self._ensure_handshake()

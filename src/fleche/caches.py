@@ -455,10 +455,9 @@ class CacheWrapper(BaseCache):
         return self.cache.expand(key)
 
     def _shrink(self, *keys: Digest | str) -> "tuple[Digest, ...]":
-        r = self.cache.shrink(*keys)
         if len(keys) == 1:
-            r = (r,)
-        return r
+            return (self.cache.shrink(keys[0]),)
+        return self.cache.shrink(*keys)
 
     def _query(self, call: call.QueryCall) -> Iterable[LazyCall]:
         return self.cache.query(call)
