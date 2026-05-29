@@ -114,7 +114,7 @@ Example fleche.toml
     calls.root = "~/.fleche/calls"
 
     # SshCache — share results with another machine over SSH.  The remote
-    # runs `python -m fleche.remote --serve` and proxies into its own
+    # runs `python -m fleche remote --serve` and proxies into its own
     # configured cache.  Compose with a local cache by stacking two
     # entries (saves go to the first entry; reads fall back to the SSH
     # remote and back-fill hits into the local layer).
