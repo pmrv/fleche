@@ -12,7 +12,7 @@ from unittest.mock import Mock
 import pytest
 
 from fleche.call import Call
-from fleche.caches import Cache, CacheStack
+from fleche.caches import Cache, CacheStack, ReadOnlyCache
 from fleche.digest import Digest
 from fleche.storage import AmbiguousDigestError, ValueMemory, CallMemory
 
@@ -242,3 +242,53 @@ def test_cache_stack_shrink_multiple_keys_skips_layers_without_key():
     assert out == (Digest("aaaa"), Digest("bbbb"))
     c1.shrink.assert_called_once_with("a" * 64)
     c2.shrink.assert_called_once_with("b" * 64)
+
+
+# ---------------------------------------------------------------------------
+# CacheWrapper._shrink (ReadOnlyCache as a representative concrete subclass)
+# ---------------------------------------------------------------------------
+
+def _make_call(name: str, x: int) -> Call:
+    return Call(name=name, arguments={"x": x}, result="r", module="m", version="1.0", metadata={})
+
+
+def test_cache_wrapper_shrink_single_key_returns_digest_not_nested_tuple():
+    """CacheWrapper._shrink with one key must return a flat Digest, not a nested tuple.
+
+    ty flags ``(r,)`` as potentially creating ``tuple[tuple[Digest, ...]]``
+    when ``self.cache.shrink(*keys)`` is inferred as returning
+    ``tuple[Digest, ...]``.  At runtime BaseCache.shrink returns a bare
+    Digest for one key, so the wrap is correct — this test pins that.
+    """
+    inner = Cache(ValueMemory({}), CallMemory({}))
+    key = inner.save(_make_call("f", 1))
+    wrapper = ReadOnlyCache(inner)
+
+    short = wrapper.shrink(key)
+
+    assert isinstance(short, Digest), f"expected Digest, got {type(short)}: {short!r}"
+    assert not isinstance(short, tuple), "shrink(single_key) must not return a nested tuple"
+    assert inner.expand(short) == key
+
+
+def test_cache_wrapper_shrink_multiple_keys_returns_flat_tuple_of_digests():
+    """CacheWrapper._shrink with multiple keys must return a flat tuple[Digest, ...],
+    not tuple[tuple[Digest, ...]] (which would happen if the wrapping logic were wrong)."""
+    inner = Cache(ValueMemory({}), CallMemory({}))
+    k1 = inner.save(_make_call("f", 1))
+    k2 = inner.save(_make_call("g", 2))
+    wrapper = ReadOnlyCache(inner)
+
+    result = wrapper.shrink(k1, k2)
+
+    assert isinstance(result, tuple)
+    assert len(result) == 2
+    for element in result:
+        assert isinstance(element, Digest), (
+            f"expected each element to be a Digest, got {type(element)}: {element!r}"
+        )
+        assert not isinstance(element, tuple), (
+            "shrink result contains a nested tuple — CacheWrapper._shrink wrapping is broken"
+        )
+    assert inner.expand(result[0]) == k1
+    assert inner.expand(result[1]) == k2
