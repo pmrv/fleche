@@ -77,6 +77,27 @@ class MetaData(ABC):
         ...
 
 
+CONFIGURABLE: dict[str, type["MetaData"]] = {}
+
+
+def configurable(cls: type["MetaData"]) -> type["MetaData"]:
+    """Register a MetaData subclass as zero-arg configurable and set its name.
+
+    Sets ``cls.name`` to ``cls.__name__.lower()`` and adds the class to the
+    ``CONFIGURABLE`` registry under ``cls.__name__``, making it selectable from
+    the TOML ``[default] metadata = [...]`` list.  Classes that require
+    constructor arguments (e.g. ``Tags``) must **not** be decorated.
+
+    ``__abstractmethods__`` is updated so that the class attribute set here
+    satisfies the abstract ``name`` property declared on ``MetaData``.
+    """
+    cls.name = cls.__name__.lower()
+    cls.__abstractmethods__ = cls.__abstractmethods__ - {"name"}
+    CONFIGURABLE[cls.__name__] = cls
+    return cls
+
+
+@configurable
 class Runtime(MetaData):
     """Metadata type for capturing runtime information.
 
@@ -103,7 +124,6 @@ class Runtime(MetaData):
             'walltime': t - pre['timestart'],
         }
 
-    name: str = 'runtime'
     keys: dict[str, type] = {
             'timestart': float,
             'timestop': float,
@@ -111,6 +131,7 @@ class Runtime(MetaData):
     }
 
 
+@configurable
 class Environment(MetaData):
     """Metadata type for capturing the execution environment.
 
@@ -132,7 +153,6 @@ class Environment(MetaData):
             'python_version': platform.python_version(),
         }
 
-    name: str = 'environment'
     keys: dict[str, type] = {
             'hostname': str,
             'username': str,
@@ -156,6 +176,7 @@ def _git(*args: str) -> str | None:
     return result.stdout.strip()
 
 
+@configurable
 class Git(MetaData):
     """Metadata type for capturing the git state of the working directory.
 
@@ -183,7 +204,6 @@ class Git(MetaData):
             'dirty': bool(status) if status is not None else None,
         }
 
-    name: str = 'git'
     keys: dict[str, type] = {
             'root': str,
             'commit': str,

@@ -248,16 +248,10 @@ def load_default_metadata():
 
     meta_objects = []
     for name in meta_names:
-        if name == "Tags":
-            raise ValueError("Tags metadata cannot be configured from the config file.")
-        elif name == "Runtime":
-            meta_objects.append(metadata.Runtime())
-        elif name == "Environment":
-            meta_objects.append(metadata.Environment())
-        elif name == "Git":
-            meta_objects.append(metadata.Git())
-        else:
-            raise ValueError(f"Unknown metadata type in config: {name}")
+        cls = metadata.CONFIGURABLE.get(name)
+        if cls is None:
+            raise ValueError(f"Unknown or non-configurable metadata type in config: {name}")
+        meta_objects.append(cls())
 
     return tuple(meta_objects)
 
