@@ -106,9 +106,9 @@ def test_both_surfaces_skip_save_on_conflict():
     src1.transfer(dst1, overwrite=False)
     src2.query().transfer(dst2, overwrite=False)
 
-    # Target retains conflicting value on both surfaces
-    assert dst1.load(_call_a.to_lookup_key()).result == 999
-    assert dst2.load(_call_a.to_lookup_key()).result == 999
+    # Target retains conflicting value on both surfaces (== _call_a_conflict.result, not _call_a.result)
+    assert dst1.load(_call_a.to_lookup_key()).result == _call_a_conflict.result
+    assert dst2.load(_call_a.to_lookup_key()).result == _call_a_conflict.result
 
 
 def test_both_surfaces_skip_source_evict_on_conflict_with_pop():
@@ -136,5 +136,6 @@ def test_both_surfaces_overwrite_target_on_conflict():
     src1.transfer(dst1, overwrite=True)
     src2.query().transfer(dst2, overwrite=True)
 
-    assert dst1.load(_call_a.to_lookup_key()).result == 10
-    assert dst2.load(_call_a.to_lookup_key()).result == 10
+    # Source value replaces the conflicting entry (== _call_a.result, not _call_a_conflict.result)
+    assert dst1.load(_call_a.to_lookup_key()).result == _call_a.result
+    assert dst2.load(_call_a.to_lookup_key()).result == _call_a.result
