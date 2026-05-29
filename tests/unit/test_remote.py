@@ -537,7 +537,7 @@ def test_sshcache_default_command_has_no_shell_wrapper():
     finally:
         c.close()
     assert cmd[:2] == ["ssh", "user@example.com"]
-    assert cmd[2:] == ["python3", "-m", "fleche.remote", "--serve", "--cache", "shared"]
+    assert cmd[2:] == ["python3", "-m", "fleche", "remote", "--serve", "--cache", "shared"]
 
 
 def test_sshcache_setup_commands_prefixed_with_exec():
@@ -556,7 +556,7 @@ def test_sshcache_setup_commands_prefixed_with_exec():
     remote = cmd[2]
     assert remote.startswith("module load python/3.11 && source ~/.venv/bin/activate && exec ")
     # The server invocation is shell-quoted so paths with spaces survive.
-    assert "python3 -m fleche.remote --serve --cache shared" in remote
+    assert "python3 -m fleche remote --serve --cache shared" in remote
 
 
 def test_sshcache_setup_commands_config_round_trip():
@@ -609,7 +609,7 @@ def test_sshcache_workdir_cds_before_exec():
     remote = cmd[2]
     # The workdir is shell-quoted so paths with spaces survive.
     assert remote.startswith("cd '~/my project' && exec ")
-    assert "python3 -m fleche.remote --serve --cache shared" in remote
+    assert "python3 -m fleche remote --serve --cache shared" in remote
 
 
 def test_sshcache_workdir_runs_before_setup_commands():

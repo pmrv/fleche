@@ -1,6 +1,6 @@
 """End-to-end integration tests for :class:`fleche.remote.SshCache`.
 
-These tests bypass SSH entirely: ``python -m fleche.remote --serve`` is
+These tests bypass SSH entirely: ``python -m fleche remote --serve`` is
 launched as a local subprocess so the same stdin/stdout RPC machinery used
 in production is exercised in full, including module loading, config file
 parsing on the server side, and the ``Popen`` handshake on the client side.
@@ -18,7 +18,7 @@ from fleche.remote import SshCache, _Connection
 
 
 class _LocalSubprocessConnection(_Connection):
-    """Launch ``python -m fleche.remote --serve`` directly (no SSH)."""
+    """Launch ``python -m fleche remote --serve`` directly (no SSH)."""
 
     def __init__(self, cache_name=None, env=None, cwd=None):
         super().__init__()
@@ -28,7 +28,7 @@ class _LocalSubprocessConnection(_Connection):
         self._proc = None
 
     def _open(self):
-        cmd = [sys.executable, "-m", "fleche.remote", "--serve"]
+        cmd = [sys.executable, "-m", "fleche", "remote", "--serve"]
         if self._cache_name is not None:
             cmd.extend(["--cache", self._cache_name])
         self._proc = subprocess.Popen(

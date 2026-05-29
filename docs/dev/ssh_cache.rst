@@ -25,7 +25,7 @@ itself: SSH provides confidentiality and authentication of the
 endpoints, and we trust both ends not to ship hostile pickled objects.
 **Do not point** :class:`~fleche.remote.SshCache` **at a host you would
 not** ``ssh`` **into**, and do not expose the server entry point
-(``python -m fleche.remote --serve``) on any transport other than the
+(``python -m fleche remote --serve``) on any transport other than the
 spawned SSH stdin/stdout — there is no authentication on the RPC
 stream itself.
 
@@ -280,7 +280,7 @@ constructed remote command looks like:
 
 .. code-block:: text
 
-   cd <workdir> && <snippet1> && <snippet2> && ... && exec <python> -m fleche.remote --serve
+   cd <workdir> && <snippet1> && <snippet2> && ... && exec <python> -m fleche remote --serve
 
 The trailing ``exec`` replaces the wrapping shell so stdin/stdout pipe
 straight through to the server process — no extra layer to corrupt the
@@ -340,7 +340,7 @@ Active cache on the remote
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The server's served cache *is* its active cache.  ``python -m
-fleche.remote --serve`` installs the named cache on the
+fleche remote --serve`` installs the named cache on the
 ``fleche.state._CACHE`` ContextVar before entering the request loop,
 so any code path on the remote that consults ``fleche.cache()``
 independently — metadata hooks, ``LazyCall._cache`` references, nested
@@ -382,7 +382,7 @@ The module ships two layers of tests, both in ``tests/{unit,integration}/test_re
   :class:`fleche.remote._Connection` subclass directly with no server
   on the other side; see ``test_connection_drop_includes_diagnose_output``.
 
-- **Integration tests** launch ``python -m fleche.remote --serve`` as
+- **Integration tests** launch ``python -m fleche remote --serve`` as
   a local subprocess (still no SSH involved) so the full
   ``Popen``-with-three-pipes handshake, module loading, and config-file
   parsing on the server side are all exercised.  Each test uses a

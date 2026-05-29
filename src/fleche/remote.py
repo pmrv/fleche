@@ -1,10 +1,11 @@
 """SSH-connected cache for sharing fleche results across machines.
 
 :class:`SshCache` is a :class:`~fleche.caches.BaseCache` that forwards every
-operation to a remote ``python -m fleche.remote`` process over a single
-persistent SSH subprocess.  The remote process loads its own ``fleche.toml``
-and proxies operations into whichever cache it has configured, so the remote
-side keeps full freedom to use any backend (file / SQL / HDF5 / stack).
+operation to a remote ``python -m fleche remote --serve`` process over a
+single persistent SSH subprocess.  The remote process loads its own
+``fleche.toml`` and proxies operations into whichever cache it has
+configured, so the remote side keeps full freedom to use any backend
+(file / SQL / HDF5 / stack).
 
 Typical configuration in ``fleche.toml`` — local cache first, remote cache
 second, composed automatically into a :class:`~fleche.caches.CacheStack`::
@@ -38,7 +39,6 @@ a single run only one authentication round-trip is required.
 """
 
 import abc
-import argparse
 import atexit
 import collections
 import logging
@@ -470,7 +470,7 @@ class _Connection(abc.ABC):
 
 
 class _SshConnection(_Connection):
-    """Persistent ``ssh host python -m fleche.remote --serve`` subprocess.
+    """Persistent ``ssh host python -m fleche remote --serve`` subprocess.
 
     One subprocess per :class:`SshCache` instance.  Spawned lazily on the
     first RPC and reused for the lifetime of the Python process; never
@@ -531,7 +531,7 @@ class _SshConnection(_Connection):
         cmd = ["ssh"]
         cmd.extend(self._ssh_options)
         cmd.append(self._host)
-        server_argv = [self._python, "-m", "fleche.remote", "--serve"]
+        server_argv = [self._python, "-m", "fleche", "remote", "--serve"]
         if self._cache_name is not None:
             server_argv.extend(["--cache", self._cache_name])
         # A `cd` into the working directory runs first so the server process —
@@ -642,7 +642,7 @@ def _forward_stderr(
 class SshCache(BaseCache):
     """A cache that forwards every operation to a remote fleche over SSH.
 
-    The remote side runs ``python -m fleche.remote --serve``; its active
+    The remote side runs ``python -m fleche remote --serve``; its active
     cache is determined by its own ``fleche.toml`` (optionally overridden by
     *cache_name* — looked up via :func:`fleche.config.load_cache_config`).
 
@@ -841,43 +841,31 @@ class SshCache(BaseCache):
 
 
 # ---------------------------------------------------------------------------
-# Module entry point: `python -m fleche.remote --serve [--cache NAME]`
+# Server entry point: invoked by `python -m fleche remote --serve` via
+# `fleche.__main__`.  Not exposed as `__main__` here because the package's
+# `__init__` transitively imports `fleche.remote`, so running this file
+# directly would trigger the `runpy` double-import warning.
 # ---------------------------------------------------------------------------
 
 
-def _main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="python -m fleche.remote")
-    parser.add_argument(
-        "--serve",
-        action="store_true",
-        help="run the remote cache server reading RPC frames from stdin",
-    )
-    parser.add_argument(
-        "--cache",
-        default=None,
-        help="named cache from the remote fleche.toml (default: the file's default)",
-    )
-    args = parser.parse_args(argv)
-    if not args.serve:
-        parser.error("nothing to do; pass --serve to run the cache server")
+def _run_server(cache_name: str | None) -> int:
+    """Load *cache_name* (or the default) and run :func:`serve` over stdio.
+
+    Installs the requested cache as the *active* one (via the ContextVar in
+    :mod:`fleche.state`) so anything executed inside the served cache —
+    metadata hooks, value-loading through ``LazyCall`` references, nested
+    ``@fleche()`` calls — sees the same cache the RPC layer is dispatching
+    against.  ``load_cache_config()`` alone only constructs the cache; it
+    doesn't activate it.
+    """
     from . import cache as activate_cache
 
-    # Install the requested cache as the *active* one (via the ContextVar in
-    # state.py) so anything executed inside the served cache — metadata
-    # hooks, value-loading through LazyCall references, nested @fleche()
-    # calls — sees the same cache the RPC layer is dispatching against.
-    # `load_cache_config()` alone only constructs the cache; it doesn't
-    # activate it.
-    if args.cache is not None:
-        activate_cache(args.cache)
+    if cache_name is not None:
+        activate_cache(cache_name)
     cache = activate_cache()
-    logger.info("serving remote fleche cache (name=%r): %r", args.cache, cache)
-    serve(sys.stdin.buffer, sys.stdout.buffer, cache, cache_name=args.cache)
+    logger.info("serving remote fleche cache (name=%r): %r", cache_name, cache)
+    serve(sys.stdin.buffer, sys.stdout.buffer, cache, cache_name=cache_name)
     return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(_main(sys.argv[1:]))
 
 
 __all__ = [

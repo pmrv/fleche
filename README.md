@@ -131,7 +131,7 @@ def my_function(x):
 
 ### SSH (remote) Cache
 - **Requires `cloudpickle`** (`pip install fleche[ssh]`) — used as the wire protocol between client and remote server; not optional
-- Forwards every cache operation over a persistent `ssh host python -m fleche.remote --serve` subprocess
+- Forwards every cache operation over a persistent `ssh host python -m fleche remote --serve` subprocess
 - Stack with a local cache to read-through to a shared remote one — see `fleche.remote.SshCache`
 
 ### In-Memory Storage
