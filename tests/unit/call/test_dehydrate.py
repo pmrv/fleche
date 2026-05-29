@@ -277,3 +277,80 @@ class TestDigestedCallDigestEquivalence:
         call_a = _call(metadata={"Runtime": {"elapsed": 1.0}})
         call_b = _call(metadata={"Runtime": {"elapsed": 9.9}})
         assert digest(call_a.digest()) != digest(call_b.digest())
+
+
+# ---------------------------------------------------------------------------
+# LazyCall.to_digested_call  —  round-trip with DigestedCall.fetch
+#
+# Asserts field equality so any future LazyCall representation change that
+# breaks the coupling between call.py and remote.py fails loudly here.
+# ---------------------------------------------------------------------------
+
+class TestLazyCallToDigestedCall:
+    """LazyCall.to_digested_call() is the inverse of DigestedCall.fetch()."""
+
+    def _lazy(self, **kwargs):
+        values = _mem()
+        cache = _cache(values)
+        call = _call(**kwargs)
+        stashed = call.stash(values)
+        return stashed.fetch(cache)
+
+    def test_returns_digested_call(self):
+        lc = self._lazy()
+        assert isinstance(lc.to_digested_call(), DigestedCall)
+
+    def test_field_equality_with_originating_digested_call(self):
+        """to_digested_call() reproduces every field of the DigestedCall it came from."""
+        values = _mem()
+        cache = _cache(values)
+        call = _call(arguments={"x": 10, "y": 20}, result=42,
+                     metadata={"Runtime": {"elapsed": 1.5}},
+                     module="mymod", version=3, code_digest="abc")
+        dc = call.stash(values)
+        lc = dc.fetch(cache)
+        dc2 = lc.to_digested_call()
+
+        assert dc2.name == dc.name
+        assert dc2.arguments == dc.arguments
+        assert dc2.result == dc.result
+        assert dc2.metadata == dc.metadata
+        assert dc2.module == dc.module
+        assert dc2.version == dc.version
+        assert dc2.code_digest == dc.code_digest
+
+    def test_round_trip_fetch_to_digested_call(self):
+        """fetch(cache).to_digested_call() == original DigestedCall (field-wise)."""
+        values = _mem()
+        cache = _cache(values)
+        call = _call()
+        dc = call.stash(values)
+        assert dc == dc.fetch(cache).to_digested_call()
+
+    def test_to_digested_call_has_no_cache_reference(self):
+        """The returned DigestedCall carries no _cache field."""
+        lc = self._lazy()
+        dc = lc.to_digested_call()
+        assert not hasattr(dc, "_cache")
+
+    def test_arguments_are_independent_copy(self):
+        """Mutating the returned arguments dict does not affect the LazyCall."""
+        lc = self._lazy()
+        dc = lc.to_digested_call()
+        dc.arguments["injected"] = Digest("a" * 64)
+        assert "injected" not in lc._arguments
+
+    def test_metadata_is_independent_copy(self):
+        """Mutating the returned metadata dict does not affect the LazyCall."""
+        lc = self._lazy(metadata={"Runtime": {"elapsed": 1.0}})
+        dc = lc.to_digested_call()
+        dc.metadata["injected"] = {}
+        assert "injected" not in lc.metadata
+
+    def test_lookup_key_preserved(self):
+        """to_digested_call() preserves the lookup key."""
+        values = _mem()
+        cache = _cache(values)
+        call = _call()
+        lc = call.stash(values).fetch(cache)
+        assert lc.to_digested_call().to_lookup_key() == call.to_lookup_key()
