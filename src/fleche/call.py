@@ -397,6 +397,23 @@ class LazyCall:
             result=self.result
         )
 
+    def detach(self) -> "DigestedCall":
+        """Return the cache-free :class:`DigestedCall` shadow of this :class:`LazyCall`.
+
+        The inverse of :meth:`DigestedCall.fetch`: strips the ``_cache``
+        reference so the result can cross process boundaries (e.g. over the
+        wire in :mod:`fleche.remote`) without carrying a live cache pointer.
+        """
+        return DigestedCall(
+            name=self.name,
+            arguments=dict(self._arguments),
+            result=self._result,
+            metadata=dict(self.metadata),
+            module=self.module,
+            version=self.version,
+            code_digest=self.code_digest,
+        )
+
     def __digest__(self):
         # Reconstruct a Call object to ensure identical digest calculation
         c = Call(

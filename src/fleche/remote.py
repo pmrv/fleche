@@ -118,15 +118,7 @@ def _strip_cache(lc: LazyCall) -> DigestedCall:
     travel across the wire — the client wraps the returned ``DigestedCall``
     back into a :class:`LazyCall` bound to itself via ``DigestedCall.fetch``.
     """
-    return DigestedCall(
-        name=lc.name,
-        arguments=dict(lc._arguments),
-        result=lc._result,
-        metadata=dict(lc.metadata),
-        module=lc.module,
-        version=lc.version,
-        code_digest=lc.code_digest,
-    )
+    return lc.detach()
 
 
 def _dispatch(cache: BaseCache, method: str, args: tuple, kwargs: dict) -> Any:
