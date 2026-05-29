@@ -17,9 +17,9 @@ def test_mixin_composition_chains_through_super():
 
     class TrackingMixin(SerializingMixin):
         @contextlib.contextmanager
-        def _operation_context(self, key):
+        def _operation_context(self, key, *, intent="write"):
             entered.append(key)
-            with super()._operation_context(key):
+            with super()._operation_context(key, intent=intent):
                 yield
 
     @dataclass(frozen=True)
@@ -47,9 +47,9 @@ def test_operation_context_wraps_evict_and_contains():
 
     class TrackingMixin(SerializingMixin):
         @contextlib.contextmanager
-        def _operation_context(self, key):
+        def _operation_context(self, key, *, intent="write"):
             called_with.append(("enter", str(key)[:4]))
-            with super()._operation_context(key):
+            with super()._operation_context(key, intent=intent):
                 yield
             called_with.append(("exit", str(key)[:4]))
 
@@ -67,3 +67,45 @@ def test_operation_context_wraps_evict_and_contains():
     called_with.clear()
     store.evict(key)
     assert any(e[0] == "enter" for e in called_with)
+
+
+def test_intent_default_is_write():
+    """The default intent passed to _operation_context is 'write'."""
+    intents_seen = []
+
+    class TrackingMixin(SerializingMixin):
+        @contextlib.contextmanager
+        def _operation_context(self, key, *, intent="write"):
+            intents_seen.append(intent)
+            with super()._operation_context(key, intent=intent):
+                yield
+
+    @dataclass(frozen=True)
+    class Tracked(TrackingMixin, _PlainValueMemory):
+        pass
+
+    store = Tracked(storage={})
+    store.save(1)
+    assert all(i == "write" for i in intents_seen)
+
+
+def test_intent_propagates_through_mixin_chain():
+    """intent is forwarded correctly through every layer in the MRO."""
+    collected = []
+
+    class OuterMixin(SerializingMixin):
+        @contextlib.contextmanager
+        def _operation_context(self, key, *, intent="write"):
+            collected.append(("outer", intent))
+            with super()._operation_context(key, intent=intent):
+                yield
+
+    @dataclass(frozen=True)
+    class Tracked(OuterMixin, _PlainValueMemory):
+        pass
+
+    store = Tracked(storage={})
+    with store._operation_context("k", intent="write"):
+        pass
+
+    assert collected == [("outer", "write")]

@@ -84,9 +84,9 @@ class SerializingMixin(KeyManagement):
     )
 
     @contextlib.contextmanager
-    def _operation_context(self, key):
+    def _operation_context(self, key, *, intent: str = "write"):
         with self._lock:
-            with super()._operation_context(key):
+            with super()._operation_context(key, intent=intent):
                 yield
 
 
@@ -136,8 +136,8 @@ class PerKeyLockMixin(KeyManagement):
             return lock
 
     @contextlib.contextmanager
-    def _operation_context(self, key):
+    def _operation_context(self, key, *, intent: str = "write"):
         with self._get_key_lock(key):
-            with super()._operation_context(key):
+            with super()._operation_context(key, intent=intent):
                 yield
 

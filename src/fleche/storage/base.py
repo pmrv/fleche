@@ -57,7 +57,7 @@ class KeyManagement(ABC):
     """
 
     @contextlib.contextmanager
-    def _operation_context(self, key: Digest | str):
+    def _operation_context(self, key: Digest | str, *, intent: str = "write"):
         """Context manager entered around every operation on ``key``.
 
         The base implementation is a no-op.  Override in a mixin to inject
@@ -68,13 +68,17 @@ class KeyManagement(ABC):
         resource (ignore the key) or per-key resources (e.g. a striped lock
         table or a key-specific file handle).
 
+        ``intent`` describes the kind of operation being performed.  Mixins
+        may use it to choose between exclusive and shared locks.  Currently
+        the only defined value is ``"write"`` (the default).
+
         **Composing multiple mixins**: use ``super()`` to chain so that every
         mixin in the MRO gets to wrap the operation::
 
             @contextlib.contextmanager
-            def _operation_context(self, key):
+            def _operation_context(self, key, *, intent="write"):
                 with self._lock:                   # this mixin's resource
-                    with super()._operation_context(key):
+                    with super()._operation_context(key, intent=intent):
                         yield
         """
         yield
