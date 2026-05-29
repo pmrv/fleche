@@ -65,16 +65,8 @@ class MetaData(ABC):
         """
         ...
 
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        """
-        The unique name of this metadata type.
-
-        Returns:
-            str: The name of the metadata type.
-        """
-        ...
+    name: str
+    """The unique name of this metadata type."""
 
 
 CONFIGURABLE: dict[str, type["MetaData"]] = {}
@@ -87,12 +79,8 @@ def configurable(cls: type["MetaData"]) -> type["MetaData"]:
     ``CONFIGURABLE`` registry under ``cls.__name__``, making it selectable from
     the TOML ``[default] metadata = [...]`` list.  Classes that require
     constructor arguments (e.g. ``Tags``) must **not** be decorated.
-
-    ``__abstractmethods__`` is updated so that the class attribute set here
-    satisfies the abstract ``name`` property declared on ``MetaData``.
     """
     cls.name = cls.__name__.lower()
-    cls.__abstractmethods__ = cls.__abstractmethods__ - {"name"}
     CONFIGURABLE[cls.__name__] = cls
     return cls
 
