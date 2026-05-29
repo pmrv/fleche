@@ -63,21 +63,7 @@ class BaseCache(ABC):
             overwrite: If True, overwrite existing entries in the target cache.
                 If False (default), skip entries that already exist in the target.
         """
-        tpl = call.QueryCall(name=None, arguments=None, metadata=None, module=None, version=None, result=None)
-        for c in self.query(tpl):
-            c = c.fetch()
-            key = c.to_lookup_key()
-            conflict = not overwrite and other.contains(key)
-            if not conflict:
-                other.save(c)
-            if pop:
-                if conflict:
-                    logger.warning(
-                        "Not evicting %s from source: already exists in target and overwrite=False",
-                        key,
-                    )
-                else:
-                    self.evict(key)
+        self.query().transfer(other, pop=pop, overwrite=overwrite)
                     
     def readonly(self) -> "ReadOnlyCache":
         """Return a read-only view of this cache."""

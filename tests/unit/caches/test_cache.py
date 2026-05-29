@@ -234,7 +234,7 @@ def test_base_cache_transfer_no_overwrite_and_pop(caplog):
     c1.save(call2)
     c2.save(call1_existing)
 
-    with caplog.at_level(logging.WARNING, logger="fleche.cache"):
+    with caplog.at_level(logging.WARNING, logger="fleche.query"):
         c1.transfer(c2, pop=True, overwrite=False)
 
     # call2 should now be in c2 (was new) and evicted from c1
@@ -244,8 +244,8 @@ def test_base_cache_transfer_no_overwrite_and_pop(caplog):
     assert c2.load(str(call1.to_lookup_key())).result == "existing"
     # call1 should still be in c1 — NOT evicted because it conflicted
     assert c1.contains(str(call1.to_lookup_key()))
-    # a warning should have been emitted for the skipped eviction
-    assert any("Not evicting" in m for m in caplog.messages)
+    # a warning should have been emitted for the skipped conflict
+    assert any("Not transferring" in m for m in caplog.messages)
 
 
 def test_cache_query_decodes_values_and_args(monkeypatch):
