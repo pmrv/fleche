@@ -93,7 +93,6 @@ class BaseCache(ABC):
     def shrink(self, key: Digest | str, /) -> Digest: ...
     @overload
     def shrink(self, key: Digest | str, /, *keys: Digest | str) -> "tuple[Digest, ...]": ...
-    @abstractmethod
     def shrink(self, *keys: Digest | str) -> "Digest | tuple[Digest, ...]":
         """
         Find the shortest substring(s) that unambiguously reference each call.
@@ -124,6 +123,14 @@ class BaseCache(ABC):
         Raises:
             :class:`AmbiguousDigestError`: if no shorter key is possible for any input
         """
+        if not keys:
+            raise TypeError("shrink() requires at least one key")
+        out = self._shrink(*keys)
+        return out[0] if len(keys) == 1 else out
+
+    @abstractmethod
+    def _shrink(self, *keys: Digest | str) -> "tuple[Digest, ...]":
+        """Partition and shrink all keys; always returns a same-length tuple of short digests."""
         ...
 
     @abstractmethod
@@ -282,13 +289,7 @@ class Cache(BaseCache):
                 pass
         return _combine_expand(key, results)
 
-    @overload
-    def shrink(self, key: Digest | str, /) -> Digest: ...
-    @overload
-    def shrink(self, key: Digest | str, /, *keys: Digest | str) -> "tuple[Digest, ...]": ...
-    def shrink(self, *keys: Digest | str) -> "Digest | tuple[Digest, ...]":
-        if not keys:
-            raise TypeError("shrink() requires at least one key")
+    def _shrink(self, *keys: Digest | str) -> "tuple[Digest, ...]":
         call_keys: list = []
         value_keys: list = []
         for k in keys:
@@ -307,8 +308,7 @@ class Cache(BaseCache):
                 r = (r,)
             for k, s in zip(ks, r):
                 results[k] = s
-        out = tuple(results[k] for k in keys)
-        return out[0] if len(keys) == 1 else out
+        return tuple(results[k] for k in keys)
 
     def _query(self, call: call.QueryCall) -> Iterable[LazyCall]:
         """Query for cached calls that match a template and return decoded results.
@@ -440,11 +440,9 @@ class CacheWrapper(BaseCache):
     def expand(self, key: Digest | str) -> Digest:
         return self.cache.expand(key)
 
-    @overload
-    def shrink(self, key: Digest | str, /) -> Digest: ...
-    @overload
-    def shrink(self, key: Digest | str, /, *keys: Digest | str) -> "tuple[Digest, ...]": ...
-    def shrink(self, *keys: Digest | str) -> "Digest | tuple[Digest, ...]":
+    def _shrink(self, *keys: Digest | str) -> "tuple[Digest, ...]":
+        if len(keys) == 1:
+            return (self.cache.shrink(keys[0]),)
         return self.cache.shrink(*keys)
 
     def _query(self, call: call.QueryCall) -> Iterable[LazyCall]:
@@ -563,13 +561,7 @@ class CacheStack(BaseCache):
     def expand(self, key: Digest | str) -> Digest:
         return _combine_expand(key, self._collect(lambda c: c.expand(key)))
 
-    @overload
-    def shrink(self, key: Digest | str, /) -> Digest: ...
-    @overload
-    def shrink(self, key: Digest | str, /, *keys: Digest | str) -> "tuple[Digest, ...]": ...
-    def shrink(self, *keys: Digest | str) -> "Digest | tuple[Digest, ...]":
-        if not keys:
-            raise TypeError("shrink() requires at least one key")
+    def _shrink(self, *keys: Digest | str) -> "tuple[Digest, ...]":
         per_key: dict = {k: [] for k in keys}
         for cache in self.stack:
             present = [k for k in keys if cache.contains(k)]
@@ -585,8 +577,7 @@ class CacheStack(BaseCache):
             if not per_key[k]:
                 raise KeyError(k)
             out_list.append(_combine_shrink(k, per_key[k]))
-        out = tuple(out_list)
-        return out[0] if len(keys) == 1 else out
+        return tuple(out_list)
 
     def _query(self, call: call.QueryCall) -> Iterable[LazyCall]:
         """Aggregate query results across the stack, avoiding duplicates.

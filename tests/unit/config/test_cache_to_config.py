@@ -108,8 +108,8 @@ def test_cache_to_config_unknown_raises():
         def expand(self, key):
             raise KeyError(key)
 
-        def shrink(self, key):
-            raise KeyError(key)
+        def _shrink(self, *keys):
+            raise KeyError(keys[0])
 
         def _query(self, call):
             return iter([])

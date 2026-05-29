@@ -51,7 +51,7 @@ import sys
 import threading
 import traceback
 from dataclasses import dataclass, field
-from typing import Any, Iterable, overload
+from typing import Any, Iterable
 
 from pyiron_snippets.import_alarm import ImportAlarm
 
@@ -734,15 +734,10 @@ class SshCache(BaseCache):
         self._ensure_handshake()
         return self._conn.call("expand", key)
 
-    @overload
-    def shrink(self, key: Digest | str, /) -> Digest: ...
-    @overload
-    def shrink(
-        self, key: Digest | str, /, *keys: Digest | str
-    ) -> "tuple[Digest, ...]": ...
-
-    def shrink(self, *keys: Digest | str) -> "Digest | tuple[Digest, ...]":
+    def _shrink(self, *keys: Digest | str) -> "tuple[Digest, ...]":
         self._ensure_handshake()
+        if len(keys) == 1:
+            return (self._conn.call("shrink", keys[0]),)
         return self._conn.call("shrink", *keys)
 
     def _query(self, call: QueryCall) -> Iterable[LazyCall]:
