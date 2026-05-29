@@ -17,6 +17,7 @@ jobs:
             run:
               - 'src/**'
               - 'tests/**'
+              - 'pyproject.toml'
 
   build:
     needs: changes
