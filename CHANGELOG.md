@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.16.0](https://github.com/pmrv/fleche/compare/0.15.0...0.16.0) (2026-05-30)
+
+
+### Features
+
+* add LazyCall.to_digested_call() — public inverse of DigestedCall.fetch() ([#599](https://github.com/pmrv/fleche/issues/599)) ([a4e06f8](https://github.com/pmrv/fleche/commit/a4e06f8fbf88d44b84aaf5586b6b7a3efdbdb34c))
+* **storage:** add `intent` parameter to `_operation_context` (step 1 of [#569](https://github.com/pmrv/fleche/issues/569)) ([#601](https://github.com/pmrv/fleche/issues/601)) ([6562c7f](https://github.com/pmrv/fleche/commit/6562c7f9cc8ba9efa4198ac52af4aeea5fcf4672))
+
 ## [0.15.0](https://github.com/pmrv/fleche/compare/0.14.0...0.15.0) (2026-05-28)
 
 
