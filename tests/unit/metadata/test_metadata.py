@@ -10,7 +10,7 @@ import pytest
 import fleche as fleche_pkg
 from fleche import fleche, cache, tags, project, meta
 from fleche.caches import Cache
-from fleche.metadata import Environment, Git, MetaData, Call
+from fleche.metadata import CONFIGURABLE, Environment, Git, MetaData, Runtime, Tags, Call, configurable
 from fleche.storage import ValueMemory, CallMemory
 
 
@@ -297,3 +297,29 @@ def test_metadata_default_methods():
 
     assert meta.pre(call) == {}
     assert meta.post({}, call) == {}
+
+
+def test_configurable_registry_contains_builtins():
+    assert CONFIGURABLE == {"Runtime": Runtime, "Environment": Environment, "Git": Git}
+
+
+def test_configurable_sets_name():
+    assert Runtime().name == "runtime"
+    assert Environment().name == "environment"
+    assert Git().name == "git"
+
+
+def test_configurable_decorator_registers_and_names():
+    @configurable
+    class MyMeta(MetaData):
+        keys: dict = {}
+
+    try:
+        assert MyMeta.name == "mymeta"
+        assert CONFIGURABLE.get("MyMeta") is MyMeta
+    finally:
+        CONFIGURABLE.pop("MyMeta", None)
+
+
+def test_tags_not_in_configurable():
+    assert Tags not in CONFIGURABLE.values()
