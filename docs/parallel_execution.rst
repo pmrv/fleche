@@ -348,20 +348,6 @@ When to prefer each pattern
      - Wrapping expensive async-style code inside a decorated helper
      - Transparently caching existing executor-based pipelines
 
-The ``isolate`` Flag
---------------------
-
-The ``@fleche(isolate=True)`` option creates a temporary working directory for
-each function invocation to prevent file-system conflicts when the wrapped
-function writes to the current directory.  This is useful for parallel
-execution of functions that produce side-effect files.
-
-.. warning::
-
-   ``os.chdir()`` is **process-wide and not thread-safe**.  The ``isolate``
-   flag should only be combined with process-based executors, not with
-   ``ThreadPoolExecutor``.
-
 
 Quick Reference
 ---------------

@@ -1,11 +1,7 @@
-import os
-from pathlib import Path
 from functools import wraps, partial
 from types import SimpleNamespace
 from typing import Any, Callable, Dict, Iterable, TypeVar
 from dataclasses import dataclass, replace
-import tempfile
-import contextlib
 from collections import defaultdict
 from concurrent.futures import Future
 
@@ -44,16 +40,6 @@ def process_ignore_required_args(
     return replace(profile,
                    ignored=profile.ignored | extra_ignored,
                    required=profile.required | extra_required)
-
-
-def _get_working_directory_root() -> Path:
-    """
-    Determines the root directory for fleche working directories, following the XDG spec.
-    """
-    xdg_cache_home = os.environ.get("XDG_CACHE_HOME") or (Path.home() / ".cache")
-    root = Path(xdg_cache_home) / "fleche" / "cwd"
-    root.mkdir(parents=True, exist_ok=True)
-    return root
 
 
 def _attach(wrapper, fn, *, name, doc_prefix, ret=None, extra_doc=""):
@@ -102,14 +88,13 @@ class _HelperSpec:
 
 class _HelpersCtx:
     """Mutable context accumulated while building helpers for a fleche-decorated function."""
-    __slots__ = ('func', 'policy', 'meta', 'isolate', 'hash_version', 'hash_module', 'hash_code',
+    __slots__ = ('func', 'policy', 'meta', 'hash_version', 'hash_module', 'hash_code',
                  'get_call', 'digest_func', 'wrapper')
 
-    def __init__(self, func, policy, meta, isolate, hash_version, hash_module, hash_code):
+    def __init__(self, func, policy, meta, hash_version, hash_module, hash_code):
         self.func = func
         self.policy = policy
         self.meta = meta
-        self.isolate = isolate
         self.hash_version = hash_version
         self.hash_module = hash_module
         self.hash_code = hash_code
@@ -167,7 +152,7 @@ def make_rerun(func, wrapper):
     return _rerun_func
 
 
-def make_wrapper(func, policy, meta, isolate, get_call):
+def make_wrapper(func, policy, meta, get_call):
     """Build the cached wrapper returned by :func:`fleche`."""
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> _T:
@@ -238,15 +223,7 @@ def make_wrapper(func, policy, meta, isolate, get_call):
                 result.add_done_callback(_cache)
                 return result
 
-        if isolate:
-            root = _get_working_directory_root()
-            # Create a unique working directory to avoid race conditions during concurrent execution.
-            # NOTE: os.chdir is process-wide and not thread-safe.
-            with tempfile.TemporaryDirectory(dir=root, prefix=f"{key}_") as workdir:
-                with contextlib.chdir(workdir):
-                    return _run_and_cache()
-        else:
-            return _run_and_cache()
+        return _run_and_cache()
     return wrapper
 
 
@@ -324,7 +301,6 @@ def fleche(
     hash_code: bool = False,
     require: None | str | list[str] | tuple[str] = None,
     ignore: None | str | list[str] | tuple[str] = None,
-    isolate: bool = False,
 ):
     """
     Cache decorator for functions.
@@ -342,18 +318,6 @@ def fleche(
     - .bind(*args, **kwargs): Create a :class:`.BoundWrapper` that freezes the current cache/metadata state.
       Optionally pre-applies *args*/*kwargs* via :func:`functools.partial`.
     The original function is available via .__wrapped__.
-
-    .. warning::
-
-        ``isolate=True`` is **not thread-safe**.  Internally it calls
-        :func:`os.chdir`, which is a process-wide POSIX syscall shared by all
-        threads.  Concurrent calls with ``isolate=True`` from multiple threads
-        will clobber each other's working directory, and a thread may find its
-        temporary directory deleted before it has finished using it.
-
-        Use ``isolate=True`` only from a single thread, or run isolated calls
-        in separate processes (e.g. via :class:`concurrent.futures.ProcessPoolExecutor`)
-        where each process has its own working directory.
     """
 
     def decorator(func: Callable[..., _T]) -> Callable[..., _T]:
@@ -364,7 +328,7 @@ def fleche(
             func.__version__ = version  # ty: ignore
 
         policy = process_ignore_required_args(func, ignore, require)
-        ctx = _HelpersCtx(func, policy, meta, isolate, hash_version, hash_module, hash_code)
+        ctx = _HelpersCtx(func, policy, meta, hash_version, hash_module, hash_code)
 
         helper_entries: list[tuple[_HelperSpec, Callable]] = []
         for spec in _PRE_WRAPPER_SPECS:
@@ -373,7 +337,7 @@ def fleche(
                 setattr(ctx, spec.ctx_attr, fn)
             helper_entries.append((spec, fn))
 
-        ctx.wrapper = wrapper = make_wrapper(ctx.func, ctx.policy, ctx.meta, ctx.isolate, ctx.get_call)
+        ctx.wrapper = wrapper = make_wrapper(ctx.func, ctx.policy, ctx.meta, ctx.get_call)
 
         for spec in _POST_WRAPPER_SPECS:
             helper_entries.append((spec, spec.builder(ctx)))
