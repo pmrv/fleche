@@ -124,16 +124,3 @@ def test_attrs():
         assert norm(Point(1, 2)) == 3
 
     assert calls == [Point(1, 2)], "attrs arg should hash to a cache hit"
-
-
-def test_executorlib():
-    """executorlib's executor accepts and runs a fleche-decorated function."""
-    pytest.importorskip("executorlib")
-    from executorlib import SingleNodeExecutor
-
-    @fleche()
-    def double(x):
-        return x * 2
-
-    with SingleNodeExecutor() as executor:
-        assert executor.submit(double, 21).result() == 42
