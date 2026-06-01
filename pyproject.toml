@@ -10,6 +10,11 @@ package-dir = {""  = "src"}
 version_file = "src/fleche/_version.py"
 fallback_version = "0.0.0"
 
+[tool.pytest.ini_options]
+markers = [
+    "smoke: minimal, fast tests touching each optional dependency end-to-end (run with `pytest -m smoke`) — intended as a pre-release sanity check of the packaged distribution.",
+]
+
 [project]
 name = "fleche"
 dynamic = ["version"]
