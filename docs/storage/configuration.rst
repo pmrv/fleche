@@ -4,9 +4,10 @@ Configuration
 ``fleche`` discovers configuration by walking the filesystem from the
 current working directory upward, collecting every ``fleche.toml`` it
 encounters.  The walk stops at ``$HOME`` (inclusive) or at the filesystem
-root, whichever comes first.  If ``$XDG_CONFIG_HOME`` is set,
-``$XDG_CONFIG_HOME/fleche/cache.toml`` is appended as a final
-lowest-priority layer.
+root, whichever comes first.  ``$XDG_CONFIG_HOME/fleche/cache.toml`` is
+then appended as a final lowest-priority layer, defaulting to
+``~/.config/fleche/cache.toml`` when ``$XDG_CONFIG_HOME`` is unset or
+empty (per the XDG base directory spec).
 
 All discovered files are **shallow-merged** at the top level: files closer
 to the current directory win, and a closer file's top-level table fully
