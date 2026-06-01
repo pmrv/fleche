@@ -164,6 +164,16 @@ issue or PR.
 
 When you cannot complete a task or question because you are missing dependencies fail early and report the errors.
 
+## Commit messages
+
+Always write commit messages in the [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
+format (`<type>[optional scope]: <description>`, e.g. `feat:`, `fix:`, `docs:`,
+`test:`, `chore:`, `refactor:`). This repo's releases are driven by
+**release-please**, which derives version bumps and changelog entries from the
+conventional-commit history on `main` — non-conforming messages are ignored by
+the release tooling. Use `!` after the type/scope (or a `BREAKING CHANGE:`
+footer) for breaking changes.
+
 ## Commit attribution
 
 When running inside a GitHub Action, the workflow may be authenticated with a
