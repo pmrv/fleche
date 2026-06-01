@@ -6,7 +6,7 @@ Overview
 Fleche lets you retrieve previously cached calls that "match" a template using the query method. You can query either:
 
 - From a function wrapper (recommended): ``myfunc.query(*args, metadata={...}, **kwargs)``
-- From the active cache directly via a Call template: ``cache().query(Call(...))``
+- From the active cache directly via a QueryCall template: ``cache().query(QueryCall(...))``
 
 When querying, any field in the template set to ``None`` acts as a wildcard. For arguments and result, values are compared using digest semantics (i.e., digest(template_value) == digest(stored_value)).
 
