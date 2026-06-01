@@ -113,14 +113,13 @@ One :class:`~fleche.remote.SshCache` owns exactly one
        │    ▲                            contains / expand / shrink /
    call│    │return                      query / evict / info
        ▼    │
-   ┌──────────────┐                        ┌─────────────────────┐
-   │_SshConnection│   (stdin) request   ─▶ │ python -m           │
-   │              │                        │   fleche.remote     │
-   │ ssh host     │ ◀─ (stdout) response   │   --serve           │
-   │ python -m    │                        │                     │
-   │ fleche.remote│ ◀─ (stderr) lines      │   serve(...) loop   │
-   │ --serve      │                        └─────────────────────┘
-   └──────────────┘
+   ┌──────────────────────┐                ┌─────────────────────┐
+   │_SshConnection        │──(stdin) req──>│ python -m           │
+   │                      │                │   fleche remote     │
+   │ ssh host             │<─(stdout) resp─│   --serve           │
+   │ python -m fleche     │                │                     │
+   │ remote --serve       │<─(stderr) lines│   serve(...) loop   │
+   └──────────────────────┘                └─────────────────────┘
        │
        │ stderr drained by a daemon thread
        ▼
