@@ -3,6 +3,7 @@ from fleche.storage import ValueMemory, CallMemory
 from fleche.caches import Cache
 from fleche.call import Call
 from fleche.digest import Digest
+import fleche.digest as _fd
 
 
 def _flip_last_nibble(hexstr: str) -> str:
@@ -145,18 +146,8 @@ def test_redigest_noop_if_digest_unchanged(monkeypatch):
 
     import fleche.digest as fd
 
-    def passthrough(v):
-        return fd.digest.__wrapped__(v) if hasattr(fd.digest, "__wrapped__") else fd._digest(v)  # type: ignore[attr-defined]
-
-    # If the original digest isn't wrapped, just reuse it directly
-    # to represent "no change" semantics
-    try:
-        orig = fd.digest
-    except Exception:  # pragma: no cover - defensive
-        orig = None
-
-    if orig is not None:
-        monkeypatch.setattr(fd, "digest", orig, raising=True)
+    # Re-patch with the same function: digest is unchanged, redigest must be a no-op.
+    monkeypatch.setattr(fd, "digest", fd.digest, raising=True)
 
     cache.redigest()
 
@@ -170,3 +161,116 @@ def test_redigest_noop_if_digest_unchanged(monkeypatch):
     assert loaded.arguments["a"] == [1, 2, (3, 4)]
     assert loaded.arguments["b"] == {"k": 10}
     assert loaded.result == ("x", {"y": 5})
+
+
+def test_redigest_orphans_value_keys_when_one_type_changes(monkeypatch):
+    """When only one type's hash changes, redigest re-keys calls but orphans old value entries.
+
+    Simulates a scenario like "int hashing gained a version prefix". Calls containing
+    int arguments get new lookup keys; redigest re-saves them under those new keys and
+    stores new value entries. The old value entries (saved before the change) are left
+    behind as orphans — only a subsequent gc() removes them.
+    """
+    cache = _make_cache()
+    original = _sample_call()
+
+    key_before = cache.save(original)
+    values_before = set(cache.values.list())
+
+    orig_digest_bytes = _fd._digest_bytes
+
+    def patched_int_only(value):
+        # Change int hashing by flipping the last nibble of the resulting hex digest.
+        # bool is a subclass of int but treated as a separate logical type; leave it unchanged.
+        if type(value) is int:
+            raw = orig_digest_bytes(value)
+            return _flip_last_nibble(raw.decode()).encode()
+        return orig_digest_bytes(value)
+
+    monkeypatch.setattr(_fd, "_digest_bytes", patched_int_only)
+
+    cache.redigest()
+
+    calls_after = set(cache.calls.list())
+    values_after = set(cache.values.list())
+
+    # Call key changes because arguments contain ints.
+    assert key_before not in calls_after
+    new_key = original.to_lookup_key()
+    assert new_key in calls_after
+
+    # redigest() does NOT evict old value entries — they become orphans.
+    assert values_before <= values_after
+    # New value entries were added under the new int-derived keys.
+    assert values_after > values_before
+
+    # Loading by the new key round-trips correctly.
+    loaded = cache.load(new_key).fetch()
+    assert loaded.arguments["a"] == [1, 2, (3, 4)]
+    assert loaded.arguments["b"] == {"k": 10}
+    assert loaded.result == ("x", {"y": 5})
+
+    # gc() removes the orphaned old entries.
+    evicted = cache.gc()
+    assert len(evicted) > 0
+    # All evicted keys came from the pre-redigest set.
+    assert evicted <= values_before
+    # Evicted keys are gone.
+    values_final = set(cache.values.list())
+    assert not (evicted & values_final)
+
+
+def test_redigest_orphans_all_value_keys_when_entire_hash_changes(monkeypatch):
+    """When the hash function changes for all types, every old value entry is orphaned.
+
+    Simulates switching the underlying hash primitive (e.g. SHA-256 → blake2b).
+    redigest() re-saves all calls and their values under the new keys but never touches
+    old value entries, leaving the entire pre-migration value set as orphans.  A
+    subsequent gc() must clean them all up.
+    """
+    import hashlib
+
+    cache = _make_cache()
+    original = _sample_call()
+
+    key_before = cache.save(original)
+    values_before = set(cache.values.list())
+
+    # Replace the hash primitive inside digest.py with blake2b(digest_size=32).
+    # blake2b produces 32-byte (64 hex-char) digests, so the output format is
+    # identical to sha256 and all downstream code continues to work.  This is a
+    # clean simulation of "the entire hash function was swapped": every digest
+    # changes, the Digest passthrough invariant is preserved, and Call / DigestedCall
+    # to_lookup_key() remain consistent with each other.
+    class _Blake2bHashlib:
+        @staticmethod
+        def sha256():
+            return hashlib.blake2b(digest_size=32)
+
+    monkeypatch.setattr(_fd, "hashlib", _Blake2bHashlib)
+
+    cache.redigest()
+
+    calls_after = set(cache.calls.list())
+    values_after = set(cache.values.list())
+
+    # All call keys change; the one call is re-keyed.
+    assert key_before not in calls_after
+    new_key = original.to_lookup_key()
+    assert new_key in calls_after
+
+    # redigest() leaves all old value entries in place (orphaned).
+    assert values_before <= values_after
+    assert values_after > values_before
+
+    # Loading by the new key round-trips correctly.
+    loaded = cache.load(new_key).fetch()
+    assert loaded.arguments["a"] == [1, 2, (3, 4)]
+    assert loaded.arguments["b"] == {"k": 10}
+    assert loaded.result == ("x", {"y": 5})
+
+    # gc() removes every orphaned old entry — the entire pre-migration value set.
+    evicted = cache.gc()
+    assert evicted == values_before
+    values_final = set(cache.values.list())
+    assert not (evicted & values_final)
