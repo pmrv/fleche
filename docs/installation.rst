@@ -8,6 +8,23 @@ Normal installation
 
    pip install fleche
 
+Installing with conda
+---------------------
+
+``fleche`` is also available on `conda-forge <https://conda-forge.org/>`_. Two
+packages are published:
+
+* ``fleche-base`` -- the core library only (no optional dependencies).
+* ``fleche`` -- the full install, which also pulls in the optional dependencies.
+
+.. code-block:: bash
+
+   # Core library only
+   conda install -c conda-forge fleche-base
+
+   # Full install with all optional dependencies
+   conda install -c conda-forge fleche
+
 Installing documentation (optional)
 -----------------------------------
 

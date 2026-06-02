@@ -29,6 +29,22 @@ A persistent caching solution for arbitrary Python functions - like `lru_cache` 
 pip install fleche
 ```
 
+### With conda
+
+`fleche` is available on [conda-forge](https://conda-forge.org/). Two packages are
+published:
+
+- **`fleche-base`** — the core library only (no optional dependencies)
+- **`fleche`** — the full install, which also pulls in the optional dependencies
+
+```bash
+# Core library only
+conda install -c conda-forge fleche-base
+
+# Full install with all optional dependencies
+conda install -c conda-forge fleche
+```
+
 ### With Optional Dependencies
 
 ```bash
