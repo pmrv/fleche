@@ -15,7 +15,9 @@ Installing with conda
 packages are published:
 
 * ``fleche-base`` -- the core library only (no optional dependencies).
-* ``fleche`` -- the full install, which also pulls in the optional dependencies.
+* ``fleche`` -- the full install, which also pulls in the optional dependencies
+  (``cloudpickle``, ``dill``, ``sqlalchemy`` and ``bagofholding``), enabling the
+  SQL, SSH, alternate-serialization and Bagofholding features out of the box.
 
 .. code-block:: bash
 
