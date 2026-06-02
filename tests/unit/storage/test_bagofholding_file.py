@@ -106,6 +106,42 @@ def test_rebag_skips_oserror(tmp_path, monkeypatch, caplog):
     assert "Failed to rebag" in caplog.text
 
 
+def test_from_file_passes_skip_load_to_h5bag(tmp_path, monkeypatch):
+    """_from_file must pass _skip_load=True so the file is opened only once per get."""
+    pytest.importorskip("bagofholding")
+    import fleche.storage.bagofholding_file as boh_mod
+
+    mock_h5bag = MagicMock()
+    mock_h5bag.return_value.load.return_value = 7
+    monkeypatch.setattr(boh_mod, "H5Bag", mock_h5bag)
+
+    s = BagOfHoldingH5FileBackend(tmp_path)
+    key = Digest("skip_load_key")
+    s.get(key)
+
+    _, kwargs = mock_h5bag.call_args
+    assert kwargs.get("_skip_load") is True
+
+
+def test_rebag_passes_skip_load_to_h5bag(tmp_path, monkeypatch):
+    """rebag must pass _skip_load=True so the file is opened only once per entry."""
+    pytest.importorskip("bagofholding")
+    import fleche.storage.bagofholding_file as boh_mod
+
+    mock_h5bag = MagicMock()
+    mock_h5bag.return_value.load.return_value = 1
+    monkeypatch.setattr(boh_mod, "H5Bag", mock_h5bag)
+
+    s = BagOfHoldingH5FileBackend(tmp_path)
+    key = Digest("rebag_skip_load_key")
+    s._path(key).write_bytes(b"dummy")
+
+    s.rebag()
+
+    _, kwargs = mock_h5bag.call_args
+    assert kwargs.get("_skip_load") is True
+
+
 def test_rebag_default_validator_is_none(tmp_path, monkeypatch):
     pytest.importorskip("bagofholding")
     import fleche.storage.bagofholding_file as boh_mod
