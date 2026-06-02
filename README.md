@@ -62,12 +62,18 @@ pip install fleche[bagofholding]
 # For SshCache (sharing caches across machines over SSH) — requires cloudpickle
 pip install fleche[ssh]
 
+# For running cached calls through executorlib executors
+pip install fleche[executorlib]
+
 # For documentation
 pip install fleche[docs]
 
 # For development and testing
 pip install fleche[tests]
 ```
+
+See the [Optional dependencies](https://fleche.readthedocs.io/en/latest/installation.html#optional-dependencies)
+section of the docs for a full table of extras and the features they enable.
 
 ## Quick Start
 
