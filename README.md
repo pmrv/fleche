@@ -29,6 +29,24 @@ A persistent caching solution for arbitrary Python functions - like `lru_cache` 
 pip install fleche
 ```
 
+### With conda
+
+`fleche` is available on [conda-forge](https://conda-forge.org/). Two packages are
+published:
+
+- **`fleche-base`** — the core library only (no optional dependencies)
+- **`fleche`** — the full install, which also pulls in the optional dependencies
+  (`cloudpickle`, `dill`, `sqlalchemy`, and `bagofholding`), enabling the SQL,
+  SSH, alternate-serialization, and Bagofholding features out of the box
+
+```bash
+# Core library only
+conda install -c conda-forge fleche-base
+
+# Full install with all optional dependencies
+conda install -c conda-forge fleche
+```
+
 ### With Optional Dependencies
 
 ```bash
@@ -44,12 +62,18 @@ pip install fleche[bagofholding]
 # For SshCache (sharing caches across machines over SSH) — requires cloudpickle
 pip install fleche[ssh]
 
+# For running cached calls through executorlib executors
+pip install fleche[executorlib]
+
 # For documentation
 pip install fleche[docs]
 
 # For development and testing
 pip install fleche[tests]
 ```
+
+See the [Optional dependencies](https://fleche.readthedocs.io/en/latest/installation.html#optional-dependencies)
+section of the docs for a full table of extras and the features they enable.
 
 ## Quick Start
 
