@@ -39,9 +39,13 @@ class BagOfHoldingH5FileBackend(FileStorage):
 
     def _from_file(self, path: Path) -> Any:
         try:
+            # _skip_load=True skips the constructor's _load_existing_bag_info() call,
+            # which would otherwise open and close the file just to read bag metadata
+            # before load() opens it a second time to read the actual payload.
+            bag = H5Bag(path, _skip_load=True)
             if self.version_validator is not None:
-                return H5Bag(path).load(version_validator=self.version_validator)
-            return H5Bag(path).load()
+                return bag.load(version_validator=self.version_validator)
+            return bag.load()
         except FileNotFoundError:
             raise KeyError(path) from None
         except OSError as e:
@@ -58,7 +62,7 @@ class BagOfHoldingH5FileBackend(FileStorage):
             path = self._path(key)
             with self._operation_context(key):
                 try:
-                    value = H5Bag(path).load(version_validator=version_validator)
+                    value = H5Bag(path, _skip_load=True).load(version_validator=version_validator)
                     H5Bag.save(value, path)
                 except OSError as e:
                     logger.warning("Failed to rebag %s: %s", key, e)
