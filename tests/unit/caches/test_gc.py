@@ -19,6 +19,10 @@ class FlatValueMemory(ValueMixin, MemoryBackend):
     :class:`fleche.storage.destructuring.HasChildDigests`.  Used to exercise
     the GC path that walks only direct call references.
     """
+    # @dataclass(frozen=True) regenerates __hash__ from fields, including the
+    # inherited storage: dict, which is unhashable. Mirror MemoryBackend's
+    # convention to keep identity-based hashing.
+    __hash__ = object.__hash__
 
 
 @pytest.fixture(params=["destructuring", "flat"])

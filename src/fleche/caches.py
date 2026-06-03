@@ -264,9 +264,6 @@ def _combine_shrink(key: "Digest | str", results: "Iterable[Digest]") -> "Digest
 class Cache(PerKeyLockMixin, BaseCache):
     values: storage.ValueStorage
     calls: storage.CallStorage
-    # Identity hash: values/calls storages may carry unhashable dict fields
-    # (e.g. MemoryBackend.storage), mirroring ValueMemory/CallMemory convention.
-    __hash__ = object.__hash__
 
     def load_value(self, key):
         with self._operation_context(key):
