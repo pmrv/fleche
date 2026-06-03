@@ -1,7 +1,5 @@
 
 import pytest
-from fleche.storage import ValueMemory, CallMemory
-from fleche.caches import Cache
 from fleche.call import Call
 from fleche.digest import Digest
 import fleche.digest as _fd
@@ -82,11 +80,6 @@ def make_patched_digest(orig_digest, mode: str):
 
 
 @pytest.fixture
-def cache():
-    return Cache(ValueMemory({}), CallMemory({}))
-
-
-@pytest.fixture
 def sample_call():
     return Call(
         name="f",
@@ -101,12 +94,12 @@ def sample_call():
     )
 
 
-def test_redigest_updates_call_keys_on_call_hash_change(monkeypatch, cache, sample_call):
+def test_redigest_updates_call_keys_on_call_hash_change(monkeypatch, clean_cache, sample_call):
     original = sample_call
 
-    key_before = cache.save(original)
-    set(cache.calls.list())
-    values_before = set(cache.values.list())
+    key_before = clean_cache.save(original)
+    set(clean_cache.calls.list())
+    values_before = set(clean_cache.values.list())
 
     # Single-site patch: only Calls change
     import fleche.digest as fd
@@ -114,10 +107,10 @@ def test_redigest_updates_call_keys_on_call_hash_change(monkeypatch, cache, samp
     patched = make_patched_digest(fd.digest, mode="calls_change")
     monkeypatch.setattr(fd, "digest", patched, raising=True)
 
-    cache.redigest()
+    clean_cache.redigest()
 
-    calls_after = set(cache.calls.list())
-    values_after = set(cache.values.list())
+    calls_after = set(clean_cache.calls.list())
+    values_after = set(clean_cache.values.list())
 
     # Call key must change
     assert key_before not in calls_after
@@ -129,34 +122,34 @@ def test_redigest_updates_call_keys_on_call_hash_change(monkeypatch, cache, samp
     assert values_after == values_before
 
     # Loading by new key succeeds and decodes structures
-    loaded = cache.load(expected_key)
+    loaded = clean_cache.load(expected_key)
     assert loaded.arguments["a"] == [1, 2, (3, 4)]
     assert loaded.arguments["b"] == {"k": 10}
     assert loaded.result == ("x", {"y": 5})
 
 
-def test_redigest_noop_if_digest_unchanged(cache, sample_call):
+def test_redigest_noop_if_digest_unchanged(clean_cache, sample_call):
     original = sample_call
 
-    key_before = cache.save(original)
-    calls_before = set(cache.calls.list())
-    values_before = set(cache.values.list())
+    key_before = clean_cache.save(original)
+    calls_before = set(clean_cache.calls.list())
+    values_before = set(clean_cache.values.list())
 
-    cache.redigest()
+    clean_cache.redigest()
 
-    calls_after = set(cache.calls.list())
-    values_after = set(cache.values.list())
+    calls_after = set(clean_cache.calls.list())
+    values_after = set(clean_cache.values.list())
 
     assert calls_after == calls_before
     assert values_after == values_before
 
-    loaded = cache.load(key_before)
+    loaded = clean_cache.load(key_before)
     assert loaded.arguments["a"] == [1, 2, (3, 4)]
     assert loaded.arguments["b"] == {"k": 10}
     assert loaded.result == ("x", {"y": 5})
 
 
-def test_redigest_orphans_value_keys_when_one_type_changes(monkeypatch, cache, sample_call):
+def test_redigest_orphans_value_keys_when_one_type_changes(monkeypatch, clean_cache, sample_call):
     """When only one type's hash changes, redigest re-keys calls but orphans old value entries.
 
     Simulates a scenario like "int hashing gained a version prefix". Calls containing
@@ -166,8 +159,8 @@ def test_redigest_orphans_value_keys_when_one_type_changes(monkeypatch, cache, s
     """
     original = sample_call
 
-    key_before = cache.save(original)
-    values_before = set(cache.values.list())
+    key_before = clean_cache.save(original)
+    values_before = set(clean_cache.values.list())
 
     orig_digest_bytes = _fd._digest_bytes
 
@@ -181,10 +174,10 @@ def test_redigest_orphans_value_keys_when_one_type_changes(monkeypatch, cache, s
 
     monkeypatch.setattr(_fd, "_digest_bytes", patched_int_only)
 
-    cache.redigest()
+    clean_cache.redigest()
 
-    calls_after = set(cache.calls.list())
-    values_after = set(cache.values.list())
+    calls_after = set(clean_cache.calls.list())
+    values_after = set(clean_cache.values.list())
 
     # Call key changes because arguments contain ints.
     assert key_before not in calls_after
@@ -197,13 +190,13 @@ def test_redigest_orphans_value_keys_when_one_type_changes(monkeypatch, cache, s
     assert values_after > values_before
 
     # Loading by the new key round-trips correctly.
-    loaded = cache.load(new_key).fetch()
+    loaded = clean_cache.load(new_key).fetch()
     assert loaded.arguments["a"] == [1, 2, (3, 4)]
     assert loaded.arguments["b"] == {"k": 10}
     assert loaded.result == ("x", {"y": 5})
 
 
-def test_redigest_orphans_all_value_keys_when_entire_hash_changes(monkeypatch, cache, sample_call):
+def test_redigest_orphans_all_value_keys_when_entire_hash_changes(monkeypatch, clean_cache, sample_call):
     """When the hash function changes for all types, every old value entry is orphaned.
 
     Simulates switching the underlying hash primitive (e.g. SHA-256 → blake2b).
@@ -215,8 +208,8 @@ def test_redigest_orphans_all_value_keys_when_entire_hash_changes(monkeypatch, c
 
     original = sample_call
 
-    key_before = cache.save(original)
-    values_before = set(cache.values.list())
+    key_before = clean_cache.save(original)
+    values_before = set(clean_cache.values.list())
 
     # Replace the hash primitive inside digest.py with blake2b(digest_size=32).
     # blake2b produces 32-byte (64 hex-char) digests, so the output format is
@@ -231,10 +224,10 @@ def test_redigest_orphans_all_value_keys_when_entire_hash_changes(monkeypatch, c
 
     monkeypatch.setattr(_fd, "hashlib", _Blake2bHashlib)
 
-    cache.redigest()
+    clean_cache.redigest()
 
-    calls_after = set(cache.calls.list())
-    values_after = set(cache.values.list())
+    calls_after = set(clean_cache.calls.list())
+    values_after = set(clean_cache.values.list())
 
     # All call keys change; the one call is re-keyed.
     assert key_before not in calls_after
@@ -246,7 +239,7 @@ def test_redigest_orphans_all_value_keys_when_entire_hash_changes(monkeypatch, c
     assert values_after > values_before
 
     # Loading by the new key round-trips correctly.
-    loaded = cache.load(new_key).fetch()
+    loaded = clean_cache.load(new_key).fetch()
     assert loaded.arguments["a"] == [1, 2, (3, 4)]
     assert loaded.arguments["b"] == {"k": 10}
     assert loaded.result == ("x", {"y": 5})
