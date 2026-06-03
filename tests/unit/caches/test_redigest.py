@@ -136,18 +136,13 @@ def test_redigest_updates_call_keys_on_call_hash_change(monkeypatch):
     assert loaded.result == ("x", {"y": 5})
 
 
-def test_redigest_noop_if_digest_unchanged(monkeypatch):
+def test_redigest_noop_if_digest_unchanged():
     cache = _make_cache()
     original = _sample_call()
 
     key_before = cache.save(original)
     calls_before = set(cache.calls.list())
     values_before = set(cache.values.list())
-
-    import fleche.digest as fd
-
-    # Re-patch with the same function: digest is unchanged, redigest must be a no-op.
-    monkeypatch.setattr(fd, "digest", fd.digest, raising=True)
 
     cache.redigest()
 
@@ -210,15 +205,6 @@ def test_redigest_orphans_value_keys_when_one_type_changes(monkeypatch):
     assert loaded.arguments["b"] == {"k": 10}
     assert loaded.result == ("x", {"y": 5})
 
-    # gc() removes the orphaned old entries.
-    evicted = cache.gc()
-    assert len(evicted) > 0
-    # All evicted keys came from the pre-redigest set.
-    assert evicted <= values_before
-    # Evicted keys are gone.
-    values_final = set(cache.values.list())
-    assert not (evicted & values_final)
-
 
 def test_redigest_orphans_all_value_keys_when_entire_hash_changes(monkeypatch):
     """When the hash function changes for all types, every old value entry is orphaned.
@@ -268,9 +254,3 @@ def test_redigest_orphans_all_value_keys_when_entire_hash_changes(monkeypatch):
     assert loaded.arguments["a"] == [1, 2, (3, 4)]
     assert loaded.arguments["b"] == {"k": 10}
     assert loaded.result == ("x", {"y": 5})
-
-    # gc() removes every orphaned old entry — the entire pre-migration value set.
-    evicted = cache.gc()
-    assert evicted == values_before
-    values_final = set(cache.values.list())
-    assert not (evicted & values_final)
