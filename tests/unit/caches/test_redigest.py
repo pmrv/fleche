@@ -1,4 +1,5 @@
 
+import pytest
 from fleche.storage import ValueMemory, CallMemory
 from fleche.caches import Cache
 from fleche.call import Call
@@ -80,14 +81,13 @@ def make_patched_digest(orig_digest, mode: str):
     return patched
 
 
-def _make_cache():
-    values = ValueMemory({})
-    calls = CallMemory({})
-    return Cache(values, calls)
+@pytest.fixture
+def cache():
+    return Cache(ValueMemory({}), CallMemory({}))
 
 
-def _sample_call():
-    # Use nested args/result to ensure value storage involvement
+@pytest.fixture
+def sample_call():
     return Call(
         name="f",
         arguments={
@@ -101,9 +101,8 @@ def _sample_call():
     )
 
 
-def test_redigest_updates_call_keys_on_call_hash_change(monkeypatch):
-    cache = _make_cache()
-    original = _sample_call()
+def test_redigest_updates_call_keys_on_call_hash_change(monkeypatch, cache, sample_call):
+    original = sample_call
 
     key_before = cache.save(original)
     set(cache.calls.list())
@@ -136,9 +135,8 @@ def test_redigest_updates_call_keys_on_call_hash_change(monkeypatch):
     assert loaded.result == ("x", {"y": 5})
 
 
-def test_redigest_noop_if_digest_unchanged():
-    cache = _make_cache()
-    original = _sample_call()
+def test_redigest_noop_if_digest_unchanged(cache, sample_call):
+    original = sample_call
 
     key_before = cache.save(original)
     calls_before = set(cache.calls.list())
@@ -158,7 +156,7 @@ def test_redigest_noop_if_digest_unchanged():
     assert loaded.result == ("x", {"y": 5})
 
 
-def test_redigest_orphans_value_keys_when_one_type_changes(monkeypatch):
+def test_redigest_orphans_value_keys_when_one_type_changes(monkeypatch, cache, sample_call):
     """When only one type's hash changes, redigest re-keys calls but orphans old value entries.
 
     Simulates a scenario like "int hashing gained a version prefix". Calls containing
@@ -166,8 +164,7 @@ def test_redigest_orphans_value_keys_when_one_type_changes(monkeypatch):
     stores new value entries. The old value entries (saved before the change) are left
     behind as orphans — only a subsequent gc() removes them.
     """
-    cache = _make_cache()
-    original = _sample_call()
+    original = sample_call
 
     key_before = cache.save(original)
     values_before = set(cache.values.list())
@@ -206,7 +203,7 @@ def test_redigest_orphans_value_keys_when_one_type_changes(monkeypatch):
     assert loaded.result == ("x", {"y": 5})
 
 
-def test_redigest_orphans_all_value_keys_when_entire_hash_changes(monkeypatch):
+def test_redigest_orphans_all_value_keys_when_entire_hash_changes(monkeypatch, cache, sample_call):
     """When the hash function changes for all types, every old value entry is orphaned.
 
     Simulates switching the underlying hash primitive (e.g. SHA-256 → blake2b).
@@ -216,8 +213,7 @@ def test_redigest_orphans_all_value_keys_when_entire_hash_changes(monkeypatch):
     """
     import hashlib
 
-    cache = _make_cache()
-    original = _sample_call()
+    original = sample_call
 
     key_before = cache.save(original)
     values_before = set(cache.values.list())
