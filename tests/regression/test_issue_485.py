@@ -42,8 +42,10 @@ def test_in_flight_covers_cache_write_gap():
     Threading.Barrier is used to hold the done-callback at the start of
     cache.save.  While it is paused, a second compute() call is made; it
     should find the key in _in_flight and return without incrementing
-    call_count.  Releasing the barrier lets save complete, and the cache
-    should contain exactly one entry.
+    call_count.  Both calls use the same key, so the cache count alone can't
+    distinguish the fix from the bug; instead we assert on call metadata --
+    the function is invoked exactly once (call_count) and cache.save runs
+    exactly once (save_count).
     """
     barrier = threading.Barrier(2)
     save_started = threading.Event()

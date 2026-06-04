@@ -214,13 +214,10 @@ def make_wrapper(func, policy, meta, isolate, get_call):
 
         # A done-callback for the same key may be mid-save right now (the
         # CPython gap between condition.notify_all() and _invoke_callbacks()).
-        # If so, the future is already resolved — .result() returns immediately.
+        # If so, the future is already resolved — .result() returns immediately
+        # and the future's result is exactly the function result.
         if (f := _in_flight.get(key)) is not None:
-            f.result()
-            try:
-                return cache.load(key).result
-            except KeyError:
-                return f.result()
+            return f.result()
 
         def _run_and_cache():
             active_meta = state._METADATA.get() + tuple(meta)
