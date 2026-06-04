@@ -10,8 +10,9 @@ import pandas as pd
 from . import digest as _digest
 from .digest import Digest  # type hint convenience
 from . import storage
-from .storage.base import _longest_common_prefix_length
+from .storage.base import _longest_common_prefix_length, OperationContext
 from .storage.destructuring import HasChildDigests
+from .storage.thread_safe import PerKeyLockMixin
 from .call import Call, DigestedCall, LazyCall, QueryCall
 from . import call
 from . import query
@@ -30,7 +31,7 @@ DigestedIterable = storage.destructuring.DigestedIterable
 DigestedDict = storage.destructuring.DigestedDict
 
 
-class BaseCache(ABC):
+class BaseCache(OperationContext):
 
     @abstractmethod
     def save(self, call: Call) -> str:
@@ -260,34 +261,40 @@ def _combine_shrink(key: "Digest | str", results: "Iterable[Digest]") -> "Digest
 
 
 @dataclass(frozen=True)
-class Cache(BaseCache):
+class Cache(PerKeyLockMixin, BaseCache):
     values: storage.ValueStorage
     calls: storage.CallStorage
 
     def load_value(self, key):
-        return self.values.load(key)
+        with self._operation_context(key):
+            return self.values.load(key)
 
     def save(self, call: Call) -> str:
-        try:
-            digested = call.stash(self.values)
-        except storage.SaveError as e:
-            raise Rejected(e)
-        return self.calls.save(digested)
+        key = call.to_lookup_key()
+        with self._operation_context(key):
+            try:
+                digested = call.stash(self.values)
+            except storage.SaveError as e:
+                raise Rejected(e)
+            return self.calls.save(digested)
 
     def load(self, key: str) -> LazyCall:
-        return self.calls.load(key).fetch(self)
+        with self._operation_context(key):
+            return self.calls.load(key).fetch(self)
 
     def contains(self, key: str) -> bool:
-        return self.calls.contains(key)
+        with self._operation_context(key):
+            return self.calls.contains(key)
 
     def expand(self, key: Digest | str) -> Digest:
-        results = []
-        for sub in (self.calls, self.values):
-            try:
-                results.append(sub.expand(key))
-            except KeyError:
-                pass
-        return _combine_expand(key, results)
+        with self._operation_context(key):
+            results = []
+            for sub in (self.calls, self.values):
+                try:
+                    results.append(sub.expand(key))
+                except KeyError:
+                    pass
+            return _combine_expand(key, results)
 
     def _shrink(self, *keys: Digest | str) -> "tuple[Digest, ...]":
         call_keys: list = []
@@ -351,7 +358,8 @@ class Cache(BaseCache):
                 )
 
     def evict(self, key: str | Digest) -> None:
-        self.calls.evict(key)
+        with self._operation_context(key):
+            self.calls.evict(key)
 
     def redigest(self) -> None:
         """Ensures consistent cache keys in case digest function changed.

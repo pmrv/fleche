@@ -1,7 +1,5 @@
 """Tests for Cache.gc() — brute-force reachability-based value eviction."""
 
-from dataclasses import dataclass
-
 import pytest
 
 from fleche.call import Call
@@ -11,7 +9,6 @@ from fleche.storage.base import ValueMixin
 from fleche.storage.memory import CallMemory, MemoryBackend, ValueMemory
 
 
-@dataclass(frozen=True)
 class FlatValueMemory(ValueMixin, MemoryBackend):
     """Memory-backed value storage without destructuring.
 
