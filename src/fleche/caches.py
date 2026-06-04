@@ -367,10 +367,22 @@ class Cache(PerKeyLockMixin, BaseCache):
         This may take time depending on cache size."""
         for key in self.calls.list():
             call = self.load(key).fetch()
-            if call.to_lookup_key() != key:
+            new_key = call.to_lookup_key()
+            if new_key == key:
+                continue
+            # Hold the per-key locks for both the old and the new key so the
+            # "save under the new key, then evict the old key" pair is atomic
+            # with respect to concurrent readers probing either key (#451).
+            # Without this, a reader could observe the call under both keys
+            # (transient duplication) or under neither (transient miss),
+            # depending on the interleaving.  The locks are reentrant, so the
+            # nested acquisitions inside save()/evict() are fine; we sort the
+            # keys to impose a consistent acquisition order and avoid deadlock.
+            first, second = sorted((key, new_key))
+            with self._operation_context(first), self._operation_context(second):
                 # instantiate values too
                 self.save(call)
-                self.calls.evict(key)
+                self.evict(key)
 
     def gc(self) -> set[Digest]:
         """Evict value entries not reachable from any stored call.
