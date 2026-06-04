@@ -26,11 +26,13 @@ from fleche.storage.memory import MemoryBackend
 
 
 @dataclass(frozen=True)
-class ValueMemoryRaw(DestructuringMixin, ValueMixin, MemoryBackend): ...
+class ValueMemoryRaw(DestructuringMixin, ValueMixin, MemoryBackend):
+    __hash__ = object.__hash__
 
 
 @dataclass(frozen=True)
-class CallMemoryRaw(CallMixin, MemoryBackend): ...
+class CallMemoryRaw(CallMixin, MemoryBackend):
+    __hash__ = object.__hash__
 
 
 @fleche
