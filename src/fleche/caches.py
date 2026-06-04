@@ -557,9 +557,11 @@ class CacheStack(PerKeyLockMixin, BaseCache):
         """Transfer a hit from a higher cache into the base cache.
 
         Serialized per key so that concurrent loads of the same missing key do
-        not all run the base cache's non-atomic check-evict-save at once.  The
-        double-checked :meth:`~BaseCache.contains` lets every waiter past the
-        first skip the redundant save once the key has been back-filled.
+        not all run the base cache's non-atomic check-evict-save at once.  All
+        concurrent loaders block on the per-key :meth:`_operation_context` lock;
+        the first one past the lock does the transfer, and every later waiter
+        finds the key already present via :meth:`~BaseCache.contains` and returns
+        without repeating the save.
         """
         with self._operation_context(key):
             if self.stack[0].contains(key):
