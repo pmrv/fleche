@@ -1,7 +1,5 @@
 """Tests for Cache.gc() — brute-force reachability-based value eviction."""
 
-from dataclasses import dataclass
-
 import pytest
 
 from fleche.call import Call
@@ -11,7 +9,6 @@ from fleche.storage.base import ValueMixin
 from fleche.storage.memory import CallMemory, MemoryBackend, ValueMemory
 
 
-@dataclass(frozen=True)
 class FlatValueMemory(ValueMixin, MemoryBackend):
     """Memory-backed value storage without destructuring.
 
@@ -19,10 +16,6 @@ class FlatValueMemory(ValueMixin, MemoryBackend):
     :class:`fleche.storage.destructuring.HasChildDigests`.  Used to exercise
     the GC path that walks only direct call references.
     """
-    # @dataclass(frozen=True) regenerates __hash__ from fields, including the
-    # inherited storage: dict, which is unhashable. Mirror MemoryBackend's
-    # convention to keep identity-based hashing.
-    __hash__ = object.__hash__
 
 
 @pytest.fixture(params=["destructuring", "flat"])
