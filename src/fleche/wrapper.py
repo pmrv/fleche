@@ -1,4 +1,5 @@
 import os
+import threading
 from pathlib import Path
 from functools import wraps, partial
 from types import SimpleNamespace
@@ -169,6 +170,13 @@ def make_rerun(func, wrapper):
 
 def make_wrapper(func, policy, meta, isolate, get_call):
     """Build the cached wrapper returned by :func:`fleche`."""
+    # Tracks futures whose done-callback is currently executing the cache write.
+    # Populated at the start of _cache() and removed in its finally clause, so
+    # the entry only exists during the narrow window between Future.set_result()
+    # releasing the condition lock and cache.save() completing.
+    _in_flight: dict[str, Future] = {}
+    _in_flight_lock = threading.Lock()
+
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> _T:
         cache: BaseCache = state._CACHE.get()
@@ -204,6 +212,13 @@ def make_wrapper(func, policy, meta, isolate, get_call):
         except KeyError:
             logger.debug("Cache miss for %s with key %s", call.name, key)
 
+        # A done-callback for the same key may be mid-save right now (the
+        # CPython gap between condition.notify_all() and _invoke_callbacks()).
+        # If so, the future is already resolved — .result() returns immediately
+        # and the future's result is exactly the function result.
+        if (f := _in_flight.get(key)) is not None:
+            return f.result()
+
         def _run_and_cache():
             active_meta = state._METADATA.get() + tuple(meta)
             metadata: Dict[str, Any] = defaultdict(dict)
@@ -212,25 +227,33 @@ def make_wrapper(func, policy, meta, isolate, get_call):
 
             result: _T = func(*args, **kwargs)
 
-            def _cache(future = None):
-                if future is None:
-                    call.result = result
-                else:
-                    call.result = future.result()
-                if call.result is None:
-                    logger.warning("Function returned None, not caching")
-                    return None
-                for m in active_meta:
-                    metadata[m.name] |= m.post(
-                        metadata[m.name], replace(call, metadata={})
-                    )
+            def _cache(future=None):
+                if future is not None:
+                    with _in_flight_lock:
+                        _in_flight[key] = future
                 try:
-                    call.metadata = metadata
-                    logger.debug("Saving result for %s with key %s", call.name, key)
-                    cache.save(call)
-                except Rejected as e:
-                    logger.warning("Cache rejected save: %s", e.args)
-                return call.result
+                    if future is None:
+                        call.result = result
+                    else:
+                        call.result = future.result()
+                    if call.result is None:
+                        logger.warning("Function returned None, not caching")
+                        return None
+                    for m in active_meta:
+                        metadata[m.name] |= m.post(
+                            metadata[m.name], replace(call, metadata={})
+                        )
+                    try:
+                        call.metadata = metadata
+                        logger.debug("Saving result for %s with key %s", call.name, key)
+                        cache.save(call)
+                    except Rejected as e:
+                        logger.warning("Cache rejected save: %s", e.args)
+                    return call.result
+                finally:
+                    if future is not None:
+                        with _in_flight_lock:
+                            _in_flight.pop(key, None)
 
             if not isinstance(result, Future):
                 return _cache()
