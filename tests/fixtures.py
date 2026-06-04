@@ -1,4 +1,6 @@
+import functools
 import os
+import threading
 import uuid
 from contextlib import contextmanager
 
@@ -21,6 +23,54 @@ from fleche.storage.bagofholding_file import BagOfHoldingH5FileBackend
 from fleche.caches import Cache
 
 secret_key = [b"test_secret_key_32_bytes_long!!!!"]
+
+
+# ---------------------------------------------------------------------------
+# Concurrency stress-test helper
+#
+# Many thread-safety tests share the same shape: spawn N threads, have each do
+# some work, collect any exceptions, join, and assert nothing blew up. This
+# helper collapses that boilerplate so the tests only describe the work.
+# ---------------------------------------------------------------------------
+
+def run_workers(worker, count=None, *, timeout=None):
+    """Run worker callables concurrently in threads; return captured exceptions.
+
+    Exceptions raised in any worker are captured (thread-safely) and returned as
+    a list, so callers just ``assert not run_workers(...)`` instead of repeating
+    the spawn/start/join/collect dance by hand.
+
+    Two calling forms:
+
+    * ``run_workers(fn, n)`` spawns ``n`` threads; thread ``i`` calls ``fn(i)``.
+    * ``run_workers([fn0, fn1, ...])`` spawns one thread per callable, each
+      invoked with no arguments. Use this for heterogeneous worker mixes (e.g.
+      some readers + some writers); bind per-worker arguments with
+      ``functools.partial``.
+
+    ``timeout`` is forwarded to each ``Thread.join``.
+    """
+    if count is not None:
+        workers = [functools.partial(worker, i) for i in range(count)]
+    else:
+        workers = list(worker)
+
+    errors: list[Exception] = []
+    errors_lock = threading.Lock()
+
+    def run(fn):
+        try:
+            fn()
+        except Exception as exc:  # noqa: BLE001 — surfaced to the caller via `errors`
+            with errors_lock:
+                errors.append(exc)
+
+    threads = [threading.Thread(target=run, args=(fn,)) for fn in workers]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout)
+    return errors
 
 
 # ---------------------------------------------------------------------------

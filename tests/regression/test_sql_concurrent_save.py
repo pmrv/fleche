@@ -1,9 +1,9 @@
 """Regression test for issue #218: Sql._save() race condition under concurrent access."""
 
-import concurrent.futures
-
 from fleche.call import Call
 from fleche.storage.sql import Sql
+
+from tests.fixtures import run_workers
 
 
 def test_sql_concurrent_save_no_integrity_error(tmp_path):
@@ -14,19 +14,11 @@ def test_sql_concurrent_save_no_integrity_error(tmp_path):
     """
     sql = Sql(str(tmp_path / "cache.db"))
 
-    errors = []
+    def save_call(worker):
+        call = Call(name="compute", arguments={"x": worker % 3}, result=None)
+        sql.save(call)
 
-    def save_call(x):
-        try:
-            call = Call(name="compute", arguments={"x": x}, result=None)
-            sql.save(call)
-        except Exception as exc:
-            errors.append(exc)
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-        futures = [pool.submit(save_call, i % 3) for i in range(24)]
-        for f in futures:
-            f.result()
+    errors = run_workers(save_call, 24)
 
     assert not errors, f"Concurrent saves raised errors: {errors}"
     stored_keys = list(sql.list())

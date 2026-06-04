@@ -1,9 +1,9 @@
 """Tests for SizeLimitedCache."""
-import threading
-
 from fleche.call import Call, QueryCall
 from fleche.caches import Cache, SizeLimitedCache
 from fleche.storage.memory import ValueMemory, CallMemory
+
+from tests.fixtures import run_workers
 
 
 def make_slcache(max_size: int) -> SizeLimitedCache:
@@ -81,20 +81,13 @@ def test_pick_eviction_target_is_overridable():
 def test_thread_safety():
     """Concurrent saves do not corrupt the size invariant."""
     cache = make_slcache(max_size=5)
-    errors = []
 
-    def save_calls(start):
-        try:
-            for i in range(start, start + 10):
-                cache.save(make_call("f", i, i * 2))
-        except Exception as e:
-            errors.append(e)
+    def save_calls(worker):
+        start = worker * 10
+        for i in range(start, start + 10):
+            cache.save(make_call("f", i, i * 2))
 
-    threads = [threading.Thread(target=save_calls, args=(i * 10,)) for i in range(4)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
+    errors = run_workers(save_calls, 4)
 
     assert not errors, f"Exceptions during concurrent saves: {errors}"
     keys = list(cache.calls.list())
