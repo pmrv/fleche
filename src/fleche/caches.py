@@ -515,11 +515,14 @@ class RefreshingCache(CacheWrapper):
 
 
 @dataclass(frozen=True)
-class CacheStack(BaseCache):
+class CacheStack(PerKeyLockMixin, BaseCache):
     """A combination of caches with a shared traversal policy.
 
     Saving always targets the lowest level (``stack[0]``); loading traverses
-    from ``stack[0]`` upward and back-fills any hit into ``stack[0]``.
+    from ``stack[0]`` upward and back-fills any hit into ``stack[0]``.  The
+    back-fill is serialized per key (via :class:`PerKeyLockMixin`) so that
+    concurrent loads of the same missing key do not all run the base cache's
+    non-atomic check-evict-save at once.
 
     All multi-cache fan-out is handled by three private traversal helpers,
     each implementing one of the recurring patterns across the stack:
@@ -544,15 +547,30 @@ class CacheStack(BaseCache):
             try:
                 lc = cache.load(key)
                 if i > 0:
-                    try:
-                        self.save(lc.fetch())
-                        logger.info("Transferred hit for %s from higher cache to base cache", key)
-                    except Rejected as e:
-                        logger.warning("Failed to transfer hit for %s to base cache: %s", key, e)
+                    self._backfill(key, lc)
                 return lc
             except KeyError:
                 continue
         raise KeyError(key)
+
+    def _backfill(self, key, lc: LazyCall) -> None:
+        """Transfer a hit from a higher cache into the base cache.
+
+        Serialized per key so that concurrent loads of the same missing key do
+        not all run the base cache's non-atomic check-evict-save at once.  All
+        concurrent loaders block on the per-key :meth:`_operation_context` lock;
+        the first one past the lock does the transfer, and every later waiter
+        finds the key already present via :meth:`~BaseCache.contains` and returns
+        without repeating the save.
+        """
+        with self._operation_context(key):
+            if self.stack[0].contains(key):
+                return
+            try:
+                self.save(lc.fetch())
+                logger.info("Transferred hit for %s from higher cache to base cache", key)
+            except Rejected as e:
+                logger.warning("Failed to transfer hit for %s to base cache: %s", key, e)
 
     def load_value(self, key):
         return self._first_hit(lambda c: c.load_value(key))
