@@ -21,6 +21,8 @@ from fleche.caches import Cache
 from fleche.digest import Digest
 from fleche.storage import CallMemory, ValueMemory
 
+from tests.fixtures import RaceLatch
+
 
 _NIBBLE_FLIP = {
     "0": "1", "1": "0", "2": "3", "3": "2", "4": "5", "5": "4", "6": "7",
@@ -56,16 +58,14 @@ def test_redigest_save_evict_is_atomic(monkeypatch):
     reader thread that probes those keys must block until the migration
     completes, and then sees the call under exactly one key — the new one.
     """
-    reached_evict = threading.Event()
-    release_evict = threading.Event()
+    latch = RaceLatch()
     reader_done = threading.Event()
 
     class PausingCache(Cache):
         def evict(self, key):
             # redigest() calls this while holding both per-key locks; pause
             # here to open the save-then-evict window for the reader thread.
-            reached_evict.set()
-            assert release_evict.wait(timeout=5), "evict never released"
+            latch.pause()
             return super().evict(key)
 
     c = PausingCache(ValueMemory({}), CallMemory({}))
@@ -95,7 +95,7 @@ def test_redigest_save_evict_is_atomic(monkeypatch):
 
     redigest_thread = threading.Thread(target=c.redigest)
     redigest_thread.start()
-    assert reached_evict.wait(timeout=5), "redigest never reached evict window"
+    latch.wait_until_paused()
 
     reader_thread = threading.Thread(target=reader)
     reader_thread.start()
@@ -107,7 +107,7 @@ def test_redigest_save_evict_is_atomic(monkeypatch):
         "reader observed the cache mid-migration; save+evict is not atomic"
     )
 
-    release_evict.set()
+    latch.release()
     redigest_thread.join(timeout=5)
     reader_thread.join(timeout=5)
     assert not redigest_thread.is_alive()

@@ -74,6 +74,65 @@ def run_workers(worker, count=None, *, timeout=None):
 
 
 # ---------------------------------------------------------------------------
+# Deterministic forced-race latch
+#
+# The other recurring concurrency-test shape is the *deterministic* race: pause
+# one thread at a precise injection point, drive a second thread into the now-
+# frozen window, then release the first. The fiddly part is the two-phase
+# handshake — "the worker reached the injection point" and "the main thread says
+# go" — with both waits timeout-guarded so a wiring bug fails the test instead of
+# hanging it. RaceLatch owns exactly that handshake; each test still wires up its
+# own injection point (which method to pause in, on which key) inline.
+# ---------------------------------------------------------------------------
+
+class RaceLatch:
+    """Two-phase handshake for forcing a deterministic race.
+
+    Typical use: a test subclasses the cache (or otherwise injects code) so that
+    some method calls :meth:`pause` at the point of interest. The worker thread
+    runs into that point, announces it has arrived, and blocks. The main thread
+    waits for that arrival with :meth:`wait_until_paused`, does whatever it needs
+    in the frozen window, then calls :meth:`release` to let the worker continue::
+
+        latch = RaceLatch()
+
+        class PausingCache(Cache):
+            def evict(self, key):
+                latch.pause()              # announce arrival, then block
+                return super().evict(key)
+
+        t = threading.Thread(target=cache.redigest)
+        t.start()
+        latch.wait_until_paused()          # window is now open
+        ...                                # race a second thread in here
+        latch.release()                    # let the worker finish
+        t.join(timeout=5)
+
+    All waits are timeout-guarded (default ``timeout`` seconds) and assert on
+    expiry, so a missed handshake surfaces as a test failure rather than a hang.
+    """
+
+    def __init__(self, *, timeout=5):
+        self._timeout = timeout
+        self._reached = threading.Event()
+        self._released = threading.Event()
+
+    def pause(self):
+        """Call from the injection point: announce arrival, then block on release."""
+        self._reached.set()
+        assert self._released.wait(self._timeout), "RaceLatch.release() was never called"
+
+    def wait_until_paused(self, timeout=None):
+        """Block until the worker reaches its injection point (and is paused)."""
+        deadline = self._timeout if timeout is None else timeout
+        assert self._reached.wait(deadline), "worker never reached the latch injection point"
+
+    def release(self):
+        """Let the paused worker continue."""
+        self._released.set()
+
+
+# ---------------------------------------------------------------------------
 # Non-sqlite SQLAlchemy backend support
 #
 # We don't bundle any out-of-process database; instead, the corresponding

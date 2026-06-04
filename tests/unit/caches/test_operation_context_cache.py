@@ -12,7 +12,7 @@ from fleche.storage.base import Intent, OperationContext
 from fleche.storage.memory import ValueMemory, CallMemory
 from fleche.storage.thread_safe import PerKeyLockMixin
 
-from tests.fixtures import run_workers
+from tests.fixtures import RaceLatch, run_workers
 
 
 def make_call(name: str, x: int, result: int) -> Call:
@@ -179,8 +179,7 @@ def test_per_key_lock_allows_parallel_ops_on_different_keys():
     share a single global lock, key2's thread would be stuck until key1 is
     released (and the ``t2.join(timeout=2)`` assertion would fail).
     """
-    t1_holding = threading.Event()
-    t1_can_release = threading.Event()
+    latch = RaceLatch()
     errors = []
     _key1 = [None]  # mutable cell so the method closure sees the late-bound value
 
@@ -190,8 +189,7 @@ def test_per_key_lock_allows_parallel_ops_on_different_keys():
             with super()._operation_context(key, intent=intent):
                 # Inside the per-key lock for `key`.  Hold it for key1 only.
                 if _key1[0] is not None and str(key) == _key1[0]:
-                    t1_holding.set()
-                    t1_can_release.wait(timeout=5)
+                    latch.pause()
                 yield
 
     cache = HoldingCache(values=ValueMemory({}), calls=CallMemory({}))
@@ -215,7 +213,7 @@ def test_per_key_lock_allows_parallel_ops_on_different_keys():
 
     t1 = threading.Thread(target=t1_worker)
     t1.start()
-    assert t1_holding.wait(timeout=5), "t1 never acquired key1 lock"
+    latch.wait_until_paused()
 
     # While t1 holds key1's lock, t2 should complete key2 without blocking.
     t2 = threading.Thread(target=t2_worker)
@@ -223,6 +221,6 @@ def test_per_key_lock_allows_parallel_ops_on_different_keys():
     t2.join(timeout=2)
     assert not t2.is_alive(), "t2 was blocked by t1's key1 lock (per-key locking broken)"
 
-    t1_can_release.set()
+    latch.release()
     t1.join(timeout=5)
     assert not errors
