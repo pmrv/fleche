@@ -60,13 +60,23 @@ jobs:
                  `query.py`, `state.py` (the decorator call loop, cache lookup,
                  query traversal).
 
-            Do the following:
+            Do the following. Fetch input lazily — triage by filename first and
+            only pull the full diff when the changed paths could plausibly touch a
+            hot path. This keeps the model input small on the common (docs/test/CI)
+            cases instead of loading a large diff every run.
             1. Read the PR title and description:
                `gh pr view ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --json title,body`
-            2. Read the change diff:
-               `gh pr diff ${{ github.event.pull_request.number }} --repo ${{ github.repository }}`
-               (If the diff is very large, focus on changes under `src/fleche/`.)
-            3. Decide: is this change **performance-critical**? Treat it as YES if
+            2. List the changed files first (cheap):
+               `gh pr diff ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --name-only`
+               - If **every** changed path is confined to non-runtime files
+                 (`docs/`, `tests/`, `benchmarks/`, `.github/`, `*.md`), decide NO
+                 immediately and skip to step 5 — do NOT fetch the full diff.
+               - Otherwise continue to step 3.
+            3. Only now pull the hunks, and focus on the runtime code. Prefer
+               restricting the diff to the source tree, e.g.
+               `gh pr diff ${{ github.event.pull_request.number }} --repo ${{ github.repository }} -- 'src/fleche/**'`
+               (fall back to the unfiltered diff only if that yields nothing).
+               Decide: is this change **performance-critical**? Treat it as YES if
                it modifies runtime behaviour of any hot path above — algorithmic
                changes, the digest/hash function, serialization, locking, the
                cache lookup/save loop, or anything the PR text itself flags as a
