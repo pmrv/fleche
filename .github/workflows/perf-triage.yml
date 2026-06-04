@@ -1,0 +1,87 @@
+name: Performance Triage
+
+# Runs on every new pull request and asks Claude Haiku to judge — from the PR
+# description and the change diff — whether the change is performance-critical
+# (i.e. touches a hot path the benchmark suite measures: digesting, storage
+# backends, cache/query traversal, the call/wrapper hot loop).
+#
+# If Haiku decides it is, it adds the `benchmark` label to the PR. That label is
+# the existing trigger for `benchmarks.yml` (it runs on the `labeled` event and
+# gates on `contains(...labels..., 'benchmark')`), so labelling here transparently
+# kicks off the full benchmark + delta-vs-baseline comparison without duplicating
+# that logic. If Haiku decides it is not, it does nothing.
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+
+# Don't pile up triage runs if a PR is rapidly reopened / edited.
+concurrency:
+  group: perf-triage-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    # Skip drafts and PRs that already carry the label (nothing to decide).
+    if: |
+      github.event.pull_request.draft == false &&
+      !contains(github.event.pull_request.labels.*.name, 'benchmark')
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Triage performance impact with Claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: |
+            --model claude-haiku-4-5
+            --allowedTools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr edit:*),Bash(gh label list:*),Bash(gh label create:*)"
+          prompt: |
+            You are triaging a pull request to decide whether it is
+            **performance-critical** and therefore warrants running the benchmark
+            suite. Be decisive and terse — do not post any PR comment.
+
+            Context:
+            - Repo: ${{ github.repository }}
+            - PR number: ${{ github.event.pull_request.number }}
+
+            fleche is a persistent function-cache library. Its benchmark suite
+            (`benchmarks/`) measures three hot paths only:
+              1. **Digesting** — `src/fleche/digest.py`, `src/fleche/call.py`
+                 (SHA256 content hashing of arguments/results; the hottest path).
+              2. **Storage backends** — `src/fleche/storage/**` (put/get/save/load,
+                 serialization, locking, SQL/file/memory/bagofholding backends).
+              3. **End-to-end caching** — `src/fleche/wrapper.py`, `caches.py`,
+                 `query.py`, `state.py` (the decorator call loop, cache lookup,
+                 query traversal).
+
+            Do the following:
+            1. Read the PR title and description:
+               `gh pr view ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --json title,body`
+            2. Read the change diff:
+               `gh pr diff ${{ github.event.pull_request.number }} --repo ${{ github.repository }}`
+               (If the diff is very large, focus on changes under `src/fleche/`.)
+            3. Decide: is this change **performance-critical**? Treat it as YES if
+               it modifies runtime behaviour of any hot path above — algorithmic
+               changes, the digest/hash function, serialization, locking, the
+               cache lookup/save loop, or anything the PR text itself flags as a
+               perf change (mentions speed, latency, throughput, hot path,
+               optimization, `hash_version`, blake2b, etc.). Treat it as NO for
+               docs-only, test-only, CI/workflow, comment, typing-only, or changes
+               confined to non-runtime files (`benchmarks/`, `docs/`, `tests/`,
+               `*.md`, `.github/`).
+            4. If and only if your decision is YES, add the label that triggers the
+               benchmark workflow:
+               `gh pr edit ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --add-label benchmark`
+               (If the label does not exist, create it first:
+               `gh label create benchmark --repo ${{ github.repository }} --color FFA500 --description "Run the benchmark suite on this PR" || true`)
+            5. Finish by printing a single line: either
+               `DECISION: performance-critical — benchmark label added` or
+               `DECISION: not performance-critical — no action`, followed by one
+               short sentence of justification.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
