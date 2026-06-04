@@ -17,6 +17,8 @@ from fleche.storage.memory import MemoryBackend
 from fleche.storage.pickle_file import PickleFileBackend
 from fleche.storage.thread_safe import _PicklableLock, _PicklableRLock
 
+from tests.fixtures import run_workers
+
 
 # ---------------------------------------------------------------------------
 # Minimal test-local storage classes — no DestructuringMixin, so values are
@@ -99,12 +101,9 @@ def _run_concurrent_save_load(store, n_threads=8, n_writes=50):
         with lock:
             saved.extend(local)
 
-    threads = [threading.Thread(target=worker, args=(tid,)) for tid in range(n_threads)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
+    errors = run_workers(worker, n_threads)
 
+    assert not errors, f"Exceptions during concurrent saves: {errors}"
     assert len(saved) == n_threads * n_writes
     for key, value in saved:
         assert store.load(key) == value
@@ -131,28 +130,16 @@ def test_value_pickle_file_concurrent_saves(tmp_path):
 def test_concurrent_load_while_writing(cls):
     store = cls(storage={})
     keys = [store.save(i) for i in range(100)]
-    errors: list[Exception] = []
 
     def reader():
-        try:
-            for k in keys:
-                assert store.load(k) in range(100)
-        except Exception as e:
-            errors.append(e)
+        for k in keys:
+            assert store.load(k) in range(100)
 
     def writer():
-        try:
-            for i in range(100, 200):
-                store.save(i)
-        except Exception as e:
-            errors.append(e)
+        for i in range(100, 200):
+            store.save(i)
 
-    threads = [threading.Thread(target=reader) for _ in range(4)]
-    threads += [threading.Thread(target=writer) for _ in range(4)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
+    errors = run_workers([reader] * 4 + [writer] * 4)
 
     assert not errors
 

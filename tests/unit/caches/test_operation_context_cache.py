@@ -1,6 +1,7 @@
 """Tests for _operation_context wiring on Cache and BaseCache(OperationContext)."""
 
 import contextlib
+import functools
 import threading
 
 import pytest
@@ -10,6 +11,8 @@ from fleche.caches import BaseCache, Cache
 from fleche.storage.base import Intent, OperationContext
 from fleche.storage.memory import ValueMemory, CallMemory
 from fleche.storage.thread_safe import PerKeyLockMixin
+
+from tests.fixtures import run_workers
 
 
 def make_call(name: str, x: int, result: int) -> Call:
@@ -120,25 +123,17 @@ def test_expand_enters_operation_context(tracking_cache):
 
 def test_concurrent_saves_are_thread_safe(clean_cache):
     """Multiple threads saving distinct calls must not corrupt the cache."""
-    errors = []
     saved_keys = []
     lock = threading.Lock()
 
     def worker(tid: int):
-        try:
-            for i in range(20):
-                c = make_call(f"f{tid}", i, tid * 100 + i)
-                key = clean_cache.save(c)
-                with lock:
-                    saved_keys.append(key)
-        except Exception as e:
-            errors.append(e)
+        for i in range(20):
+            c = make_call(f"f{tid}", i, tid * 100 + i)
+            key = clean_cache.save(c)
+            with lock:
+                saved_keys.append(key)
 
-    threads = [threading.Thread(target=worker, args=(tid,)) for tid in range(8)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
+    errors = run_workers(worker, 8)
 
     assert not errors, f"Exceptions during concurrent saves: {errors}"
     # Every saved key should be loadable
@@ -148,39 +143,29 @@ def test_concurrent_saves_are_thread_safe(clean_cache):
 
 def test_concurrent_save_load_round_trip(clean_cache):
     """Concurrent saves and loads on the same cache produce no data races."""
-    errors = []
     saved: list[tuple] = []
     lock = threading.Lock()
 
     def saver(tid: int):
-        try:
-            for i in range(10):
-                c = make_call("g", tid * 100 + i, i)
-                key = clean_cache.save(c)
-                with lock:
-                    saved.append((key, i))
-        except Exception as e:
-            errors.append(e)
+        for i in range(10):
+            c = make_call("g", tid * 100 + i, i)
+            key = clean_cache.save(c)
+            with lock:
+                saved.append((key, i))
 
     def loader():
-        try:
-            for _ in range(30):
-                with lock:
-                    snap = list(saved)
-                for key, _ in snap:
-                    try:
-                        clean_cache.load(key)
-                    except KeyError:
-                        pass
-        except Exception as e:
-            errors.append(e)
+        for _ in range(30):
+            with lock:
+                snap = list(saved)
+            for key, _ in snap:
+                try:
+                    clean_cache.load(key)
+                except KeyError:
+                    pass
 
-    threads = [threading.Thread(target=saver, args=(tid,)) for tid in range(4)]
-    threads += [threading.Thread(target=loader) for _ in range(4)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
+    errors = run_workers(
+        [functools.partial(saver, tid) for tid in range(4)] + [loader] * 4
+    )
 
     assert not errors, f"Exceptions during concurrent save/load: {errors}"
 
