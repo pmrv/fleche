@@ -309,24 +309,30 @@ the :data:`fleche.state._CACHE` ``ContextVar``.
 
 It returns:
 
-================ =================================================
-Key              Meaning
-================ =================================================
-``cache``        :func:`~fleche.config.cache_to_config` of the
-                 served cache — a structured dict (or list, for
-                 stacks) that round-trips back through
-                 :func:`~fleche.config.cache_from_config`.
-``cache_name``   The ``--cache`` argument the server was launched
-                 with, or ``None`` for the default cache.
-``read_only``    ``True`` when the served cache (or, for a
-                 :class:`~fleche.caches.CacheStack`, its
-                 ``stack[0]``) is a
-                 :class:`~fleche.caches.ReadOnlyMixin`.
-``cwd``          ``os.getcwd()`` on the remote.
-``hostname``     ``socket.gethostname()`` on the remote.
-``python``       ``sys.executable`` on the remote.
-``pid``          The server process's PID.
-================ =================================================
+======================== =================================================
+Key                      Meaning
+======================== =================================================
+``cache``                :func:`~fleche.config.cache_to_config` of the
+                         served cache — a structured dict (or list, for
+                         stacks) that round-trips back through
+                         :func:`~fleche.config.cache_from_config`.
+``cache_name``           The ``--cache`` argument the server was launched
+                         with, or ``None`` for the default cache.
+``read_only``            ``True`` when the served cache (or, for a
+                         :class:`~fleche.caches.CacheStack`, its
+                         ``stack[0]``) is a
+                         :class:`~fleche.caches.ReadOnlyMixin`.
+``cwd``                  ``os.getcwd()`` on the remote.
+``hostname``             ``socket.gethostname()`` on the remote.
+``python``               ``sys.executable`` on the remote.
+``pid``                  The server process's PID.
+``fleche_version``       The server's ``fleche`` package version string.
+                         Compared against the client's version by
+                         :func:`~fleche.remote._warn_on_version_skew`.
+``cloudpickle_version``  The server's ``cloudpickle`` version string.
+                         A mismatch with the client can cause silent
+                         wire-format incompatibilities.
+======================== =================================================
 
 ``info()`` is the debugging back-channel for any "the remote isn't
 doing what I expected" question — wrong cache loaded, wrong working
