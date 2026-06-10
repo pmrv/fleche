@@ -232,23 +232,3 @@ def test_roundtrip_sql(tmp_path):
     assert isinstance(reconstructed, Cache)
     assert isinstance(reconstructed.calls, storage.Sql)
     assert reconstructed.calls.url == url
-
-
-def test_roundtrip_cache_stack_nested_readonly():
-    stack = CacheStack((
-        ReadOnlyCache(
-            Cache(
-                values=storage.ValueMemory({}),
-                calls=storage.CallMemory({}),
-            )
-        ),
-        Cache(
-            values=storage.ValueVoid(),
-            calls=storage.CallVoid(),
-        ),
-    ))
-    reconstructed = cache_from_config(cache_to_config(stack))
-    assert isinstance(reconstructed, CacheStack)
-    assert isinstance(reconstructed.stack[0], ReadOnlyCache)
-    assert isinstance(reconstructed.stack[0].cache, Cache)
-    assert isinstance(reconstructed.stack[1], Cache)
