@@ -70,7 +70,7 @@ Example:
 ``metadata``
 ~~~~~~~~~~~~
 
-The ``metadata`` key specifies the default metadata chain to use. This is a list of strings, where each string is the name of a metadata class from the ``fleche.metadata`` module.
+The ``metadata`` key specifies the default metadata chain to use. This is a list of strings, where each string is the name of a metadata class from the ``fleche.metadata`` module.  When this key is omitted, ``fleche`` defaults to ``["Runtime"]``, so :class:`~fleche.metadata.Runtime` timing information is collected automatically.
 
 Example:
 
