@@ -273,6 +273,12 @@ def _digest_bytes(value: Any) -> bytes:
             m.update(_digest_bytes(value.__func__))
         case property():
             m.update(_digest_bytes((value.fget, value.fset, value.fdel)))
+        case _ if isinstance(value, type):
+            # Digest a class (type object) by its fully-qualified name: module + qualname.
+            # This case must precede the dataclasses check because dataclasses.is_dataclass()
+            # returns True for both the class itself and its instances, but
+            # getattr(cls, field_name) raises AttributeError for required fields.
+            m.update(_digest_bytes(f"{getattr(value, '__module__', '')}.{getattr(value, '__qualname__', value.__name__)}"))
         case _ if dataclasses.is_dataclass(value):
             # cannot use asdict because it recursively converts values which destroys digests
             # instead (flat-) convert to dictionaries, salt with type name, then fallback to dictionary case.

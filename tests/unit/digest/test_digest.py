@@ -845,3 +845,74 @@ def test_module_digest_function_content_independence():
     m2.__all__ = ["func"]
 
     assert digest(m1) == digest(m2)
+
+
+# --- Tests for digesting types (classes) — issue #469 ---
+
+
+def test_builtin_types_are_digestible():
+    """Built-in types must not raise Indigestible."""
+    for t in (int, str, float, bool, bytes, list, dict, tuple, set, type, object):
+        assert isinstance(digest(t), Digest)
+
+
+def test_dataclass_type_is_digestible():
+    """Digesting a dataclass *class* (not an instance) must not raise."""
+
+    @dataclass
+    class Point:
+        x: float
+        y: float
+
+    assert isinstance(digest(Point), Digest)
+
+
+def test_plain_class_is_digestible():
+    """User-defined non-dataclass classes must be digestible."""
+
+    class MyClass:
+        pass
+
+    assert isinstance(digest(MyClass), Digest)
+
+
+def test_type_digest_is_stable():
+    """Digesting the same type object twice returns the same value."""
+    assert digest(int) == digest(int)
+    assert digest(str) == digest(str)
+
+
+def test_different_types_have_different_digests():
+    """int and str must produce different digests."""
+    assert digest(int) != digest(str)
+    assert digest(int) != digest(float)
+
+
+def test_type_digest_differs_from_instance_digest():
+    """digest(int) must differ from digest(0), the most natural int instance."""
+    assert digest(int) != digest(0)
+
+
+def test_dataclass_type_differs_from_instance():
+    """Digesting a dataclass class must differ from digesting one of its instances."""
+
+    @dataclass
+    class Pt:
+        x: int
+
+    assert digest(Pt) != digest(Pt(x=1))
+
+
+def test_two_classes_with_same_name_in_same_scope_have_same_digest():
+    """Two class objects sharing module + qualname (e.g. redefined in the same scope)
+    must produce the same digest — identity is determined by name, not object id."""
+
+    class Temp:
+        pass
+
+    first_digest = digest(Temp)
+
+    class Temp:  # noqa: F811 — intentional redefinition
+        pass
+
+    assert digest(Temp) == first_digest
