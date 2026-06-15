@@ -1,43 +1,8 @@
 Parallel Execution
-==================
-
-Fleche-decorated functions work with Python's ``concurrent.futures`` executors
-and other process-/thread-based parallelism libraries.  This page explains the
-recommended patterns for each executor type.
-
-Three complementary APIs cover the common cases:
-
-- :class:`~fleche.BoundWrapper` — freeze the active cache and metadata into a
-  picklable callable that a worker can invoke without any further setup.  Use
-  when you own the submission site and want explicit control.
-- **Future pass-through** — a fleche-decorated function that internally
-  returns a :class:`~concurrent.futures.Future` is cached automatically when
-  the future completes.  Use when the decorated function *is* the one that
-  submits work.
-- :func:`~fleche.wrap_executor` — a one-line wrapper around an executor
-  instance that transparently binds fleche-decorated functions on ``submit``
-  **and** short-circuits cache hits without ever touching the executor.  Use
-  when you want the most compact call site, or to avoid submit/serialise
-  overhead on cached inputs.
-
-.. contents:: On this page
-   :local:
-   :depth: 2
-
-ThreadPoolExecutor
-------------------
-
-For the most compact call site, use :func:`~fleche.wrap_executor` — it patches
-the executor's ``submit`` once and then handles any fleche-decorated function
-automatically, serving cache hits from a pre-completed
-:class:`~concurrent.futures.Future` without ever submitting a task:
-
-.. code-block:: pycon
-
    >>> import concurrent.futures
    >>> import fleche
    >>> from fleche.caches import Cache
-   >>> from fleche.storage.memory import ValueMemory, CallMemory
+   >>> from fleche.storage import ValueMemory, CallMemory
 
    >>> @fleche.fleche
    ... def compute(x):
@@ -64,7 +29,7 @@ write to the same store:
    >>> import fleche
    >>> from fleche import BoundWrapper
    >>> from fleche.caches import Cache
-   >>> from fleche.storage.memory import ValueMemory, CallMemory
+   >>> from fleche.storage import ValueMemory, CallMemory
 
    >>> @fleche.fleche
    ... def compute(x):
@@ -114,7 +79,7 @@ needed:
    >>> import fleche
    >>> from fleche import BoundWrapper
    >>> from fleche.caches import Cache
-   >>> from fleche.storage.pickle_file import ValuePickleFile, CallPickleFile
+   >>> from fleche.storage import ValuePickleFile, CallPickleFile
 
    >>> @fleche.fleche
    ... def heavy_computation(x):
@@ -214,7 +179,7 @@ automatically caches the result once the future completes:
    >>> import concurrent.futures
    >>> import fleche
    >>> from fleche.caches import Cache
-   >>> from fleche.storage.memory import ValueMemory, CallMemory
+   >>> from fleche.storage import ValueMemory, CallMemory
 
    >>> _executor = concurrent.futures.ThreadPoolExecutor()
 
@@ -258,7 +223,7 @@ automatically:
    >>> import concurrent.futures, tempfile, os
    >>> import fleche
    >>> from fleche.caches import Cache
-   >>> from fleche.storage.pickle_file import ValuePickleFile, CallPickleFile
+   >>> from fleche.storage import ValuePickleFile, CallPickleFile
 
    >>> @fleche.fleche
    ... def heavy_computation(x):
