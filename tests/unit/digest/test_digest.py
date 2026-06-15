@@ -851,68 +851,56 @@ def test_module_digest_function_content_independence():
 
 
 def test_builtin_types_are_digestible():
-    """Built-in types must not raise Indigestible."""
+    """Built-in types (builtins module) must not raise Indigestible."""
     for t in (int, str, float, bool, bytes, list, dict, tuple, set, type, object):
         assert isinstance(digest(t), Digest)
 
 
-def test_dataclass_type_is_digestible():
-    """Digesting a dataclass *class* (not an instance) must not raise."""
-
-    @dataclass
-    class Point:
-        x: float
-        y: float
-
-    assert isinstance(digest(Point), Digest)
-
-
-def test_plain_class_is_digestible():
-    """User-defined non-dataclass classes must be digestible."""
-
-    class MyClass:
-        pass
-
-    assert isinstance(digest(MyClass), Digest)
-
-
-def test_type_digest_is_stable():
-    """Digesting the same type object twice returns the same value."""
+def test_builtin_type_digest_is_stable():
+    """Digesting the same built-in type twice returns the same value."""
     assert digest(int) == digest(int)
     assert digest(str) == digest(str)
 
 
-def test_different_types_have_different_digests():
-    """int and str must produce different digests."""
+def test_different_builtin_types_have_different_digests():
+    """int, str, and float must produce distinct digests."""
     assert digest(int) != digest(str)
     assert digest(int) != digest(float)
 
 
-def test_type_digest_differs_from_instance_digest():
-    """digest(int) must differ from digest(0), the most natural int instance."""
+def test_builtin_type_digest_differs_from_instance_digest():
+    """digest(int) must differ from digest(0)."""
     assert digest(int) != digest(0)
 
 
-def test_dataclass_type_differs_from_instance():
-    """Digesting a dataclass class must differ from digesting one of its instances."""
+def test_user_defined_class_raises_indigestible():
+    """User-defined classes are not digestible (only builtins are)."""
+    from fleche.digest import Indigestible
+
+    class MyClass:
+        pass
+
+    with pytest.raises(Indigestible):
+        digest(MyClass)
+
+
+def test_dataclass_type_raises_indigestible():
+    """A dataclass *class* (not instance) is not digestible."""
+    from fleche.digest import Indigestible
 
     @dataclass
     class Pt:
         x: int
 
-    assert digest(Pt) != digest(Pt(x=1))
+    with pytest.raises(Indigestible):
+        digest(Pt)
 
 
-def test_two_classes_with_same_name_in_same_scope_have_same_digest():
-    """Two class objects sharing module + qualname (e.g. redefined in the same scope)
-    must produce the same digest — identity is determined by name, not object id."""
+def test_dataclass_instance_still_works():
+    """The dataclass instance path must not be broken by the type guard."""
 
-    class Temp:
-        pass
+    @dataclass
+    class Pt:
+        x: int
 
-    first_digest = digest(Temp)
-
-    class Temp:  # noqa: F811 — intentional redefinition
-        pass
-
-    assert digest(Temp) == first_digest
+    assert isinstance(digest(Pt(x=1)), Digest)
