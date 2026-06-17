@@ -300,30 +300,24 @@ class TestLazyCallDetach:
         lc = self._lazy()
         assert isinstance(lc.detach(), DigestedCall)
 
-    def test_field_equality_with_originating_digested_call(self):
-        """detach() reproduces every field of the DigestedCall it came from."""
-        values = _mem()
-        cache = _cache(values)
-        call = _call(arguments={"x": 10, "y": 20}, result=42,
-                     metadata={"Runtime": {"elapsed": 1.5}},
-                     module="mymod", version=3, code_digest="abc")
-        dc = call.stash(values)
-        lc = dc.fetch(cache)
-        dc2 = lc.detach()
-
-        assert dc2.name == dc.name
-        assert dc2.arguments == dc.arguments
-        assert dc2.result == dc.result
-        assert dc2.metadata == dc.metadata
-        assert dc2.module == dc.module
-        assert dc2.version == dc.version
-        assert dc2.code_digest == dc.code_digest
-
     def test_round_trip_fetch_detach(self):
-        """fetch(cache).detach() == original DigestedCall (field-wise)."""
+        """fetch(cache).detach() == original DigestedCall (field-wise).
+
+        Uses non-default values for every optional field (metadata,
+        module, version, code_digest) so the equality check exercises
+        the full DigestedCall.__eq__ surface — a regression that drops
+        any one of those fields on detach() must fail this assertion.
+        """
         values = _mem()
         cache = _cache(values)
-        call = _call()
+        call = _call(
+            arguments={"x": 10, "y": 20},
+            result=42,
+            metadata={"Runtime": {"elapsed": 1.5}},
+            module="mymod",
+            version=3,
+            code_digest="abc",
+        )
         dc = call.stash(values)
         assert dc == dc.fetch(cache).detach()
 

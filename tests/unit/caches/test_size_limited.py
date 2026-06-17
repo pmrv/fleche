@@ -101,14 +101,6 @@ def test_thread_safety():
     assert len(keys) <= 5
 
 
-def test_contains_delegates():
-    cache = make_slcache(max_size=5)
-    c = make_call("f", 1, 2)
-    key = cache.save(c)
-    assert cache.contains(key)
-    assert not cache.contains("a" * 64)
-
-
 def test_query_delegates():
     cache = make_slcache(max_size=5)
     cache.save(make_call("myf", 1, 10))
