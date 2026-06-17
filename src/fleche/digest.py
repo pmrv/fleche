@@ -279,7 +279,7 @@ def _digest_bytes(value: Any) -> bytes:
             # This case must precede the dataclasses check: is_dataclass() returns True
             # for both a class and its instances, but getattr(cls, field) raises
             # AttributeError for required fields that have no class-level default.
-            m.update(_digest_bytes(f"builtins.{value.__qualname__}"))
+            return _digest_bytes(f"builtins.{value.__qualname__}")
         case _ if dataclasses.is_dataclass(value) and not isinstance(value, type):
             # cannot use asdict because it recursively converts values which destroys digests
             # instead (flat-) convert to dictionaries, salt with type name, then fallback to dictionary case.
