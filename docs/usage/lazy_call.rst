@@ -12,20 +12,23 @@ When you call ``cache().load(key)`` or iterate over ``cache().query(...)``, you 
 
 .. code-block:: python
 
-   from fleche import cache
+   from fleche import fleche, cache
+
+   @fleche
+   def process(x):
+       return x * 2
+
+   process(21)                       # populate the cache
+   key = process.digest(21)          # SHA-256 digest for this call
 
    # Default: returns a LazyCall — cheap, no deserialization yet
    lazy_call = cache().load(key)
 
    # Arguments and results are fetched only when accessed
-   print(lazy_call.result)          # Triggers a load from value storage
-   print(lazy_call.arguments['x'])  # Triggers a load for argument 'x'
+   print(lazy_call.result)           # Triggers a load from value storage
+   print(lazy_call.arguments['x'])   # Triggers a load for argument 'x'
 
-To load everything upfront, call ``.fetch()`` on an existing ``LazyCall``:
-
-.. code-block:: python
-
-   # Fetch everything from a lazy call you already have
+   # Fetch everything upfront from a lazy call you already have
    call = lazy_call.fetch()
 
 Parity with Call
