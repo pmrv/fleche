@@ -75,6 +75,11 @@ def test_supported_types():
         {"a": 1, "b": None},
         np.array([1, 2, 3]),
         MyData(x=1, y="a"),
+        # built-in types (the class objects themselves) — issue #469
+        int,
+        str,
+        list,
+        dict,
     ]
 
     for example in supported_examples:
@@ -849,28 +854,26 @@ def test_module_digest_function_content_independence():
 
 # --- Tests for digesting types (classes) — issue #469 ---
 
+# Only built-in types (the ``builtins`` module) are digestible; everything else
+# raises ``Indigestible``.  Digestibility of these is also covered generically by
+# ``test_supported_types``; the parametrized tests below pin down distinctness.
+BUILTIN_TYPES = (int, str, float, bool, bytes, list, dict, tuple, set, type, object)
 
-def test_builtin_types_are_digestible():
+
+@pytest.mark.parametrize("t", BUILTIN_TYPES)
+def test_builtin_type_is_digestible(t):
     """Built-in types (builtins module) must not raise Indigestible."""
-    for t in (int, str, float, bool, bytes, list, dict, tuple, set, type, object):
-        assert isinstance(digest(t), Digest)
+    assert isinstance(digest(t), Digest)
 
 
-def test_builtin_type_digest_is_stable():
-    """Digesting the same built-in type twice returns the same value."""
-    assert digest(int) == digest(int)
-    assert digest(str) == digest(str)
-
-
-def test_different_builtin_types_have_different_digests():
-    """int, str, and float must produce distinct digests."""
-    assert digest(int) != digest(str)
-    assert digest(int) != digest(float)
-
-
-def test_builtin_type_digest_differs_from_instance_digest():
-    """digest(int) must differ from digest(0)."""
-    assert digest(int) != digest(0)
+@pytest.mark.parametrize("t2", BUILTIN_TYPES)
+@pytest.mark.parametrize("t1", BUILTIN_TYPES)
+def test_builtin_type_digests_distinct(t1, t2):
+    """Equal types digest equally; distinct types digest distinctly."""
+    if t1 is t2:
+        assert digest(t1) == digest(t2)
+    else:
+        assert digest(t1) != digest(t2)
 
 
 def test_user_defined_class_raises_indigestible():
