@@ -56,9 +56,11 @@ Optionally pre-applies ``*args`` and ``**kwargs`` via :func:`functools.partial`.
        return a + b
 
    with cache("memory"):
-       bound = add.bind()      # freezes the active "memory" cache
-       result = bound(1, 2)    # runs under that cache regardless of current context
-       assert result == 3
+       bound = add.bind()   # freezes the active "memory" cache
+
+   # bound carries the "memory" cache — callable anywhere, no context needed
+   result = bound(1, 2)
+   assert result == 3
 
    # Pre-apply arguments
    with cache("memory"):
