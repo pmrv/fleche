@@ -18,19 +18,18 @@ When you call ``cache().load(key)`` or iterate over ``cache().query(...)``, you 
    def process(x):
        return x * 2
 
-   with cache("memory"):
-       process(21)                       # populate the cache
-       key = process.digest(21)          # SHA-256 digest for this call
+   process(21)                       # populate the cache
+   key = process.digest(21)          # SHA-256 digest for this call
 
-       # Default: returns a LazyCall — cheap, no deserialization yet
-       lazy_call = cache().load(key)
+   # Default: returns a LazyCall — cheap, no deserialization yet
+   lazy_call = cache().load(key)
 
-       # Arguments and results are fetched only when accessed
-       print(lazy_call.result)           # Triggers a load from value storage
-       print(lazy_call.arguments['x'])   # Triggers a load for argument 'x'
+   # Arguments and results are fetched only when accessed
+   print(lazy_call.result)           # Triggers a load from value storage
+   print(lazy_call.arguments['x'])   # Triggers a load for argument 'x'
 
-       # Fetch everything upfront from a lazy call you already have
-       call = lazy_call.fetch()
+   # Fetch everything upfront from a lazy call you already have
+   call = lazy_call.fetch()
 
 Parity with Call
 ----------------
