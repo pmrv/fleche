@@ -655,6 +655,58 @@ def test_sshcache_workdir_omitted_from_config_when_unset():
     assert "workdir" not in d
 
 
+# ---------------------------------------------------------------------------
+# Real subprocess lifecycle (covers _SshConnection._open / _diagnose / _close)
+# ---------------------------------------------------------------------------
+
+
+def test_sshconnection_surfaces_remote_exit_code_and_stderr_tail():
+    """Real-subprocess failure surfaces exit code + stderr tail to the caller.
+
+    All other tests stub the transport with in-process pipes, so the
+    :class:`_SshConnection` lifecycle (spawn, stderr forwarder, diagnose,
+    teardown) is otherwise unexercised. Here we substitute the SSH argv
+    with a local Python one-liner that writes to stderr and exits
+    non-zero, then drive a single RPC: the resulting
+    :class:`RemoteConnectionError` must carry the exit code and stderr
+    tail produced by :meth:`_SshConnection._diagnose`. This is the
+    user-visible promise that a failed ``module load`` / missing remote
+    venv shows up as a useful error instead of a bare ``EOFError``.
+    """
+    from fleche.remote import RemoteConnectionError, _SshConnection
+
+    script = (
+        "import sys\n"
+        "sys.stderr.write('module: command not found\\n')\n"
+        "sys.stderr.flush()\n"
+        "sys.exit(7)\n"
+    )
+
+    class _LocalSubprocess(_SshConnection):
+        def _build_command(self):
+            return [sys.executable, "-c", script]
+
+    conn = _LocalSubprocess(
+        host="local.host",
+        python=sys.executable,
+        cache_name=None,
+        ssh_options=(),
+        setup_commands=(),
+    )
+    try:
+        with pytest.raises(RemoteConnectionError) as excinfo:
+            conn.call("contains", "deadbeef")
+    finally:
+        conn.close()
+    msg = str(excinfo.value)
+    assert "Remote cache connection lost during 'contains'" in msg
+    assert "remote exit code: 7" in msg
+    assert "module: command not found" in msg
+    # _close() drops the proc and the stderr thread.
+    assert conn._proc is None
+    assert conn._stderr_thread is None
+
+
 def test_cache_stack_with_ssh_layer():
     """A stack of [local, ssh] composes via the existing array-of-tables path."""
     from fleche.config import cache_from_config
