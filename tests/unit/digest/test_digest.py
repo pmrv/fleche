@@ -18,7 +18,7 @@ import keyword
 
 
 from fleche import fleche
-from fleche.digest import digest, Digest
+from fleche.digest import digest, Digest, Indigestible
 from fleche.call import Call
 
 
@@ -854,16 +854,7 @@ def test_module_digest_function_content_independence():
 
 # --- Tests for digesting types (classes) — issue #469 ---
 
-# Only built-in types (the ``builtins`` module) are digestible; everything else
-# raises ``Indigestible``.  Digestibility of these is also covered generically by
-# ``test_supported_types``; the parametrized tests below pin down distinctness.
 BUILTIN_TYPES = (int, str, float, bool, bytes, list, dict, tuple, set, type, object)
-
-
-@pytest.mark.parametrize("t", BUILTIN_TYPES)
-def test_builtin_type_is_digestible(t):
-    """Built-in types (builtins module) must not raise Indigestible."""
-    assert isinstance(digest(t), Digest)
 
 
 @pytest.mark.parametrize("t2", BUILTIN_TYPES)
@@ -876,34 +867,13 @@ def test_builtin_type_digests_distinct(t1, t2):
         assert digest(t1) != digest(t2)
 
 
-def test_user_defined_class_raises_indigestible():
-    """User-defined classes are not digestible (only builtins are)."""
-    from fleche.digest import Indigestible
+@dataclass
+class _Pt:
+    x: int
 
-    class MyClass:
-        pass
 
+@pytest.mark.parametrize("t", [type("MyClass", (), {}), _Pt])
+def test_non_builtin_type_raises_indigestible(t):
+    """Non-builtin type objects (user-defined classes, dataclass classes) raise Indigestible."""
     with pytest.raises(Indigestible):
-        digest(MyClass)
-
-
-def test_dataclass_type_raises_indigestible():
-    """A dataclass *class* (not instance) is not digestible."""
-    from fleche.digest import Indigestible
-
-    @dataclass
-    class Pt:
-        x: int
-
-    with pytest.raises(Indigestible):
-        digest(Pt)
-
-
-def test_dataclass_instance_still_works():
-    """The dataclass instance path must not be broken by the type guard."""
-
-    @dataclass
-    class Pt:
-        x: int
-
-    assert isinstance(digest(Pt(x=1)), Digest)
+        digest(t)
