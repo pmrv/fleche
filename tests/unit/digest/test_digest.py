@@ -93,11 +93,15 @@ def test_different_integers_have_different_hashes(x, y):
 @given(st.floats(allow_nan=True), st.floats(allow_nan=True))
 def test_different_floats_have_different_hashes(x, y):
     """Test that two different floats have different hashes."""
-    # Handle NaN comparison and sign comparison
-    both_nan = math.isnan(x) and math.isnan(y)
-    same_sign = math.copysign(1, x) == math.copysign(1, y)
-
-    if (both_nan and same_sign) or x == y:
+    if math.isnan(x) or math.isnan(y):
+        # NaN case: digest is based on raw binary packing
+        x_bytes = struct.pack("<d", x)
+        y_bytes = struct.pack("<d", y)
+        if x_bytes == y_bytes:
+            assert digest(x) == digest(y)
+        else:
+            assert digest(x) != digest(y)
+    elif x == y:
         assert digest(x) == digest(y)
     else:
         assert digest(x) != digest(y)
