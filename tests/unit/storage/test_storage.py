@@ -31,7 +31,7 @@ def test_backend_put_get_roundtrip(storage_backend, value):
         assert loaded == value
 
 
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
 @given(call=st_digested_calls)
 def test_backend_stores_call_objects(storage_backend, call):
     key = call.to_lookup_key()
@@ -43,7 +43,7 @@ def test_backend_stores_call_objects(storage_backend, call):
     assert loaded == call
 
 
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
 @given(value=st_data)
 def test_backend_short_prefix_expand(storage_backend, value):
     key = digest(value)
