@@ -47,24 +47,26 @@ Returns a :class:`~fleche.state.BoundWrapper` that captures the currently active
 
 Optionally pre-applies ``*args`` and ``**kwargs`` via :func:`functools.partial`. This is useful when work needs to be submitted to a process pool where the cache context must travel with the callable.
 
-.. code-block:: python
+.. code-block:: pycon
 
-   from fleche import fleche, cache
+   >>> from fleche import fleche, cache
 
-   @fleche
-   def add(a, b):
-       return a + b
+   >>> @fleche
+   ... def add(a, b):
+   ...     return a + b
 
-   with cache("memory"):
-       bound = add.bind()      # freezes the active "memory" cache
-       result = bound(1, 2)    # runs under that cache regardless of current context
-       assert result == 3
+   >>> with cache("memory"):
+   ...     bound = add.bind()   # freezes the active "memory" cache
+   ...
+   >>> # bound carries the "memory" cache — callable anywhere, no context needed
+   >>> result = bound(1, 2)
+   >>> assert result == 3
 
-   # Pre-apply arguments
-   with cache("memory"):
-       bound_partial = add.bind(1, 2)
-       result = bound_partial()   # equivalent to add(1, 2) in the frozen context
-       assert result == 3
+   >>> # Pre-apply arguments
+   >>> with cache("memory"):
+   ...     bound_partial = add.bind(1, 2)
+   ...     result = bound_partial()   # equivalent to add(1, 2) in the frozen context
+   ...     assert result == 3
 
 See :class:`~fleche.state.BoundWrapper` for the full API, including pickling support.
 
@@ -73,14 +75,14 @@ Accessing the Original Function
 
 The original, undecorated function is always accessible via the ``.__wrapped__`` attribute. This is useful if you need to bypass the cache entirely for a specific call.
 
-.. code-block:: python
+.. code-block:: pycon
 
-   @fleche
-   def my_func(x):
-       return x * 2
+   >>> @fleche
+   ... def my_func(x):
+   ...     return x * 2
 
-   # Bypass cache
-   result = my_func.__wrapped__(10)
+   >>> # Bypass cache
+   >>> result = my_func.__wrapped__(10)
 
 Per-Function Static Caching
 ---------------------------
@@ -119,11 +121,11 @@ no effect on the persistent fleche backends.
 
    If you genuinely need to drop the per-function cache in-process:
 
-   .. code-block:: python
+   .. code-block:: pycon
 
-      from fleche.call import _profile
+      >>> from fleche.call import _profile
 
-      _profile.cache_clear()
+      >>> _profile.cache_clear()
 
 .. note::
 
@@ -147,28 +149,28 @@ Usage with Decorated Methods
    For ``fleche`` to cache calls that include ``self``, the class must be hashable —
    i.e. it must implement a ``__digest__`` method (see :doc:`/dev/custom_digests`).
 
-   .. code-block:: python
+   .. code-block:: pycon
 
-      from fleche import fleche
-      from fleche.digest import digest, Digest
+      >>> from fleche import fleche
+      >>> from fleche.digest import digest, Digest
 
-      class MyClass:
-          def __init__(self, id: int):
-              self.id = id
+      >>> class MyClass:
+      ...     def __init__(self, id: int):
+      ...         self.id = id
+      ...
+      ...     def __digest__(self) -> Digest:
+      ...         return digest((type(self).__name__, self.id))
+      ...
+      ...     @fleche
+      ...     def compute(self, x):
+      ...         return x ** 2
 
-          def __digest__(self) -> Digest:
-              return digest((type(self).__name__, self.id))
+      >>> obj = MyClass(id=1)
 
-          @fleche
-          def compute(self, x):
-              return x ** 2
+      >>> # Correct — pass self explicitly
+      >>> obj.compute.query(obj, x=5)
+      >>> obj.compute.contains(obj, x=5)
+      >>> obj.compute.digest(obj, x=5)
 
-      obj = MyClass(id=1)
-
-      # Correct — pass self explicitly
-      obj.compute.query(obj, x=5)
-      obj.compute.contains(obj, x=5)
-      obj.compute.digest(obj, x=5)
-
-      # Also works as a keyword argument
-      obj.compute.query(self=obj, x=5)
+      >>> # Also works as a keyword argument
+      >>> obj.compute.query(self=obj, x=5)

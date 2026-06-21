@@ -30,10 +30,10 @@ classifiers = [
 ]
 license = "BSD-3-Clause"
 dependencies = [
-    'numpy',
+    'numpy >= 1.26',
     'pandas >= 2.2, <4',
-    'pyiron-snippets',
-    'filelock',
+    'pyiron-snippets >= 1.1',
+    'filelock >= 3.4',
 ]
 
 [project.optional-dependencies]
@@ -45,36 +45,36 @@ docs = [
     "ipython_pygments_lexers",
 ]
 cloudpickle = [
-    "cloudpickle",
+    "cloudpickle >= 2",
 ]
 dill = [
-    "dill",
+    "dill >= 0.3",
 ]
 sqlalchemy = [
-    "sqlalchemy",
+    "sqlalchemy >= 2",
 ]
 bagofholding = [
     "bagofholding == 0.1.12",
 ]
 ssh = [
     # SshCache uses cloudpickle for its wire protocol — required, not optional.
-    "cloudpickle",
+    "cloudpickle >= 2",
 ]
 tests = [
-    "pytest",
-    "hypothesis",
-    "cloudpickle",
-    "dill",
-    "sqlalchemy",
+    "pytest >= 7.4",
+    "hypothesis >= 6.100",
+    "cloudpickle >= 2",
+    "dill >= 0.3",
+    "sqlalchemy >= 2",
     "bagofholding == 0.1.12",
-    "nbconvert",
-    "ipykernel",
-    "tabulate",
-    "attrs",
+    "nbconvert >= 6.5",
+    "ipykernel >= 6.26",
+    "tabulate >= 0.8",
+    "attrs >= 21.3",
 ]
 executorlib = [
     "executorlib",
 ]
 ty = [
-    "ty == 0.0.43",
+    "ty == 0.0.48",
 ]

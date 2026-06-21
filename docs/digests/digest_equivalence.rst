@@ -29,29 +29,29 @@ This means you can convert a class from one record framework to the other withou
 invalidating any already-cached call that took an instance of that class as an
 argument (or returned one).
 
-.. code-block:: python
+.. code-block:: pycon
 
-    from dataclasses import dataclass
-    import attrs
-    from fleche.digest import digest
+    >>> from dataclasses import dataclass
+    >>> import attrs
+    >>> from fleche.digest import digest
 
-    # before the migration
-    @dataclass
-    class Point:
-        x: int
-        y: int
+    >>> # before the migration
+    >>> @dataclass
+    ... class Point:
+    ...     x: int
+    ...     y: int
 
-    before = digest(Point(x=1, y=2))
+    >>> before = digest(Point(x=1, y=2))
 
-    # after the migration — same name, same fields
-    @attrs.define
-    class Point:
-        x: int
-        y: int
+    >>> # after the migration — same name, same fields
+    >>> @attrs.define
+    ... class Point:
+    ...     x: int
+    ...     y: int
 
-    after = digest(Point(x=1, y=2))
+    >>> after = digest(Point(x=1, y=2))
 
-    assert before == after
+    >>> assert before == after
 
 Why we make them equivalent
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -96,17 +96,17 @@ If a particular class needs stricter scoping than "same name + same fields", giv
 a custom ``__digest__`` (see :doc:`/dev/custom_digests`).  For example, to scope by full
 qualified path:
 
-.. code-block:: python
+.. code-block:: pycon
 
-    @dataclass
-    class Point:
-        x: int
-        y: int
-
-        def __digest__(self):
-            from fleche.digest import digest
-            return digest((f"{type(self).__module__}.{type(self).__qualname__}",
-                           self.x, self.y))
+    >>> @dataclass
+    ... class Point:
+    ...     x: int
+    ...     y: int
+    ...
+    ...     def __digest__(self):
+    ...         from fleche.digest import digest
+    ...         return digest((f"{type(self).__module__}.{type(self).__qualname__}",
+    ...                        self.x, self.y))
 
 A custom ``__digest__`` short-circuits the dataclass / attrs path and takes
 precedence over both built-in cases.

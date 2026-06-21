@@ -8,25 +8,31 @@ Fleche avoids this by returning **lazy call objects** from ``load()`` and ``quer
 What is a LazyCall?
 -------------------
 
-When you call ``cache().load(key)`` or iterate over ``cache().query(...)``, you get back a ``LazyCall`` rather than a full ``Call``. A ``LazyCall`` holds the digests (unique identifiers) of the arguments and result, plus a reference to the cache, but none of the actual Python objects. Those are loaded on demand the first time you touch them.
+When you call ``cache().load(key)`` or iterate over ``cache().query(...)``, you get back a ``LazyCall`` rather than a full ``Call``. A ``LazyCall`` holds the digests (unique identifiers) of the arguments and result, plus a reference to the cache, but none of the actual Python objects. Those are loaded from storage on demand whenever you access them.
 
-.. code-block:: python
+.. code-block:: pycon
 
-   from fleche import cache
+   >>> from fleche import fleche, cache
+   >>> @fleche
+   ... def process(x):
+   ...     return x * 2
+   ...
+   >>> process(21)                   # populate the cache
+   >>> key = process.digest(21)      # SHA-256 digest for this call
 
-   # Default: returns a LazyCall — cheap, no deserialization yet
-   lazy_call = cache().load(key)
+   >>> # Default: returns a LazyCall — cheap, no deserialization yet
+   >>> lazy_call = cache().load(key)
 
-   # Arguments and results are fetched only when accessed
-   print(lazy_call.result)          # Triggers a load from value storage
-   print(lazy_call.arguments['x'])  # Triggers a load for argument 'x'
+   >>> # Arguments and results are fetched only when accessed
+   >>> print(lazy_call.result)          # Triggers a load from value storage
+   >>> print(lazy_call.arguments['x'])  # Triggers a load for argument 'x'
 
 To load everything upfront, call ``.fetch()`` on an existing ``LazyCall``:
 
-.. code-block:: python
+.. code-block:: pycon
 
-   # Fetch everything from a lazy call you already have
-   call = lazy_call.fetch()
+   >>> # Fetch everything from a lazy call you already have
+   >>> call = lazy_call.fetch()
 
 Parity with Call
 ----------------
@@ -40,7 +46,7 @@ Parity with Call
 LazyArguments
 -------------
 
-The ``arguments`` attribute of a ``LazyCall`` returns a ``LazyArguments`` proxy. This proxy implements the standard Python ``Mapping`` interface, so you can use it like a regular dictionary. Each argument is fetched from storage the first time it is accessed by key.
+The ``arguments`` attribute of a ``LazyCall`` returns a ``LazyArguments`` proxy. This proxy implements the standard Python ``Mapping`` interface, so you can use it like a regular dictionary. Each argument is fetched from storage on each access by key — there is no per-key caching inside the proxy itself.
 
 When lazy loading helps most
 -----------------------------

@@ -150,3 +150,28 @@ def test_short_digest_expansion_via_D():
 def test_D_alias():
     assert D("abc") == Digest("abc")
     assert isinstance(D("abc"), Digest)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        42,                  # non-string
+        "g" * 8,             # non-hex string (g is not a hex digit)
+        "abc!",              # mixed hex + non-hex
+        "",                  # empty string fails 0 < len
+        "a" * 65,            # exceeds DIGEST_LENGTH
+    ],
+    ids=["int", "non_hex", "mixed", "empty", "too_long"],
+)
+def test_D_falls_through_to_digest_for_non_short_hex(value):
+    """D() must compute the digest of any input that isn't a short hex string.
+
+    Pins the documented contract: only non-empty hex strings up to
+    DIGEST_LENGTH characters are used verbatim; anything else (non-strings,
+    empty strings, non-hex characters, too-long strings) is hashed.
+    """
+    from fleche import digest as _digest
+
+    result = D(value)
+    assert isinstance(result, Digest)
+    assert result == _digest.digest(value)
