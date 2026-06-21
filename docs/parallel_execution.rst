@@ -37,7 +37,7 @@ automatically, serving cache hits from a pre-completed
    >>> import concurrent.futures
    >>> import fleche
    >>> from fleche.caches import Cache
-   >>> from fleche.storage.memory import ValueMemory, CallMemory
+   >>> from fleche.storage import ValueMemory, CallMemory
 
    >>> @fleche.fleche
    ... def compute(x):
@@ -64,7 +64,7 @@ write to the same store:
    >>> import fleche
    >>> from fleche import BoundWrapper
    >>> from fleche.caches import Cache
-   >>> from fleche.storage.memory import ValueMemory, CallMemory
+   >>> from fleche.storage import ValueMemory, CallMemory
 
    >>> @fleche.fleche
    ... def compute(x):
@@ -114,7 +114,7 @@ needed:
    >>> import fleche
    >>> from fleche import BoundWrapper
    >>> from fleche.caches import Cache
-   >>> from fleche.storage.pickle_file import ValuePickleFile, CallPickleFile
+   >>> from fleche.storage import ValuePickleFile, CallPickleFile
 
    >>> @fleche.fleche
    ... def heavy_computation(x):
@@ -214,7 +214,7 @@ automatically caches the result once the future completes:
    >>> import concurrent.futures
    >>> import fleche
    >>> from fleche.caches import Cache
-   >>> from fleche.storage.memory import ValueMemory, CallMemory
+   >>> from fleche.storage import ValueMemory, CallMemory
 
    >>> _executor = concurrent.futures.ThreadPoolExecutor()
 
@@ -258,7 +258,7 @@ automatically:
    >>> import concurrent.futures, tempfile, os
    >>> import fleche
    >>> from fleche.caches import Cache
-   >>> from fleche.storage.pickle_file import ValuePickleFile, CallPickleFile
+   >>> from fleche.storage import ValuePickleFile, CallPickleFile
 
    >>> @fleche.fleche
    ... def heavy_computation(x):

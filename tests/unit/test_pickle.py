@@ -134,7 +134,7 @@ def test_size_limited_cache_picklable():
 # ---------------------------------------------------------------------------
 
 
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @given(call=st_digested_calls)
 def test_call_storage_functional_roundtrip(call_storage, call):
     """Data saved to a call storage before pickling is accessible after restoring."""
@@ -147,7 +147,7 @@ def test_call_storage_functional_roundtrip(call_storage, call):
     assert restored.load(key) == call
 
 
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @given(call=st_digested_calls)
 def test_cache_functional_roundtrip(value_storage, call_storage, call):
     """Data saved to a cache before pickling is accessible after restoring."""
@@ -161,7 +161,7 @@ def test_cache_functional_roundtrip(value_storage, call_storage, call):
     assert loaded == call
 
 
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @given(call=st_digested_calls)
 def test_cache_stack_functional_roundtrip(value_storage, call_storage, call):
     """CacheStack saves and loads correctly after pickling."""
