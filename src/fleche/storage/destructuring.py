@@ -1,6 +1,7 @@
 import hashlib
 from abc import ABC, abstractmethod
-from collections import Counter
+from collections import Counter, OrderedDict
+from collections.abc import Mapping
 import dataclasses as _dataclasses
 from dataclasses import dataclass
 from numbers import Number
@@ -71,9 +72,16 @@ class Digested(ABC):
         else:
             return key
 
+
 @dataclass
 class DigestedIterable(Digested):
     items: list | tuple
+
+    def __repr__(self):
+        # Surface the inner container type (list / tuple / subclass) which is
+        # part of the wrapper's identity but invisible in a bare [...] / (...) repr.
+        inner = list.__repr__(list(self.items))
+        return f"DigestedIterable[{type(self.items).__name__}]({inner})"
 
     def underlying(self):
         return self.items
@@ -95,30 +103,56 @@ class DigestedIterable(Digested):
 
 
 @dataclass
-class DigestedDict(Digested):
-    items: dict
+class DigestedMapping(Digested):
+    """Marker for a destructured mapping, preserving the concrete mapping type.
+
+    Reconstruction (:meth:`_rebuild_plain`, :meth:`mend`) rebuilds via
+    ``type(value)(<iterable of (key, value) pairs>)``, so only mapping types
+    whose constructor accepts an iterable of pairs round-trip correctly
+    (``dict``, ``OrderedDict``, plain dict subclasses, ...).  Types that break
+    this contract — e.g. ``defaultdict`` (first argument is a factory, raises)
+    or ``Counter`` (would *count* the pairs instead) — must not be sundered.
+    Which mappings are destructured is controlled by the exact-type allowlist
+    in ``_DESTRUCTURERS`` (currently ``dict`` and ``OrderedDict``); every other
+    mapping type is stored verbatim as an opaque value unless a handler is
+    registered via :func:`register_destructurer`.
+    """
+
+    items: Mapping
+
+    def __repr__(self):
+        # The inner type (dict / OrderedDict / DirectoryBlob / ...) is part of the
+        # wrapper's identity but lost by ``dict``'s ``{...}`` repr.  Surface it.
+        return f"DigestedMapping[{type(self.items).__name__}]({dict.__repr__(self.items)})"
 
     def underlying(self):
         return self.items
 
-    def mend(self, storage: 'DestructuringMixin') -> dict:
-        return {self.get(storage, k): self.get(storage, v)
-                    for k, v in self.items.items()}
+    def mend(self, storage: 'DestructuringMixin') -> Mapping:
+        return type(self.items)(
+            (self.get(storage, k), self.get(storage, v))
+            for k, v in self.items.items()
+        )
 
     @classmethod
-    def _slots(cls, value: dict) -> list[tuple[None, Any]]:
+    def _slots(cls, value: Mapping) -> list[tuple[None, Any]]:
         # keys and values interned as one flat sequence; _rebuild_* re-pairs them by
         # position using len(value) as the key/value split point.
         return [(None, k) for k in value] + [(None, v) for v in value.values()]
 
     @classmethod
-    def _rebuild_plain(cls, value: dict, labels: tuple, children: tuple) -> dict:
+    def _rebuild_plain(cls, value: Mapping, labels: tuple, children: tuple) -> Mapping:
         n = len(value)
-        return dict(zip(children[:n], children[n:]))
+        return type(value)(zip(children[:n], children[n:]))
 
     @classmethod
-    def _rebuild_digest(cls, value: dict, labels: tuple, children: tuple) -> 'DigestedDict':
+    def _rebuild_digest(cls, value: Mapping, labels: tuple, children: tuple) -> 'DigestedMapping':
         return cls(cls._rebuild_plain(value, labels, children))
+
+
+# Backward-compatible alias: DigestedMapping was renamed from DigestedDict when it
+# was generalized from dict to any Mapping.  Keep the old name importable.
+DigestedDict = DigestedMapping
 
 
 @dataclass
@@ -195,8 +229,15 @@ class DigestedAttrs(DigestedFields):
 
 
 _DESTRUCTURERS: list[tuple[Callable[[Any], bool], Callable]] = [
-    (lambda v: isinstance(v, (list, tuple)), DigestedIterable.sunder),
-    (lambda v: isinstance(v, dict), DigestedDict.sunder),
+    # Exact types (not isinstance): reconstruction goes through
+    # ``type(value)(<children>)``, a contract subclasses may repurpose —
+    # defaultdict's first argument is a factory (crashes), Counter *counts* the
+    # pairs (silently wrong), namedtuples reject a single iterable.  Subclasses
+    # are therefore stored verbatim as opaque values unless a handler is opted
+    # in via register_destructurer().  Dataclasses/attrs are exempt from this
+    # concern: their mend bypasses __init__ entirely.
+    (lambda v: type(v) in (list, tuple), DigestedIterable.sunder),  # noqa: E721
+    (lambda v: type(v) in (dict, OrderedDict), DigestedMapping.sunder),  # noqa: E721
     (lambda v: _dataclasses.is_dataclass(v) and not isinstance(v, type), DigestedDataclass.sunder),
     (_attrs.is_attrs_instance, DigestedAttrs.sunder),
 ]
@@ -210,7 +251,10 @@ def register_destructurer(pred: Callable[[Any], bool], fn: Callable) -> None:
     :meth:`DestructuringMixin._intern_rec`.  Entries are appended after the
     built-in ones; first match wins, so registering a handler for an entirely
     new container type is safe without displacing list/dict/dataclass/attrs.
-    Call before any :class:`DestructuringMixin` instance is used.
+    The built-in predicates match exact types only, so a handler for a subclass
+    (e.g. ``defaultdict`` with a picklable factory) can also be registered
+    without conflict.  Call before any :class:`DestructuringMixin` instance is
+    used.
     """
     _DESTRUCTURERS.append((pred, fn))
 
@@ -326,7 +370,7 @@ class DestructuringMixin(base.ValueStorage):
         match raw:
             case DigestedIterable():
                 return {i for i in raw.items if isinstance(i, digest.Digest)}
-            case DigestedDict():
+            case DigestedMapping():
                 return {
                     x
                     for pair in raw.items.items()
@@ -355,7 +399,7 @@ class DestructuringMixin(base.ValueStorage):
         """Return a counter of how many times each stored key is referenced as a sub-component.
 
         Scans every raw entry and tallies ``Digest`` back-references found inside
-        :class:`DigestedIterable` and :class:`DigestedDict` wrappers.  A count of ``0``
+        :class:`DigestedIterable` and :class:`DigestedMapping` wrappers.  A count of ``0``
         means the key is not pointed to by any other stored value (i.e. a top-level entry).
         A count greater than ``1`` indicates a sub-value shared between multiple parent containers.
 

@@ -28,7 +28,9 @@ class Rejected(Exception):
 # backwards compat imports
 # from breaking introduced in 0.4.0
 DigestedIterable = storage.destructuring.DigestedIterable
-DigestedDict = storage.destructuring.DigestedDict
+DigestedMapping = storage.destructuring.DigestedMapping
+# DigestedDict was renamed to DigestedMapping; keep the old name re-exported.
+DigestedDict = storage.destructuring.DigestedMapping
 
 
 class BaseCache(OperationContext):
