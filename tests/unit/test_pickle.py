@@ -117,6 +117,18 @@ def test_cache_stack_picklable():
     assert len(restored.stack) == 2
 
 
+def test_size_limited_cache_picklable():
+    """SizeLimitedCache roundtrips through pickle and remains functional."""
+    from fleche.caches import SizeLimitedCache
+    from fleche.call import Call
+    cache = SizeLimitedCache(ValueMemory({}), CallMemory({}), max_size=5)
+    call_obj = Call(name="f", arguments={"x": 1}, result=2, module="test", version=1, metadata={})
+    key = cache.save(call_obj)
+    restored = roundtrip(cache)
+    assert isinstance(restored, SizeLimitedCache)
+    assert restored.contains(key)
+
+
 # ---------------------------------------------------------------------------
 # Functional roundtrip: save → pickle → unpickle → load
 # ---------------------------------------------------------------------------

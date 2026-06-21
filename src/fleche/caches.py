@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 import contextlib
 import logging
 import random
-import threading
 from dataclasses import dataclass, replace, field
 from typing import Iterable, Any, Callable, Literal, overload
 
@@ -13,7 +12,7 @@ from .digest import Digest  # type hint convenience
 from . import storage
 from .storage.base import _longest_common_prefix_length, Intent, OperationContext
 from .storage.destructuring import HasChildDigests
-from .storage.thread_safe import PerKeyLockMixin
+from .storage.thread_safe import PerKeyLockMixin, _PicklableRLock
 from .call import Call, DigestedCall, LazyCall, QueryCall
 from . import call
 from . import query
@@ -824,13 +823,13 @@ class SizeLimitedMixin(BaseCache):
     """
 
     max_size: int
-    _lock: threading.RLock = field(init=False, repr=False, compare=False)
+    _lock: _PicklableRLock = field(init=False, repr=False, compare=False)
     _keys: set[str] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self, *args, **kwargs):
         if hasattr(super(), '__post_init__'):
             super().__post_init__(*args, **kwargs)  # ty: ignore
-        object.__setattr__(self, '_lock', threading.RLock())
+        object.__setattr__(self, '_lock', _PicklableRLock())
         object.__setattr__(self, '_keys', {c.to_lookup_key() for c in self.query(call.QueryCall())})
 
     # ------------------------------------------------------------------
