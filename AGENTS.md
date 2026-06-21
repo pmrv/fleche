@@ -1,6 +1,46 @@
 # AGENTS.md
 
-Reference for AI coding agents working in this repository.
+Cross-tool entry point for AI coding agents (Codex, Cursor, Aider, Claude, ...). Quickstart below; the dense module-by-module reference and decisions log start at [Quick Reference](#quick-reference).
+
+## Commands
+
+```bash
+pip install -e ".[tests]"                              # install with test deps
+pytest tests/                                          # all tests
+pytest tests/unit/digest/test_digest.py::test_name     # single test
+pytest -m smoke                                        # one-round-trip-per-optional-dep packaging sanity
+ty check src/                                          # type check (CI: .github/workflows/ty.yml)
+python benchmarks/run_benchmarks.py                    # benchmarks (writes benchmarks/results.csv)
+```
+
+Python `>=3.11,<3.15`. No committed lint config; `pyproject.toml` has no `[tool.ruff]`/`[tool.flake8]`.
+
+Optional dep extras: `cloudpickle`, `dill`, `sqlalchemy`, `bagofholding`, `ssh` (cloudpickle — **hard-required** for `SshCache`'s wire protocol, not optional within that feature), `executorlib`, `docs`, `tests` (the `tests` extra already pulls in cloudpickle/dill/sqlalchemy/bagofholding/attrs plus pytest/hypothesis/nbconvert), `ty` (pins the `ty` type-checker version run in CI). `attrs` itself has no dedicated extra — it is only required to exercise the `attrs`-class digest/destructuring paths in tests; runtime support degrades gracefully when `attrs` is missing. Other optional deps are gated via `pyiron_snippets.import_alarm.ImportAlarm` — importing a backend without its extra installed raises at construction, not at module import.
+
+## Conventions
+
+- **Conventional Commits** are required (`feat:`/`fix:`/`docs:`/`test:`/`chore:`/`refactor:`, `!` or `BREAKING CHANGE:` for breaks). Release-please derives version bumps and changelog from `main`'s commit history — non-conforming messages are ignored by the release tooling.
+- Running inside a GitHub Action, **attribute commits to `claude[bot]`** (see [Commit attribution](#commit-attribution) below) so they aren't tagged to the workflow's PAT identity.
+- If a task spans a separate issue/PR, keep the detailed response there; only post a quick link back to the original.
+- Fail early when a dependency is missing; report the error rather than working around it.
+
+## Where to look
+
+| Looking for | Start here |
+|---|---|
+| Decorator + helper attachment | `wrapper.py` |
+| Hashing / digest dispatch | `digest.py` |
+| Cache classes, mixins, stacks, GC | `caches.py` |
+| Active cache, sticky context, metadata, `BoundWrapper` | `state.py` |
+| TOML config + named-cache interning | `config.py` |
+| Storage backends (memory / pickle / bagofholding / sql) | `storage/` |
+| SSH remote forwarding | `remote.py` |
+| Chainable queries | `query.py` |
+| Test layout | [Test layout](#test-layout) |
+| CI workflows | `.github/workflows/` (see [Other directories](#other-directories)) |
+| What's been considered or rejected | [Design themes / open scope](#design-themes--open-scope-issue-tracker) |
+
+---
 
 ## Quick Reference
 
@@ -49,20 +89,6 @@ Reference for AI coding agents working in this repository.
 Each mixin/backend declares its own dataclass fields; Python's dataclass machinery merges them into one generated `__init__` via MRO — **do not pass `init=False`** on user-facing fields. Internal state (locks, `_keys` on `SizeLimitedMixin`, `engine`/`session`/`_local` on `Sql`) uses `field(init=False, repr=False, compare=False)` and is rebuilt in `__post_init__` via `object.__setattr__`. `config._asdict_init_only` strips `init=False` fields when serialising, so any new internal field must be `init=False` or it leaks into round-tripped configs. `MemoryBackend`/`ValueMemory`/`CallMemory` carry an explicit `__hash__ = object.__hash__` because their `storage: dict` field is unhashable; the file-backed classes don't need this since all of their fields hash by value. **Footgun (#634):** `@dataclass(frozen=True)` regenerates `__hash__` on every subclass, so the override does **not** carry through — any downstream dict-backed subclass that forgets to repeat `__hash__ = object.__hash__` blows up later inside `PerKeyLockMixin._per_instance_locks[self]` with a confusing `TypeError: unhashable type: 'dict'`. PR #632 surfaced this on the benchmark's bespoke `Raw` variants right after PR #622 reparented `Cache` onto `PerKeyLockMixin`.
 
 ---
-
-## Commands
-
-```bash
-pip install -e ".[tests]"                              # install with test deps
-pytest tests/                                          # all tests
-pytest tests/unit/digest/test_digest.py::test_name     # single test
-ty check src/                                          # type check (CI: .github/workflows/ty.yml)
-python benchmarks/run_benchmarks.py                    # benchmarks (writes benchmarks/results.csv)
-```
-
-Python `>=3.11,<3.15`. No committed lint config; `pyproject.toml` has no `[tool.ruff]`/`[tool.flake8]`.
-
-Optional dep extras: `cloudpickle`, `dill`, `sqlalchemy`, `bagofholding`, `ssh` (cloudpickle — **hard-required** for `SshCache`'s wire protocol, not optional within that feature), `executorlib`, `docs`, `tests` (the `tests` extra already pulls in cloudpickle/dill/sqlalchemy/bagofholding/attrs plus pytest/hypothesis/nbconvert), `ty` (pins the `ty` type-checker version run in CI). `attrs` itself has no dedicated extra — it is only required to exercise the `attrs`-class digest/destructuring paths in tests; runtime support degrades gracefully when `attrs` is missing. Other optional deps are gated via `pyiron_snippets.import_alarm.ImportAlarm` — importing a backend without its extra installed raises at construction, not at module import.
 
 ## Architecture notes
 
