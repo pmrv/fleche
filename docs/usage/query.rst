@@ -15,30 +15,30 @@ Querying from a wrapper
 -----------------------
 The wrapper-based API builds the correct Call template for you.
 
-Example::
+.. code-block:: pycon
 
-    from fleche import fleche, cache, tags
+   >>> from fleche import fleche, cache, tags
 
-    @fleche
-    def add(a, b):
-        return a + b
+   >>> @fleche
+   ... def add(a, b):
+   ...     return a + b
 
-    # Run some calls under different metadata tags
-    with tags(project="alpha", phase="train"):
-        add(1, 2)
-        add(a=3, b=4)
-    with tags(project="beta", phase="eval"):
-        add(10, 5)
+   >>> # Run some calls under different metadata tags
+   >>> with tags(project="alpha", phase="train"):
+   ...     add(1, 2)
+   ...     add(a=3, b=4)
+   >>> with tags(project="beta", phase="eval"):
+   ...     add(10, 5)
 
-    # Find calls tagged with project="alpha"
-    for call in add.query(1, 2, metadata={"tags": {"project": "alpha"}}):
-        assert call.name == "add"
-        assert call.metadata["tags"]["project"] == "alpha"
-        # call.result is decoded immediately on access
-        print(call.result)                # e.g. 3
-        # call.arguments is a lazy proxy — individual keys are decoded on access
-        print(call.arguments["a"])        # e.g. 1
-        print(dict(call.arguments))       # decode all arguments at once
+   >>> # Find calls tagged with project="alpha"
+   >>> for call in add.query(1, 2, metadata={"tags": {"project": "alpha"}}):
+   ...     assert call.name == "add"
+   ...     assert call.metadata["tags"]["project"] == "alpha"
+   ...     # call.result is decoded immediately on access
+   ...     print(call.result)                # e.g. 3
+   ...     # call.arguments is a lazy proxy — individual keys are decoded on access
+   ...     print(call.arguments["a"])        # e.g. 1
+   ...     print(dict(call.arguments))       # decode all arguments at once
 
 Notes:
 - ``metadata={"tags": {}}`` matches any call with a "tags" metadata entry (presence check).
@@ -47,19 +47,21 @@ Notes:
 
 Querying with a QueryCall template
 -----------------------------------
-You can also construct a ``QueryCall`` template manually and query against the active cache::
+You can also construct a ``QueryCall`` template manually and query against the active cache:
 
-    from fleche.call import QueryCall
-    tpl = QueryCall(
-        name="add",             # or None for wildcard
-        arguments={"a": None},  # key present wildcard for argument 'a'
-        metadata={"tags": {"project": "alpha"}},
-        module=None,
-        version=None,
-        result=None,
-    )
-    for call in cache().query(tpl):
-        print(call)
+.. code-block:: pycon
+
+   >>> from fleche.call import QueryCall
+   >>> tpl = QueryCall(
+   ...     name="add",             # or None for wildcard
+   ...     arguments={"a": None},  # key present wildcard for argument 'a'
+   ...     metadata={"tags": {"project": "alpha"}},
+   ...     module=None,
+   ...     version=None,
+   ...     result=None,
+   ... )
+   >>> for call in cache().query(tpl):
+   ...     print(call)
 
 
 Behavior details

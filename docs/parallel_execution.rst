@@ -32,24 +32,24 @@ the executor's ``submit`` once and then handles any fleche-decorated function
 automatically, serving cache hits from a pre-completed
 :class:`~concurrent.futures.Future` without ever submitting a task:
 
-.. code-block:: python
+.. code-block:: pycon
 
-   import concurrent.futures
-   import fleche
-   from fleche.caches import Cache
-   from fleche.storage.memory import ValueMemory, CallMemory
+   >>> import concurrent.futures
+   >>> import fleche
+   >>> from fleche.caches import Cache
+   >>> from fleche.storage.memory import ValueMemory, CallMemory
 
-   @fleche.fleche
-   def compute(x):
-       return x ** 2
+   >>> @fleche.fleche
+   ... def compute(x):
+   ...     return x ** 2
 
-   my_cache = Cache(ValueMemory({}), CallMemory({}))
+   >>> my_cache = Cache(ValueMemory({}), CallMemory({}))
 
-   with fleche.cache(my_cache):
-       with concurrent.futures.ThreadPoolExecutor() as executor:
-           fleche.wrap_executor(executor)
-           futures = [executor.submit(compute, i) for i in range(4)]
-           results = [f.result() for f in futures]  # all cached in my_cache
+   >>> with fleche.cache(my_cache):
+   ...     with concurrent.futures.ThreadPoolExecutor() as executor:
+   ...         fleche.wrap_executor(executor)
+   ...         futures = [executor.submit(compute, i) for i in range(4)]
+   ...         results = [f.result() for f in futures]  # all cached in my_cache
 
 Alternatively, use :class:`~fleche.BoundWrapper` when you need explicit
 control over which callable is submitted — for example, to share a single
@@ -58,24 +58,24 @@ bound callable across multiple pools or helper modules.
 restores it on every call — including inside worker threads — so all tasks
 write to the same store:
 
-.. code-block:: python
+.. code-block:: pycon
 
-   import concurrent.futures
-   import fleche
-   from fleche import BoundWrapper
-   from fleche.caches import Cache
-   from fleche.storage.memory import ValueMemory, CallMemory
+   >>> import concurrent.futures
+   >>> import fleche
+   >>> from fleche import BoundWrapper
+   >>> from fleche.caches import Cache
+   >>> from fleche.storage.memory import ValueMemory, CallMemory
 
-   @fleche.fleche
-   def compute(x):
-       return x ** 2
+   >>> @fleche.fleche
+   ... def compute(x):
+   ...     return x ** 2
 
-   my_cache = Cache(ValueMemory({}), CallMemory({}))
+   >>> my_cache = Cache(ValueMemory({}), CallMemory({}))
 
-   with fleche.cache(my_cache):
-       with concurrent.futures.ThreadPoolExecutor() as executor:
-           futures = [executor.submit(BoundWrapper.bind(compute), i) for i in range(4)]
-           results = [f.result() for f in futures]  # all cached in my_cache
+   >>> with fleche.cache(my_cache):
+   ...     with concurrent.futures.ThreadPoolExecutor() as executor:
+   ...         futures = [executor.submit(BoundWrapper.bind(compute), i) for i in range(4)]
+   ...         results = [f.result() for f in futures]  # all cached in my_cache
 
 Passing a bound function around
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -84,15 +84,15 @@ Because :class:`~fleche.BoundWrapper` is a regular picklable callable, you can
 bind it once and pass it anywhere — to multiple executor pools, helper modules,
 or across function calls.  The captured state travels with the callable:
 
-.. code-block:: python
+.. code-block:: pycon
 
-   with fleche.cache(my_cache):
-       bound_compute = BoundWrapper.bind(compute)   # bind once
+   >>> with fleche.cache(my_cache):
+   ...     bound_compute = BoundWrapper.bind(compute)   # bind once
 
-   # bound_compute carries my_cache — no cache context manager needed at the call site
-   with concurrent.futures.ThreadPoolExecutor() as executor:
-       futures = [executor.submit(bound_compute, i) for i in range(4)]
-       results = [f.result() for f in futures]
+   >>> # bound_compute carries my_cache — no cache context manager needed at the call site
+   >>> with concurrent.futures.ThreadPoolExecutor() as executor:
+   ...     futures = [executor.submit(bound_compute, i) for i in range(4)]
+   ...     results = [f.result() for f in futures]
 
 ProcessPoolExecutor
 -------------------
@@ -107,32 +107,32 @@ To share cached results, point both the parent and workers at the same
 cache configuration into the callable so no manual worker-wrapper function is
 needed:
 
-.. code-block:: python
+.. code-block:: pycon
 
-   import concurrent.futures
-   import tempfile, os
-   import fleche
-   from fleche import BoundWrapper
-   from fleche.caches import Cache
-   from fleche.storage.pickle_file import ValuePickleFile, CallPickleFile
+   >>> import concurrent.futures
+   >>> import tempfile, os
+   >>> import fleche
+   >>> from fleche import BoundWrapper
+   >>> from fleche.caches import Cache
+   >>> from fleche.storage.pickle_file import ValuePickleFile, CallPickleFile
 
-   @fleche.fleche
-   def heavy_computation(x):
-       return x ** 3
+   >>> @fleche.fleche
+   ... def heavy_computation(x):
+   ...     return x ** 3
 
-   with tempfile.TemporaryDirectory() as tmpdir:
-       file_cache = Cache(
-           ValuePickleFile.with_pickle(root=os.path.join(tmpdir, "values")),
-           CallPickleFile.with_pickle(root=os.path.join(tmpdir, "calls")),
-       )
-
-       with fleche.cache(file_cache):
-           with concurrent.futures.ProcessPoolExecutor() as executor:
-               futures = [executor.submit(BoundWrapper.bind(heavy_computation), i)
-                          for i in range(8)]
-               results = [f.result() for f in futures]
-
-       assert file_cache.contains(heavy_computation.digest(3))
+   >>> with tempfile.TemporaryDirectory() as tmpdir:
+   ...     file_cache = Cache(
+   ...         ValuePickleFile.with_pickle(root=os.path.join(tmpdir, "values")),
+   ...         CallPickleFile.with_pickle(root=os.path.join(tmpdir, "calls")),
+   ...     )
+   ...
+   ...     with fleche.cache(file_cache):
+   ...         with concurrent.futures.ProcessPoolExecutor() as executor:
+   ...             futures = [executor.submit(BoundWrapper.bind(heavy_computation), i)
+   ...                        for i in range(8)]
+   ...             results = [f.result() for f in futures]
+   ...
+   ...     assert file_cache.contains(heavy_computation.digest(3))
 
 Fleche's file-based storage uses lock files to coordinate concurrent writes, so
 multiple workers can safely write to the same directory.
@@ -158,23 +158,23 @@ manual setup.
 This also works for **plain functions that call fleche-decorated functions
 internally**: the bound state propagates to all nested fleche calls.
 
-.. code-block:: python
+.. code-block:: pycon
 
-   @fleche.fleche
-   def step_a(x):
-       return x + 1
+   >>> @fleche.fleche
+   ... def step_a(x):
+   ...     return x + 1
 
-   def pipeline(x):
-       """Plain function that uses fleche-decorated helpers."""
-       return step_a(x) * 3
+   >>> def pipeline(x):
+   ...     """Plain function that uses fleche-decorated helpers."""
+   ...     return step_a(x) * 3
 
-   with fleche.cache(file_cache):
-       bound_pipeline = BoundWrapper.bind(pipeline)
+   >>> with fleche.cache(file_cache):
+   ...     bound_pipeline = BoundWrapper.bind(pipeline)
 
-   # In a worker process, step_a will use file_cache
-   with concurrent.futures.ProcessPoolExecutor() as executor:
-       future = executor.submit(bound_pipeline, 10)
-       assert future.result() == 33  # (10 + 1) * 3
+   >>> # In a worker process, step_a will use file_cache
+   >>> with concurrent.futures.ProcessPoolExecutor() as executor:
+   ...     future = executor.submit(bound_pipeline, 10)
+   ...     assert future.result() == 33  # (10 + 1) * 3
 
 executorlib
 -----------
@@ -187,18 +187,18 @@ processes, the same rules as ``ProcessPoolExecutor`` apply:
 - In-memory caches are **not** shared with workers.
 - Use **file-** or **SQL-backed** storage with :class:`~fleche.BoundWrapper`.
 
-.. code-block:: python
+.. code-block:: pycon
 
-   # file_cache and heavy_computation as set up in the ProcessPoolExecutor example above
-   import fleche
-   from fleche import BoundWrapper
-   from executorlib import SingleNodeExecutor
+   >>> # file_cache and heavy_computation as set up in the ProcessPoolExecutor example above
+   >>> import fleche
+   >>> from fleche import BoundWrapper
+   >>> from executorlib import SingleNodeExecutor
 
-   with fleche.cache(file_cache):
-       with SingleNodeExecutor() as executor:
-           futures = [executor.submit(BoundWrapper.bind(heavy_computation), i)
-                      for i in range(4)]
-           results = [f.result() for f in futures]
+   >>> with fleche.cache(file_cache):
+   ...     with SingleNodeExecutor() as executor:
+   ...         futures = [executor.submit(BoundWrapper.bind(heavy_computation), i)
+   ...                    for i in range(4)]
+   ...         results = [f.result() for f in futures]
 
 Future Pass-Through — Caching Async-style Results
 --------------------------------------------------
@@ -209,25 +209,25 @@ the resulting :class:`~concurrent.futures.Future`.  Fleche detects the
 ``Future`` return value, passes it through to the caller unchanged, and
 automatically caches the result once the future completes:
 
-.. code-block:: python
+.. code-block:: pycon
 
-   import concurrent.futures
-   import fleche
-   from fleche.caches import Cache
-   from fleche.storage.memory import ValueMemory, CallMemory
+   >>> import concurrent.futures
+   >>> import fleche
+   >>> from fleche.caches import Cache
+   >>> from fleche.storage.memory import ValueMemory, CallMemory
 
-   _executor = concurrent.futures.ThreadPoolExecutor()
+   >>> _executor = concurrent.futures.ThreadPoolExecutor()
 
-   @fleche.fleche
-   def compute(x):
-       """Submits work and returns a Future — fleche caches on completion."""
-       return _executor.submit(lambda: x ** 2)
+   >>> @fleche.fleche
+   ... def compute(x):
+   ...     """Submits work and returns a Future — fleche caches on completion."""
+   ...     return _executor.submit(lambda: x ** 2)
 
-   my_cache = Cache(ValueMemory({}), CallMemory({}))
+   >>> my_cache = Cache(ValueMemory({}), CallMemory({}))
 
-   with fleche.cache(my_cache):
-       future = compute(4)   # returns the Future immediately
-       result = future.result()   # 16, and the result is now cached
+   >>> with fleche.cache(my_cache):
+   ...     future = compute(4)   # returns the Future immediately
+   ...     result = future.result()   # 16, and the result is now cached
 
 On the next call, ``compute(4)`` returns the cached value directly (no
 ``Future`` is created).
@@ -253,37 +253,37 @@ automatically:
 - Cache misses are bound via :meth:`~fleche.BoundWrapper.bind` so the parent's
   cache and metadata travel with the call into the worker.
 
-.. code-block:: python
+.. code-block:: pycon
 
-   import concurrent.futures, tempfile, os
-   import fleche
-   from fleche.caches import Cache
-   from fleche.storage.pickle_file import ValuePickleFile, CallPickleFile
+   >>> import concurrent.futures, tempfile, os
+   >>> import fleche
+   >>> from fleche.caches import Cache
+   >>> from fleche.storage.pickle_file import ValuePickleFile, CallPickleFile
 
-   @fleche.fleche
-   def heavy_computation(x):
-       return x ** 3
+   >>> @fleche.fleche
+   ... def heavy_computation(x):
+   ...     return x ** 3
 
-   with tempfile.TemporaryDirectory() as tmpdir:
-       file_cache = Cache(
-           ValuePickleFile.with_pickle(root=os.path.join(tmpdir, "values")),
-           CallPickleFile.with_pickle(root=os.path.join(tmpdir, "calls")),
-       )
-
-       with fleche.cache(file_cache):
-           with concurrent.futures.ProcessPoolExecutor() as executor:
-               fleche.wrap_executor(executor)             # patch once
-
-               # Submit exactly as you would a plain function.
-               futures = [executor.submit(heavy_computation, i) for i in range(8)]
-               results = [f.result() for f in futures]
-
-           # A second round with the same inputs never enters the worker pool:
-           with concurrent.futures.ProcessPoolExecutor() as executor:
-               fleche.wrap_executor(executor)
-               fut = executor.submit(heavy_computation, 3)
-               assert fut.done()                          # already-completed future
-               assert fut.result() == 27
+   >>> with tempfile.TemporaryDirectory() as tmpdir:
+   ...     file_cache = Cache(
+   ...         ValuePickleFile.with_pickle(root=os.path.join(tmpdir, "values")),
+   ...         CallPickleFile.with_pickle(root=os.path.join(tmpdir, "calls")),
+   ...     )
+   ...
+   ...     with fleche.cache(file_cache):
+   ...         with concurrent.futures.ProcessPoolExecutor() as executor:
+   ...             fleche.wrap_executor(executor)             # patch once
+   ...
+   ...             # Submit exactly as you would a plain function.
+   ...             futures = [executor.submit(heavy_computation, i) for i in range(8)]
+   ...             results = [f.result() for f in futures]
+   ...
+   ...         # A second round with the same inputs never enters the worker pool:
+   ...         with concurrent.futures.ProcessPoolExecutor() as executor:
+   ...             fleche.wrap_executor(executor)
+   ...             fut = executor.submit(heavy_computation, 3)
+   ...             assert fut.done()                          # already-completed future
+   ...             assert fut.result() == 27
 
 Executor-specific keyword arguments
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -296,19 +296,19 @@ Some executors (e.g. `executorlib
 forwarded to ``submit`` while the rest are bound as part of the callable's
 payload:
 
-.. code-block:: python
+.. code-block:: pycon
 
-   # file_cache and heavy_computation as set up in the wrap_executor example above
-   from executorlib import SingleNodeExecutor
+   >>> # file_cache and heavy_computation as set up in the wrap_executor example above
+   >>> from executorlib import SingleNodeExecutor
 
-   with fleche.cache(file_cache):
-       with SingleNodeExecutor() as executor:
-           fleche.wrap_executor(executor)
-           future = executor.submit(
-               heavy_computation, 5,
-               resource_dict={"cores": 4},   # goes to SingleNodeExecutor.submit
-           )
-           assert future.result() == 125
+   >>> with fleche.cache(file_cache):
+   ...     with SingleNodeExecutor() as executor:
+   ...         fleche.wrap_executor(executor)
+   ...         future = executor.submit(
+   ...             heavy_computation, 5,
+   ...             resource_dict={"cores": 4},   # goes to SingleNodeExecutor.submit
+   ...         )
+   ...         assert future.result() == 125
 
 .. note::
 

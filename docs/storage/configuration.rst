@@ -29,12 +29,12 @@ The name ``memory`` is a reserved cache name. When requested, ``fleche`` will pr
 
 Example:
 
-.. code-block:: python
+.. code-block:: pycon
 
-   from fleche import cache
-   with cache("memory"):
-       # Results will be cached in memory. The cache persists for the lifetime of the process.
-       ...
+   >>> from fleche import cache
+   >>> with cache("memory"):
+   ...     # Results will be cached in memory. The cache persists for the lifetime of the process.
+   ...     ...
 
 ``void``
 ~~~~~~~~
@@ -43,12 +43,12 @@ The name ``void`` is a reserved cache name. When requested, ``fleche`` will prov
 
 Example:
 
-.. code-block:: python
+.. code-block:: pycon
 
-   from fleche import cache
-   with cache("void"):
-       # Results will not be cached at all. Every call executes the function.
-       ...
+   >>> from fleche import cache
+   >>> with cache("void"):
+   ...     # Results will not be cached at all. Every call executes the function.
+   ...     ...
 
 The ``[default]`` section
 -------------------------

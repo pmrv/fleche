@@ -15,29 +15,29 @@ Behavior
 Example
 -------
 
-.. code-block:: python
+.. code-block:: pycon
 
-    from fleche import fleche, cache
-    from fleche.caches import Cache, CacheStack
-    from fleche.storage import ValueMemory, CallMemory
+    >>> from fleche import fleche, cache
+    >>> from fleche.caches import Cache, CacheStack
+    >>> from fleche.storage import ValueMemory, CallMemory
 
-    # Define two caches
-    local_cache = Cache(ValueMemory({}), CallMemory({}))
-    remote_cache = Cache(ValueMemory({}), CallMemory({}))
+    >>> # Define two caches
+    >>> local_cache = Cache(ValueMemory({}), CallMemory({}))
+    >>> remote_cache = Cache(ValueMemory({}), CallMemory({}))
 
-    @fleche
-    def my_function(x):
-        return x * 2
+    >>> @fleche
+    ... def my_function(x):
+    ...     return x * 2
 
-    # Populate remote_cache with a result
-    with cache(remote_cache):
-        my_function(10)
+    >>> # Populate remote_cache with a result
+    >>> with cache(remote_cache):
+    ...     my_function(10)
 
-    # Create a stack: local_cache is the base cache (checked first), remote_cache is the fallback
-    stack = CacheStack((local_cache, remote_cache))
+    >>> # Create a stack: local_cache is the base cache (checked first), remote_cache is the fallback
+    >>> stack = CacheStack((local_cache, remote_cache))
 
-    with cache(stack):
-        # Result is found in remote_cache and automatically copied to local_cache
-        my_function(10)
+    >>> with cache(stack):
+    ...     # Result is found in remote_cache and automatically copied to local_cache
+    ...     my_function(10)
 
 Automatic hit transfer only applies to full function calls (``Call`` objects) and not to individual values loaded via ``load_value``.

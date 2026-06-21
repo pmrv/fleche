@@ -10,26 +10,29 @@ What is a LazyCall?
 
 When you call ``cache().load(key)`` or iterate over ``cache().query(...)``, you get back a ``LazyCall`` rather than a full ``Call``. A ``LazyCall`` holds the digests (unique identifiers) of the arguments and result, plus a reference to the cache, but none of the actual Python objects. Those are loaded from storage on demand whenever you access them.
 
-.. code-block:: python
+.. code-block:: pycon
 
-   from fleche import fleche, cache
+   >>> from fleche import fleche, cache
+   >>> @fleche
+   ... def process(x):
+   ...     return x * 2
+   ...
+   >>> process(21)                   # populate the cache
+   >>> key = process.digest(21)      # SHA-256 digest for this call
 
-   @fleche
-   def process(x):
-       return x * 2
+   >>> # Default: returns a LazyCall — cheap, no deserialization yet
+   >>> lazy_call = cache().load(key)
 
-   process(21)                       # populate the cache
-   key = process.digest(21)          # SHA-256 digest for this call
+   >>> # Arguments and results are fetched only when accessed
+   >>> print(lazy_call.result)          # Triggers a load from value storage
+   >>> print(lazy_call.arguments['x'])  # Triggers a load for argument 'x'
 
-   # Default: returns a LazyCall — cheap, no deserialization yet
-   lazy_call = cache().load(key)
+To load everything upfront, call ``.fetch()`` on an existing ``LazyCall``:
 
-   # Arguments and results are fetched only when accessed
-   print(lazy_call.result)           # Triggers a load from value storage
-   print(lazy_call.arguments['x'])   # Triggers a load for argument 'x'
+.. code-block:: pycon
 
-   # Fetch everything upfront from a lazy call you already have
-   call = lazy_call.fetch()
+   >>> # Fetch everything from a lazy call you already have
+   >>> call = lazy_call.fetch()
 
 Parity with Call
 ----------------
