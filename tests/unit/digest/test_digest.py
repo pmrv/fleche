@@ -18,7 +18,7 @@ import keyword
 
 
 from fleche import fleche
-from fleche.digest import digest, Digest
+from fleche.digest import digest, Digest, Indigestible
 from fleche.call import Call
 
 
@@ -56,29 +56,55 @@ def test_custom_digest_priority():
     assert digest(CustomDict(a=1)) == "custom_dict_digest"
 
 
+@dataclass
+class _SupportedData:
+    x: int
+    y: str
+
+
+# Built-in type objects (the classes themselves) are digestible per issue #469;
+# anything outside the ``builtins`` module raises ``Indigestible`` (see the
+# negative boundary test near the end of this file).
+BUILTIN_TYPES = (int, str, float, bool, bytes, list, dict, tuple, set, type, object)
+
+# One representative value per digestible category, all mutually distinct.  Used
+# both as the digestibility smoke test and as the basis for the distinctness
+# product test below.
+SUPPORTED_VALUES = [
+    "hello",
+    123,
+    123.456,
+    True,
+    None,
+    ("a", 1, None),
+    ["a", 1, None],
+    {"a": 1, "b": None},
+    np.array([1, 2, 3]),
+    _SupportedData(x=1, y="a"),
+    *BUILTIN_TYPES,
+]
+
+
 def test_supported_types():
-    """Test that all supported types can be digested without raising an exception."""
+    """All supported values can be digested without raising an exception."""
+    for value in SUPPORTED_VALUES:
+        digest(value)
 
-    @dataclass
-    class MyData:
-        x: int
-        y: str
 
-    supported_examples = [
-        "hello",
-        123,
-        123.456,
-        True,
-        None,
-        ("a", 1, None),
-        ["a", 1, None],
-        {"a": 1, "b": None},
-        np.array([1, 2, 3]),
-        MyData(x=1, y="a"),
-    ]
+@pytest.mark.parametrize("j", range(len(SUPPORTED_VALUES)))
+@pytest.mark.parametrize("i", range(len(SUPPORTED_VALUES)))
+def test_supported_values_digest_distinctly(i, j):
+    """Distinct supported values digest distinctly; the same value digests stably.
 
-    for example in supported_examples:
-        digest(example)
+    Built-in type objects (issue #469) are folded into SUPPORTED_VALUES, so their
+    digestibility, stability, and pairwise distinctness — including type-vs-instance
+    — are all covered here rather than in a bespoke builtins-only test.
+    """
+    a, b = SUPPORTED_VALUES[i], SUPPORTED_VALUES[j]
+    if i == j:
+        assert digest(a) == digest(b)
+    else:
+        assert digest(a) != digest(b)
 
 
 @given(st.integers(), st.integers())
@@ -845,3 +871,23 @@ def test_module_digest_function_content_independence():
     m2.__all__ = ["func"]
 
     assert digest(m1) == digest(m2)
+
+
+# --- Tests for the Indigestible boundary of type objects — issue #469 ---
+#
+# Digestibility, stability, and distinctness of built-in type objects are covered
+# by ``test_supported_values_digest_distinctly`` (BUILTIN_TYPES are folded into
+# SUPPORTED_VALUES).  Only the negative boundary needs a dedicated test: anything
+# outside the ``builtins`` module — including dataclass *classes* — must raise.
+
+
+@dataclass
+class _Pt:
+    x: int
+
+
+@pytest.mark.parametrize("t", [type("MyClass", (), {}), _Pt])
+def test_non_builtin_type_raises_indigestible(t):
+    """Non-builtin type objects (user-defined classes, dataclass classes) raise Indigestible."""
+    with pytest.raises(Indigestible):
+        digest(t)
