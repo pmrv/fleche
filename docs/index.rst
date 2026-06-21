@@ -37,6 +37,12 @@ Welcome to the **Fleche** library documentation.
 
 .. toctree::
    :maxdepth: 2
+   :caption: Recipes
+
+   recipes/files_and_paths
+
+.. toctree::
+   :maxdepth: 2
    :caption: Digests
 
    digests/digests_as_args
@@ -62,6 +68,7 @@ Welcome to the **Fleche** library documentation.
    :caption: Development
 
    dev/custom_digests
+   dev/path_storage
    dev/developer
    dev/ssh_cache
 
@@ -75,6 +82,7 @@ Welcome to the **Fleche** library documentation.
    notebooks/SecureStorage
    notebooks/CacheStack
    notebooks/ConcurrentExecution
+   notebooks/Files
 
 .. toctree::
    :maxdepth: 2

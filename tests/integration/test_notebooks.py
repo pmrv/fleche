@@ -9,6 +9,7 @@ NOTEBOOKS = [
         "StorageBackends.ipynb",
         "SecureStorage.ipynb",
         "CacheStack.ipynb",
+        "Files.ipynb",
 ]
 
 
