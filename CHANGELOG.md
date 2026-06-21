@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.17.0](https://github.com/pmrv/fleche/compare/0.16.0...0.17.0) (2026-06-21)
+
+
+### Features
+
+* **cache:** BaseCache(OperationContext) + PerKeyLockMixin on Cache (steps 4-5 of [#569](https://github.com/pmrv/fleche/issues/569)) ([#622](https://github.com/pmrv/fleche/issues/622)) ([095432d](https://github.com/pmrv/fleche/commit/095432d141925204eea951f4de2173d5558d8aa1))
+
+
+### Bug Fixes
+
+* **benchmarks:** restore __hash__ on raw Memory subclasses ([#632](https://github.com/pmrv/fleche/issues/632)) ([17b681b](https://github.com/pmrv/fleche/commit/17b681b0c5bcb38471a420c65c1d5cacc20e50d0))
+* **caches:** make redigest() save+evict atomic per key ([#451](https://github.com/pmrv/fleche/issues/451)) ([#631](https://github.com/pmrv/fleche/issues/631)) ([d22e882](https://github.com/pmrv/fleche/commit/d22e882365220b262a892f679def6d78480d4132))
+* **caches:** serialize CacheStack.load() auto-transfer to base cache ([#629](https://github.com/pmrv/fleche/issues/629)) ([f70f72c](https://github.com/pmrv/fleche/commit/f70f72c37a799c307aee5c7c57810063088cdf2d))
+* **digest:** handle type objects without raising Indigestible ([#651](https://github.com/pmrv/fleche/issues/651)) ([55a8d9a](https://github.com/pmrv/fleche/commit/55a8d9a32fbbc4ca546dcc3413949cd62699c68b))
+* **query:** make transfer check-then-save atomic via target per-key lock ([#630](https://github.com/pmrv/fleche/issues/630)) ([5f0d05f](https://github.com/pmrv/fleche/commit/5f0d05f255680c1b288aaf4e675baeef5a3f17a7))
+* **tests:** allow byte-distinct NaNs to digest differently ([#666](https://github.com/pmrv/fleche/issues/666)) ([973dbd0](https://github.com/pmrv/fleche/commit/973dbd0bdec327d1d3a6f9699100b1c20d9da610))
+* **wrapper:** narrow _in_flight to the cache-write gap, not full computation ([#627](https://github.com/pmrv/fleche/issues/627)) ([8b0abaa](https://github.com/pmrv/fleche/commit/8b0abaa922f3135846873158e7809047f18ad2cc))
+
+
+### Performance Improvements
+
+* avoid double H5Bag file open on load ([#616](https://github.com/pmrv/fleche/issues/616)) ([8fbcae4](https://github.com/pmrv/fleche/commit/8fbcae4a5efe35285d0454a7bdd7c8a2fc3f49f8))
+
 ## [0.16.0](https://github.com/pmrv/fleche/compare/0.15.0...0.16.0) (2026-05-30)
 
 
