@@ -188,15 +188,23 @@ class QueryIterator(Iterable[call.LazyCall]):
                 If False (default), conflicts are skipped.
         """
         for c in self:
+            # Delegate the check-then-save to the target cache: ``_transfer_one``
+            # holds the target's per-key operation context across the whole
+            # ``contains`` → ``save`` sequence, so the "skip if already present"
+            # decision cannot race a concurrent writer (the #452 TOCTOU).
+            # Keeping the lock inside the cache means we only call public cache
+            # methods here, and wrapper/stack targets lock their real inner
+            # cache rather than inheriting a no-op context.  ``_transfer_one``
+            # returns whether it wrote, so the skip warning stays on this
+            # (``fleche.query``) logger; we log the full lookup key since
+            # internal callers must never ``shrink`` (a user-only convenience).
             key = c.to_lookup_key()
-            conflict = not overwrite and target.contains(key)
-            if conflict:
+            if not target._transfer_one(c, overwrite=overwrite):
                 logger.warning(
                     "Not transferring %s: already exists in target and overwrite=False",
-                    target.shrink(key),
+                    key,
                 )
                 continue
-            target.save(c.fetch())
             if pop:
                 c._cache.evict(key)
 

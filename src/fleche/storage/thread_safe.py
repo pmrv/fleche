@@ -85,6 +85,10 @@ class SerializingMixin(OperationContext):
 
     @contextlib.contextmanager
     def _operation_context(self, key, *, intent: Intent = Intent.WRITE):
+        if intent is Intent.READ:
+            # No-op for now; reserved for a future shared (reader) lock.
+            yield
+            return
         with self._lock:
             with super()._operation_context(key, intent=intent):
                 yield
@@ -137,6 +141,10 @@ class PerKeyLockMixin(OperationContext):
 
     @contextlib.contextmanager
     def _operation_context(self, key, *, intent: Intent = Intent.WRITE):
+        if intent is Intent.READ:
+            # No-op for now; reserved for a future shared (reader) lock.
+            yield
+            return
         with self._get_key_lock(key):
             with super()._operation_context(key, intent=intent):
                 yield

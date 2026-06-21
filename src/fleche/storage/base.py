@@ -24,8 +24,15 @@ class Intent(StrEnum):
     """Describes the kind of operation being performed on storage.
 
     Mixins may use this to choose between exclusive and shared locks.
+
+    :attr:`WRITE` always takes the exclusive lock.  :attr:`READ` is a
+    **no-op** for now — the locking mixins short-circuit it and acquire
+    nothing.  It is reserved for a future reader-writer lock, where reads
+    would take a *shared* lock instead.  Because it currently grants **no**
+    mutual exclusion, ``READ`` must never guard a read-modify-write sequence.
     """
     WRITE = "write"
+    READ = "read"
 
 
 def _longest_common_prefix_length(s1: str, s2: str) -> int:
