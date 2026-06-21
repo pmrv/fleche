@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import contextlib
 import logging
 import random
 import threading
@@ -10,7 +11,7 @@ import pandas as pd
 from . import digest as _digest
 from .digest import Digest  # type hint convenience
 from . import storage
-from .storage.base import _longest_common_prefix_length, OperationContext
+from .storage.base import _longest_common_prefix_length, Intent, OperationContext
 from .storage.destructuring import HasChildDigests
 from .storage.thread_safe import PerKeyLockMixin
 from .call import Call, DigestedCall, LazyCall, QueryCall
@@ -65,7 +66,38 @@ class BaseCache(OperationContext):
                 If False (default), skip entries that already exist in the target.
         """
         self.query().transfer(other, pop=pop, overwrite=overwrite)
-                    
+
+    def _transfer_one(self, c: LazyCall, *, overwrite: bool = False) -> bool:
+        """Atomically replay one call into this cache, honouring ``overwrite``.
+
+        Holds this cache's per-key operation context across the whole
+        ``contains`` → ``save`` sequence, so the "skip if already present"
+        decision cannot race a concurrent writer (the #452
+        ``contains``→``save`` TOCTOU).  The context is reentrant, so
+        ``contains`` / ``save`` re-entering it for the same key do not deadlock.
+        Keeping this on the cache (rather than in
+        :meth:`~fleche.query.QueryIterator.transfer`) means the query layer
+        only ever calls public cache methods, and each cache encapsulates its
+        own locking — :class:`CacheWrapper` and :class:`CacheStack` override
+        :meth:`_operation_context` so wrapper/stack targets lock their *real*
+        inner :class:`Cache` rather than the no-op base context.
+
+        Args:
+            c: the call to transfer; fetched from its source cache only on the
+                non-conflict path, so a skipped transfer pays no deserialisation.
+            overwrite: if True, write even when a conflicting entry exists.
+
+        Returns:
+            ``True`` if the call was written, ``False`` if it was skipped
+            because a conflicting entry already exists.
+        """
+        key = c.to_lookup_key()
+        with self._operation_context(key):
+            if not overwrite and self.contains(key):
+                return False
+            self.save(c.fetch())
+            return True
+
     def readonly(self) -> "ReadOnlyCache":
         """Return a read-only view of this cache."""
         return ReadOnlyCache(self)
@@ -468,6 +500,18 @@ class CacheWrapper(BaseCache):
     def _query(self, call: call.QueryCall) -> Iterable[LazyCall]:
         return self.cache.query(call)
 
+    @contextlib.contextmanager
+    def _operation_context(self, key, *, intent: Intent = Intent.WRITE):
+        # A wrapper and its inner cache are never accessed independently — every
+        # forwarding method above delegates to ``self.cache`` — so forwarding the
+        # context makes that already-true fact explicit.  Without it the wrapper
+        # would inherit the no-op base context, leaving ``_transfer_one``'s
+        # check-then-save unguarded for wrapper targets (the #452 gap).  The
+        # inner lock is reentrant, so the forwarding ``contains`` / ``save`` /
+        # ``shrink`` re-entering it for the same key do not deadlock.
+        with self.cache._operation_context(key, intent=intent):
+            yield
+
 
 class ReadOnlyMixin(CacheWrapper):
     """Raises :class:`Rejected` for ``save`` and ``evict``."""
@@ -553,6 +597,28 @@ class CacheStack(PerKeyLockMixin, BaseCache):
 
     def save(self, call: Call):
         self.stack[0].save(call)
+
+    @contextlib.contextmanager
+    def _operation_context(self, key, *, intent: Intent = Intent.WRITE):
+        # Saves always land on ``stack[0]``, so that is the only member that
+        # needs the real (write) lock; every other member is entered with
+        # ``Intent.READ``, a no-op today (reserved for a future shared lock).
+        # This makes ``_transfer_one``'s check-then-save atomic against the
+        # bottom cache where the write goes — closing the #452 TOCTOU for stack
+        # targets — while ``contains`` still fans out across the whole stack.
+        # ``stack[0]`` forwards through any wrapper to its real inner lock.
+        #
+        # NOTE: before ``Intent.READ`` is ever made a genuine *shared* lock,
+        # members must be entered in a canonical (lock-identity) order — two
+        # stacks sharing leaves in inverted order (``(A, B)`` vs ``(B, A)``) on
+        # the same key would otherwise deadlock.  While READ is a no-op only
+        # ``stack[0]`` is ever locked, so a single lock cannot deadlock.
+        with contextlib.ExitStack() as es:
+            for i, cache in enumerate(self.stack):
+                es.enter_context(
+                    cache._operation_context(key, intent=intent if i == 0 else Intent.READ)
+                )
+            yield
 
     def load(self, key) -> LazyCall:
         for i, cache in enumerate(self.stack):

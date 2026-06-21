@@ -699,12 +699,13 @@ def test_transfer_skips_existing_by_default(test_cache, other_cache, caplog):
 
     # Target value not overwritten
     assert other_cache.load(c.to_lookup_key()).result == 999
-    # Exactly one warning, naming the shrunk key and the overwrite=False reason
+    # Exactly one warning, naming the full lookup key and the overwrite=False
+    # reason.  The warning uses the full digest, not a shrunk one: internal API
+    # paths must never call shrink (a user-only convenience).
     warnings = [r for r in caplog.records if r.name == "fleche.query"]
     assert len(warnings) == 1
-    short = other_cache.shrink(c.to_lookup_key())
     assert warnings[0].getMessage() == (
-        f"Not transferring {short}: already exists in target and overwrite=False"
+        f"Not transferring {c.to_lookup_key()}: already exists in target and overwrite=False"
     )
 
 
