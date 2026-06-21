@@ -27,6 +27,10 @@ class VoidBackend(StorageBackend):
         return False
 
 
+# ValueVoid is the degenerate "store nothing" value storage: it deliberately omits
+# DestructuringMixin and, for the same reason, PathValueMixin.  Since VoidBackend
+# discards on put and raises KeyError on get, layering Path-to-blob conversion would
+# only build-then-throw-away blobs and could never materialize a Path on load.
 @dataclass(frozen=True)
 class ValueVoid(ValueMixin, VoidBackend): ...
 

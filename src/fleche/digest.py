@@ -6,6 +6,7 @@ import dataclasses
 import numbers
 from numbers import Number
 import struct
+from pathlib import Path
 import types
 import importlib.metadata
 from collections.abc import Iterable, Mapping
@@ -154,6 +155,29 @@ def digest(value: Any) -> Digest:
     return Digest(_digest_bytes(value).decode())
 
 
+def _path_content_digest(path) -> Digest:
+    """Content-only digest of a path: a file as its bytes, a directory as its
+    ``{name: child}`` tree (the directory's own name excluded).
+
+    This mirrors exactly what :class:`~fleche.storage.paths.PathValueMixin`
+    stores for a file's content blob and for a :class:`DirectoryBlob`, so a
+    directory tree and a standalone file agree on their children's digests.  A
+    *standalone* file additionally carries its basename (see the ``Path`` arm of
+    :func:`_digest_bytes`); inside a directory the name lives in the parent's
+    ``contents`` key, so only the content matters here.
+    """
+    if path.is_file():
+        return digest(path.read_bytes())
+    if path.is_dir():
+        contents = {
+            child.name: _path_content_digest(child)
+            for child in path.iterdir()
+            if child.is_file() or child.is_dir()
+        }
+        return digest(("DirectoryBlob", contents))
+    raise Indigestible("Can only digest files and folders!")
+
+
 def _digest_bytes(value: Any) -> bytes:
     """
     Returns bytes representing the SHA-256 digest of *value*.
@@ -232,6 +256,26 @@ def _digest_bytes(value: Any) -> bytes:
                 return _digest_bytes(value)
         case bytes():
             m.update(value)
+        case Path():
+            # A *file* is identified by (basename, content): its name (and
+            # extension) matter, but the content deduplicates.  A *directory* is
+            # identified by its tree alone — its own (often incidental, e.g. a
+            # temp dir) root name is dropped, though child names are kept.  Both
+            # mirror exactly what PathValueMixin stores, preserving the
+            # digest(path) == values.save(path) invariant on which cache lookups
+            # of path-valued arguments/results depend.  The "FileBlob" /
+            # "DirectoryBlob" salts MUST match
+            # fleche.storage.paths.{FileBlob,DirectoryBlob}.__digest__.
+            if not value.exists():
+                raise Indigestible("Only existing paths can be digested.")
+            if value.is_file():
+                return _digest_bytes(
+                    ("FileBlob", value.name, _path_content_digest(value))
+                )
+            elif value.is_dir():
+                return _path_content_digest(value).encode()
+            else:
+                raise Indigestible("Can only digest files and folders!")
         case np.ndarray():
             m.update(_digest_bytes(value.dtype.str))
             m.update(_digest_bytes(value.shape))

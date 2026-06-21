@@ -10,6 +10,7 @@ from .file import FileStorage
 from .base import ValueMixin, CallMixin
 from .thread_safe import PerKeyLockMixin
 from .destructuring import DestructuringMixin
+from .paths import PathValueMixin
 from ..security import get_secret_key, normalize_secret_key, SignedBytes, SignatureError
 
 from pyiron_snippets.import_alarm import ImportAlarm
@@ -113,7 +114,7 @@ class PickleFileBackend(FileStorage):
 
 
 @dataclass(frozen=True)
-class ValuePickleFile(PerKeyLockMixin, DestructuringMixin, ValueMixin, PickleFileBackend): ...
+class ValuePickleFile(PerKeyLockMixin, DestructuringMixin, PathValueMixin, ValueMixin, PickleFileBackend): ...
 
 @dataclass(frozen=True)
 class CallPickleFile(PerKeyLockMixin, CallMixin, PickleFileBackend): ...
