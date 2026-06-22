@@ -406,14 +406,21 @@ computes the function and writes the result — wasting redundant work and
 potentially producing inconsistent call metadata (e.g. ``Runtime`` values will
 differ between the duplicate records).
 
-The root cause is that there is no reservation mechanism between the cache
-miss check and the cache write in ``wrapper.py``.  A correct fix would require
-pre-allocating a "pending" slot in the cache so that other workers can detect
-the in-flight computation and wait, rather than starting their own.
-Implementing this correctly is non-trivial: it requires key-scoped locking,
-timeout handling for stale allocations (e.g. if the computing worker crashes),
-and cross-process coordination for file- and SQL-backed stores.  This is
-currently out of scope.
+Fleche does provide a narrow same-process guard for **Future-based** decorated
+functions: while a ``Future`` result is being saved, the key is registered in
+an ``_in_flight`` dict so that a second call on the same thread can return the
+in-flight future's result immediately rather than re-running the function.
+This only covers the brief window between the future completing and
+``cache.save()`` finishing, and has no effect across processes.
+
+For the common case — multiple workers calling the same non-``Future``-returning
+function with identical arguments before any result is stored — there is no
+reservation mechanism.  A correct cross-worker fix would require pre-allocating
+a "pending" slot in the cache so that other workers can detect the in-flight
+computation and wait, rather than starting their own.  Implementing this
+correctly is non-trivial: it requires key-scoped locking, timeout handling for
+stale allocations (e.g. if the computing worker crashes), and cross-process
+coordination for file- and SQL-backed stores.  This is currently out of scope.
 
 .. warning::
 
