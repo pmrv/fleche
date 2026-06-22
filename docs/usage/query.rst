@@ -36,7 +36,7 @@ The wrapper-based API builds the correct Call template for you.
    ...     assert call.metadata["tags"]["project"] == "alpha"
    ...     # call.result fetches the full result from value storage on access
    ...     print(call.result)                # e.g. 3
-   ...     # call.arguments is a LazyArguments proxy — each key triggers a separate load
+   ...     # call.arguments is a lazy proxy — each key triggers a separate load
    ...     print(call.arguments["a"])        # e.g. 1
    ...     print(dict(call.arguments))       # load all arguments at once
 
