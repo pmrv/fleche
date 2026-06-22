@@ -25,15 +25,27 @@ Reserved Cache Names
 ``memory``
 ~~~~~~~~~~
 
-The name ``memory`` is a reserved cache name. When requested, ``fleche`` will provide a transient in-memory cache. This cache is persistent for the duration of the process, but is not shared with other processes and is lost when the current process exits.
+The name ``memory`` is a reserved cache name. When requested, ``fleche`` will provide a
+transient in-memory cache. The cache object is interned (the same instance is reused on
+every call to ``cache("memory")``), so data stored in it persists for the lifetime of
+the process.  It is **not** shared with other processes and is lost when the current
+process exits.
 
-Example:
+Note that ``with cache("memory"):`` makes the memory cache active *only for the duration
+of the* ``with`` *block* — the previous cache is restored on exit.  To make the memory
+cache sticky (active until explicitly changed), discard the returned context manager::
+
+   cache("memory")   # sticky — memory cache stays active
+
+Example using the context-manager form to temporarily switch to memory caching:
 
 .. code-block:: pycon
 
    >>> from fleche import cache
    >>> with cache("memory"):
-   ...     # Results will be cached in memory. The cache persists for the lifetime of the process.
+   ...     # The memory cache is the active cache inside this block.
+   ...     # Results stored here persist for the process lifetime via the interned instance,
+   ...     # but after the block exits the previous active cache is restored.
    ...     ...
 
 ``void``
