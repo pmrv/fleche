@@ -11,6 +11,7 @@ import importlib.metadata
 from collections.abc import Iterable, Mapping
 from typing import Any, TypeVar, Callable, Type, Generic
 import numpy as np
+import pandas as pd
 
 from . import _attrs
 
@@ -238,6 +239,22 @@ def _digest_bytes(value: Any) -> bytes:
         case np.bool_():
             # np.bool_ ∉ Number so this arm is reachable
             return _digest_bytes(bool(value))
+        case pd.DataFrame():
+            # DataFrame is Iterable (yields column names) but NOT Mapping, so without
+            # this arm two DataFrames sharing column names collide regardless of values.
+            m.update(_digest_bytes(list(value.columns)))
+            m.update(_digest_bytes([str(d) for d in value.dtypes]))
+            m.update(_digest_bytes(value.index))
+            m.update(pd.util.hash_pandas_object(value, index=False).values.tobytes())
+        case pd.Series():
+            m.update(_digest_bytes(value.name))
+            m.update(_digest_bytes(str(value.dtype)))
+            m.update(_digest_bytes(value.index))
+            m.update(pd.util.hash_pandas_object(value, index=False).values.tobytes())
+        case pd.Index():
+            m.update(_digest_bytes(value.name))
+            m.update(_digest_bytes(str(value.dtype)))
+            m.update(pd.util.hash_pandas_object(value).values.tobytes())
         case types.FunctionType():
             return _digest_bytes(value.__code__)
         case types.CodeType():

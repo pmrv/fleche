@@ -382,6 +382,60 @@ def test_numpy_explicit_cases():
     assert digest(c) != digest(d)
 
 
+def test_pandas_dataframe_hashes_by_content():
+    """Regression: DataFrame iter yields column names only, so falling through to
+    the Iterable arm makes any two DataFrames with the same columns collide."""
+    import pandas as pd
+
+    df1 = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
+    df2 = pd.DataFrame({"a": [10, 20, 30], "b": [40, 50, 60]})
+    df3 = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
+
+    assert digest(df1) != digest(df2)
+    assert digest(df1) == digest(df3)
+    assert isinstance(digest(df1), Digest)
+
+
+def test_pandas_dataframe_distinguishes_columns_dtype_index():
+    import pandas as pd
+
+    base = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
+    reordered_cols = pd.DataFrame({"b": [4, 5, 6], "a": [1, 2, 3]})
+    different_dtype = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
+    different_index = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}, index=[10, 20, 30])
+    renamed_cols = pd.DataFrame({"a": [1, 2, 3], "c": [4, 5, 6]})
+
+    digests = {digest(base), digest(reordered_cols), digest(different_dtype),
+               digest(different_index), digest(renamed_cols)}
+    assert len(digests) == 5
+
+
+def test_pandas_series_hashes_by_content():
+    import pandas as pd
+
+    s1 = pd.Series([1, 2, 3])
+    s2 = pd.Series([10, 20, 30])
+    s3 = pd.Series([1, 2, 3])
+    s_named = pd.Series([1, 2, 3], name="x")
+
+    assert digest(s1) != digest(s2)
+    assert digest(s1) == digest(s3)
+    assert digest(s1) != digest(s_named)
+
+
+def test_pandas_index_hashes_by_content():
+    import pandas as pd
+
+    i1 = pd.Index([1, 2, 3])
+    i2 = pd.Index([1, 2, 4])
+    i3 = pd.Index([1, 2, 3])
+    i_named = pd.Index([1, 2, 3], name="x")
+
+    assert digest(i1) != digest(i2)
+    assert digest(i1) == digest(i3)
+    assert digest(i1) != digest(i_named)
+
+
 def test_lambda_can_be_digested():
     """Test that lambda functions can be digested without raising Indigestible."""
     f = lambda x: x + 1
