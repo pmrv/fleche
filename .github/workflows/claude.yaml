@@ -24,9 +24,30 @@ jobs:
       (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
     steps:
       - uses: actions/checkout@v6
+      - name: Resolve model from mention
+        id: model
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          REVIEW_BODY: ${{ github.event.review.body }}
+        run: |
+          body="${COMMENT_BODY}${REVIEW_BODY}"
+          model=opus
+          if [[ "$body" =~ @claude\[([a-zA-Z]+)\] ]]; then
+            choice="${BASH_REMATCH[1],,}"
+            case "$choice" in
+              haiku|sonnet|opus)
+                model="$choice"
+                ;;
+              *)
+                echo "::warning::Unknown @claude model alias '$choice'; using default ($model)."
+                ;;
+            esac
+          fi
+          echo "model=$model" >> "$GITHUB_OUTPUT"
+          echo "Selected model: $model"
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          claude_args: '--model opus --effort high --allowedTools WebFetch Bash(pip:*) Bash(python:*) Bash(pytest:*) Bash(git:*) Bash(gh pr:*)'
+          claude_args: '--model ${{ steps.model.outputs.model }} --effort high --allowedTools WebFetch Bash(pip:*) Bash(python:*) Bash(pytest:*) Bash(git:*) Bash(gh pr:*)'
           additional_permissions: |
             actions: read
