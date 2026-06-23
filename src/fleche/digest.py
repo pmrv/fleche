@@ -11,6 +11,7 @@ import importlib.metadata
 from collections.abc import Iterable, Mapping
 from typing import Any, TypeVar, Callable, Type, Generic
 import numpy as np
+import pandas as pd
 
 from . import _attrs
 
@@ -238,6 +239,33 @@ def _digest_bytes(value: Any) -> bytes:
         case np.bool_():
             # np.bool_ ∉ Number so this arm is reachable
             return _digest_bytes(bool(value))
+        case pd.DataFrame():
+            # DataFrame is Iterable (yields column names) but NOT Mapping, so without
+            # this arm two DataFrames sharing column names collide regardless of values.
+            #
+            # We digest columns/dtypes/index ourselves and pass index=False to
+            # hash_pandas_object rather than letting index=True fold the index in.
+            # hash_pandas_object only mixes per-element value bytes — it ignores
+            # column names, column dtypes, index.name, and index.dtype — so
+            # index=True alone would still collide DataFrames whose indices differ
+            # only in name or dtype.  Recursing through _digest_bytes on
+            # value.index also reuses the pd.Index arm below, keeping a standalone
+            # Index and a DataFrame's .index digest-consistent.
+            m.update(_digest_bytes(list(value.columns)))
+            m.update(_digest_bytes([str(d) for d in value.dtypes]))
+            m.update(_digest_bytes(value.index))
+            m.update(pd.util.hash_pandas_object(value, index=False).values.tobytes())
+        case pd.Series():
+            # Same reasoning as DataFrame: hash_pandas_object ignores name/dtype/
+            # index metadata, so we digest those ourselves and pass index=False.
+            m.update(_digest_bytes(value.name))
+            m.update(_digest_bytes(str(value.dtype)))
+            m.update(_digest_bytes(value.index))
+            m.update(pd.util.hash_pandas_object(value, index=False).values.tobytes())
+        case pd.Index():
+            m.update(_digest_bytes(value.name))
+            m.update(_digest_bytes(str(value.dtype)))
+            m.update(pd.util.hash_pandas_object(value).values.tobytes())
         case types.FunctionType():
             return _digest_bytes(value.__code__)
         case types.CodeType():
