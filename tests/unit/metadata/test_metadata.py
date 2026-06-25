@@ -284,19 +284,21 @@ def test_git_metadata_when_subprocess_fails(failure, monkeypatch, cache_it: Cach
 def test_metadata_default_methods():
     """MetaData should define pre/post method defaults that return empty dictionaries."""
     class MyMetaData(MetaData):
-        @property
-        def keys(self):
-            return {}
+        keys: dict[str, type] = {}
+        name = "minimal"
 
-        @property
-        def name(self):
-            return "minimal"
-
-    meta = MyMetaData()
+    m = MyMetaData()
     call = Call(name="test", arguments={})
 
-    assert meta.pre(call) == {}
-    assert meta.post({}, call) == {}
+    assert m.pre(call) == {}
+    assert m.post({}, call) == {}
+
+
+def test_metadata_missing_keys_raises():
+    """Subclasses that omit 'keys' entirely must fail at class-definition time."""
+    with pytest.raises(TypeError, match="must define"):
+        class NoKeys(MetaData):
+            name = "nokeys"
 
 
 def test_configurable_registry_contains_builtins():

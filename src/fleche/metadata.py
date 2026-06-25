@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+from abc import ABC
 from dataclasses import dataclass
 import getpass
 import os
@@ -54,19 +54,23 @@ class MetaData(ABC):
         """
         return {}
 
-    @property
-    @abstractmethod
-    def keys(self) -> dict[str, type]:
-        """
-        Defines the schema of the metadata, mapping metadata keys to their expected types.
+    keys: dict[str, type]
+    """Schema of the metadata: maps each key name to its expected type.
 
-        Returns:
-            dict[str, type]: A dictionary representing the metadata schema.
-        """
-        ...
+    Subclasses must set this as a class attribute.  For metadata whose schema
+    depends on constructor arguments (e.g. :class:`Tags`), a ``@property`` or
+    per-instance assignment in ``__post_init__`` is also accepted.
+    """
 
     name: str
     """The unique name of this metadata type."""
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        super().__init_subclass__(**kwargs)
+        if not any('keys' in c.__dict__ for c in cls.__mro__ if c not in (MetaData, object)):
+            raise TypeError(
+                f"{cls.__name__} must define a 'keys' class attribute or property"
+            )
 
 
 CONFIGURABLE: dict[str, type["MetaData"]] = {}
