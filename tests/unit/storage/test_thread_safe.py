@@ -26,21 +26,23 @@ from tests.fixtures import run_workers
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
-class PlainValueMemory(ValueMixin, MemoryBackend): ...
+class PlainValueMemory(ValueMixin, MemoryBackend):
+    __hash__ = object.__hash__
 
 @dataclass(frozen=True)
-class PlainCallMemory(CallMixin, MemoryBackend): ...
+class PlainCallMemory(CallMixin, MemoryBackend):
+    __hash__ = object.__hash__
 
 @dataclass(frozen=True)
-class SerializingValueMemory(SerializingMixin, PlainValueMemory): ...
+class SerializingValueMemory(SerializingMixin, PlainValueMemory):
+    __hash__ = object.__hash__
 
 @dataclass(frozen=True)
-class SerializingCallMemory(SerializingMixin, PlainCallMemory): ...
+class SerializingCallMemory(SerializingMixin, PlainCallMemory):
+    __hash__ = object.__hash__
 
 @dataclass(frozen=True)
 class PerKeyValueMemory(PerKeyLockMixin, PlainValueMemory):
-    # @dataclass(frozen=True) would generate __hash__ from storage: dict (failing);
-    # re-declare the identity hash from MemoryBackend so it takes effect here.
     __hash__ = object.__hash__
 
 @dataclass(frozen=True)

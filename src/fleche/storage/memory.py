@@ -21,6 +21,17 @@ class MemoryBackend(StorageBackend):
     # without the indigestible dict field causing a TypeError.
     __hash__ = object.__hash__
 
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if "__hash__" not in cls.__dict__:
+            raise TypeError(
+                f"{cls.__qualname__} subclasses MemoryBackend without defining "
+                "`__hash__ = object.__hash__`. The inherited `storage: dict` field is "
+                "unhashable, and `@dataclass(frozen=True)` regenerates `__hash__` on "
+                "every subclass without carrying the override through. "
+                "Add `__hash__ = object.__hash__` to the class body."
+            )
+
     def list(self) -> Iterable[Digest]:
         return tuple(self.storage.keys())
 

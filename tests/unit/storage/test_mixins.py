@@ -44,11 +44,13 @@ from fleche.storage.memory import MemoryBackend
 @dataclass(frozen=True)
 class PlainValueMemory(ValueMixin, MemoryBackend):
     """ValueMixin wired directly to MemoryBackend; no DestructuringMixin."""
+    __hash__ = object.__hash__
 
 
 @dataclass(frozen=True)
 class PlainCallMemory(CallMixin, MemoryBackend):
     """CallMixin wired directly to MemoryBackend."""
+    __hash__ = object.__hash__
 
 
 @dataclass
@@ -76,6 +78,7 @@ class MinimalBackend(StorageBackend):
 @dataclass(frozen=True)
 class _TrackingValueMemory(ValueMixin, MemoryBackend):
     """Records every key passed to _operation_context (append-only list field)."""
+    __hash__ = object.__hash__
     _ctx_keys: list = field(default_factory=list, init=False, compare=False, repr=False)
 
     @contextlib.contextmanager
@@ -87,6 +90,7 @@ class _TrackingValueMemory(ValueMixin, MemoryBackend):
 
 @dataclass(frozen=True)
 class _TrackingCallMemory(CallMixin, MemoryBackend):
+    __hash__ = object.__hash__
     _ctx_keys: list = field(default_factory=list, init=False, compare=False, repr=False)
 
     @contextlib.contextmanager
@@ -100,6 +104,7 @@ class _TrackingCallMemory(CallMixin, MemoryBackend):
 class _PhantomCallMemory(CallMixin, MemoryBackend):
     """list() includes a phantom key that has no matching entry in storage,
     triggering the except KeyError: continue path in transform()."""
+    __hash__ = object.__hash__
 
     def list(self):
         return [*super().list(), digest("__phantom__")]
@@ -359,3 +364,27 @@ def test_resolve_prefix_else_branch():
     identical = Digest("a" * 64)
     with pytest.raises(AmbiguousDigestError):
         _resolve_prefix("aaaa", [identical, identical])
+
+
+# ---------------------------------------------------------------------------
+# MemoryBackend.__init_subclass__ guard (memory.py, issue #634)
+# ---------------------------------------------------------------------------
+
+def test_memory_backend_subclass_without_hash_raises():
+    """Creating a MemoryBackend subclass without __hash__ raises TypeError at
+    class-definition time, before a cryptic unhashable-dict error can arise."""
+    with pytest.raises(TypeError, match="__hash__"):
+        @dataclass(frozen=True)
+        class _BadMemory(ValueMixin, MemoryBackend):
+            pass
+
+
+def test_memory_backend_subclass_with_hash_ok():
+    """A subclass that declares __hash__ = object.__hash__ is accepted."""
+    @dataclass(frozen=True)
+    class _GoodMemory(ValueMixin, MemoryBackend):
+        __hash__ = object.__hash__
+
+    inst = _GoodMemory(storage={})
+    assert hash(inst) == hash(inst)  # identity-based: stable across calls
+    assert {inst: True}[inst]  # usable as a dict key

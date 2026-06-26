@@ -16,6 +16,7 @@ class FlatValueMemory(ValueMixin, MemoryBackend):
     :class:`fleche.storage.destructuring.HasChildDigests`.  Used to exercise
     the GC path that walks only direct call references.
     """
+    __hash__ = object.__hash__
 
 
 @pytest.fixture(params=["destructuring", "flat"])

@@ -8,7 +8,8 @@ from fleche.storage.memory import MemoryBackend
 
 
 @dataclass(frozen=True)
-class _PlainValueMemory(ValueMixin, MemoryBackend): ...
+class _PlainValueMemory(ValueMixin, MemoryBackend):
+    __hash__ = object.__hash__
 
 
 def test_mixin_composition_chains_through_super():
@@ -24,7 +25,7 @@ def test_mixin_composition_chains_through_super():
 
     @dataclass(frozen=True)
     class Tracked(TrackingMixin, _PlainValueMemory):
-        pass
+        __hash__ = object.__hash__
 
     store = Tracked(storage={})
     k = store.save(42)
@@ -55,7 +56,7 @@ def test_operation_context_wraps_evict_and_contains():
 
     @dataclass(frozen=True)
     class Tracked(TrackingMixin, _PlainValueMemory):
-        pass
+        __hash__ = object.__hash__
 
     store = Tracked(storage={})
     key = store.save(99)
@@ -82,7 +83,7 @@ def test_intent_default_is_write():
 
     @dataclass(frozen=True)
     class Tracked(TrackingMixin, _PlainValueMemory):
-        pass
+        __hash__ = object.__hash__
 
     store = Tracked(storage={})
     store.save(1)
@@ -103,7 +104,7 @@ def test_intent_propagates_through_mixin_chain():
 
     @dataclass(frozen=True)
     class Tracked(OuterMixin, _PlainValueMemory):
-        pass
+        __hash__ = object.__hash__
 
     store = Tracked(storage={})
     with store._operation_context("k", intent=Intent.WRITE):
