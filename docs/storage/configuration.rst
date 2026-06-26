@@ -301,6 +301,39 @@ checked in order.  See :doc:`cache_stack` for the runtime behaviour.
    calls.type = "cloudpickle"
    calls.root = "~/.cache/fleche/calls"
 
+CachePool via a ``pool`` array-of-tables
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A dict section with a ``pool`` key (itself an array of tables,
+``[[name.pool]]``) defines a :class:`~fleche.caches.CachePool`: a
+**read-only, unordered collection** of caches queried as one.  Each member
+is configured like a normal cache section (including ``read_only`` /
+``max_size`` or even a nested stack).
+
+Unlike a ``CacheStack``, a pool never writes to any member: ``save`` and
+``evict`` raise :class:`~fleche.caches.Rejected`, and a ``load`` hit is
+**not** back-filled anywhere.  Reads fan out across all members —
+``contains`` is true if any member holds the key, ``query`` returns the
+deduplicated union, and ``load`` returns the first member that holds the
+key.  Use it to expose several independent, immutable caches (a teammate's
+results directory, a shared archive, last month's run) as one cache you can
+read from without risking a write to any of them.
+
+.. code-block:: toml
+
+   # A read-only pool over two independent on-disk caches.
+   [[shared.pool]]
+   values.type = "cloudpickle"
+   values.root = "~/.cache/fleche/values"
+   calls.type = "cloudpickle"
+   calls.root = "~/.cache/fleche/calls"
+
+   [[shared.pool]]
+   values.type = "cloudpickle"
+   values.root = "/shared/teammate/.cache/fleche/values"
+   calls.type = "cloudpickle"
+   calls.root = "/shared/teammate/.cache/fleche/calls"
+
 Full Configuration Example
 --------------------------
 
@@ -357,3 +390,16 @@ Below is an example of a complete configuration file demonstrating several featu
    values.root = "~/.cache/fleche/values"
    calls.type = "cloudpickle"
    calls.root = "~/.cache/fleche/calls"
+
+   # CachePool: a read-only collection of two independent caches
+   [[shared.pool]]
+   values.type = "cloudpickle"
+   values.root = "~/.cache/fleche/values"
+   calls.type = "cloudpickle"
+   calls.root = "~/.cache/fleche/calls"
+
+   [[shared.pool]]
+   values.type = "cloudpickle"
+   values.root = "/shared/team/.cache/fleche/values"
+   calls.type = "cloudpickle"
+   calls.root = "/shared/team/.cache/fleche/calls"

@@ -569,8 +569,181 @@ class RefreshingCache(CacheWrapper):
         return False
 
 
+class _MultiCache(BaseCache):
+    """Shared read fan-out for caches that aggregate several member caches.
+
+    Subclasses expose their members via :attr:`_members` and choose their own
+    *write* / :meth:`load` policy.  Everything that only **reads** across the
+    members — :meth:`contains`, :meth:`load_value`, :meth:`expand`,
+    :meth:`_shrink`, :meth:`_query` — plus the three private traversal helpers
+    lives here, so :class:`CacheStack` (an ordered, writable hierarchy) and
+    :class:`CachePool` (an unordered, read-only collection) share one
+    implementation of the fan-out.
+
+    Each traversal helper implements one of the recurring patterns:
+
+    - :meth:`_first_hit` — return on the first success; raise if all miss.
+    - :meth:`_collect` — gather every success; caller combines the results.
+    - :meth:`_foreach` — apply to every member; swallow expected refusals.
+    """
+
+    @property
+    @abstractmethod
+    def _members(self) -> "tuple[BaseCache, ...]":
+        """The member caches to fan out over, in traversal order."""
+        ...
+
+    def load_value(self, key):
+        return self._first_hit(lambda c: c.load_value(key))
+
+    def contains(self, key: str) -> bool:
+        return any(cache.contains(key) for cache in self._members)
+
+    def expand(self, key: Digest | str) -> Digest:
+        return _combine_expand(key, self._collect(lambda c: c.expand(key)))
+
+    def _shrink(self, *keys: Digest | str) -> "tuple[Digest, ...]":
+        per_key: dict = {k: [] for k in keys}
+        for cache in self._members:
+            present = [k for k in keys if cache.contains(k)]
+            if not present:
+                continue
+            r = cache.shrink(*present)
+            if len(present) == 1:
+                r = (r,)
+            for k, s in zip(present, r):
+                per_key[k].append(s)
+        out_list = []
+        for k in keys:
+            if not per_key[k]:
+                raise KeyError(k)
+            out_list.append(_combine_shrink(k, per_key[k]))
+        return tuple(out_list)
+
+    def _query(self, call: call.QueryCall) -> Iterable[LazyCall]:
+        """Aggregate query results across the members, avoiding duplicates.
+
+        The members are queried in order.  Results are deduplicated by their
+        lookup key (via ``Call.to_lookup_key()``) and yielded in the order they
+        are first seen.
+
+        Args:
+            call: A template ``Call`` where ``None`` fields act as wildcards.
+
+        Yields:
+            Call | LazyCall: Matching calls from any member, without duplicates.
+        """
+        seen = set()
+        for cache in self._members:
+            for c in cache.query(call):
+                k = c.to_lookup_key()
+                if k in seen:
+                    continue
+                seen.add(k)
+                yield c
+
+    # ------------------------------------------------------------------
+    # Private traversal helpers — three patterns that recur across the
+    # public fan-out methods.  New multi-cache operations should be
+    # expressed as a one-liner over whichever helper fits.
+    # ------------------------------------------------------------------
+
+    def _first_hit(self, op: Callable[["BaseCache"], Any], *, exc: type[BaseException] = KeyError) -> Any:
+        """Return the first successful result from iterating the members.
+
+        Invokes ``op(cache)`` on each member in :attr:`_members` in order and
+        returns immediately when a call does not raise *exc*.  If every member
+        raises *exc* the exception is re-raised.
+
+        This is the **first-hit-wins** pattern: used when any single cache can
+        satisfy the request and earlier members are preferred (e.g.
+        :meth:`load_value`).  The caller supplies the per-cache operation as a
+        lambda so the key (or other closure state) is always available in the
+        traceback without adding an extra helper argument.
+
+        Args:
+            op:  Callable that accepts a single :class:`BaseCache` and returns
+                 the desired result.  Called at most once per member.
+            exc: Exception *class* treated as a cache miss.  Defaults to
+                 :class:`KeyError`.  Must be a single type (not a tuple)
+                 because it is also used in the ``raise`` at the end.
+
+        Raises:
+            exc: If every member raises *exc*.
+        """
+        for cache in self._members:
+            try:
+                return op(cache)
+            except exc:
+                continue
+        raise exc
+
+    def _collect(self, op: Callable[["BaseCache"], Any], *, exc: type[BaseException] = KeyError) -> list:
+        """Collect one result per member, skipping misses.
+
+        Invokes ``op(cache)`` on every member in :attr:`_members` and appends
+        each non-raising result to a list.  Members that raise *exc* are
+        silently skipped; all other exceptions propagate normally.
+
+        This is the **collect-and-combine** pattern: used when all members may
+        hold relevant data and the caller needs to aggregate results before
+        returning (e.g. :meth:`expand` and :meth:`_shrink`, which pass the
+        collected list to ``_combine_expand``/``_combine_shrink``).
+
+        Args:
+            op:  Callable that accepts a single :class:`BaseCache` and returns
+                 a result to collect.  Called exactly once per member.
+            exc: Exception *class* to treat as a miss and skip.  Defaults to
+                 :class:`KeyError`.
+
+        Returns:
+            A list of all non-raising results in member order.  May be empty
+            when every member misses; the caller is responsible for handling
+            that case (typically by raising :class:`KeyError`).
+        """
+        out = []
+        for cache in self._members:
+            try:
+                out.append(op(cache))
+            except exc:
+                pass
+        return out
+
+    def _foreach(
+        self,
+        op: Callable[["BaseCache"], None],
+        *,
+        exc: type[BaseException] | tuple[type[BaseException], ...] = (Rejected, KeyError),
+    ) -> None:
+        """Apply an operation to every member, swallowing refusals.
+
+        Invokes ``op(cache)`` on every member in :attr:`_members`
+        unconditionally.  Exceptions of type *exc* are caught and discarded;
+        any other exception propagates normally.
+
+        This is the **apply-everywhere** pattern: used when an operation should
+        be attempted on all members regardless of whether individual caches
+        support it (e.g. :meth:`CacheStack.evict`, where read-only caches raise
+        :class:`Rejected` and empty caches raise :class:`KeyError`, and both
+        are expected non-fatal outcomes).
+
+        Args:
+            op:  Callable that accepts a single :class:`BaseCache`.  Its return
+                 value is ignored.  Called exactly once per member.
+            exc: Exception type(s) to swallow.  Defaults to
+                 ``(Rejected, KeyError)`` — the two standard refusal signals
+                 used across the cache hierarchy.  Pass a tuple to swallow
+                 multiple types.
+        """
+        for cache in self._members:
+            try:
+                op(cache)
+            except exc:
+                pass
+
+
 @dataclass(frozen=True)
-class CacheStack(PerKeyLockMixin, BaseCache):
+class CacheStack(PerKeyLockMixin, _MultiCache):
     """A combination of caches with a shared traversal policy.
 
     Saving always targets the lowest level (``stack[0]``); loading traverses
@@ -579,15 +752,15 @@ class CacheStack(PerKeyLockMixin, BaseCache):
     concurrent loads of the same missing key do not all run the base cache's
     non-atomic check-evict-save at once.
 
-    All multi-cache fan-out is handled by three private traversal helpers,
-    each implementing one of the recurring patterns across the stack:
-
-    - :meth:`_first_hit` — return on the first success; raise if all miss.
-    - :meth:`_collect` — gather every success; caller combines the results.
-    - :meth:`_foreach` — apply to every cache; swallow expected refusals.
+    All multi-cache fan-out is inherited from :class:`_MultiCache`'s three
+    private traversal helpers.
     """
 
     stack: tuple[BaseCache, ...]
+
+    @property
+    def _members(self) -> "tuple[BaseCache, ...]":
+        return self.stack
 
     def __post_init__(self):
         for c in self.stack:
@@ -649,159 +822,54 @@ class CacheStack(PerKeyLockMixin, BaseCache):
             except Rejected as e:
                 logger.warning("Failed to transfer hit for %s to base cache: %s", key, e)
 
-    def load_value(self, key):
-        return self._first_hit(lambda c: c.load_value(key))
-
-    def contains(self, key: str) -> bool:
-        return any(cache.contains(key) for cache in self.stack)
-
     def push(self, cache: BaseCache) -> "CacheStack":
         return CacheStack((cache, *self.stack))
 
     def evict(self, key: str | Digest) -> None:
         self._foreach(lambda c: c.evict(key))
 
-    def expand(self, key: Digest | str) -> Digest:
-        return _combine_expand(key, self._collect(lambda c: c.expand(key)))
 
-    def _shrink(self, *keys: Digest | str) -> "tuple[Digest, ...]":
-        per_key: dict = {k: [] for k in keys}
-        for cache in self.stack:
-            present = [k for k in keys if cache.contains(k)]
-            if not present:
-                continue
-            r = cache.shrink(*present)
-            if len(present) == 1:
-                r = (r,)
-            for k, s in zip(present, r):
-                per_key[k].append(s)
-        out_list = []
-        for k in keys:
-            if not per_key[k]:
-                raise KeyError(k)
-            out_list.append(_combine_shrink(k, per_key[k]))
-        return tuple(out_list)
+@dataclass(frozen=True)
+class CachePool(_MultiCache):
+    """A read-only collection of caches queried as one.
 
-    def _query(self, call: call.QueryCall) -> Iterable[LazyCall]:
-        """Aggregate query results across the stack, avoiding duplicates.
+    Where :class:`CacheStack` is an *ordered, writable* hierarchy (saves land
+    on ``stack[0]`` and hits back-fill downward), a ``CachePool`` is an
+    *unordered, read-only* aggregate: it never writes to any member.  Use it to
+    expose several independent caches — a teammate's results directory, a
+    shared read-only archive, last month's run — as a single cache you can
+    :meth:`load`, :meth:`contains`, :meth:`query`, :meth:`expand` and
+    :meth:`shrink` against without risking a write to any of them.
 
-        The caches are queried from bottom to top. Results are deduplicated by
-        their lookup key (via ``Call.to_lookup_key()``) and yielded in the
-        order they are first seen.
+    All reads fan out across :attr:`caches`:
 
-        Args:
-            call: A template ``Call`` where ``None`` fields act as wildcards.
+    - :meth:`load` / :meth:`load_value` — first member to hold the key wins.
+    - :meth:`contains` — true if *any* member holds the key.
+    - :meth:`query` — union across members, deduplicated by lookup key.
+    - :meth:`expand` / :meth:`shrink` — combined across members.
 
-        Yields:
-            Call | LazyCall: Matching calls from any cache in the stack, without duplicates.
-        """
-        seen = set()
-        for cache in self.stack:
-            for c in cache.query(call):
-                k = c.to_lookup_key()
-                if k in seen:
-                    continue
-                seen.add(k)
-                yield c
+    Both :meth:`save` and :meth:`evict` raise :class:`Rejected`; the members
+    are kept exactly as the caller supplied them.  Unlike :meth:`CacheStack`,
+    ``load`` does **not** back-fill a hit anywhere, so members are never
+    mutated as a side effect of reading.  The member order only decides which
+    cache's copy is returned on a :meth:`load` collision; every member is an
+    equally valid read source.
+    """
 
-    # ------------------------------------------------------------------
-    # Private traversal helpers — three patterns that recur across the
-    # public fan-out methods.  New CacheStack operations should be
-    # expressed as a one-liner over whichever helper fits.
-    # ------------------------------------------------------------------
+    caches: tuple[BaseCache, ...]
 
-    def _first_hit(self, op: Callable[["BaseCache"], Any], *, exc: type[BaseException] = KeyError) -> Any:
-        """Return the first successful result from iterating the stack.
+    @property
+    def _members(self) -> "tuple[BaseCache, ...]":
+        return self.caches
 
-        Invokes ``op(cache)`` on each cache in ``self.stack`` in order and
-        returns immediately when a call does not raise *exc*.  If every cache
-        raises *exc* the exception is re-raised.
+    def save(self, call: Call) -> str:
+        raise Rejected("Cannot save to a CachePool", self, call)
 
-        This is the **first-hit-wins** pattern: used when any single cache can
-        satisfy the request and caches earlier in the stack are preferred (e.g.
-        :meth:`load_value`).  The caller supplies the per-cache operation as a
-        lambda so the key (or other closure state) is always available in the
-        traceback without adding an extra helper argument.
+    def evict(self, key: str | Digest) -> None:
+        raise Rejected("Cannot evict from a CachePool", self, key)
 
-        Args:
-            op:  Callable that accepts a single :class:`BaseCache` and returns
-                 the desired result.  Called at most once per cache.
-            exc: Exception *class* treated as a cache miss.  Defaults to
-                 :class:`KeyError`.  Must be a single type (not a tuple)
-                 because it is also used in the ``raise`` at the end.
-
-        Raises:
-            exc: If every cache in the stack raises *exc*.
-        """
-        for cache in self.stack:
-            try:
-                return op(cache)
-            except exc:
-                continue
-        raise exc
-
-    def _collect(self, op: Callable[["BaseCache"], Any], *, exc: type[BaseException] = KeyError) -> list:
-        """Collect one result per cache, skipping misses.
-
-        Invokes ``op(cache)`` on every cache in ``self.stack`` and appends
-        each non-raising result to a list.  Caches that raise *exc* are
-        silently skipped; all other exceptions propagate normally.
-
-        This is the **collect-and-combine** pattern: used when all caches may
-        hold relevant data and the caller needs to aggregate results before
-        returning (e.g. :meth:`expand` and :meth:`shrink`, which pass the
-        collected list to ``_combine_expand``/``_combine_shrink``).
-
-        Args:
-            op:  Callable that accepts a single :class:`BaseCache` and returns
-                 a result to collect.  Called exactly once per cache.
-            exc: Exception *class* to treat as a miss and skip.  Defaults to
-                 :class:`KeyError`.
-
-        Returns:
-            A list of all non-raising results in stack order.  May be empty
-            when every cache misses; the caller is responsible for handling
-            that case (typically by raising :class:`KeyError`).
-        """
-        out = []
-        for cache in self.stack:
-            try:
-                out.append(op(cache))
-            except exc:
-                pass
-        return out
-
-    def _foreach(
-        self,
-        op: Callable[["BaseCache"], None],
-        *,
-        exc: type[BaseException] | tuple[type[BaseException], ...] = (Rejected, KeyError),
-    ) -> None:
-        """Apply an operation to every cache in the stack, swallowing refusals.
-
-        Invokes ``op(cache)`` on every cache in ``self.stack`` unconditionally.
-        Exceptions of type *exc* are caught and discarded; any other exception
-        propagates normally.
-
-        This is the **apply-everywhere** pattern: used when an operation should
-        be attempted on all caches regardless of whether individual caches
-        support it (e.g. :meth:`evict`, where read-only caches raise
-        :class:`Rejected` and empty caches raise :class:`KeyError`, and both
-        are expected non-fatal outcomes).
-
-        Args:
-            op:  Callable that accepts a single :class:`BaseCache`.  Its return
-                 value is ignored.  Called exactly once per cache.
-            exc: Exception type(s) to swallow.  Defaults to
-                 ``(Rejected, KeyError)`` — the two standard refusal signals
-                 used across the cache hierarchy.  Pass a tuple to swallow
-                 multiple types.
-        """
-        for cache in self.stack:
-            try:
-                op(cache)
-            except exc:
-                pass
+    def load(self, key: str) -> LazyCall:
+        return self._first_hit(lambda c: c.load(key))
 
 
 class SizeLimitedMixin(BaseCache):
