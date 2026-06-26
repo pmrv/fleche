@@ -112,11 +112,13 @@ class Runtime(MetaData):
             'walltime': t - pre['timestart'],
         }
 
-    keys: dict[str, type] = {
+    @property
+    def keys(self) -> dict[str, type]:
+        return {
             'timestart': float,
             'timestop': float,
             'walltime': float,
-    }
+        }
 
 
 @configurable
@@ -141,13 +143,15 @@ class Environment(MetaData):
             'python_version': platform.python_version(),
         }
 
-    keys: dict[str, type] = {
+    @property
+    def keys(self) -> dict[str, type]:
+        return {
             'hostname': str,
             'username': str,
             'cwd': str,
             'fleche_version': str,
             'python_version': str,
-    }
+        }
 
 
 def _git(*args: str) -> str | None:
@@ -192,12 +196,14 @@ class Git(MetaData):
             'dirty': bool(status) if status is not None else None,
         }
 
-    keys: dict[str, type] = {
+    @property
+    def keys(self) -> dict[str, type]:
+        return {
             'root': str,
             'commit': str,
             'branch': str,
             'dirty': bool,
-    }
+        }
 
 
 @dataclass
