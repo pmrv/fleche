@@ -9,17 +9,21 @@ import io
 import os
 import sys
 import threading
+import types
 
 import pytest
 
+import fleche.state as _state
 from fleche.call import Call, QueryCall
 from fleche.caches import Cache, Rejected
+from fleche.config import cache_to_config, load_cache_config
 from fleche.digest import Digest
 from fleche.remote import (
     RemoteConnectionError,
     SshCache,
     _Connection,
     _read_frame,
+    _run_server,
     _write_frame,
     serve,
 )
@@ -746,19 +750,12 @@ def test_run_server_serves_active_cache_over_stdio_until_eof(monkeypatch, cache_
     server launched with ``--cache NAME`` is recognisable from the
     client's ``info()``.
     """
-    import sys as _sys
-    import types as _types
-
-    import fleche.state as _state
-    from fleche.config import cache_to_config, load_cache_config
-    from fleche.remote import _read_frame, _run_server, _write_frame
-
     fake_stdin = io.BytesIO()
     _write_frame(fake_stdin, ("info", (), {}))
     fake_stdin.seek(0)
     fake_stdout = io.BytesIO()
-    monkeypatch.setattr(_sys, "stdin", _types.SimpleNamespace(buffer=fake_stdin))
-    monkeypatch.setattr(_sys, "stdout", _types.SimpleNamespace(buffer=fake_stdout))
+    monkeypatch.setattr(sys, "stdin", types.SimpleNamespace(buffer=fake_stdin))
+    monkeypatch.setattr(sys, "stdout", types.SimpleNamespace(buffer=fake_stdout))
 
     # Pin a freshly-constructed clean cache as active.  Two reasons:
     # (1) `_run_server(cache_name)` calls `cache(cache_name)` which mutates
