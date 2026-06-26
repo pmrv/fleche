@@ -27,7 +27,8 @@ from hypothesis.database import InMemoryExampleDatabase
 
 
 @dataclass(frozen=True)
-class ValueMemoryRaw(DestructuringMixin, ValueMixin, MemoryBackend): ...
+class ValueMemoryRaw(DestructuringMixin, ValueMixin, MemoryBackend):
+    __hash__ = object.__hash__
 
 
 def _generate_backend_safe_nested(count=50, max_depth=3, max_size=6):

@@ -13,7 +13,7 @@ from tests.strategies import st_base_values, st_nested_values, st_key_values, na
 @dataclass(frozen=True)
 class DestructuringMemory(DestructuringMixin, ValueMixin, MemoryBackend):
     """Test-only class: DestructuringMixin layered on top of ValueMixin + MemoryBackend."""
-    pass
+    __hash__ = object.__hash__
 
 
 @pytest.fixture

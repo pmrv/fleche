@@ -202,7 +202,7 @@ def test_fleche_distinguishes_different_attrs_arguments():
 
 @dataclass(frozen=True)
 class DestructuringMemory(DestructuringMixin, ValueMixin, MemoryBackend):
-    pass
+    __hash__ = object.__hash__
 
 
 @pytest.fixture

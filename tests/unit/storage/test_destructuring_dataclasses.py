@@ -22,7 +22,7 @@ from tests.strategies import st_base_values, st_nested_values, dataclasses as st
 
 @dataclass(frozen=True)
 class DestructuringMemory(DestructuringMixin, ValueMixin, MemoryBackend):
-    pass
+    __hash__ = object.__hash__
 
 
 @pytest.fixture
