@@ -512,18 +512,28 @@ class CacheWrapper(BaseCache):
             yield
 
 
-class ReadOnlyMixin(CacheWrapper):
-    """Raises :class:`Rejected` for ``save`` and ``evict``."""
+class ReadOnlyMixin:
+    """Read-only behaviour: ``save`` and ``evict`` raise :class:`Rejected`.
+
+    Field-free and base-free, so it composes onto *any* cache layout — a
+    single-cache wrapper (:class:`ReadOnlyCache`, :class:`FilteredCache`) or a
+    multi-cache view (:class:`CachePool`).  Place it **first** in the bases so
+    its ``save``/``evict`` win over a forwarding/aggregating implementation.
+
+    It is also the marker :func:`fleche.remote._is_read_only` keys on, so any
+    cache mixing it in is recognised as read-only by the SSH layer (which then
+    short-circuits ``save``/``evict`` without a round-trip).
+    """
 
     def save(self, call: Call):
         raise Rejected(self, call)
 
     def evict(self, key: str | Digest) -> None:
-        raise Rejected("Cannot evict from a ReadOnlyCache", self, key)
+        raise Rejected("Cannot evict from a read-only cache", self, key)
 
 
 @dataclass(frozen=True)
-class ReadOnlyCache(ReadOnlyMixin):
+class ReadOnlyCache(ReadOnlyMixin, CacheWrapper):
     """A cache that can only be read from."""
 
 
@@ -546,7 +556,7 @@ class FilteringMixin(CacheWrapper):
 
 
 @dataclass(frozen=True)
-class FilteredCache(FilteringMixin, ReadOnlyMixin):
+class FilteredCache(ReadOnlyMixin, FilteringMixin):
     """A read-only view of a cache that only exposes calls matching a predicate."""
 
 
@@ -830,7 +840,7 @@ class CacheStack(PerKeyLockMixin, _MultiCache):
 
 
 @dataclass(frozen=True)
-class CachePool(_MultiCache):
+class CachePool(ReadOnlyMixin, _MultiCache):
     """A read-only collection of caches queried as one.
 
     Where :class:`CacheStack` is an *ordered, writable* hierarchy (saves land
@@ -848,12 +858,13 @@ class CachePool(_MultiCache):
     - :meth:`query` — union across members, deduplicated by lookup key.
     - :meth:`expand` / :meth:`shrink` — combined across members.
 
-    Both :meth:`save` and :meth:`evict` raise :class:`Rejected`; the members
-    are kept exactly as the caller supplied them.  Unlike :meth:`CacheStack`,
-    ``load`` does **not** back-fill a hit anywhere, so members are never
-    mutated as a side effect of reading.  The member order only decides which
-    cache's copy is returned on a :meth:`load` collision; every member is an
-    equally valid read source.
+    Read-only-ness is inherited from :class:`ReadOnlyMixin` (so ``save`` and
+    ``evict`` raise :class:`Rejected`, and the SSH layer recognises the pool as
+    read-only); the members are kept exactly as the caller supplied them.
+    Unlike :class:`CacheStack`, ``load`` does **not** back-fill a hit anywhere,
+    so members are never mutated as a side effect of reading.  The member order
+    only decides which cache's copy is returned on a :meth:`load` collision;
+    every member is an equally valid read source.
     """
 
     caches: tuple[BaseCache, ...]
@@ -861,12 +872,6 @@ class CachePool(_MultiCache):
     @property
     def _members(self) -> "tuple[BaseCache, ...]":
         return self.caches
-
-    def save(self, call: Call) -> str:
-        raise Rejected("Cannot save to a CachePool", self, call)
-
-    def evict(self, key: str | Digest) -> None:
-        raise Rejected("Cannot evict from a CachePool", self, key)
 
     def load(self, key: str) -> LazyCall:
         return self._first_hit(lambda c: c.load(key))

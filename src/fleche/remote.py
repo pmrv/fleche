@@ -154,8 +154,9 @@ def _is_read_only(cache: BaseCache) -> bool:
     """Best-effort check of whether *cache* will reject every ``save``.
 
     Recognises :class:`~fleche.caches.ReadOnlyMixin` directly (covers
-    :class:`~fleche.caches.ReadOnlyCache` and
-    :class:`~fleche.caches.FilteredCache`); for a
+    :class:`~fleche.caches.ReadOnlyCache`,
+    :class:`~fleche.caches.FilteredCache`, and
+    :class:`~fleche.caches.CachePool`); for a
     :class:`~fleche.caches.CacheStack` checks ``stack[0]`` since that is
     where ``CacheStack.save`` writes.  Returns ``False`` for anything
     else — at worst the client falls back to the round-trip path.

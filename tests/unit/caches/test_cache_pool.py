@@ -2,7 +2,14 @@ from unittest.mock import Mock
 
 import pytest
 
-from fleche.caches import Cache, CachePool, CacheStack, ReadOnlyCache, Rejected
+from fleche.caches import (
+    Cache,
+    CachePool,
+    CacheStack,
+    ReadOnlyCache,
+    ReadOnlyMixin,
+    Rejected,
+)
 from fleche.call import Call
 from fleche.digest import digest
 from fleche.storage import CallMemory, ValueMemory
@@ -10,6 +17,20 @@ from fleche.storage import CallMemory, ValueMemory
 
 def _mem() -> Cache:
     return Cache(ValueMemory({}), CallMemory({}))
+
+
+def test_cache_pool_is_recognised_as_read_only():
+    """A pool reuses ReadOnlyMixin, so it is a read-only cache by type.
+
+    This is what makes ``remote._is_read_only`` short-circuit ``save``/``evict``
+    when an SshCache serves a pool, instead of hand-rolling the rejection.
+    """
+    pool = CachePool((_mem(),))
+    assert isinstance(pool, ReadOnlyMixin)
+
+    from fleche.remote import _is_read_only
+
+    assert _is_read_only(pool)
 
 
 def test_cache_pool_save_rejected():
