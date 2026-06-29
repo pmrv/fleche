@@ -95,7 +95,10 @@ per-function metadata in one frozen dataclass:
 - ``inspect.signature(func)`` — used for argument binding
 - the digest of ``func.__code__`` (included in cache keys only when ``hash_code=True``; the default is ``False``)
 - ``(qualname, module, version)`` extracted via
-  :class:`pyiron_snippets.versions.VersionInfo`
+  :class:`pyiron_snippets.versions.VersionInfo` — ``module`` and ``version``
+  are included in cache keys by default (``hash_module=True``,
+  ``hash_version=True``); set either flag to ``False`` to exclude the
+  corresponding field from the key
 - the sets of :class:`~fleche.call.Ignored`- and
   :class:`~fleche.call.Required`-annotated argument names
 
