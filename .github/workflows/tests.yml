@@ -18,6 +18,7 @@ jobs:
               - 'src/**'
               - 'tests/**'
               - 'pyproject.toml'
+              - '.github/workflows/**'
 
   build:
     needs: changes
