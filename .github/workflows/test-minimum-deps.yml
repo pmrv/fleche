@@ -1,6 +1,8 @@
 name: test-minimum-deps
 
-on: pull_request
+on:
+  pull_request:
+    branches: [ main ]
 
 jobs:
   test-minimum-deps:
