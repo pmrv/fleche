@@ -19,7 +19,7 @@ jobs:
               - 'src/**'
               - 'tests/**'
               - 'pyproject.toml'
-              - '.github/workflows/**'
+              - '.github/workflows/test-minimum-deps.yml'
 
   test-minimum-deps:
     needs: changes

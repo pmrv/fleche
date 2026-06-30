@@ -20,7 +20,7 @@ jobs:
               - 'src/**'
               - 'tests/**'
               - 'pyproject.toml'
-              - '.github/workflows/**'
+              - '.github/workflows/ty.yml'
 
   ty:
     needs: changes
