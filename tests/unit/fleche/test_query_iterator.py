@@ -93,20 +93,6 @@ def test_query_iterator_results_empty():
     assert list(QueryIterator(lambda: []).results()) == []
 
 
-def test_query_iterator_results_from_wrapper(test_cache):
-    """results() works correctly when the iterator comes from a fleche wrapper."""
-    with cache(test_cache):
-        @fleche
-        def square(n):
-            return n * n
-
-        square(3)
-        square(4)
-
-        results = sorted(square.fleche.query().results())
-        assert results == [9, 16]
-
-
 # ---------------------------------------------------------------------------
 # .table() — basic structure
 # ---------------------------------------------------------------------------

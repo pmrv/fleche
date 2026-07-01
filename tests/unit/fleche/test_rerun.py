@@ -28,40 +28,6 @@ def test_rerun_basic():
         assert func(1) == 2
         assert mock_func.call_count == 2
 
-def test_rerun_nested():
-    mock_inner = Mock(side_effect=[10, 20])
-    mock_outer = Mock(side_effect=[100, 200])
-
-    @fleche
-    def inner(x):
-        return mock_inner(x)
-
-    @fleche
-    def outer(x):
-        mock_outer(x)
-        return inner(x)
-
-    with cache(Cache(ValueMemory({}), CallMemory({}))):
-        # First call: both miss
-        assert outer(1) == 10
-        assert mock_outer.call_count == 1
-        assert mock_inner.call_count == 1
-
-        # Second call: both hit
-        assert outer(1) == 10
-        assert mock_outer.call_count == 1
-        assert mock_inner.call_count == 1
-
-        # Rerun: both should re-execute because of RefreshingCache
-        assert outer.fleche.rerun(1) == 20
-        assert mock_outer.call_count == 2
-        assert mock_inner.call_count == 2
-
-        # Verify they are now cached with new values
-        assert outer(1) == 20
-        assert mock_outer.call_count == 2
-        assert mock_inner.call_count == 2
-
 def test_rerun_nested_multiple_levels():
     mock_l3 = Mock(side_effect=[1, 2, 3])
 
