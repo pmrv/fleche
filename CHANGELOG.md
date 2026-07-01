@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.18.0](https://github.com/pmrv/fleche/compare/0.17.0...0.18.0) (2026-07-01)
+
+
+### Features
+
+* add CachePool, a read-only collection of caches ([#689](https://github.com/pmrv/fleche/issues/689)) ([9cbcfbe](https://github.com/pmrv/fleche/commit/9cbcfbee99b76b708c394a841fececd656f39f33))
+* **storage:** guard MemoryBackend subclasses against silent __hash__ loss ([#683](https://github.com/pmrv/fleche/issues/683)) ([f8ce0c8](https://github.com/pmrv/fleche/commit/f8ce0c8c9d180bfbba92e391792ab9105aebb7d7))
+
+
+### Bug Fixes
+
+* **digest:** hash pandas DataFrame/Series/Index by content ([#675](https://github.com/pmrv/fleche/issues/675)) ([0e95163](https://github.com/pmrv/fleche/commit/0e95163bb8bda1bb9f1e3df2a6d5841f0c259bde))
+
 ## [0.17.0](https://github.com/pmrv/fleche/compare/0.16.0...0.17.0) (2026-06-21)
 
 
