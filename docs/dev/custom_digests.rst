@@ -77,8 +77,16 @@ which returns the object at the given path directly — it does **not** call it.
 
 .. code-block:: pycon
 
-   >>> # my_package/hooks.py
    >>> from fleche.digest import digest, Digest, Hook
+
+   >>> class TypeA:
+   ...     def __init__(self, field1, field2):
+   ...         self.field1 = field1
+   ...         self.field2 = field2
+
+   >>> class TypeB:
+   ...     def __init__(self, relevant_field):
+   ...         self.relevant_field = relevant_field
 
    >>> def type_a_digest(obj: TypeA) -> Digest:
    ...     return digest((type(obj).__name__, obj.field1, obj.field2))
