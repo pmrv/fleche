@@ -75,21 +75,29 @@ These must be **module-level objects**, not callables that return hooks.
 ``fleche`` loads the entry point with ``importlib.metadata.EntryPoint.load()``,
 which returns the object at the given path directly — it does **not** call it.
 
-.. code-block:: python
+.. code-block:: pycon
 
-   # my_package/hooks.py
-   from fleche.digest import digest, Digest, Hook
+   >>> from fleche.digest import digest, Digest, Hook
 
-   def type_a_digest(obj: TypeA) -> Digest:
-       return digest((type(obj).__name__, obj.field1, obj.field2))
+   >>> class TypeA:
+   ...     def __init__(self, field1, field2):
+   ...         self.field1 = field1
+   ...         self.field2 = field2
 
-   def type_b_digest(obj: TypeB) -> Digest:
-       return digest((type(obj).__name__, obj.relevant_field))
+   >>> class TypeB:
+   ...     def __init__(self, relevant_field):
+   ...         self.relevant_field = relevant_field
 
-   digest_hooks = [
-       Hook(TypeA, type_a_digest),
-       (TypeB, type_b_digest),
-   ]
+   >>> def type_a_digest(obj: TypeA) -> Digest:
+   ...     return digest((type(obj).__name__, obj.field1, obj.field2))
+
+   >>> def type_b_digest(obj: TypeB) -> Digest:
+   ...     return digest((type(obj).__name__, obj.relevant_field))
+
+   >>> digest_hooks = [
+   ...     Hook(TypeA, type_a_digest),
+   ...     (TypeB, type_b_digest),
+   ... ]
 
 Lazy Loading and Retries
 ~~~~~~~~~~~~~~~~~~~~~~~~
