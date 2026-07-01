@@ -9,17 +9,21 @@ import io
 import os
 import sys
 import threading
+import types
 
 import pytest
 
+import fleche.state as _state
 from fleche.call import Call, QueryCall
 from fleche.caches import Cache, Rejected
+from fleche.config import cache_to_config, load_cache_config
 from fleche.digest import Digest
 from fleche.remote import (
     RemoteConnectionError,
     SshCache,
     _Connection,
     _read_frame,
+    _run_server,
     _write_frame,
     serve,
 )
@@ -800,3 +804,59 @@ def test_cache_stack_with_ssh_layer():
     assert isinstance(c, CacheStack)
     assert isinstance(c.stack[1], SshCache)
     c.stack[1].close()
+
+
+# ---------------------------------------------------------------------------
+# `_run_server` — the `python -m fleche remote --serve` entry point
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("cache_name", [None, "memory"])
+def test_run_server_serves_active_cache_over_stdio_until_eof(monkeypatch, cache_name):
+    """``_run_server`` is the entry point invoked by ``python -m fleche
+    remote --serve``: it activates the named cache (when given), runs
+    :func:`serve` over ``sys.stdin.buffer`` / ``sys.stdout.buffer``, and
+    returns ``0`` on clean stdin EOF.
+
+    The integration tests exercise this through a real subprocess where
+    coverage doesn't propagate to the parent run, so this drives the
+    function in-process with stubbed binary stdio streams. The single
+    ``info`` request preloaded into the fake stdin lets us verify two
+    contracts in one round-trip: the served cache matches the one
+    selected by ``cache_name`` (``None`` → the active cache as it stood
+    on entry; ``"memory"`` → the named cache installed via
+    :func:`fleche.state.cache`), and ``cache_name`` is echoed back so a
+    server launched with ``--cache NAME`` is recognisable from the
+    client's ``info()``.
+    """
+    fake_stdin = io.BytesIO()
+    _write_frame(fake_stdin, ("info", (), {}))
+    fake_stdin.seek(0)
+    fake_stdout = io.BytesIO()
+    monkeypatch.setattr(sys, "stdin", types.SimpleNamespace(buffer=fake_stdin))
+    monkeypatch.setattr(sys, "stdout", types.SimpleNamespace(buffer=fake_stdout))
+
+    # Pin a freshly-constructed clean cache as active.  Two reasons:
+    # (1) `_run_server(cache_name)` calls `cache(cache_name)` which mutates
+    # the active-cache ContextVar stickily — without a token reset the change
+    # leaks into subsequent tests; (2) ``cache_to_config`` recurses into a
+    # ``MemoryBackend.storage`` dict via ``dataclasses.asdict``, so an active
+    # cache left populated by earlier tests would make the round-trip
+    # comparison below crash on unrelated state.
+    clean_cache = Cache(ValueMemory({}), CallMemory({}))
+    cache_token = _state._CACHE.set(clean_cache)
+    try:
+        assert _run_server(cache_name=cache_name) == 0
+    finally:
+        _state._CACHE.reset(cache_token)
+
+    fake_stdout.seek(0)
+    tag, info = _read_frame(fake_stdout)
+    assert tag == "ok"
+    assert info["cache_name"] == cache_name
+    expected_cache = (
+        load_cache_config(cache_name) if cache_name is not None else clean_cache
+    )
+    assert info["cache"] == cache_to_config(expected_cache)
+    # Clean EOF: no second frame queued.
+    assert fake_stdout.read() == b""
