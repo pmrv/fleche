@@ -113,6 +113,20 @@ Example fleche.toml
     calls.type = "cloudpickle"
     calls.root = "~/.fleche/calls"
 
+    # CachePool — a read-only collection of caches, queried as one; never
+    # writes to any member.  Use a dict with a `pool` array-of-tables.
+    [[mypool.pool]]
+    values.type = "cloudpickle"
+    values.root = "~/.fleche/values"
+    calls.type = "cloudpickle"
+    calls.root = "~/.fleche/calls"
+
+    [[mypool.pool]]
+    values.type = "cloudpickle"
+    values.root = "~/teammate/.fleche/values"
+    calls.type = "cloudpickle"
+    calls.root = "~/teammate/.fleche/calls"
+
     # SshCache — share results with another machine over SSH.  The remote
     # runs `python -m fleche remote --serve` and proxies into its own
     # configured cache.  Compose with a local cache by stacking two
@@ -388,6 +402,9 @@ def cache_from_config(d: "dict[str, Any] | list[dict[str, Any]]") -> caches.Base
 
     - A **list** of dicts is treated as a :class:`~fleche.caches.CacheStack`,
       with each element processed recursively.
+    - A **dict** containing a ``pool`` key (a list of dicts) creates a
+      read-only :class:`~fleche.caches.CachePool`, with each element of the
+      list processed recursively.
     - A **dict** containing a ``max_size`` key creates a
       :class:`~fleche.caches.SizeLimitedCache`.
     - A **dict** containing ``read_only: true`` wraps the resulting cache in a
@@ -416,6 +433,9 @@ def cache_from_config(d: "dict[str, Any] | list[dict[str, Any]]") -> caches.Base
     """
     if isinstance(d, list):
         return caches.CacheStack(tuple(cache_from_config(c) for c in d))
+
+    if "pool" in d:
+        return caches.CachePool(tuple(cache_from_config(c) for c in d["pool"]))
 
     d = dict(d)
     if d.get("type") == "ssh":
@@ -449,6 +469,7 @@ def cache_to_config(c: caches.BaseCache) -> "dict[str, Any] | list[dict[str, Any
     - :class:`~fleche.caches.ReadOnlyCache` wrapping a ``Cache`` or
       ``SizeLimitedCache`` → inner cache dict with ``"read_only": True``
     - :class:`~fleche.caches.CacheStack` → list of dicts
+    - :class:`~fleche.caches.CachePool` → dict with a ``"pool"`` list of dicts
 
     Raises:
         ValueError: for unsupported cache types or unsupported
@@ -478,6 +499,8 @@ def cache_to_config(c: caches.BaseCache) -> "dict[str, Any] | list[dict[str, Any
             return d
         case caches.CacheStack():
             return cast("list[dict[str, Any]]", [cache_to_config(s) for s in c.stack])
+        case caches.CachePool():
+            return {"pool": [cache_to_config(m) for m in c.caches]}
         case _:
             if isinstance(c, SshCache):
                 d: dict[str, Any] = {"type": "ssh", "host": c.host}

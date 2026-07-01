@@ -1,5 +1,5 @@
 from fleche import storage
-from fleche.caches import Cache, CacheStack, ReadOnlyCache, SizeLimitedCache
+from fleche.caches import Cache, CachePool, CacheStack, ReadOnlyCache, SizeLimitedCache
 from fleche.config import cache_from_config
 import pytest
 
@@ -114,6 +114,43 @@ def test_cache_stack_nested_readonly():
     assert isinstance(c, CacheStack)
     assert isinstance(c.stack[0], ReadOnlyCache)
     assert isinstance(c.stack[1], Cache)
+
+
+def test_cache_pool_from_dict():
+    """A dict with a `pool` key is implicitly treated as a CachePool."""
+    cfg = {
+        "pool": [
+            {"values": {"type": "memory"}, "calls": {"type": "memory"}},
+            {"values": {"type": "void"}, "calls": {"type": "void"}},
+        ]
+    }
+    c = cache_from_config(cfg)
+    assert isinstance(c, CachePool)
+    assert len(c.caches) == 2
+    assert isinstance(c.caches[0], Cache)
+    assert isinstance(c.caches[0].values, storage.ValueMemory)
+    assert isinstance(c.caches[1].values, storage.ValueVoid)
+
+
+def test_cache_pool_nested_members():
+    """Pool members are processed recursively (e.g. read-only / stack)."""
+    cfg = {
+        "pool": [
+            {
+                "values": {"type": "memory"},
+                "calls": {"type": "memory"},
+                "read_only": True,
+            },
+            [
+                {"values": {"type": "memory"}, "calls": {"type": "memory"}},
+                {"values": {"type": "void"}, "calls": {"type": "void"}},
+            ],
+        ]
+    }
+    c = cache_from_config(cfg)
+    assert isinstance(c, CachePool)
+    assert isinstance(c.caches[0], ReadOnlyCache)
+    assert isinstance(c.caches[1], CacheStack)
 
 
 def test_cache_pickle_file(tmp_path):

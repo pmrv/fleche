@@ -1,7 +1,7 @@
 import pytest
 
 from fleche import storage
-from fleche.caches import BaseCache, Cache, CacheStack, ReadOnlyCache, SizeLimitedCache
+from fleche.caches import BaseCache, Cache, CachePool, CacheStack, ReadOnlyCache, SizeLimitedCache
 from fleche.config import cache_from_config, cache_to_config
 
 
@@ -77,6 +77,19 @@ def test_cache_to_config_cache_stack():
     assert len(cfg) == 2
     assert cfg[0]["values"]["type"] == "memory"
     assert cfg[1]["values"]["type"] == "void"
+
+
+def test_cache_to_config_cache_pool():
+    c = CachePool((
+        Cache(values=storage.ValueMemory({}), calls=storage.CallMemory({})),
+        Cache(values=storage.ValueVoid(), calls=storage.CallVoid()),
+    ))
+    cfg = cache_to_config(c)
+    assert isinstance(cfg, dict)
+    assert list(cfg) == ["pool"]
+    assert len(cfg["pool"]) == 2
+    assert cfg["pool"][0]["values"]["type"] == "memory"
+    assert cfg["pool"][1]["values"]["type"] == "void"
 
 
 def test_cache_to_config_readonly_wrapping_stack_raises():
@@ -206,6 +219,18 @@ def test_roundtrip_cache_stack():
     assert len(reconstructed.stack) == 2
     assert isinstance(reconstructed.stack[0].values, storage.ValueMemory)
     assert isinstance(reconstructed.stack[1].values, storage.ValueVoid)
+
+
+def test_roundtrip_cache_pool():
+    original = CachePool((
+        Cache(values=storage.ValueMemory({}), calls=storage.CallMemory({})),
+        Cache(values=storage.ValueVoid(), calls=storage.CallVoid()),
+    ))
+    reconstructed = cache_from_config(cache_to_config(original))
+    assert isinstance(reconstructed, CachePool)
+    assert len(reconstructed.caches) == 2
+    assert isinstance(reconstructed.caches[0].values, storage.ValueMemory)
+    assert isinstance(reconstructed.caches[1].values, storage.ValueVoid)
 
 
 def test_roundtrip_pickle_file(tmp_path):
