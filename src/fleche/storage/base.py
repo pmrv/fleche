@@ -122,21 +122,15 @@ class KeyManagement(OperationContext):
     def evict(self, key: Digest | str) -> None:
         """Removes the entry corresponding to the key from the storage."""
         with self._operation_context(key):
-            if len(key) < DIGEST_LENGTH:
-                key = self.expand(key)
-            else:
-                key = Digest(key)
-            self._evict(key)
+            self._evict(self._normalize_key(key))
 
     def contains(self, key: Digest | str) -> bool:
+        """Return True if the key is present in the storage, False otherwise."""
         with self._operation_context(key):
-            if len(key) < DIGEST_LENGTH:
-                try:
-                    key = self.expand(key)
-                except KeyError:
-                    return False
-            else:
-                key = Digest(key)
+            try:
+                key = self._normalize_key(key)
+            except KeyError:
+                return False
             return self._contains(key)
 
     def expand(self, key: Digest | str) -> Digest:
