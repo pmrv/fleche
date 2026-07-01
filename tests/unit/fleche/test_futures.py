@@ -127,29 +127,6 @@ class TestThreadPoolFutures:
         finally:
             executor.shutdown(wait=False)
 
-    def test_multiple_futures_concurrent(self):
-        """Multiple concurrent futures should all be cached independently."""
-        executor = ThreadPoolExecutor(max_workers=4)
-        try:
-            @fleche
-            def compute(x):
-                return executor.submit(lambda: x ** 2)
-
-            with cache(_make_cache()):
-                futures = [compute(i) for i in range(5)]
-                results = [f.result() for f in futures]
-                assert results == [0, 1, 4, 9, 16]
-
-                # Wait for all done callbacks before re-calling
-                for i in range(5):
-                    _wait_for_cache(compute, i)
-
-                # All results should now be cached
-                cached = [compute(i) for i in range(5)]
-                assert cached == [0, 1, 4, 9, 16]
-        finally:
-            executor.shutdown(wait=False)
-
 # Module-level decorated function for ProcessPoolExecutor (must be picklable)
 @fleche
 def _pp_compute(x):

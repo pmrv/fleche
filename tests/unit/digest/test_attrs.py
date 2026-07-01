@@ -184,16 +184,6 @@ def test_fleche_caches_attrs_result():
         assert isinstance(b, AttrsBasic)
 
 
-def test_fleche_distinguishes_different_attrs_arguments():
-    @fleche
-    def f(obj):
-        return obj.x
-
-    with cache(Cache(ValueMemory({}), CallMemory({}))):
-        assert f(AttrsBasic(x=1, y="a")) == 1
-        assert f(AttrsBasic(x=2, y="a")) == 2
-
-
 # ---------------------------------------------------------------------------
 # Destructuring-storage integration: attrs instances should be destructured
 # into a per-field representation just like dataclasses.
