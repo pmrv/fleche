@@ -485,6 +485,85 @@ def test_forward_stderr_appends_to_buffer():
 
 
 # ---------------------------------------------------------------------------
+# Server-side error recovery
+# ---------------------------------------------------------------------------
+#
+# ``serve()`` documents two error-recovery contracts:
+#
+#   1. A frame whose payload isn't ``(method, args, kwargs)`` is logged and
+#      skipped; the loop keeps reading subsequent frames instead of dying.
+#   2. If a cache-raised exception cannot be cloudpickled, the server replaces
+#      it with a ``RuntimeError`` carrying its repr + traceback so the client
+#      always receives an ``("err", ...)`` frame instead of a wire-protocol
+#      error (which would surface as a bare ``EOFError`` on the client).
+#
+# Both branches are exercised in-process by piping pre-built request bytes
+# through ``serve()`` and inspecting the responses it writes back.
+
+
+def test_serve_malformed_frame_is_skipped_and_loop_continues(caplog):
+    """A non-tuple request is logged as malformed; the next well-formed
+    frame is still handled, so a noisy client can't wedge the server."""
+    import logging
+
+    server_in = io.BytesIO()
+    _write_frame(server_in, "not a tuple")          # malformed
+    _write_frame(server_in, ("contains", ("0" * 64,), {}))  # well-formed
+    server_in.seek(0)
+    server_out = io.BytesIO()
+
+    cache = Cache(ValueMemory({}), CallMemory({}))
+    caplog.set_level(logging.ERROR, logger="fleche.remote")
+    serve(server_in, server_out, cache)
+
+    assert any(
+        "Malformed request frame" in r.getMessage() for r in caplog.records
+    ), "expected the malformed frame to be logged"
+
+    # Exactly one response written — for the second, well-formed frame.
+    server_out.seek(0)
+    tag, payload = _read_frame(server_out)
+    assert tag == "ok"
+    assert payload is False  # `contains` misses on an empty cache
+    with pytest.raises(EOFError):
+        _read_frame(server_out)
+
+
+def test_serve_falls_back_when_exception_is_unpicklable(monkeypatch):
+    """Cache exceptions that can't be cloudpickled are wrapped in a
+    ``RuntimeError`` so an ``("err", ...)`` frame is always delivered."""
+    from fleche import remote as _remote
+
+    class Unpicklable(RuntimeError):
+        def __reduce__(self):
+            raise TypeError("this exception cannot travel across the wire")
+
+    def raising_dispatch(cache, method, args, kwargs):
+        raise Unpicklable("boom")
+
+    monkeypatch.setattr(_remote, "_dispatch", raising_dispatch)
+
+    server_in = io.BytesIO()
+    _write_frame(server_in, ("contains", ("0" * 64,), {}))
+    server_in.seek(0)
+    server_out = io.BytesIO()
+
+    cache = Cache(ValueMemory({}), CallMemory({}))
+    serve(server_in, server_out, cache)
+
+    server_out.seek(0)
+    tag, payload = _read_frame(server_out)
+    assert tag == "err"
+    # The fallback replaces the un-cloudpicklable exception with a plain
+    # RuntimeError carrying enough context for a human to diagnose it.
+    assert isinstance(payload, RuntimeError)
+    assert not isinstance(payload, Unpicklable)
+    msg = str(payload)
+    assert "Unpicklable" in msg
+    assert "boom" in msg
+
+
+# ---------------------------------------------------------------------------
 # Config integration
 # ---------------------------------------------------------------------------
 
