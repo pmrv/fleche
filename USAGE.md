@@ -1,5 +1,9 @@
 # USAGE.md
 
+> **AI-agent reference.** This file is written for AI coding agents (Codex,
+> Cursor, Aider, Claude, ...) working in or against this repo, linked from
+> [AGENTS.md](AGENTS.md) — not human-facing documentation.
+
 How to use the `fleche` library as a dependency — decorating functions,
 configuring caches, choosing storage backends, querying results. If you're
 modifying fleche's own source instead, see [DEVELOPING.md](DEVELOPING.md).

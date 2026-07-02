@@ -1,5 +1,9 @@
 # DEVELOPING.md
 
+> **AI-agent reference.** This file is written for AI coding agents (Codex,
+> Cursor, Aider, Claude, ...) working in or against this repo, linked from
+> [AGENTS.md](AGENTS.md) — not human-facing documentation.
+
 Developing fleche's own source: commands, conventions, module map,
 architecture internals, test layout, and the design/issue-tracker history.
 If you just want to *use* fleche as a dependency instead, see
