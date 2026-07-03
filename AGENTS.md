@@ -10,8 +10,8 @@ This file is deliberately short. Pick the guide that matches what you're doing:
 
 | Task | Guide |
 |---|---|
-| Writing code that *calls* fleche — decorating functions, configuring a cache via `fleche.toml`, choosing a storage backend, querying stored calls | **[USAGE.md](USAGE.md)** |
-| Changing fleche's *own* source — commands, tests, module map, architecture internals, the design/issue-tracker history, commit conventions | **[DEVELOPING.md](DEVELOPING.md)** |
+| Writing code that *calls* fleche — decorating functions, configuring a cache via `fleche.toml`, choosing a storage backend, querying stored calls | **[agents/USAGE.md](agents/USAGE.md)** |
+| Changing fleche's *own* source — commands, tests, module map, architecture internals, the design/issue-tracker history, commit conventions | **[agents/DEVELOPING.md](agents/DEVELOPING.md)** |
 
 Full human-facing docs (Sphinx) live in `docs/`; runnable examples live in
 `notebooks/`.
@@ -26,4 +26,4 @@ ty check src/                 # type check
 
 Python `>=3.11,<3.15`. Conventional Commits are required on every commit
 message (`feat:`/`fix:`/`docs:`/`test:`/`chore:`/`refactor:`) — see
-[DEVELOPING.md](DEVELOPING.md#commit-messages) for why and how.
+[agents/DEVELOPING.md](agents/DEVELOPING.md#commit-messages) for why and how.
