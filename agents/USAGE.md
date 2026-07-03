@@ -1,0 +1,165 @@
+# USAGE.md
+
+> **AI-agent reference.** This file is written for AI coding agents (Codex,
+> Cursor, Aider, Claude, ...) working in or against this repo, linked from
+> [AGENTS.md](../AGENTS.md) — not human-facing documentation.
+
+How to use the `fleche` library as a dependency — decorating functions,
+configuring caches, choosing storage backends, querying results. If you're
+modifying fleche's own source instead, see [DEVELOPING.md](DEVELOPING.md).
+
+This is the condensed, agent-oriented version. Full human docs live in
+`docs/` (Sphinx sources — read the `.rst` files directly, or build with
+Sphinx) and runnable notebooks in `notebooks/`; this file links to the
+authoritative source for anything it summarizes.
+
+## Basic usage
+
+```python
+from fleche import fleche
+
+@fleche()
+def expensive(x, y):
+    ...  # only re-runs when x, y, or the function's code change
+```
+
+- The decorator hashes the function's arguments (SHA256, content-based —
+  not `id()`/pickle-identity based) into a lookup key, and returns the
+  stored result on a hit.
+- Helpers attached to the wrapped function: `.call`, `.digest`, `.load`,
+  `.contains`, `.query`, `.rerun`, `.bind` (mirrored under `.fleche.*` too).
+- Returning `None` is never cached (a warning is logged) — fleche can't
+  distinguish "cached `None`" from "no result yet".
+
+## The active cache
+
+There is exactly one *active* cache at a time (a thread-safe `ContextVar`),
+used by every `@fleche()`-wrapped function that doesn't specify otherwise.
+
+```python
+from fleche import cache
+
+cache("mycache")            # sticky: switches the active cache and stays switched
+with cache("mycache"):      # scoped: active only inside the `with` block
+    ...
+cache()                      # returns the current active cache, doesn't change it
+```
+
+Two reserved names bypass config entirely:
+- `cache("memory")` — a process-lifetime in-memory cache (not shared across
+  processes, not persisted to disk).
+- `cache("void")` — discards everything; use to disable caching without
+  touching decorated code.
+
+`cache("default")` / `cache()` with no config resolves to whatever
+`[default]` names in `fleche.toml` (see below), or a plain in-memory cache
+if no config file is found anywhere.
+
+## Config files — where fleche looks, and what's in them
+
+**This is the part that's easy to get wrong, so read it before writing a
+`fleche.toml`.**
+
+Fleche looks for **`fleche.toml`** files — there is no single fixed path.
+On the first cache/metadata lookup it:
+
+1. Walks from the **current working directory upward** to `$HOME`
+   (inclusive) or the filesystem root, collecting every `fleche.toml` it
+   passes.
+2. Appends `$XDG_CONFIG_HOME/fleche/cache.toml` (or
+   `~/.config/fleche/cache.toml` if that env var is unset/empty) as a
+   final, lowest-priority layer.
+3. **Shallow-merges** all discovered files at the top level: a file closer
+   to the CWD wins outright, and its top-level table *replaces* (not
+   recursively merges into) the same-named table from a farther file.
+
+So a project-local `./fleche.toml` overrides `~/fleche.toml`, which
+overrides the XDG fallback. If no file is found anywhere, fleche silently
+falls back to an in-memory-only cache — no error is raised.
+
+A minimal file:
+
+```toml
+[default]
+cache = "persistent"        # which section below is "the" default cache
+metadata = ["Runtime"]      # this is the default even if the key is omitted
+
+[persistent]
+values.type = "cloudpickle"
+values.root = "~/.cache/fleche/values"
+calls.type = "cloudpickle"
+calls.root = "~/.cache/fleche/calls"
+```
+
+Every cache section (`[persistent]` above) needs a `values` backend
+(stores function results) and a `calls` backend (stores call
+metadata/arguments) — see the backend table below for `type` options.
+A section can add `read_only = true` (wraps it in a `ReadOnlyCache` — loads
+still work, saves/evicts raise `Rejected`) or `max_size = N` (an
+evict-oldest `SizeLimitedCache`). A TOML array-of-tables (`[[name]]`)
+builds a `CacheStack` (fast layer in front of a persistent one; reads fall
+through and back-fill hits). `[[name.pool]]` builds a read-only
+`CachePool` (fans reads out over several caches, never writes to any of
+them — e.g. to read from a teammate's cache alongside your own).
+
+Full worked examples for every shape (stack, pool, read-only, size-limited,
+SSH-remote) are in `docs/storage/configuration.rst` and the module
+docstring of `src/fleche/config.py` — copy from there rather than
+re-deriving the TOML by hand.
+
+## Choosing a storage backend (the `type` key)
+
+| `type` | Backend | Required keys | Notes |
+|---|---|---|---|
+| `"memory"` | in-process dict | — | lost on process exit |
+| `"void"` | no-op | — | discards everything |
+| `"pickle"` / `"cloudpickle"` / `"dill"` | filesystem, one file per entry | `root` | `cloudpickle`/`dill` handle lambdas/closures stdlib `pickle` can't; optional `compress`, `secret_key` (HMAC signing) |
+| `"bagofholding_hdf"` | single HDF5 file via `bagofholding` | `root` | optional `version_validator` |
+| `"sql"` | SQLAlchemy | `url` | **calls only** — pair with a value backend above |
+| `"ssh"` | forwards to a remote `python -m fleche remote --serve` process | `host` | whole-cache forwarding, not a per-key backend |
+
+`values` and `calls` are stored separately on purpose: call records
+(arguments, metadata) are queryable without deserializing the
+(potentially heavy) result values.
+
+## Controlling the cache key
+
+Decorator kwargs on `@fleche(...)`:
+
+- `version=` — bump to invalidate old entries without changing code.
+- `ignore=[...]` / `require=[...]` — argument names to exclude from the
+  key, or to force present (a call missing a `require`d kwarg runs
+  uncached, with a warning).
+- `hash_code=True` — folds `func.__code__` into the key (invalidates on
+  any code edit).
+- `hash_version=` / `hash_module=` — pin the digest scheme / module
+  identity explicitly.
+- `meta=[...]` — metadata classes to record (`Runtime`, `Environment`,
+  `Git`, or a `Tags(...)` instance) — see `docs/usage/`.
+- `isolate=True` — runs each call in a unique tempdir (not thread-safe;
+  uses `os.chdir`).
+- Per-argument: `Ignored[T]` / `Required[T]` type annotations do the same
+  thing as `ignore=`/`require=`, inline in the signature.
+
+Use `D(value)` (from `fleche`) to pass an existing digest/key as a lookup
+shortcut instead of the real value — the cache expands it back to the
+value before hashing.
+
+## Querying stored calls
+
+```python
+expensive.query().filter(...).table()   # pandas DataFrame of matching calls
+expensive.query().latest()               # most recent call by timestamp
+```
+
+`QueryIterator` is chainable (`take`/`skip`/`filter`/`unique`/`sorted`);
+terminal methods (`only`/`any`/`count`/`table`/`groupby`/`transfer`/`evict`)
+consume it. Full API: `docs/usage/query.rst`.
+
+## Security
+
+Only pickle-family backends (`pickle`/`cloudpickle`/`dill`) support
+signing. Set `secret_key` in the TOML section, or the `FLECHE_SECRET_KEY`
+env var (colon-separated hex strings), to HMAC-sign stored entries; a
+tampered or wrong-key entry surfaces as a cache miss (`KeyError`), not a
+crash. Details: `docs/storage/security.rst`.
