@@ -3,6 +3,7 @@ import pytest
 from fleche.call import Call
 from fleche.digest import Digest
 import fleche.digest as _fd
+from fleche.caches import Cache
 
 
 def _flip_last_nibble(hexstr: str) -> str:
@@ -240,6 +241,156 @@ def test_redigest_orphans_all_value_keys_when_entire_hash_changes(monkeypatch, c
 
     # Loading by the new key round-trips correctly.
     loaded = clean_cache.load(new_key).fetch()
+    assert loaded.arguments["a"] == [1, 2, (3, 4)]
+    assert loaded.arguments["b"] == {"k": 10}
+    assert loaded.result == ("x", {"y": 5})
+
+
+def _patch_int_digest(monkeypatch):
+    """Flip the last nibble of every int's digest, leaving all other types alone."""
+    orig_digest_bytes = _fd._digest_bytes
+
+    def patched(value):
+        if type(value) is int:
+            raw = orig_digest_bytes(value)
+            return _flip_last_nibble(raw.decode()).encode()
+        return orig_digest_bytes(value)
+
+    monkeypatch.setattr(_fd, "_digest_bytes", patched)
+
+
+def test_redigest_multi_call_only_changed_call_is_touched(monkeypatch, clean_cache):
+    """A multi-call cache: only calls whose key actually changes are re-saved/evicted."""
+    call_int = Call(name="f", arguments={"a": 1}, metadata={}, module=None, version=None, result="r1")
+    call_str = Call(name="f", arguments={"a": "x"}, metadata={}, module=None, version=None, result="r2")
+
+    key_int_before = clean_cache.save(call_int)
+    key_str_before = clean_cache.save(call_str)
+
+    _patch_int_digest(monkeypatch)
+
+    evicted = []
+    orig_evict = Cache.evict
+
+    def spy_evict(self, key):
+        evicted.append(key)
+        return orig_evict(self, key)
+
+    monkeypatch.setattr(Cache, "evict", spy_evict)
+
+    clean_cache.redigest()
+
+    calls_after = set(clean_cache.calls.list())
+
+    # The call with an int argument is re-keyed ...
+    new_key_int = call_int.to_lookup_key()
+    assert key_int_before not in calls_after
+    assert new_key_int in calls_after
+    assert key_int_before in evicted
+
+    # ... while the call with no int arguments keeps its original key and is
+    # never evicted/re-saved.
+    assert call_str.to_lookup_key() == key_str_before
+    assert key_str_before in calls_after
+    assert key_str_before not in evicted
+
+    assert clean_cache.load(new_key_int).fetch().result == "r1"
+    assert clean_cache.load(key_str_before).fetch().result == "r2"
+
+
+def test_redigest_second_call_is_noop(monkeypatch, clean_cache, sample_call):
+    """Calling redigest() again once keys are consistent does nothing."""
+    original = sample_call
+    clean_cache.save(original)
+
+    _patch_int_digest(monkeypatch)
+
+    clean_cache.redigest()
+    calls_after_first = set(clean_cache.calls.list())
+    values_after_first = set(clean_cache.values.list())
+
+    evicted = []
+    saved = []
+    orig_evict = Cache.evict
+    orig_save = Cache.save
+
+    def spy_evict(self, key):
+        evicted.append(key)
+        return orig_evict(self, key)
+
+    def spy_save(self, call):
+        saved.append(call)
+        return orig_save(self, call)
+
+    monkeypatch.setattr(Cache, "evict", spy_evict)
+    monkeypatch.setattr(Cache, "save", spy_save)
+
+    clean_cache.redigest()
+
+    assert not evicted
+    assert not saved
+    assert set(clean_cache.calls.list()) == calls_after_first
+    assert set(clean_cache.values.list()) == values_after_first
+
+
+def test_redigest_propagates_load_error_leaving_partial_migration(monkeypatch, clean_cache):
+    """redigest() bails out on the first load/fetch error instead of skipping it.
+
+    Documents the current behaviour (#618 gap 4): calls processed before the
+    failing one are already migrated, the failing call and everything after it
+    in iteration order are left untouched, and the exception propagates to the
+    caller instead of being swallowed.
+    """
+    call_first = Call(name="f", arguments={"a": 1}, metadata={}, module=None, version=None, result="r1")
+    call_second = Call(name="f", arguments={"a": 2}, metadata={}, module=None, version=None, result="r2")
+
+    key_first_before = clean_cache.save(call_first)
+    key_second_before = clean_cache.save(call_second)
+
+    _patch_int_digest(monkeypatch)
+
+    orig_load = Cache.load
+
+    def failing_load(self, key):
+        if key == key_second_before:
+            raise RuntimeError("boom")
+        return orig_load(self, key)
+
+    monkeypatch.setattr(Cache, "load", failing_load)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        clean_cache.redigest()
+
+    calls_after = set(clean_cache.calls.list())
+
+    # The first call, processed before the failure, was migrated ...
+    new_key_first = call_first.to_lookup_key()
+    assert key_first_before not in calls_after
+    assert new_key_first in calls_after
+
+    # ... but the second call was never reached and is left under its old key.
+    assert key_second_before in calls_after
+
+
+def test_redigest_on_file_backed_cache(monkeypatch, file_cache, sample_call):
+    """redigest() migrates keys correctly on a disk-backed cache, not just in-memory."""
+    original = sample_call
+
+    key_before = file_cache.save(original)
+
+    import fleche.digest as fd
+
+    patched = make_patched_digest(fd.digest, mode="calls_change")
+    monkeypatch.setattr(fd, "digest", patched, raising=True)
+
+    file_cache.redigest()
+
+    calls_after = set(file_cache.calls.list())
+    assert key_before not in calls_after
+    expected_key = original.to_lookup_key()
+    assert expected_key in calls_after
+
+    loaded = file_cache.load(expected_key).fetch()
     assert loaded.arguments["a"] == [1, 2, (3, 4)]
     assert loaded.arguments["b"] == {"k": 10}
     assert loaded.result == ("x", {"y": 5})
