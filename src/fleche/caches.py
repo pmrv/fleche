@@ -392,12 +392,38 @@ class Cache(PerKeyLockMixin, BaseCache):
         with self._operation_context(key):
             self.calls.evict(key)
 
-    def redigest(self) -> None:
+    def redigest(self, *, onerror: Literal["raise", "skip", "evict"] = "raise") -> None:
         """Ensures consistent cache keys in case digest function changed.
 
-        This may take time depending on cache size."""
+        This may take time depending on cache size.
+
+        Args:
+            onerror: How to handle a call that fails to load while re-keying.
+                ``"raise"`` (default) propagates the exception immediately,
+                leaving the cache partially migrated — already-consistent
+                keys are untouched, and a later ``redigest()`` call will
+                pick up where this one stopped.  ``"skip"`` logs a warning
+                and leaves the offending entry as-is, continuing with the
+                remaining keys.  ``"evict"`` logs a warning and evicts the
+                offending entry, continuing with the remaining keys.
+
+        Raises:
+            ValueError: if ``onerror`` is not one of ``"raise"``, ``"skip"``, or ``"evict"``.
+        """
+        if onerror not in ("raise", "skip", "evict"):
+            raise ValueError(f"onerror must be 'raise', 'skip', or 'evict', not {onerror!r}")
         for key in self.calls.list():
-            call = self.load(key).fetch()
+            try:
+                call = self.load(key).fetch()
+            except Exception as e:
+                if onerror == "raise":
+                    raise
+                if onerror == "evict":
+                    logger.warning("Failed to redigest %s: %s; evicting", key, e)
+                    self.evict(key)
+                else:
+                    logger.warning("Failed to redigest %s: %s; skipping", key, e)
+                continue
             new_key = call.to_lookup_key()
             if new_key == key:
                 continue
