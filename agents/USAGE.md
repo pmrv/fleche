@@ -95,8 +95,9 @@ Every cache section (`[persistent]` above) needs a `values` backend
 (stores function results) and a `calls` backend (stores call
 metadata/arguments) — see the backend table below for `type` options.
 A section can add `read_only = true` (wraps it in a `ReadOnlyCache` — loads
-still work, saves/evicts raise `Rejected`) or `max_size = N` (an
-evict-oldest `SizeLimitedCache`). A TOML array-of-tables (`[[name]]`)
+still work, saves/evicts raise `Rejected`) or `max_size = N` (a
+`SizeLimitedCache` — evicts uniformly at random by default; override
+`_pick_eviction_target` for LRU/LFU/etc.). A TOML array-of-tables (`[[name]]`)
 builds a `CacheStack` (fast layer in front of a persistent one; reads fall
 through and back-fill hits). `[[name.pool]]` builds a read-only
 `CachePool` (fans reads out over several caches, never writes to any of
