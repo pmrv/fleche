@@ -51,7 +51,7 @@ import sys
 import threading
 import traceback
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 from pyiron_snippets.import_alarm import ImportAlarm
 
@@ -121,33 +121,49 @@ def _strip_cache(lc: LazyCall) -> DigestedCall:
     return lc.detach()
 
 
+@dataclass(frozen=True)
+class _RemoteMethod:
+    """One RPC-exposed :class:`BaseCache` method.
+
+    ``call`` invokes the cache operation and shapes the result for the wire
+    (e.g. running it through :func:`_strip_cache`); ``void`` forces the
+    response to ``None`` regardless of what ``call`` returns, which matters
+    for methods like ``evict`` whose return value is not part of the wire
+    contract.
+    """
+
+    call: Callable[[BaseCache, tuple], Any]
+    void: bool = False
+
+
+def _query_result(cache: BaseCache, args: tuple) -> tuple[DigestedCall, ...]:
+    (template,) = args
+    return tuple(_strip_cache(lc) for lc in cache.query(template))
+
+
+# Single inventory of every method `SshCache` forwards across the wire; the
+# client-side stubs near `SshCache` call these names via `self._conn.call(...)`.
+# Adding a new RPC-exposed cache method only requires one entry here.
+_REMOTE_METHODS: dict[str, _RemoteMethod] = {
+    "save": _RemoteMethod(lambda cache, args: cache.save(*args)),
+    "load": _RemoteMethod(lambda cache, args: _strip_cache(cache.load(*args))),
+    "load_value": _RemoteMethod(lambda cache, args: cache.load_value(*args)),
+    "evict": _RemoteMethod(lambda cache, args: cache.evict(*args), void=True),
+    "contains": _RemoteMethod(lambda cache, args: cache.contains(*args)),
+    "expand": _RemoteMethod(lambda cache, args: cache.expand(*args)),
+    # Variadic: single key → Digest, multiple keys → tuple[Digest, ...].
+    "shrink": _RemoteMethod(lambda cache, args: cache.shrink(*args)),
+    "query": _RemoteMethod(_query_result),
+}
+
+
 def _dispatch(cache: BaseCache, method: str, args: tuple, kwargs: dict) -> Any:
-    if method == "save":
-        (c,) = args
-        return cache.save(c)
-    if method == "load":
-        (key,) = args
-        return _strip_cache(cache.load(key))
-    if method == "load_value":
-        (key,) = args
-        return cache.load_value(key)
-    if method == "evict":
-        (key,) = args
-        cache.evict(key)
-        return None
-    if method == "contains":
-        (key,) = args
-        return cache.contains(key)
-    if method == "expand":
-        (key,) = args
-        return cache.expand(key)
-    if method == "shrink":
-        # Variadic: single key → Digest, multiple keys → tuple[Digest, ...].
-        return cache.shrink(*args)
-    if method == "query":
-        (template,) = args
-        return tuple(_strip_cache(lc) for lc in cache.query(template))
-    raise ValueError(f"Unknown remote cache method: {method!r}")
+    try:
+        spec = _REMOTE_METHODS[method]
+    except KeyError:
+        raise ValueError(f"Unknown remote cache method: {method!r}") from None
+    result = spec.call(cache, args)
+    return None if spec.void else result
 
 
 def _is_read_only(cache: BaseCache) -> bool:
