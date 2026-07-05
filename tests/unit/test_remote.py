@@ -22,8 +22,10 @@ from fleche.remote import (
     RemoteConnectionError,
     SshCache,
     _Connection,
+    _dispatch,
     _read_frame,
     _run_server,
+    _REMOTE_METHODS,
     _write_frame,
     serve,
 )
@@ -208,6 +210,39 @@ def test_shrink_variadic(remote):
     assert len(many) == 2
     assert k1.startswith(many[0])
     assert k2.startswith(many[1])
+
+
+# ---------------------------------------------------------------------------
+# _dispatch registry
+# ---------------------------------------------------------------------------
+
+
+def test_dispatch_unknown_method_raises_valueerror():
+    cache = Cache(ValueMemory({}), CallMemory({}))
+    with pytest.raises(ValueError, match="Unknown remote cache method: 'nope'"):
+        _dispatch(cache, "nope", (), {})
+
+
+def test_dispatch_covers_every_registered_method():
+    """Every name a client stub calls must have a registry entry."""
+    assert set(_REMOTE_METHODS) == {
+        "save",
+        "load",
+        "load_value",
+        "evict",
+        "contains",
+        "expand",
+        "shrink",
+        "query",
+    }
+
+
+def test_dispatch_evict_is_void_even_if_cache_returns_a_value(monkeypatch):
+    """`evict`'s return value is not part of the wire contract (regression for #638):
+    a registry entry that forgot `void=True` would leak it across the wire."""
+    cache = Cache(ValueMemory({}), CallMemory({}))
+    monkeypatch.setattr(Cache, "evict", lambda self, key: "not-none")
+    assert _dispatch(cache, "evict", ("deadbeef",), {}) is None
 
 
 # ---------------------------------------------------------------------------
