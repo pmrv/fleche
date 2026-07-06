@@ -23,9 +23,11 @@ concurrency:
 jobs:
   triage:
     runs-on: ubuntu-latest
-    # Skip drafts and PRs that already carry the label (nothing to decide).
+    # Skip drafts, dependabot PRs, and PRs that already carry the label
+    # (nothing to decide).
     if: |
       github.event.pull_request.draft == false &&
+      github.event.pull_request.user.login != 'dependabot[bot]' &&
       !contains(github.event.pull_request.labels.*.name, 'benchmark')
     permissions:
       id-token: write
