@@ -271,16 +271,15 @@ def _load_merged_config() -> dict[str, Any]:
     that file acts as the top of the hierarchy, and any files farther up
     (including the XDG fallback) are ignored.
     """
-    configs: list[dict[str, Any]] = []
+    merged: dict[str, Any] = {}
     for path in _collect_config_paths():  # closest first
         config = _load_config(path)
-        configs.append(config)
+        # setdefault, not update: a closer file already in `merged` wins over
+        # the same top-level key in a farther file.
+        for key, value in config.items():
+            merged.setdefault(key, value)
         if _is_root_config(config):
             break
-
-    merged: dict[str, Any] = {}
-    for config in reversed(configs):  # farthest retained first, closest wins
-        merged.update(config)
     return merged
 
 

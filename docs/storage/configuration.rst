@@ -125,7 +125,7 @@ here: any ``fleche.toml`` farther up the directory tree, along with the
 ``$XDG_CONFIG_HOME`` fallback, is ignored.  Files *closer* to the current
 directory are still merged on top as usual.
 
-This mirrors the ESLint ``root: true`` convention — use it to pin a
+Use it to pin a
 project's configuration so it does not inherit whatever ``fleche.toml``
 happens to live in a parent directory or ``$HOME``.
 
