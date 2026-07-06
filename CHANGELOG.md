@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.0](https://github.com/pmrv/fleche/compare/0.18.0...0.19.0) (2026-07-06)
+
+
+### Features
+
+* **config:** add [default] root tag to stop upward config merge ([#719](https://github.com/pmrv/fleche/issues/719)) ([7cd34df](https://github.com/pmrv/fleche/commit/7cd34df4e9cdfc46f7561eb03cb9fa1b55a74e34))
+
 ## [0.18.0](https://github.com/pmrv/fleche/compare/0.17.0...0.18.0) (2026-07-01)
 
 
