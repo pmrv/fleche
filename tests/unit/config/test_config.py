@@ -741,3 +741,130 @@ def test_walk_merged_metadata(monkeypatch, tmp_path):
     meta = load_default_metadata()
     assert len(meta) == 1
     assert isinstance(meta[0], Runtime)
+
+
+def test_walk_root_stops_upward_merge(monkeypatch, tmp_path):
+    """A closer file with `root = true` blocks farther files from merging in."""
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    home = tmp_path
+    sub = home / "project"
+    sub.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(sub)
+
+    # Farther file defines a cache the closer file references by name.
+    (home / "fleche.toml").write_text(textwrap.dedent("""
+        [home_only]
+        values.type = "void"
+        calls.type = "void"
+    """))
+
+    # Closer file declares itself root → the farther file is ignored, so
+    # 'home_only' is not resolvable and we fall back to the memory default.
+    (sub / "fleche.toml").write_text(textwrap.dedent("""
+        [default]
+        cache = "home_only"
+        root = true
+    """))
+
+    cache_obj = load_cache_config()
+    # 'home_only' was never merged → fallback memory cache.
+    assert isinstance(cache_obj.values, storage.ValueMemory)
+
+
+def test_walk_root_keeps_closer_files(monkeypatch, tmp_path):
+    """`root` stops farther files but closer files still merge on top."""
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    home = tmp_path
+    mid = home / "project"
+    mid.mkdir()
+    sub = mid / "nested"
+    sub.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(sub)
+
+    # Farthest ($HOME) — must be ignored because 'mid' is root.
+    (home / "fleche.toml").write_text(textwrap.dedent("""
+        [default]
+        cache = "from_home"
+
+        [from_home]
+        values.type = "void"
+        calls.type = "void"
+    """))
+
+    # Middle — the root of the hierarchy; supplies the 'chosen' cache.
+    (mid / "fleche.toml").write_text(textwrap.dedent("""
+        [default]
+        cache = "from_home"
+        root = true
+
+        [chosen]
+        values.type = "memory"
+        calls.type = "memory"
+    """))
+
+    # Closest — still merges on top of the root file, overriding [default].
+    (sub / "fleche.toml").write_text(textwrap.dedent("""
+        [default]
+        cache = "chosen"
+    """))
+
+    cache_obj = load_cache_config()
+    # Closer file's [default] wins ('chosen'); farther $HOME file is ignored.
+    assert isinstance(cache_obj.values, storage.ValueMemory)
+
+
+def test_walk_root_ignores_xdg_fallback(monkeypatch, tmp_path):
+    """`root = true` also excludes the XDG lowest-priority fallback."""
+    home = tmp_path / "home"
+    home.mkdir()
+    sub = home / "project"
+    sub.mkdir()
+    xdg = tmp_path / "xdg"
+    (xdg / "fleche").mkdir(parents=True)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(sub)
+
+    (xdg / "fleche" / "cache.toml").write_text(textwrap.dedent("""
+        [from_xdg]
+        values.type = "void"
+        calls.type = "void"
+    """))
+
+    (sub / "fleche.toml").write_text(textwrap.dedent("""
+        [default]
+        cache = "from_xdg"
+        root = true
+    """))
+
+    cache_obj = load_cache_config()
+    # XDG layer was not merged → 'from_xdg' unresolved → memory fallback.
+    assert isinstance(cache_obj.values, storage.ValueMemory)
+
+
+def test_walk_root_false_still_merges(monkeypatch, tmp_path):
+    """`root = false` is a no-op: farther files still merge in."""
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    home = tmp_path
+    sub = home / "project"
+    sub.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(sub)
+
+    (home / "fleche.toml").write_text(textwrap.dedent("""
+        [home_only]
+        values.type = "void"
+        calls.type = "void"
+    """))
+
+    (sub / "fleche.toml").write_text(textwrap.dedent("""
+        [default]
+        cache = "home_only"
+        root = false
+    """))
+
+    cache_obj = load_cache_config()
+    # root = false → farther file still merged → 'home_only' resolves.
+    assert isinstance(cache_obj.values, storage.ValueVoid)

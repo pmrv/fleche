@@ -77,6 +77,13 @@ So a project-local `./fleche.toml` overrides `~/fleche.toml`, which
 overrides the XDG fallback. If no file is found anywhere, fleche silently
 falls back to an in-memory-only cache — no error is raised.
 
+To stop that upward inheritance, set `root = true` in a file's `[default]`
+table. The walk halts at the closest `root` file: files farther up the tree
+(and the XDG fallback) are ignored, so only that file and any closer to the
+CWD contribute. This is the ESLint `root: true` pattern — pin a project's
+config without inheriting whatever `fleche.toml` lives in a parent directory
+or `$HOME`.
+
 A minimal file:
 
 ```toml

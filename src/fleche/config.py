@@ -166,6 +166,20 @@ as a final lowest-priority layer.
 All discovered files are **shallow-merged** at the top level: files closer
 to the CWD win, and a closer file's top-level table fully replaces the
 same key in a farther file (tables are *not* recursively merged).
+
+Stopping the walk
+-----------------
+
+A ``fleche.toml`` can declare ``root = true`` in its ``[default]`` table to
+act as the top of the config hierarchy.  When the walk reaches such a file,
+files farther up the tree (and the ``$XDG_CONFIG_HOME`` fallback) are *not*
+merged in — only the ``root`` file and any files closer to the CWD
+contribute.  This lets a project pin its configuration without inheriting
+whatever ``fleche.toml`` happens to live in a parent directory or ``$HOME``::
+
+    [default]
+    cache = "persistent"
+    root = true              # ignore any fleche.toml farther up the tree
 """
 
 import dataclasses
@@ -235,16 +249,37 @@ def _collect_config_paths() -> list[Path]:
     return paths
 
 
+def _is_root_config(config: dict[str, Any]) -> bool:
+    """Whether ``config`` declares ``root = true`` in its ``[default]`` table.
+
+    A file that sets ``[default].root`` acts as the top of the config
+    hierarchy: files farther up the walk (and the XDG fallback) are not
+    merged in.
+    """
+    default = config.get("default")
+    return isinstance(default, dict) and bool(default.get("root", False))
+
+
 def _load_merged_config() -> dict[str, Any]:
     """Load and shallow-merge all config files on the walk path.
 
     Files closer to the CWD override files farther away.  Top-level keys
     from the closest file fully replace the same key from any farther file
     (no recursive table merging).
+
+    The walk stops at the closest file that sets ``[default].root = true``:
+    that file acts as the top of the hierarchy, and any files farther up
+    (including the XDG fallback) are ignored.
     """
-    merged: dict[str, Any] = {}
-    for path in reversed(_collect_config_paths()):
+    configs: list[dict[str, Any]] = []
+    for path in _collect_config_paths():  # closest first
         config = _load_config(path)
+        configs.append(config)
+        if _is_root_config(config):
+            break
+
+    merged: dict[str, Any] = {}
+    for config in reversed(configs):  # farthest retained first, closest wins
         merged.update(config)
     return merged
 
