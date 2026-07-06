@@ -158,10 +158,6 @@ def my_function(x):
 - Forwards every cache operation over a persistent `ssh host python -m fleche remote --serve` subprocess
 - Stack with a local cache to read-through to a shared remote one — see `fleche.remote.SshCache`
 
-### In-Memory Storage
-- For testing or temporary caching
-- Loses data when process exits
-
 ### Custom Backends
 Implement the `Storage` interface to create custom backends.
 
