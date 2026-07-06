@@ -648,6 +648,51 @@ def _forward_stderr(
 
 
 @dataclass(frozen=True)
+class _ClientMethod:
+    """One ``BaseCache`` method that :class:`SshCache` forwards over the wire.
+
+    The client-side mirror of :class:`_RemoteMethod` above: ``unwrap``
+    reshapes the raw RPC result for the caller (fetching a
+    :class:`LazyCall`, or lazily fetching each item of a query result);
+    ``write`` marks methods that must be rejected *locally* — no RPC — when
+    the remote reports itself read-only, with ``reject_message`` carrying
+    the extra context ``evict`` has always raised (``save`` raises bare).
+    """
+
+    unwrap: Callable[["SshCache", Any], Any] = lambda self, result: result
+    write: bool = False
+    reject_message: str | None = None
+
+
+def _fetch_lazy_call(sc: "SshCache", dc: DigestedCall) -> LazyCall:
+    return dc.fetch(sc)
+
+
+def _fetch_lazy_calls(sc: "SshCache", results: "tuple[DigestedCall, ...]") -> Iterable[LazyCall]:
+    for dc in results:
+        yield dc.fetch(sc)
+
+
+# Single inventory of every method `SshCache` forwards across the wire; adding
+# a new RPC-exposed cache method only requires one entry here instead of a new
+# handshake/read-only/forward method body.
+_CLIENT_METHODS: dict[str, _ClientMethod] = {
+    "save": _ClientMethod(write=True),
+    "load": _ClientMethod(unwrap=_fetch_lazy_call),
+    "load_value": _ClientMethod(),
+    "evict": _ClientMethod(
+        write=True, reject_message="Cannot evict from a read-only remote cache"
+    ),
+    "contains": _ClientMethod(),
+    "expand": _ClientMethod(),
+    # Variadic: single key → Digest, multiple keys → tuple[Digest, ...];
+    # the wrap/unwrap for that shape lives in `SshCache._shrink` itself.
+    "shrink": _ClientMethod(),
+    "query": _ClientMethod(unwrap=_fetch_lazy_calls),
+}
+
+
+@dataclass(frozen=True)
 class SshCache(BaseCache):
     """A cache that forwards every operation to a remote fleche over SSH.
 
@@ -722,46 +767,51 @@ class SshCache(BaseCache):
         if self._info_cache is None:
             self._cached_info()
 
-    def save(self, call: Call) -> str:
+    def _rpc(self, name: str, *args: Any) -> Any:
+        """Handshake, apply the read-only short-circuit, forward, unwrap.
+
+        The client-side mirror of :func:`_dispatch` on the server: every
+        public method below is now a one-line call into ``_CLIENT_METHODS``
+        instead of repeating "handshake → optional ``read_only`` guard →
+        ``self._conn.call(...)``".
+        """
         self._ensure_handshake()
-        if self._info_cache and self._info_cache.get("read_only", False):
-            raise Rejected(self, call)
-        return self._conn.call("save", call)
+        spec = _CLIENT_METHODS[name]
+        if spec.write and self._info_cache and self._info_cache.get("read_only", False):
+            if spec.reject_message is not None:
+                raise Rejected(spec.reject_message, self, *args)
+            raise Rejected(self, *args)
+        return spec.unwrap(self, self._conn.call(name, *args))
+
+    def save(self, call: Call) -> str:
+        return self._rpc("save", call)
 
     def load(self, key: str) -> LazyCall:
-        self._ensure_handshake()
-        dc: DigestedCall = self._conn.call("load", key)
-        return dc.fetch(self)
+        return self._rpc("load", key)
 
     def load_value(self, key: str) -> Any:
-        self._ensure_handshake()
-        return self._conn.call("load_value", key)
+        return self._rpc("load_value", key)
 
     def evict(self, key: str | Digest) -> None:
-        self._ensure_handshake()
-        if self._info_cache and self._info_cache.get("read_only", False):
-            raise Rejected("Cannot evict from a read-only remote cache", self, key)
-        self._conn.call("evict", key)
+        self._rpc("evict", key)
 
     def contains(self, key: str) -> bool:
-        self._ensure_handshake()
-        return self._conn.call("contains", key)
+        return self._rpc("contains", key)
 
     def expand(self, key: Digest | str) -> Digest:
-        self._ensure_handshake()
-        return self._conn.call("expand", key)
+        return self._rpc("expand", key)
 
     def _shrink(self, *keys: Digest | str) -> "tuple[Digest, ...]":
-        self._ensure_handshake()
+        # Variadic single-vs-tuple unwrap stays here rather than in
+        # `_CLIENT_METHODS` — it's the same special case shared by
+        # `Cache`/`CacheStack`/`CacheWrapper` and has its own refactor
+        # proposal (#687), out of scope for the dispatcher collapse.
         if len(keys) == 1:
-            return (self._conn.call("shrink", keys[0]),)
-        return self._conn.call("shrink", *keys)
+            return (self._rpc("shrink", keys[0]),)
+        return self._rpc("shrink", *keys)
 
     def _query(self, call: QueryCall) -> Iterable[LazyCall]:
-        self._ensure_handshake()
-        results: tuple[DigestedCall, ...] = self._conn.call("query", call)
-        for dc in results:
-            yield dc.fetch(self)
+        return self._rpc("query", call)
 
     # ------------------------------------------------------------------
     # lifecycle helpers
