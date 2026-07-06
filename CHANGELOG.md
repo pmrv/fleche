@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.2](https://github.com/pmrv/fleche/compare/0.19.1...0.19.2) (2026-07-06)
+
+
+### Bug Fixes
+
+* don't double-bind an already-bound BoundWrapper in wrap_executor.submit ([#724](https://github.com/pmrv/fleche/issues/724)) ([21f7ce3](https://github.com/pmrv/fleche/commit/21f7ce332d04729c96f5690bcd5ed7faafd1a5b4))
+
 ## [0.19.1](https://github.com/pmrv/fleche/compare/0.19.0...0.19.1) (2026-07-06)
 
 
