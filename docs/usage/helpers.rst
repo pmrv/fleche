@@ -33,6 +33,19 @@ Returns ``True`` if the result for the given call is already present in the cach
 
 Returns matching cached calls from the active cache. Any argument passed as ``None`` acts as a wildcard, matching any stored value for that parameter. The ``metadata`` keyword argument accepts a dictionary of metadata tags to further filter results (e.g., ``metadata={"tags": {"project": "alpha"}}``).
 
+.. warning::
+
+   If the decorated function has a parameter named ``metadata``, that parameter
+   is shadowed by ``.query()``'s own ``metadata=`` keyword and **cannot** be
+   passed as a keyword argument.  Pass it positionally instead::
+
+      # function signature: def fetch(user_id, metadata):
+      fetch.query(123, "v1")           # positional — works
+      fetch.query(user_id=123, metadata="v1")  # shadowed — 'metadata' is
+                                               # interpreted as the filter dict
+
+   ``fleche`` logs a ``WARNING`` when this situation is detected.
+
 See :doc:`query` for a detailed guide on querying cached calls.
 
 ``.rerun(*args, **kwargs)``
@@ -149,8 +162,10 @@ Usage with Decorated Methods
    However, this helper is a plain function — not a bound method — so ``obj`` is not
    pre-applied; you must pass the instance explicitly as the first positional argument.
 
-   For ``fleche`` to cache calls that include ``self``, the class must be hashable —
-   i.e. it must implement a ``__digest__`` method (see :doc:`/dev/custom_digests`).
+   For ``fleche`` to cache calls that include ``self``, the class must be
+   *digestible* — i.e. it must implement a ``__digest__`` method
+   (see :doc:`/dev/custom_digests`).  This is unrelated to Python's
+   ``__hash__``/hashability.
 
    .. code-block:: pycon
 
