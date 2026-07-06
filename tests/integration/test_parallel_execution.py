@@ -320,6 +320,7 @@ class _RecordingExecutor:
     """
 
     def __init__(self):
+        self.func = None
         self.submit_args = None
         self.submit_kwargs = None
         self.call_args = None
@@ -327,6 +328,7 @@ class _RecordingExecutor:
         self.result = None
 
     def submit(self, func, *args, resource_dict=None, **kwargs):
+        self.func = func
         self.submit_args = args
         self.submit_kwargs = {"resource_dict": resource_dict, **kwargs}
 
@@ -348,6 +350,23 @@ def test_wrap_executor_binds_non_fleche_callable():
         result = executor.submit(_plain_add, 2, 3).result()
 
     assert result == 5
+
+
+def test_wrap_executor_does_not_double_bind_bound_wrapper():
+    """An already-bound BoundWrapper passed to submit is forwarded unchanged."""
+    cache1 = Cache(ValueMemory({}), CallMemory({}))
+
+    with fleche.cache(cache1):
+        bound = BoundWrapper.bind(_plain_add)
+
+    executor = _RecordingExecutor()
+    fleche.wrap_executor(executor)
+    future = executor.submit(bound, 2, 3)
+
+    assert future.result() == 5
+    assert executor.func is bound, (
+        "an already-bound BoundWrapper must be forwarded as-is, not wrapped again"
+    )
 
 
 def test_wrap_executor_thread_cache_miss():

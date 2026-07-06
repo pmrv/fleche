@@ -14,7 +14,9 @@ so that:
 
 * non-fleche callables are bound via :meth:`.BoundWrapper.bind` and submitted
   to the original ``submit`` unchanged otherwise, so that any fleche calls
-  nested inside them still see the active cache/metadata state,
+  nested inside them still see the active cache/metadata state (a callable
+  that is already a :class:`.BoundWrapper` is submitted as-is, since it is
+  already bound),
 * fleche callables whose result is already cached are returned via an
   already-completed :class:`~concurrent.futures.Future` without touching the
   executor, and
@@ -87,8 +89,9 @@ def wrap_executor(executor):
 
     def submit(func, *args, **kwargs):
         if not _is_fleche_function(func):
-            bound = state.BoundWrapper.bind(func)
-            return original_submit(bound, *args, **kwargs)
+            if not isinstance(func, state.BoundWrapper):
+                func = state.BoundWrapper.bind(func)
+            return original_submit(func, *args, **kwargs)
 
         submit_kwargs, func_kwargs = _split_submit_kwargs(
             original_submit, kwargs
