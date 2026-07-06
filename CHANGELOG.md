@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.1](https://github.com/pmrv/fleche/compare/0.19.0...0.19.1) (2026-07-06)
+
+
+### Bug Fixes
+
+* always bind non-fleche callables in wrap_executor.submit ([#722](https://github.com/pmrv/fleche/issues/722)) ([3a8e8c2](https://github.com/pmrv/fleche/commit/3a8e8c2f8c7964302889a31d0b287e931136b604))
+
 ## [0.19.0](https://github.com/pmrv/fleche/compare/0.18.0...0.19.0) (2026-07-06)
 
 
