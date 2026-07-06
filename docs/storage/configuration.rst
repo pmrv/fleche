@@ -62,6 +62,22 @@ Example:
    ...     # Results will not be cached at all. Every call executes the function.
    ...     ...
 
+``default``
+~~~~~~~~~~~
+
+The name ``default`` is a reserved cache name. When requested, ``fleche`` activates
+whichever cache the configuration file designates as the default — equivalent to
+the cache that is active at process start.  This is **not** the same as passing
+``None`` to :func:`~fleche.state.cache`, which returns the *currently active* cache
+without changing anything.
+
+.. code-block:: pycon
+
+   >>> from fleche import cache
+   >>> with cache("default"):
+   ...     # The config-file default cache is active inside this block.
+   ...     ...
+
 The ``[default]`` section
 -------------------------
 
