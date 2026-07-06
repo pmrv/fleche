@@ -16,6 +16,11 @@ merged).  This makes it easy to keep a base config at ``~/fleche.toml``
 (or in XDG) and override individual cache definitions in project
 subdirectories.
 
+A file can opt out of this upward inheritance by setting ``root = true`` in
+its ``[default]`` table (see :ref:`the default section <default-section>`
+below).  The walk stops at the closest such file: files farther up the tree
+— and the ``$XDG_CONFIG_HOME`` fallback — are not merged in.
+
 If no configuration file is discovered, ``fleche`` falls back to a default
 in-memory cache.
 
@@ -78,6 +83,8 @@ without changing anything.
    ...     # The config-file default cache is active inside this block.
    ...     ...
 
+.. _default-section:
+
 The ``[default]`` section
 -------------------------
 
@@ -108,6 +115,27 @@ Example:
    metadata = ["Runtime"]
 
 **Note:** The ``Tags`` metadata cannot be configured from the config file, as it requires arguments.
+
+``root``
+~~~~~~~~
+
+The ``root`` key is a boolean (default ``false``) that marks this file as the
+top of the config hierarchy.  When set to ``true``, the discovery walk stops
+here: any ``fleche.toml`` farther up the directory tree, along with the
+``$XDG_CONFIG_HOME`` fallback, is ignored.  Files *closer* to the current
+directory are still merged on top as usual.
+
+Use it to pin a
+project's configuration so it does not inherit whatever ``fleche.toml``
+happens to live in a parent directory or ``$HOME``.
+
+Example:
+
+.. code-block:: toml
+
+   [default]
+   cache = "mycache"
+   root = true
 
 Cache sections
 --------------

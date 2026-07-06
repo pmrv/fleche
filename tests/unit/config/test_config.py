@@ -741,3 +741,112 @@ def test_walk_merged_metadata(monkeypatch, tmp_path):
     meta = load_default_metadata()
     assert len(meta) == 1
     assert isinstance(meta[0], Runtime)
+
+
+def _write_config(directory, body, name="fleche.toml"):
+    """Write a dedented TOML config file into ``directory``."""
+    (directory / name).write_text(textwrap.dedent(body))
+
+
+@pytest.fixture
+def home_and_project(monkeypatch, tmp_path):
+    """Lay out ``$HOME=<tmp>`` with CWD at ``<tmp>/project`` and XDG unset.
+
+    Returns ``(home, project)`` so a test only has to write the config
+    files whose interaction it is actually exercising.
+    """
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    home = tmp_path
+    project = home / "project"
+    project.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(project)
+    return home, project
+
+
+def test_walk_root_stops_upward_merge(home_and_project):
+    """A closer file with `root = true` blocks farther files from merging in."""
+    home, project = home_and_project
+    # 'home_only' lives only in the farther ($HOME) file.
+    _write_config(home, """
+        [home_only]
+        values.type = "void"
+        calls.type = "void"
+    """)
+    _write_config(project, """
+        [default]
+        cache = "home_only"
+        root = true
+    """)
+    # root = true ignores the farther file → 'home_only' unresolved → memory.
+    assert isinstance(load_cache_config().values, storage.ValueMemory)
+
+
+def test_walk_root_keeps_closer_files(monkeypatch, home_and_project):
+    """A `root` file still lets files closer to the CWD merge on top."""
+    _, root_dir = home_and_project
+    nested = root_dir / "nested"
+    nested.mkdir()
+    monkeypatch.chdir(nested)
+    # The root file's own [default] points at a void cache...
+    _write_config(root_dir, """
+        [default]
+        cache = "rootcache"
+        root = true
+
+        [rootcache]
+        values.type = "void"
+        calls.type = "void"
+
+        [nearcache]
+        values.type = "memory"
+        calls.type = "memory"
+    """)
+    # ...but the closer file overrides [default] to the memory cache.
+    _write_config(nested, """
+        [default]
+        cache = "nearcache"
+    """)
+    assert isinstance(load_cache_config().values, storage.ValueMemory)
+
+
+def test_walk_root_ignores_xdg_fallback(monkeypatch, tmp_path):
+    """`root = true` also excludes the XDG lowest-priority fallback."""
+    home = tmp_path / "home"
+    project = home / "project"
+    xdg = tmp_path / "xdg"
+    project.mkdir(parents=True)
+    (xdg / "fleche").mkdir(parents=True)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(project)
+    # 'from_xdg' lives only in the XDG fallback layer.
+    _write_config(xdg / "fleche", """
+        [from_xdg]
+        values.type = "void"
+        calls.type = "void"
+    """, name="cache.toml")
+    _write_config(project, """
+        [default]
+        cache = "from_xdg"
+        root = true
+    """)
+    # XDG layer not merged → 'from_xdg' unresolved → memory fallback.
+    assert isinstance(load_cache_config().values, storage.ValueMemory)
+
+
+def test_walk_root_false_still_merges(home_and_project):
+    """`root = false` is a no-op: farther files still merge in."""
+    home, project = home_and_project
+    _write_config(home, """
+        [home_only]
+        values.type = "void"
+        calls.type = "void"
+    """)
+    _write_config(project, """
+        [default]
+        cache = "home_only"
+        root = false
+    """)
+    # root = false → farther file still merged → 'home_only' resolves (void).
+    assert isinstance(load_cache_config().values, storage.ValueVoid)
