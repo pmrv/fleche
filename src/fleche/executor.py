@@ -3,13 +3,18 @@
 Motivation: users passing a :func:`fleche.fleche`-decorated function to
 ``executor.submit(...)`` have to remember to call :meth:`.BoundWrapper.bind`
 themselves to carry the active cache/metadata state into the worker.  They also
-pay the submit/serialisation cost even when the result is already cached.
+pay the submit/serialisation cost even when the result is already cached.  The
+same problem affects plain (non-fleche) callables that merely *call* a
+fleche-decorated function somewhere in their body: unless they are bound too,
+the active cache/metadata state never reaches the worker process.
 
 :func:`wrap_executor` patches the ``submit`` method of an executor *instance*
 (we cannot subclass, since callers pass us instances of third-party executors)
 so that:
 
-* non-fleche callables are forwarded unchanged,
+* non-fleche callables are bound via :meth:`.BoundWrapper.bind` and submitted
+  to the original ``submit`` unchanged otherwise, so that any fleche calls
+  nested inside them still see the active cache/metadata state,
 * fleche callables whose result is already cached are returned via an
   already-completed :class:`~concurrent.futures.Future` without touching the
   executor, and
@@ -25,6 +30,8 @@ remaining keyword arguments are bound as part of the function payload.
 from concurrent.futures import Future
 from inspect import signature, Parameter
 from types import SimpleNamespace
+
+from . import state
 
 
 __all__ = ["wrap_executor"]
@@ -80,7 +87,8 @@ def wrap_executor(executor):
 
     def submit(func, *args, **kwargs):
         if not _is_fleche_function(func):
-            return original_submit(func, *args, **kwargs)
+            bound = state.BoundWrapper.bind(func)
+            return original_submit(bound, *args, **kwargs)
 
         submit_kwargs, func_kwargs = _split_submit_kwargs(
             original_submit, kwargs

@@ -246,10 +246,13 @@ executor **instance** (no subclassing — callers pass us instances of
 third-party executors) so that fleche-decorated functions are handled
 automatically:
 
-- Non-fleche callables pass straight through to the original ``submit``.
-- Cache hits are served from an already-completed
-  :class:`~concurrent.futures.Future` without ever touching the executor,
-  avoiding submit/serialise overhead on cached inputs.
+- Non-fleche callables are bound via :meth:`~fleche.BoundWrapper.bind` before
+  being forwarded to the original ``submit``, so the parent's cache and
+  metadata are available in the worker even for a plain function that only
+  *calls* a fleche-decorated function somewhere in its body.
+- Cache hits (for fleche-decorated callables submitted directly) are served
+  from an already-completed :class:`~concurrent.futures.Future` without ever
+  touching the executor, avoiding submit/serialise overhead on cached inputs.
 - Cache misses are bound via :meth:`~fleche.BoundWrapper.bind` so the parent's
   cache and metadata travel with the call into the worker.
 
