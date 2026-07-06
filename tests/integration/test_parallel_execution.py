@@ -341,8 +341,8 @@ class _RecordingExecutor:
         return fut
 
 
-def test_wrap_executor_passthrough_non_fleche():
-    """Non-fleche callables go straight to the original submit."""
+def test_wrap_executor_binds_non_fleche_callable():
+    """Non-fleche callables are still bound via BoundWrapper before submission."""
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
         fleche.wrap_executor(executor)
         result = executor.submit(_plain_add, 2, 3).result()
@@ -442,3 +442,4 @@ def test_executorlib_wrap_executor(file_cache):
 
     assert result == 42, f"Expected 42, got {result}"
     assert file_cache.contains(double.digest(21))
+
