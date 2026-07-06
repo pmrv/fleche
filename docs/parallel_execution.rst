@@ -249,7 +249,9 @@ automatically:
 - Non-fleche callables are bound via :meth:`~fleche.BoundWrapper.bind` before
   being forwarded to the original ``submit``, so the parent's cache and
   metadata are available in the worker even for a plain function that only
-  *calls* a fleche-decorated function somewhere in its body.
+  *calls* a fleche-decorated function somewhere in its body. A callable that
+  is already a :class:`~fleche.BoundWrapper` is forwarded unchanged instead
+  of being bound again.
 - Cache hits (for fleche-decorated callables submitted directly) are served
   from an already-completed :class:`~concurrent.futures.Future` without ever
   touching the executor, avoiding submit/serialise overhead on cached inputs.
