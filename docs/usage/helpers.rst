@@ -163,9 +163,8 @@ Usage with Decorated Methods
    pre-applied; you must pass the instance explicitly as the first positional argument.
 
    For ``fleche`` to cache calls that include ``self``, the class must be
-   *digestible* — i.e. it must implement a ``__digest__`` method
-   (see :doc:`/dev/custom_digests`).  This is unrelated to Python's
-   ``__hash__``/hashability.
+   *digestible* --- i.e. it must implement a ``__digest__`` method
+   (see :doc:`/dev/custom_digests`).
 
    .. code-block:: pycon
 
