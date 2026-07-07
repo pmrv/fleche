@@ -18,7 +18,7 @@ When you call ``cache().load(key)`` or iterate over ``cache().query(...)``, you 
    ...     return x * 2
    ...
    >>> process(21)                   # populate the cache
-   >>> key = process.digest(21)      # SHA-256 digest for this call
+   >>> key = process.digest(21)      # blake2b digest for this call
 
    >>> # Default: returns a LazyCall — cheap, no deserialization yet
    >>> lazy_call = cache().load(key)

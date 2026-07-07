@@ -3,7 +3,7 @@
 Cross-tool entry point for AI coding agents (Codex, Cursor, Aider, Claude, ...).
 
 **Fleche** is a persistent function cache for Python (`@fleche()`) — like
-`lru_cache` but it survives restarts, with SHA256 content-based keys and
+`lru_cache` but it survives restarts, with blake2b content-based keys and
 pluggable storage backends (memory, pickle-family, HDF5, SQL, SSH).
 
 This file is deliberately short. Pick the guide that matches what you're doing:

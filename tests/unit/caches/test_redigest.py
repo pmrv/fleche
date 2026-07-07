@@ -200,7 +200,7 @@ def test_redigest_orphans_value_keys_when_one_type_changes(monkeypatch, clean_ca
 def test_redigest_orphans_all_value_keys_when_entire_hash_changes(monkeypatch, clean_cache, sample_call):
     """When the hash function changes for all types, every old value entry is orphaned.
 
-    Simulates switching the underlying hash primitive (e.g. SHA-256 → blake2b).
+    Simulates switching the underlying hash primitive (e.g. blake2b → sha3_256).
     redigest() re-saves all calls and their values under the new keys but never touches
     old value entries, leaving the entire pre-migration value set as orphans.  A
     subsequent gc() must clean them all up.
@@ -212,18 +212,18 @@ def test_redigest_orphans_all_value_keys_when_entire_hash_changes(monkeypatch, c
     key_before = clean_cache.save(original)
     values_before = set(clean_cache.values.list())
 
-    # Replace the hash primitive inside digest.py with blake2b(digest_size=32).
-    # blake2b produces 32-byte (64 hex-char) digests, so the output format is
-    # identical to sha256 and all downstream code continues to work.  This is a
-    # clean simulation of "the entire hash function was swapped": every digest
-    # changes, the Digest passthrough invariant is preserved, and Call / DigestedCall
-    # to_lookup_key() remain consistent with each other.
-    class _Blake2bHashlib:
+    # Replace the hash primitive inside digest.py with sha3_256, truncated to the same
+    # 32-byte/64-hex-char shape blake2b(digest_size=32) produces, so the output format
+    # stays compatible and all downstream code continues to work. This is a clean
+    # simulation of "the entire hash function was swapped": every digest changes, the
+    # Digest passthrough invariant is preserved, and Call / DigestedCall to_lookup_key()
+    # remain consistent with each other.
+    class _Sha3Hashlib:
         @staticmethod
-        def sha256():
-            return hashlib.blake2b(digest_size=32)
+        def blake2b(*, digest_size):
+            return hashlib.sha3_256()
 
-    monkeypatch.setattr(_fd, "hashlib", _Blake2bHashlib)
+    monkeypatch.setattr(_fd, "hashlib", _Sha3Hashlib)
 
     clean_cache.redigest()
 

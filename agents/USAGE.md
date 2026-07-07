@@ -23,7 +23,7 @@ def expensive(x, y):
     ...  # only re-runs when x, y, or the function's code change
 ```
 
-- The decorator hashes the function's arguments (SHA256, content-based —
+- The decorator hashes the function's arguments (blake2b, content-based —
   not `id()`/pickle-identity based) into a lookup key, and returns the
   stored result on a hit.
 - Helpers attached to the wrapped function: `.call`, `.digest`, `.load`,

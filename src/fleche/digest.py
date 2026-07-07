@@ -156,7 +156,7 @@ def digest(value: Any) -> Digest:
 
 def _digest_bytes(value: Any) -> bytes:
     """
-    Returns bytes representing the SHA-256 digest of *value*.
+    Returns bytes representing the blake2b(digest_size=32) digest of *value*.
 
     All recursive call sites pass the result directly to ``m.update()``.
 
@@ -170,7 +170,7 @@ def _digest_bytes(value: Any) -> bytes:
     ``bytes.fromhex(...)``.  That must be coordinated with a ``hash_version``
     bump and a ``Cache.redigest`` migration.
     """
-    m = hashlib.sha256()
+    m = hashlib.blake2b(digest_size=32)
 
     # Fast-path: in the common case both hook lists are empty, so skip the
     # ``get_hooks()`` call which would otherwise allocate a fresh combined list

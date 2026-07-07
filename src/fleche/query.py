@@ -257,7 +257,7 @@ class QueryIterator(Iterable[call.LazyCall]):
         items = list(self)
         keys = [c.to_lookup_key() for c in items]
         if shrink_keys and items:
-            # Full 64-char digests are unambiguous modulo SHA-256 collision,
+            # Full 64-char digests are unambiguous modulo blake2b collision,
             # so we let AmbiguousDigestError propagate rather than silently
             # falling back — a hit here means our hash assumptions are broken.
             shrink_cache = self.cache or items[0]._cache

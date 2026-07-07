@@ -1,7 +1,7 @@
 Digest Equivalence
 ==================
 
-The :func:`fleche.digest.digest` function turns Python objects into SHA256 hex strings.
+The :func:`fleche.digest.digest` function turns Python objects into blake2b hex strings.
 Those strings are the *only* thing the cache compares, so two objects that produce the
 same digest are — for caching purposes — interchangeable.  Most of the time this is
 exactly what you want: ``digest(1) == digest(1.0) == digest(1+0j)`` because all three

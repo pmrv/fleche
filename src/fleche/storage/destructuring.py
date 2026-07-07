@@ -100,9 +100,9 @@ class DigestedFields(Digested):
 
     def __digest__(self):
         # Reproduce the same hash that digest._digest computes for a plain instance:
-        # SHA256(cls.__name__ + digest(fields_as_dict)).  Digest values in self.fields are
-        # transparent (digest(Digest("abc")) == "abc") so they round-trip correctly.
-        m = hashlib.sha256()
+        # blake2b(digest_size=32)(cls.__name__ + digest(fields_as_dict)).  Digest values in
+        # self.fields are transparent (digest(Digest("abc")) == "abc") so they round-trip correctly.
+        m = hashlib.blake2b(digest_size=32)
         m.update(self.cls.__name__.encode())
         m.update(digest.digest(self.fields).encode())
         return digest.Digest(m.hexdigest())

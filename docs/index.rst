@@ -5,14 +5,14 @@ Welcome to the **Fleche** library documentation.
 
 * **What is Fleche?**  A persistent caching library for Python functions — like
   ``lru_cache`` but persisted across runs. The ``@fleche()`` decorator wraps
-  functions, generates content-based cache keys via SHA256 hashing, and stores
+  functions, generates content-based cache keys via blake2b hashing, and stores
   results in configurable backends (file, SQL, memory, HDF5).
 
 * **Key features**
 
   - **Persistent caching** – results survive process restarts
   - **Flexible storage backends** – filesystem, SQL, in-memory, and HDF5
-  - **Intelligent hashing** – content-based SHA256 keys with type-aware support
+  - **Intelligent hashing** – content-based blake2b keys with type-aware support
     for numpy, pandas, and custom types
   - **Query support** – search and inspect cached calls as pandas DataFrames
   - **Configurable** – TOML-based project and global configuration
