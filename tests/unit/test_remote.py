@@ -477,6 +477,43 @@ def test_info_redacts_url_password():
     )
 
 
+def test_redact_config_walks_stack_with_nested_sql_url():
+    """`_redact_config` recurses through list-shaped stack configs and masks nested SQL URLs.
+
+    :func:`cache_to_config` serialises a :class:`~fleche.caches.CacheStack` as a
+    top-level list of member dicts.  A member with a :class:`~fleche.storage.sql.Sql`
+    call storage carries the DB password inside its nested ``calls.url``.  Both
+    the list traversal (recursion into each member) and the nested ``url``
+    rewrite must fire for a stack-of-SQL-caches ``info()`` handshake not to leak
+    the password.  The primitives are exercised in isolation by
+    ``test_info_redacts_secret_key`` / ``test_info_redacts_url_password``; this
+    test pins their composition on the shape that ends up on the wire.
+    """
+    from fleche.remote import _redact_config
+
+    stack_config = [
+        {
+            "values": {"type": "memory"},
+            "calls": {
+                "type": "sql",
+                "url": "postgresql://alice:hunter2@db.example.com:5432/x",
+            },
+        },
+        {
+            "values": {"type": "memory"},
+            "calls": {"type": "memory"},
+        },
+    ]
+    redacted = _redact_config(stack_config)
+    assert isinstance(redacted, list)
+    assert len(redacted) == 2
+    assert (
+        redacted[0]["calls"]["url"]
+        == "postgresql://alice:***@db.example.com:5432/x"
+    )
+    assert redacted[1]["calls"] == {"type": "memory"}
+
+
 def test_info_exposes_versions(remote):
     """info() includes `fleche_version` and `cloudpickle_version`."""
     info = remote.info()
