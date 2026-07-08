@@ -204,7 +204,7 @@ def _load_config(path: Path) -> dict[str, Any]:
         with open(path, "rb") as f:
             return tomllib.load(f)
     except Exception as e:
-        logger.info("Failed to load configuration from %s: %s", path, e, exc_info=True)
+        logger.error("Failed to load configuration from %s: %s", path, e, exc_info=True)
         return {}
 
 
@@ -555,7 +555,7 @@ def cache_to_config(c: caches.BaseCache) -> "dict[str, Any] | list[dict[str, Any
 def _default_memory_cache(name: str | None, reason: str | None = None) -> caches.Cache:
     """Return (and intern) a fresh in-memory cache, optionally logging the fallback reason."""
     if reason is not None:
-        logger.warning("Using default memory cache: %s", reason)
+        logger.info("Using default memory cache: %s", reason)
     cache = caches.Cache(storage.ValueMemory({}), storage.CallMemory({}))
     _live_caches[name] = cache
     return cache
