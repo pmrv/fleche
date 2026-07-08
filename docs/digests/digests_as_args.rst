@@ -42,6 +42,45 @@ Behavior
 - **Missing Digests**: If a `Digest` is passed but its value cannot be found in the current cache, a `KeyError` will be raised.
 - **Short Digests**: If the underlying storage supports short-hand digest expansion, you can pass a short digest (at least 4 characters) to `D()`, and it will be expanded to the full value.
 
+Looking Up a Value Directly
+----------------------------
+
+``D()`` is also the ergonomic entry point for the opposite direction: given a value
+you already hold, or a digest hex string copied from a log line or from
+``cache().table()``, fetch the corresponding entry from the active cache's value
+storage without importing ``fleche.digest.digest`` yourself.
+
+- **You have the value itself.** ``D()`` computes its digest, which
+  :meth:`~fleche.caches.BaseCache.load_value` accepts directly:
+
+  .. code-block:: pycon
+
+     >>> from fleche import fleche, cache, D
+
+     >>> @fleche
+     ... def compute(x):
+     ...     return x * 2
+
+     >>> with cache("memory"):
+     ...     result = compute(21)                # populates the cache
+     ...     assert cache().load_value(D(result)) == result
+
+- **You have a digest hex string** (possibly shortened). ``D()`` recognises hex
+  strings and wraps them into a :class:`~fleche.digest.Digest` instead of hashing
+  them; call :meth:`~fleche.digest.Digest.expand` to resolve a short prefix back to
+  the full digest before loading it:
+
+  .. code-block:: pycon
+
+     >>> with cache("memory"):
+     ...     result = compute(21)
+     ...     short = D(result).shrink()          # shortest unambiguous prefix
+     ...     assert cache().load_value(D(short).expand()) == result
+
+If you instead have the *original arguments* of a decorated call rather than its
+result, prefer ``func.load(*args, **kwargs)`` (see :doc:`/usage/helpers`) — it
+re-derives the lookup key from the arguments and needs no digest at all.
+
 The `D` Wrapper
 ---------------
 
