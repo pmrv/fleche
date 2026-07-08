@@ -23,9 +23,10 @@ def expensive(x, y):
     ...  # only re-runs when x, y, or the function's code change
 ```
 
-- The decorator hashes the function's arguments (SHA256, content-based —
-  not `id()`/pickle-identity based) into a lookup key, and returns the
-  stored result on a hit.
+- The decorator digests the function's identity (qualified name, module,
+  `version`, and optionally `func.__code__` when `hash_code=True`) together
+  with its arguments (SHA256, content-based — not `id()`/pickle-identity
+  based) into a lookup key, and returns the stored result on a hit.
 - Helpers attached to the wrapped function: `.call`, `.digest`, `.load`,
   `.contains`, `.query`, `.rerun`, `.bind` (mirrored under `.fleche.*` too).
 - Returning `None` is never cached (a warning is logged) — fleche can't
