@@ -204,7 +204,7 @@ def _load_config(path: Path) -> dict[str, Any]:
         with open(path, "rb") as f:
             return tomllib.load(f)
     except Exception as e:
-        logger.error("Failed to load configuration from %s: %s", path, e)
+        logger.info("Failed to load configuration from %s: %s", path, e, exc_info=True)
         return {}
 
 

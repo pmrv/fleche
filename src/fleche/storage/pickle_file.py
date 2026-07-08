@@ -1,5 +1,4 @@
 import pickle
-import logging
 import gzip
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -14,8 +13,6 @@ from .destructuring import DestructuringMixin
 from ..security import get_secret_key, normalize_secret_key, SignedBytes, SignatureError
 
 from pyiron_snippets.import_alarm import ImportAlarm
-
-logger = logging.getLogger("fleche.storage.pickle_file")
 
 with ImportAlarm(
     "PickleFile.with_cloudpickle requires 'cloudpickle' to be installed. "
