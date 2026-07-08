@@ -35,6 +35,7 @@ def _file_read_lock_with_fallback(
                 "Failed to read %s after timeout while lock was held: %s",
                 key,
                 e,
+                exc_info=True,
             )
             raise KeyError(key) from None
         raise

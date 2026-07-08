@@ -49,7 +49,7 @@ class BagOfHoldingH5FileBackend(FileStorage):
         except FileNotFoundError:
             raise KeyError(path) from None
         except OSError as e:
-            logger.error(f"Corrupt file present in cache at path {path}: {e}")
+            logger.error("Corrupt file present in cache at path %s: %s", path, e, exc_info=True)
             raise KeyError(path) from e
 
     def rebag(self, version_validator: VersionValidator = "none") -> None:
