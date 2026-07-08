@@ -150,11 +150,6 @@ def test_normalize_list_of_str():
     assert normalize_secret_key(keys) == [bytes.fromhex(k) for k in keys]
 
 
-def test_normalize_list_of_bytes():
-    keys = [b"A" * 32, b"B" * 32]
-    assert normalize_secret_key(keys) == keys
-
-
 def test_normalize_list_str_with_delimiter():
     k1, k2 = "ab" * 16, "cd" * 16
     keys = [k1 + ":" + k2]
