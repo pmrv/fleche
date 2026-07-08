@@ -318,7 +318,7 @@ def serve(
         try:
             method, args, kwargs = req
         except (TypeError, ValueError):
-            logger.error("Malformed request frame: %r", req)
+            logger.error("Malformed request frame: %r", req, exc_info=True)
             continue
         try:
             if method == "info":
@@ -436,7 +436,7 @@ class _Connection(abc.ABC):
                 )
                 if diag:
                     msg = f"{msg}\n{diag}"
-                    logger.error("%s", msg)
+                    logger.error("%s", msg, exc_info=True)
                 raise RemoteConnectionError(msg) from e
         logger.debug("rpc ← %s %s", method, tag)
         if tag == "ok":

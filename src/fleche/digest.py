@@ -133,7 +133,7 @@ def load_entry_points():
                 _EP_HOOKS.append(hook)
                 seen_types[hook.type] = ep.value
         except Exception as e:
-            logger.error("Failed to load entry point %s: %s", ep.name, e)
+            logger.error("Failed to load entry point %s: %s", ep.name, e, exc_info=True)
 
 
 def _digest_mapping(m, contents: Mapping) -> bytes:

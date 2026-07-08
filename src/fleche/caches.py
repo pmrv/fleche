@@ -385,7 +385,10 @@ class Cache(PerKeyLockMixin, BaseCache):
                 yield c.fetch(self)
             except Exception as err:
                 logger.error(
-                        f"Failed to load matching call {c.to_lookup_key()} with {err}! Indicates corrupt cache."
+                        "Failed to load matching call %s with %s! Indicates corrupt cache.",
+                        c.to_lookup_key(),
+                        err,
+                        exc_info=True,
                 )
 
     def evict(self, key: str | Digest) -> None:
