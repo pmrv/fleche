@@ -152,7 +152,10 @@ Decorator kwargs on `@fleche(...)`:
 
 Use `D(value)` (from `fleche`) to pass an existing digest/key as a lookup
 shortcut instead of the real value — the cache expands it back to the
-value before hashing.
+value before hashing. `D(value)` also accepts a stored value (returns its
+digest) or a hex-digest string, so `cache().load_value(D(x))` retrieves a
+value directly from either shape — see `docs/digests/digests_as_args.rst`
+("Looking Up a Value Directly").
 
 ## Querying stored calls
 
