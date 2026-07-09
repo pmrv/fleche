@@ -56,8 +56,7 @@ def _resolve_prefix(
     values — for callers combining results from multiple sub-storages, where
     the same digest may legitimately appear more than once.
     """
-    if dedupe:
-        candidates = sorted(set(candidates))
+    candidates = sorted(set(candidates)) if dedupe else list(candidates)
     if not candidates:
         raise KeyError(key)
     if len(candidates) == 1:
