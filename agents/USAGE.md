@@ -123,7 +123,7 @@ re-deriving the TOML by hand.
 | `"memory"` | in-process dict | — | lost on process exit |
 | `"void"` | no-op | — | discards everything |
 | `"pickle"` / `"cloudpickle"` / `"dill"` | filesystem, one file per entry | `root` | `cloudpickle`/`dill` handle lambdas/closures stdlib `pickle` can't; optional `compress`, `secret_key` (HMAC signing) |
-| `"bagofholding_hdf"` | single HDF5 file via `bagofholding` | `root` | optional `version_validator` |
+| `"bagofholding_hdf"` | HDF5 file(s) via `bagofholding` | `root` | optional `version_validator`, `prefix_length` (multiplex keys sharing an N-char digest prefix into one shared `.h5` file instead of one file per key) |
 | `"sql"` | SQLAlchemy | `url` | **calls only** — pair with a value backend above |
 | `"ssh"` | forwards to a remote `python -m fleche remote --serve` process | `host` | whole-cache forwarding, not a per-key backend |
 

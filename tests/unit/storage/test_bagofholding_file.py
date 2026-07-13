@@ -157,3 +157,107 @@ def test_rebag_default_validator_is_none(tmp_path, monkeypatch):
     s.rebag()
 
     mock_h5bag.return_value.load.assert_called_once_with(version_validator="none")
+
+
+def _digest_like(payload: str) -> Digest:
+    # 64-char stand-ins for real sha256 digests, so prefix slicing behaves realistically.
+    return Digest((payload * 64)[:64])
+
+
+def test_multi_bag_put_get_roundtrip(tmp_path):
+    pytest.importorskip("bagofholding")
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    key = _digest_like("a")
+
+    s.put("hello", key)
+
+    assert s.get(key) == "hello"
+    assert (tmp_path / f"{key[:2]}.h5").is_file()
+
+
+def test_multi_bag_single_file_multiple_keys(tmp_path):
+    pytest.importorskip("bagofholding")
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    key1 = Digest("ab" + "1" * 62)
+    key2 = Digest("ab" + "2" * 62)
+
+    s.put("first", key1)
+    s.put("second", key2)
+
+    assert s.get(key1) == "first"
+    assert s.get(key2) == "second"
+    h5_files = list(tmp_path.glob("*.h5"))
+    assert len(h5_files) == 1
+    assert h5_files[0].name == "ab.h5"
+
+
+def test_multi_bag_list(tmp_path):
+    pytest.importorskip("bagofholding")
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    key1 = Digest("ab" + "1" * 62)
+    key2 = Digest("cd" + "2" * 62)
+
+    s.put("first", key1)
+    s.put("second", key2)
+
+    assert set(s.list()) == {key1, key2}
+
+
+def test_multi_bag_evict(tmp_path):
+    pytest.importorskip("bagofholding")
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    key1 = Digest("ab" + "1" * 62)
+    key2 = Digest("ab" + "2" * 62)
+
+    s.put("first", key1)
+    s.put("second", key2)
+
+    s.evict(key1)
+    assert not s.contains(key1)
+    assert s.contains(key2)
+    assert (tmp_path / "ab.h5").is_file()  # sibling group survives
+
+    s.evict(key2)
+    assert not s.contains(key2)
+    assert not (tmp_path / "ab.h5").exists()  # file removed once empty
+
+
+def test_multi_bag_contains(tmp_path):
+    pytest.importorskip("bagofholding")
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    key = _digest_like("a")
+    missing = _digest_like("b")
+
+    assert not s.contains(key)
+    s.put("value", key)
+    assert s.contains(key)
+    assert not s.contains(missing)
+
+
+def test_multi_bag_different_prefix_lengths(tmp_path):
+    pytest.importorskip("bagofholding")
+    s2 = BagOfHoldingH5FileBackend(tmp_path / "two", prefix_length=2)
+    s4 = BagOfHoldingH5FileBackend(tmp_path / "four", prefix_length=4)
+    key = _digest_like("a")
+
+    s2.put("short-prefix", key)
+    s4.put("long-prefix", key)
+
+    assert (tmp_path / "two" / f"{key[:2]}.h5").is_file()
+    assert (tmp_path / "four" / f"{key[:4]}.h5").is_file()
+    assert s2.get(key) == "short-prefix"
+    assert s4.get(key) == "long-prefix"
+
+
+def test_multi_bag_rebag(tmp_path):
+    pytest.importorskip("bagofholding")
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    key1 = Digest("ab" + "1" * 62)
+    key2 = Digest("ab" + "2" * 62)
+    s.put("first", key1)
+    s.put("second", key2)
+
+    s.rebag(version_validator="none")
+
+    assert s.get(key1) == "first"
+    assert s.get(key2) == "second"

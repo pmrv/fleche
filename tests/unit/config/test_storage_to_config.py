@@ -56,6 +56,26 @@ def test_bagofholding_h5file_version_validator_roundtrip(tmp_path, version_valid
     assert reconstructed.version_validator == version_validator
 
 
+def test_bagofholding_h5file_prefix_length_default(tmp_path):
+    pytest.importorskip("bagofholding")
+    root = tmp_path / "values"
+    s = storage.ValueBagOfHoldingH5File(root=root)
+    cfg = storage_to_config(s)
+    assert cfg["prefix_length"] is None
+
+
+@pytest.mark.parametrize("prefix_length", [None, 2, 4])
+def test_bagofholding_h5file_prefix_length_roundtrip(tmp_path, prefix_length):
+    pytest.importorskip("bagofholding")
+    root = tmp_path / "values"
+    original = storage.ValueBagOfHoldingH5File(root=root, prefix_length=prefix_length)
+    cfg = storage_to_config(original)
+    assert cfg["type"] == "bagofholding_hdf"
+    reconstructed = storage_from_config(cfg, "value")
+    assert isinstance(reconstructed, storage.ValueBagOfHoldingH5File)
+    assert reconstructed.prefix_length == prefix_length
+
+
 def test_sql():
     pytest.importorskip("sqlalchemy")
     s = storage.Sql(url="sqlite:///:memory:")
