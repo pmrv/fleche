@@ -42,6 +42,23 @@ def _longest_common_prefix_length(s1: str, s2: str) -> int:
     return min(len(s1), len(s2))
 
 
+def _apply_shrink(
+    shrink_many: Callable[..., "tuple[Digest, ...]"], keys: "tuple[Digest | str, ...]"
+) -> "Digest | tuple[Digest, ...]":
+    """Shared empty-check + single/tuple unwrap for a batched ``shrink(*keys)`` overload.
+
+    Calls ``shrink_many(*keys)``, which must return a same-length tuple of
+    :class:`Digest`, and unwraps it to a single :class:`Digest` when *keys*
+    has length one. Shared by :meth:`KeyManagement.shrink` and
+    :meth:`~fleche.caches.BaseCache.shrink`, whose batched ``_shrink``
+    implementations differ but whose public overload boilerplate does not.
+    """
+    if not keys:
+        raise TypeError("shrink() requires at least one key")
+    out = shrink_many(*keys)
+    return out[0] if len(keys) == 1 else out
+
+
 def _resolve_prefix(key: str, candidates: list[Digest]) -> Digest:
     """Return the unique Digest for *key* prefix, or raise KeyError / AmbiguousDigestError.
 
@@ -156,8 +173,9 @@ class KeyManagement(OperationContext):
         the batched form fetches ``list()`` once instead of per-key, which
         matters on backends where listing is expensive (e.g. SQL, filesystem).
         """
-        if not keys:
-            raise TypeError("shrink() requires at least one key")
+        return _apply_shrink(self._shrink, keys)
+
+    def _shrink(self, *keys: Digest | str) -> "tuple[Digest, ...]":
         # Enter _operation_context for each key so subclasses with locks
         # (e.g. PerKeyLockMixin) still observe the read.  The list() snapshot
         # is taken once inside the combined context.
@@ -165,8 +183,7 @@ class KeyManagement(OperationContext):
             for k in keys:
                 stack.enter_context(self._operation_context(k))
             sorted_all = sorted(self.list())
-            out = tuple(self._shrink_one(k, sorted_all) for k in keys)
-        return out[0] if len(keys) == 1 else out
+            return tuple(self._shrink_one(k, sorted_all) for k in keys)
 
     def _shrink_one(self, key: "Digest | str", sorted_all: Sequence[str]) -> Digest:
         # Correctness: in a sorted key list, the longest prefix any *other*
