@@ -201,7 +201,7 @@ Available storage types
        :class:`~fleche.storage.CallBagOfHoldingH5File`)
      - ``root``
      - ``lock_timeout``,
-       ``version_validator``, ``remaining_depth`` *(value only)*
+       ``version_validator``, ``prefix_length``, ``remaining_depth`` *(value only)*
    * - ``"sql"``
      - SQL via SQLAlchemy (:class:`~fleche.storage.Sql`).
        *Call storage only.*
@@ -240,8 +240,48 @@ Key descriptions
     ``"semantic-minor"``, ``"semantic-major"``, or ``"none"``.  When omitted,
     ``bagofholding``'s own default applies.
 
+``prefix_length``
+    (int, default ``None``) — *``bagofholding_hdf`` only.*  Multiplexes keys
+    into shared HDF5 files instead of one file per key; see
+    `Multi-bagging (bagofholding_hdf)`_ below.
+
 ``remaining_depth``
     (int, default ``0``) — destructuring depth; see `Destructuring`_ below.
+
+Multi-bagging (``bagofholding_hdf``)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+By default, ``"bagofholding_hdf"`` writes one ``.h5`` file per cache key —
+fine for a handful of large arrays, but a lot of small files if you cache
+many small results, since every file carries HDF5's fixed per-file overhead
+and each ``put``/``get`` opens and closes its own file.
+
+Setting ``prefix_length`` groups keys that share the first *N* characters of
+their digest into a single file at ``root/{key[:N]}.h5``, storing each key as
+a sibling HDF5 group inside it (named by the full key) rather than as its own
+file.  This trades a bit of write contention on the shared file (each
+``put``/``get``/``evict`` still takes a per-file lock) for far fewer files on
+disk. It's a single fixed split — there's no adaptive re-splitting as a
+prefix bucket grows.
+
+.. code-block:: toml
+
+   [hdf5_multi]
+   values.type = "bagofholding_hdf"
+   values.root = "~/.cache/fleche/hdf5_values"
+   values.prefix_length = 2   # up to 256 keys share each *.h5 file
+   calls.type = "sql"
+   calls.url = "sqlite:///~/.cache/fleche/calls.db"
+
+Since digests are SHA256 hex strings, ``prefix_length = 2`` spreads keys
+across up to 256 files (``"00.h5"`` .. ``"ff.h5"``); larger values group more
+keys per file (fewer files, more contention per file), smaller values group
+fewer. Digests are already uniformly distributed, so bucket sizes stay
+roughly even without any extra bookkeeping. ``prefix_length`` is fixed for
+the lifetime of a ``root`` directory — changing it on an existing cache
+leaves old bags where they are and starts writing new ones under the new
+scheme, so existing entries become unreachable. Leave it unset
+(``None``, the default) to keep the original one-file-per-key layout.
 
 Destructuring
 ^^^^^^^^^^^^^
