@@ -166,7 +166,7 @@ def _call_storage_params():
     Always-on backends are listed first; non-sqlite SQL backends are only
     appended when their URL env var is set, so local default runs stay quiet.
     """
-    params = ["memory", "cloudpickle", "dill", "pickle", "h5", "sql"]
+    params = ["memory", "cloudpickle", "dill", "pickle", "h5", "h5_multi", "sql"]
     if os.environ.get(POSTGRES_URL_ENV):
         params.append("sql_postgres")
     if os.environ.get(MYSQL_URL_ENV):
@@ -188,6 +188,8 @@ def call_storage(request, tmp_path):
         yield CallPickleFile.with_pickle(tmp_path / "pickle", secret_key=secret_key)
     elif request.param == "h5":
         yield CallBagOfHoldingH5File(tmp_path / "h5")
+    elif request.param == "h5_multi":
+        yield CallBagOfHoldingH5File(tmp_path / "h5_multi", prefix_length=2)
     elif request.param == "sql":
         yield Sql(tmp_path / "calls.db")
     elif request.param == "sql_postgres":
@@ -198,7 +200,7 @@ def call_storage(request, tmp_path):
         raise ValueError(f"Unknown call_storage param: {request.param}")
 
 
-@pytest.fixture(params=["memory", "cloudpickle", "dill", "pickle", "h5"])
+@pytest.fixture(params=["memory", "cloudpickle", "dill", "pickle", "h5", "h5_multi"])
 def value_storage(request, tmp_path):
     if request.param == "memory":
         return ValueMemory({})
@@ -212,8 +214,10 @@ def value_storage(request, tmp_path):
         return ValuePickleFile.with_pickle(tmp_path / "pickle", secret_key=secret_key)
     elif request.param == "h5":
         return ValueBagOfHoldingH5File(tmp_path / "h5")
+    elif request.param == "h5_multi":
+        return ValueBagOfHoldingH5File(tmp_path / "h5_multi", prefix_length=2)
 
-@pytest.fixture(params=["memory", "cloudpickle", "dill", "pickle", "h5"])
+@pytest.fixture(params=["memory", "cloudpickle", "dill", "pickle", "h5", "h5_multi"])
 def storage_backend(request, tmp_path):
     if request.param == "memory":
         return MemoryBackend({})
@@ -225,6 +229,8 @@ def storage_backend(request, tmp_path):
         return PickleFileBackend.with_pickle(tmp_path / "pickle")
     elif request.param == "h5":
         return BagOfHoldingH5FileBackend(tmp_path / "h5")
+    elif request.param == "h5_multi":
+        return BagOfHoldingH5FileBackend(tmp_path / "h5_multi", prefix_length=2)
 
 
 @pytest.fixture

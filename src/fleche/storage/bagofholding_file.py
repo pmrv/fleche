@@ -1,12 +1,14 @@
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Iterable
 import logging
+import filelock
 
-from .file import FileStorage
+from .file import FileStorage, _file_read_lock_with_fallback
 from .base import SaveError, ValueMixin, CallMixin
 from .thread_safe import PerKeyLockMixin
 from .destructuring import DestructuringMixin
+from ..digest import Digest
 
 from pyiron_snippets.import_alarm import ImportAlarm
 
@@ -18,6 +20,7 @@ with ImportAlarm(
     raise_exception=True,
 ) as bagofholding_alarm:
     from bagofholding import H5Bag
+    import h5py
 
 VersionValidator = Literal["exact", "semantic-minor", "semantic-major", "none"]
 
@@ -25,6 +28,10 @@ VersionValidator = Literal["exact", "semantic-minor", "semantic-major", "none"]
 @dataclass(frozen=True)
 class BagOfHoldingH5FileBackend(FileStorage):
     version_validator: VersionValidator | None = None
+    # When set, keys sharing the first `prefix_length` characters are multiplexed as
+    # sibling groups (named by the full key) into one file at root/{prefix}.h5, instead
+    # of each key getting its own file.
+    prefix_length: int | None = None
 
     @bagofholding_alarm
     def __post_init__(self):
@@ -46,11 +53,84 @@ class BagOfHoldingH5FileBackend(FileStorage):
             if self.version_validator is not None:
                 return bag.load(version_validator=self.version_validator)
             return bag.load()
-        except FileNotFoundError:
+        except (FileNotFoundError, KeyError):
             raise KeyError(path) from None
         except OSError as e:
             logger.error("Corrupt file present in cache at path %s: %s", path, e, exc_info=True)
             raise KeyError(path) from e
+
+    def _bag_file(self, key: str) -> Path:
+        """The HDF5 file backing `key` in multi-bag mode: ``root/{prefix}.h5``."""
+        self.root.mkdir(parents=True, exist_ok=True)
+        return self.root / f"{key[: self.prefix_length]}.h5"
+
+    def _bag_path(self, key: str) -> Path:
+        """Path to hand to :class:`H5Bag`: the plain per-key file, or the
+        composite ``file.h5/{key}`` group path in multi-bag mode."""
+        if self.prefix_length is None:
+            return self._path(key)
+        return self._bag_file(key) / key
+
+    def _lock_path(self, key: str) -> Path:
+        if self.prefix_length is None:
+            return self._path(f"{key}.lock")
+        return Path(f"{self._bag_file(key)}.lock")
+
+    def put(self, value: Any, key: Digest) -> Digest:
+        if self.prefix_length is None:
+            return super().put(value, key)
+        with filelock.FileLock(self._lock_path(key), timeout=self.lock_timeout):
+            self._to_file(value, self._bag_path(key))
+        return key
+
+    def get(self, key: Digest) -> Any:
+        if self.prefix_length is None:
+            return super().get(key)
+        with _file_read_lock_with_fallback(self._lock_path(key), self.lock_timeout, str(key)):
+            return self._from_file(self._bag_path(key))
+
+    def _contains(self, key: Digest) -> bool:
+        if self.prefix_length is None:
+            return super()._contains(key)
+        file_path = self._bag_file(key)
+        if not file_path.is_file():
+            return False
+        try:
+            with h5py.File(file_path, "r") as f:
+                return key in f
+        except OSError:
+            return False
+
+    def _evict(self, key: Digest) -> None:
+        if self.prefix_length is None:
+            return super()._evict(key)
+        file_path = self._bag_file(key)
+        lock_path = self._lock_path(key)
+        with filelock.FileLock(lock_path, timeout=self.lock_timeout):
+            if not file_path.is_file():
+                return
+            with h5py.File(file_path, "a") as f:
+                if key in f:
+                    del f[key]
+                remaining = len(f)
+            if remaining == 0:
+                file_path.unlink(missing_ok=True)
+                lock_path.unlink(missing_ok=True)
+
+    def list(self) -> Iterable[Digest]:
+        if self.prefix_length is None:
+            return super().list()
+        self.root.mkdir(parents=True, exist_ok=True)
+        keys = []
+        for p in self.root.iterdir():
+            if not p.is_file() or not p.name.endswith(".h5"):
+                continue
+            try:
+                with h5py.File(p, "r") as f:
+                    keys.extend(Digest(name) for name in f.keys())
+            except OSError as e:
+                logger.error("Corrupt file present in cache at path %s: %s", p, e, exc_info=True)
+        return keys
 
     def rebag(self, version_validator: VersionValidator = "none") -> None:
         """Re-open and re-save all bags using the given version validator.
@@ -59,7 +139,7 @@ class BagOfHoldingH5FileBackend(FileStorage):
         would otherwise fail strict version checking on load.
         """
         for key in list(self.list()):
-            path = self._path(key)
+            path = self._bag_path(key)
             with self._operation_context(key):
                 try:
                     value = H5Bag(path, _skip_load=True).load(version_validator=version_validator)
