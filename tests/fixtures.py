@@ -187,7 +187,7 @@ def call_storage(request, tmp_path):
     elif request.param == "pickle":
         yield CallPickleFile.with_pickle(tmp_path / "pickle", secret_key=secret_key)
     elif request.param == "h5":
-        yield CallBagOfHoldingH5File(tmp_path / "h5")
+        yield CallBagOfHoldingH5File(tmp_path / "h5", prefix_length=None)
     elif request.param == "h5_multi":
         yield CallBagOfHoldingH5File(tmp_path / "h5_multi", prefix_length=2)
     elif request.param == "sql":
@@ -213,7 +213,7 @@ def value_storage(request, tmp_path):
     elif request.param == "pickle":
         return ValuePickleFile.with_pickle(tmp_path / "pickle", secret_key=secret_key)
     elif request.param == "h5":
-        return ValueBagOfHoldingH5File(tmp_path / "h5")
+        return ValueBagOfHoldingH5File(tmp_path / "h5", prefix_length=None)
     elif request.param == "h5_multi":
         return ValueBagOfHoldingH5File(tmp_path / "h5_multi", prefix_length=2)
 
@@ -228,7 +228,7 @@ def storage_backend(request, tmp_path):
     elif request.param == "pickle":
         return PickleFileBackend.with_pickle(tmp_path / "pickle")
     elif request.param == "h5":
-        return BagOfHoldingH5FileBackend(tmp_path / "h5")
+        return BagOfHoldingH5FileBackend(tmp_path / "h5", prefix_length=None)
     elif request.param == "h5_multi":
         return BagOfHoldingH5FileBackend(tmp_path / "h5_multi", prefix_length=2)
 

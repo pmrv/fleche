@@ -215,7 +215,7 @@ class DestructuringMixin(base.ValueStorage):
         True
     """
 
-    remaining_depth: int = 0
+    remaining_depth: int = 1
 
     @staticmethod
     def _is_trojan_tuple(value):
