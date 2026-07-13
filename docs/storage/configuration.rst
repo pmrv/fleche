@@ -447,3 +447,27 @@ Below is an example of a complete configuration file demonstrating several featu
    values.root = "/shared/team/.cache/fleche/values"
    calls.type = "cloudpickle"
    calls.root = "/shared/team/.cache/fleche/calls"
+
+.. _none-not-cached:
+
+Functions Returning ``None``
+-----------------------------
+
+Functions that return ``None`` are **never cached**.  When a decorated function
+returns ``None``, ``fleche`` logs a ``WARNING`` and skips the save step
+entirely.  Subsequent calls will execute the function again rather than
+returning a cached value.
+
+This applies to all code paths, with one difference for ``.rerun()``:
+
+- A normal call that returns ``None`` does not cache.
+- ``.rerun()`` re-executes the function and still does not cache if the new
+  result is ``None`` — but since a prior cached entry may now be stale, it is
+  **evicted** so that later calls fall through to re-execution rather than
+  returning the old value. If the active cache rejects the eviction (e.g. a
+  read-only cache), ``fleche`` only logs a ``WARNING`` — the stale entry is
+  left in place, and you must evict it yourself::
+
+     >>> from fleche import cache
+     >>> key = my_func.digest(*args, **kwargs)
+     >>> cache().evict(key)
