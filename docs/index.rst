@@ -30,6 +30,7 @@ Welcome to the **Fleche** library documentation.
    :maxdepth: 2
    :caption: Using Fleche
 
+   usage/tldr
    usage/helpers
    usage/lazy_call
    usage/query
