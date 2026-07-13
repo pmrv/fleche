@@ -10,7 +10,7 @@ import pandas as pd
 from . import digest as _digest
 from .digest import Digest  # type hint convenience
 from . import storage
-from .storage.base import _apply_shrink, _longest_common_prefix_length, Intent, OperationContext
+from .storage.base import _apply_shrink, _resolve_prefix, Intent, OperationContext
 from .storage.destructuring import HasChildDigests
 from .storage.thread_safe import PerKeyLockMixin, _PicklableRLock
 from .call import Call, DigestedCall, LazyCall, QueryCall
@@ -258,24 +258,6 @@ class BaseCache(OperationContext):
         return FilteredCache(self, predicate)
 
 
-def _combine_expand(key: "Digest | str", results: "Iterable[Digest]") -> "Digest":
-    """Reduce sub-storage expand results to a single resolved digest.
-
-    Raises:
-        KeyError: if no results were found.
-        AmbiguousDigestError: if results disagree on the full digest.
-    """
-    unique = sorted(set(results))
-    if not unique:
-        raise KeyError(key)
-    if len(unique) == 1:
-        return unique[0]
-    lcp = _longest_common_prefix_length(unique[0], unique[1])
-    raise storage.AmbiguousDigestError(
-        f"Short digest {key} is ambiguous; expands to: {unique}; need at least {lcp + 1} characters."
-    )
-
-
 def _combine_shrink(key: "Digest | str", results: "Iterable[Digest]") -> "Digest":
     """Reduce sub-storage shrink results to the longest (safest) prefix.
 
@@ -322,7 +304,7 @@ class Cache(PerKeyLockMixin, BaseCache):
                     results.append(sub.expand(key))
                 except KeyError:
                     pass
-            return _combine_expand(key, results)
+            return _resolve_prefix(key, results, dedupe=True)
 
     def _shrink(self, *keys: Digest | str) -> "tuple[Digest, ...]":
         call_keys: list = []
@@ -610,7 +592,7 @@ class _MultiCache(BaseCache):
         return any(cache.contains(key) for cache in self._members)
 
     def expand(self, key: Digest | str) -> Digest:
-        return _combine_expand(key, self._collect(lambda c: c.expand(key)))
+        return _resolve_prefix(key, self._collect(lambda c: c.expand(key)), dedupe=True)
 
     def _shrink(self, *keys: Digest | str) -> "tuple[Digest, ...]":
         per_key: dict = {k: [] for k in keys}
@@ -698,7 +680,7 @@ class _MultiCache(BaseCache):
         This is the **collect-and-combine** pattern: used when all members may
         hold relevant data and the caller needs to aggregate results before
         returning (e.g. :meth:`expand` and :meth:`_shrink`, which pass the
-        collected list to ``_combine_expand``/``_combine_shrink``).
+        collected list to ``_resolve_prefix``/``_combine_shrink``).
 
         Args:
             op:  Callable that accepts a single :class:`BaseCache` and returns

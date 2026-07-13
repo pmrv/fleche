@@ -59,20 +59,29 @@ def _apply_shrink(
     return out[0] if len(keys) == 1 else out
 
 
-def _resolve_prefix(key: str, candidates: list[Digest]) -> Digest:
+def _resolve_prefix(
+    key: "Digest | str", candidates: "Iterable[Digest]", *, dedupe: bool = False
+) -> Digest:
     """Return the unique Digest for *key* prefix, or raise KeyError / AmbiguousDigestError.
 
-    *candidates* must contain at most two entries (the two lexicographically
-    smallest keys that start with *key*); callers are responsible for fetching
-    them efficiently (e.g. via a ``LIKE … LIMIT 2`` query for SQL backends).
+    With ``dedupe=False`` (the default), *candidates* must contain at most two
+    entries (the two lexicographically smallest keys that start with *key*);
+    callers are responsible for fetching them efficiently (e.g. via a
+    ``LIKE … LIMIT 2`` query for SQL backends).
+
+    With ``dedupe=True``, *candidates* is first reduced to its sorted unique
+    values — for callers combining results from multiple sub-storages, where
+    the same digest may legitimately appear more than once.
     """
+    candidates = sorted(set(candidates)) if dedupe else list(candidates)
     if not candidates:
         raise KeyError(key)
     if len(candidates) == 1:
         return candidates[0]
     lcp = _longest_common_prefix_length(candidates[0], candidates[1])
     raise AmbiguousDigestError(
-        f"Short digest {key} is ambiguous; need at least {lcp+1} characters."
+        f"Short digest {key} is ambiguous; expands to: {list(candidates)}; "
+        f"need at least {lcp + 1} characters."
     )
 
 
