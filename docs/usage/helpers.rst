@@ -51,7 +51,7 @@ See :doc:`query` for a detailed guide on querying cached calls.
 ``.rerun(*args, **kwargs)``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Forces the function to re-execute, even if its result is already present in the cache, and saves the newly computed result to the cache (unless the result is ``None`` — see :ref:`none-not-cached` below). This forces reevaluation recursively for any nested ``@fleche`` calls as well.
+Forces the function to re-execute, even if its result is already present in the cache, and saves the newly computed result to the cache (unless the result is ``None``, in which case any prior cached result is evicted instead — see :ref:`none-not-cached` below). This forces reevaluation recursively for any nested ``@fleche`` calls as well.
 
 ``.bind(*args, **kwargs)``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -93,11 +93,13 @@ returns ``None``, ``fleche`` logs a ``WARNING`` and skips the save step
 entirely.  Subsequent calls will execute the function again rather than
 returning a cached value.
 
-This applies uniformly to all code paths:
+This applies to all code paths, with one difference for ``.rerun()``:
 
 - A normal call that returns ``None`` does not cache.
-- ``.rerun()`` re-executes the function but still does not cache if the new
-  result is ``None``.
+- ``.rerun()`` re-executes the function and still does not cache if the new
+  result is ``None`` — but since a prior cached entry may now be stale, it is
+  **evicted** so that later calls fall through to re-execution rather than
+  returning the old value.
 
 To cache the fact that a function produced "no result", return a sentinel value
 instead of ``None`` (e.g. ``[]``, ``""``, or a dedicated singleton object), and

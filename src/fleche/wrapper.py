@@ -237,7 +237,16 @@ def make_wrapper(func, policy, meta, isolate, get_call):
                     else:
                         call.result = future.result()
                     if call.result is None:
-                        logger.warning("Function returned None, not caching")
+                        if isinstance(cache, RefreshingCache):
+                            try:
+                                cache.evict(key)
+                                logger.warning(
+                                    "Function returned None during rerun, evicted stale cache entry"
+                                )
+                            except Rejected as e:
+                                logger.warning("Cache rejected evict: %s", e.args)
+                        else:
+                            logger.warning("Function returned None, not caching")
                         return None
                     for m in active_meta:
                         metadata[m.name] |= m.post(
