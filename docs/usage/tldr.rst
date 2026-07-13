@@ -17,6 +17,11 @@ served from the cache afterwards:
    expensive(1, 2)   # cache hit — nothing printed
    expensive(2, 3)   # new arguments, computes again
 
+.. note::
+
+   Functions that return ``None`` are **never cached** — every call
+   re-executes. See :ref:`none-not-cached` in :doc:`helpers` for details.
+
 To persist results across runs, put a ``fleche.toml`` in your project
 directory (or anywhere up to ``$HOME``):
 
