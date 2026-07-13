@@ -41,3 +41,16 @@ Example
     ...     my_function(10)
 
 Automatic hit transfer only applies to full function calls (``Call`` objects) and not to individual values loaded via ``load_value``.
+
+Restrictions
+------------
+
+``CacheStack`` **cannot be nested**: passing a ``CacheStack`` as a member of
+another ``CacheStack`` raises ``ValueError`` immediately::
+
+   inner = CacheStack((cache_a, cache_b))
+   outer = CacheStack((inner, cache_c))  # raises ValueError
+
+Flatten the layers directly instead::
+
+   flat = CacheStack((cache_a, cache_b, cache_c))
