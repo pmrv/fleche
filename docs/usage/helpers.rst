@@ -51,7 +51,7 @@ See :doc:`query` for a detailed guide on querying cached calls.
 ``.rerun(*args, **kwargs)``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Forces the function to re-execute, even if its result is already present in the cache, and saves the newly computed result to the cache. This forces reevaluation recursively for any nested `@fleche` calls as well.
+Forces the function to re-execute, even if its result is already present in the cache, and saves the newly computed result to the cache (unless the result is ``None`` — see :ref:`none-not-cached` below). This forces reevaluation recursively for any nested ``@fleche`` calls as well.
 
 ``.bind(*args, **kwargs)``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -82,6 +82,26 @@ Optionally pre-applies ``*args`` and ``**kwargs`` via :func:`functools.partial`.
    ...     assert result == 3
 
 See :class:`~fleche.state.BoundWrapper` for the full API, including pickling support.
+
+.. _none-not-cached:
+
+Functions returning ``None``
+----------------------------
+
+Functions that return ``None`` are **never cached**.  When a decorated function
+returns ``None``, ``fleche`` logs a ``WARNING`` and skips the save step
+entirely.  Subsequent calls will execute the function again rather than
+returning a cached value.
+
+This applies uniformly to all code paths:
+
+- A normal call that returns ``None`` does not cache.
+- ``.rerun()`` re-executes the function but still does not cache if the new
+  result is ``None``.
+
+To cache the fact that a function produced "no result", return a sentinel value
+instead of ``None`` (e.g. ``[]``, ``""``, or a dedicated singleton object), and
+convert it back to ``None`` at the call site.
 
 Accessing the Original Function
 -------------------------------
