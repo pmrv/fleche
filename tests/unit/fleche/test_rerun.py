@@ -28,6 +28,31 @@ def test_rerun_basic():
         assert func(1) == 2
         assert mock_func.call_count == 2
 
+def test_rerun_none_evicts_stale_entry():
+    mock_func = Mock(side_effect=[1, None, 2])
+
+    @fleche
+    def func(x):
+        return mock_func(x)
+
+    with cache(Cache(ValueMemory({}), CallMemory({}))):
+        # First call: cache miss, execute and cache 1
+        assert func(1) == 1
+        assert mock_func.call_count == 1
+
+        # Cache hit, still 1
+        assert func(1) == 1
+        assert mock_func.call_count == 1
+
+        # Rerun returns None: not cached, and the stale entry for 1 is evicted
+        assert func.fleche.rerun(1) is None
+        assert mock_func.call_count == 2
+
+        # Since the prior entry was evicted, this is a cache miss again
+        assert func(1) == 2
+        assert mock_func.call_count == 3
+
+
 def test_rerun_nested_multiple_levels():
     mock_l3 = Mock(side_effect=[1, 2, 3])
 

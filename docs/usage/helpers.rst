@@ -51,7 +51,7 @@ See :doc:`query` for a detailed guide on querying cached calls.
 ``.rerun(*args, **kwargs)``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Forces the function to re-execute, even if its result is already present in the cache, and saves the newly computed result to the cache. This forces reevaluation recursively for any nested `@fleche` calls as well.
+Forces the function to re-execute, even if its result is already present in the cache, and saves the newly computed result to the cache (unless the result is ``None``, in which case any prior cached result is evicted instead — see :ref:`none-not-cached` below). This forces reevaluation recursively for any nested ``@fleche`` calls as well.
 
 ``.bind(*args, **kwargs)``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -82,6 +82,30 @@ Optionally pre-applies ``*args`` and ``**kwargs`` via :func:`functools.partial`.
    ...     assert result == 3
 
 See :class:`~fleche.state.BoundWrapper` for the full API, including pickling support.
+
+.. _none-not-cached:
+
+Functions Returning ``None``
+-----------------------------
+
+Functions that return ``None`` are **never cached**.  When a decorated function
+returns ``None``, ``fleche`` logs a ``WARNING`` and skips the save step
+entirely.  Subsequent calls will execute the function again rather than
+returning a cached value.
+
+This applies to all code paths, with one difference for ``.rerun()``:
+
+- A normal call that returns ``None`` does not cache.
+- ``.rerun()`` re-executes the function and still does not cache if the new
+  result is ``None`` — but since a prior cached entry may now be stale, it is
+  **evicted** so that later calls fall through to re-execution rather than
+  returning the old value. If the active cache rejects the eviction (e.g. a
+  read-only cache), ``fleche`` only logs a ``WARNING`` — the stale entry is
+  left in place, and you must evict it yourself::
+
+     >>> from fleche import cache
+     >>> key = my_func.digest(*args, **kwargs)
+     >>> cache().evict(key)
 
 Accessing the Original Function
 -------------------------------
