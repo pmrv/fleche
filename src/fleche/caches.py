@@ -10,7 +10,7 @@ import pandas as pd
 from . import digest as _digest
 from .digest import Digest  # type hint convenience
 from . import storage
-from .storage.base import _longest_common_prefix_length, Intent, OperationContext
+from .storage.base import _apply_shrink, _longest_common_prefix_length, Intent, OperationContext
 from .storage.destructuring import HasChildDigests
 from .storage.thread_safe import PerKeyLockMixin, _PicklableRLock
 from .call import Call, DigestedCall, LazyCall, QueryCall
@@ -155,10 +155,7 @@ class BaseCache(OperationContext):
         Raises:
             :class:`AmbiguousDigestError`: if no shorter key is possible for any input
         """
-        if not keys:
-            raise TypeError("shrink() requires at least one key")
-        out = self._shrink(*keys)
-        return out[0] if len(keys) == 1 else out
+        return _apply_shrink(self._shrink, keys)
 
     @abstractmethod
     def _shrink(self, *keys: Digest | str) -> "tuple[Digest, ...]":
