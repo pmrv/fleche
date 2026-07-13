@@ -61,6 +61,9 @@ class FileStorage(StorageBackend):
         self.root.mkdir(parents=True, exist_ok=True)
         return self.root / key
 
+    def _lock_path(self, key: str) -> Path:
+        return self._path(f"{key}.lock")
+
     def list(self) -> Iterable[Digest]:
         self.root.mkdir(parents=True, exist_ok=True)
         return (
@@ -73,17 +76,15 @@ class FileStorage(StorageBackend):
 
     def _evict(self, key: Digest) -> None:
         self._path(key).unlink(missing_ok=True)
-        self._path(f"{key}.lock").unlink(missing_ok=True)
+        self._lock_path(key).unlink(missing_ok=True)
 
     def put(self, value: Any, key: Digest) -> Digest:
-        lock_path = self._path(f"{key}.lock")
-        with filelock.FileLock(lock_path, timeout=self.lock_timeout):
+        with filelock.FileLock(self._lock_path(key), timeout=self.lock_timeout):
             self._to_file(value, self._path(key))
         return key
 
     def get(self, key: Digest) -> Any:
-        lock_path = self._path(f"{key}.lock")
-        with _file_read_lock_with_fallback(lock_path, self.lock_timeout, str(key)):
+        with _file_read_lock_with_fallback(self._lock_path(key), self.lock_timeout, str(key)):
             return self._from_file(self._path(key))
 
     @abstractmethod

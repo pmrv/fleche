@@ -90,8 +90,7 @@ class PickleFileBackend(FileStorage):
         """
         for key in list(self.list()):
             path = self._path(key)
-            lock_path = self._path(f"{key}.lock")
-            with filelock.FileLock(lock_path, timeout=self.lock_timeout):
+            with filelock.FileLock(self._lock_path(key), timeout=self.lock_timeout):
                 try:
                     content = path.read_bytes()
                 except FileNotFoundError:

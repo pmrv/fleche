@@ -4,7 +4,7 @@ from typing import Any, Literal, Iterable
 import logging
 import filelock
 
-from .file import FileStorage, _file_read_lock_with_fallback
+from .file import FileStorage
 from .base import SaveError, ValueMixin, CallMixin
 from .thread_safe import PerKeyLockMixin
 from .destructuring import DestructuringMixin
@@ -64,30 +64,17 @@ class BagOfHoldingH5FileBackend(FileStorage):
         self.root.mkdir(parents=True, exist_ok=True)
         return self.root / f"{key[: self.prefix_length]}.h5"
 
-    def _bag_path(self, key: str) -> Path:
+    def _path(self, key: str) -> Path:
         """Path to hand to :class:`H5Bag`: the plain per-key file, or the
         composite ``file.h5/{key}`` group path in multi-bag mode."""
         if self.prefix_length is None:
-            return self._path(key)
+            return super()._path(key)
         return self._bag_file(key) / key
 
     def _lock_path(self, key: str) -> Path:
         if self.prefix_length is None:
-            return self._path(f"{key}.lock")
+            return super()._lock_path(key)
         return Path(f"{self._bag_file(key)}.lock")
-
-    def put(self, value: Any, key: Digest) -> Digest:
-        if self.prefix_length is None:
-            return super().put(value, key)
-        with filelock.FileLock(self._lock_path(key), timeout=self.lock_timeout):
-            self._to_file(value, self._bag_path(key))
-        return key
-
-    def get(self, key: Digest) -> Any:
-        if self.prefix_length is None:
-            return super().get(key)
-        with _file_read_lock_with_fallback(self._lock_path(key), self.lock_timeout, str(key)):
-            return self._from_file(self._bag_path(key))
 
     def _contains(self, key: Digest) -> bool:
         if self.prefix_length is None:
@@ -139,7 +126,7 @@ class BagOfHoldingH5FileBackend(FileStorage):
         would otherwise fail strict version checking on load.
         """
         for key in list(self.list()):
-            path = self._bag_path(key)
+            path = self._path(key)
             with self._operation_context(key):
                 try:
                     value = H5Bag(path, _skip_load=True).load(version_validator=version_validator)
