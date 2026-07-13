@@ -249,6 +249,129 @@ def test_multi_bag_different_prefix_lengths(tmp_path):
     assert s4.get(key) == "long-prefix"
 
 
+def test_refix_from_per_key(tmp_path):
+    pytest.importorskip("bagofholding")
+    s = BagOfHoldingH5FileBackend(tmp_path)
+    key1 = Digest("ab" + "1" * 62)
+    key2 = Digest("cd" + "2" * 62)
+    s.put("first", key1)
+    s.put("second", key2)
+
+    s.refix(2)
+
+    assert s.prefix_length == 2
+    assert not (tmp_path / key1).exists()
+    assert not (tmp_path / key2).exists()
+    assert {p.name for p in tmp_path.glob("*.h5")} == {"ab.h5", "cd.h5"}
+    assert s.get(key1) == "first"
+    assert s.get(key2) == "second"
+
+
+def test_refix_to_per_key(tmp_path):
+    pytest.importorskip("bagofholding")
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    key1 = Digest("ab" + "1" * 62)
+    key2 = Digest("ab" + "2" * 62)
+    s.put("first", key1)
+    s.put("second", key2)
+
+    s.refix(None)
+
+    assert s.prefix_length is None
+    assert not list(tmp_path.glob("*.h5"))
+    assert (tmp_path / key1).is_file()
+    assert (tmp_path / key2).is_file()
+    assert s.get(key1) == "first"
+    assert s.get(key2) == "second"
+
+
+def test_refix_between_prefixes(tmp_path):
+    pytest.importorskip("bagofholding")
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    key1 = Digest("ab" + "1" * 62)
+    key2 = Digest("ab" + "2" * 62)
+    s.put("first", key1)
+    s.put("second", key2)
+
+    s.refix(4)
+
+    assert s.prefix_length == 4
+    assert {p.name for p in tmp_path.glob("*.h5")} == {"ab11.h5", "ab22.h5"}
+    assert s.get(key1) == "first"
+    assert s.get(key2) == "second"
+
+
+def test_refix_noop(tmp_path):
+    pytest.importorskip("bagofholding")
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    key = _digest_like("a")
+    s.put("value", key)
+
+    s.refix(2)
+
+    assert s.prefix_length == 2
+    assert s.get(key) == "value"
+
+
+def test_refix_rejects_invalid(tmp_path):
+    pytest.importorskip("bagofholding")
+    s = BagOfHoldingH5FileBackend(tmp_path)
+    with pytest.raises(ValueError, match="prefix_length"):
+        s.refix(0)
+    with pytest.raises(ValueError, match="prefix_length"):
+        s.refix(65)
+
+
+def test_reopen_after_refix(tmp_path):
+    pytest.importorskip("bagofholding")
+    s = BagOfHoldingH5FileBackend(tmp_path)
+    key = _digest_like("a")
+    s.put("value", key)
+
+    s.refix(2)
+
+    reopened = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    assert reopened.get(key) == "value"
+
+
+def test_init_rejects_invalid_prefix_length(tmp_path):
+    pytest.importorskip("bagofholding")
+    with pytest.raises(ValueError, match="prefix_length"):
+        BagOfHoldingH5FileBackend(tmp_path, prefix_length=0)
+
+
+def test_init_rejects_prefix_mismatch_on_multi_bag_layout(tmp_path):
+    pytest.importorskip("bagofholding")
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    s.put("value", _digest_like("a"))
+
+    with pytest.raises(ValueError, match="prefix_length"):
+        BagOfHoldingH5FileBackend(tmp_path, prefix_length=4)
+    with pytest.raises(ValueError, match="prefix_length"):
+        BagOfHoldingH5FileBackend(tmp_path)
+    BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)  # matching layout is fine
+
+
+def test_init_rejects_prefix_on_per_key_layout(tmp_path):
+    pytest.importorskip("bagofholding")
+    s = BagOfHoldingH5FileBackend(tmp_path)
+    s.put("value", _digest_like("a"))
+
+    with pytest.raises(ValueError, match="prefix_length"):
+        BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    BagOfHoldingH5FileBackend(tmp_path)  # matching layout is fine
+
+
+def test_init_check_ignores_unrelated_files(tmp_path):
+    pytest.importorskip("bagofholding")
+    (tmp_path / "notes.txt").write_text("not fleche's")
+    (tmp_path / ".hidden").write_text("not fleche's")
+    (tmp_path / "ab.h5.lock").write_text("")
+
+    BagOfHoldingH5FileBackend(tmp_path)
+    BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+
+
 def test_multi_bag_rebag(tmp_path):
     pytest.importorskip("bagofholding")
     s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)

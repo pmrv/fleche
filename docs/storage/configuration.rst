@@ -277,11 +277,16 @@ Since digests are SHA256 hex strings, ``prefix_length = 2`` spreads keys
 across up to 256 files (``"00.h5"`` .. ``"ff.h5"``); larger values group more
 keys per file (fewer files, more contention per file), smaller values group
 fewer. Digests are already uniformly distributed, so bucket sizes stay
-roughly even without any extra bookkeeping. ``prefix_length`` is fixed for
-the lifetime of a ``root`` directory — changing it on an existing cache
-leaves old bags where they are and starts writing new ones under the new
-scheme, so existing entries become unreachable. Leave it unset
+roughly even without any extra bookkeeping. Leave it unset
 (``None``, the default) to keep the original one-file-per-key layout.
+
+``prefix_length`` is checked against the files already present in ``root``
+when the storage is constructed: opening an existing cache directory with a
+different ``prefix_length`` raises a ``ValueError`` instead of silently
+leaving the old entries unreachable.  To re-shard an existing cache, open it
+with its current ``prefix_length`` and call ``refix(new_prefix_length)``,
+which moves every stored entry into the new layout (including to or from the
+per-key layout via ``None``) and switches the live instance over to it.
 
 Destructuring
 ^^^^^^^^^^^^^

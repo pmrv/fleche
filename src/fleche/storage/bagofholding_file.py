@@ -1,3 +1,4 @@
+import copy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, Iterable
@@ -8,7 +9,7 @@ from .file import FileStorage
 from .base import SaveError, ValueMixin, CallMixin
 from .thread_safe import PerKeyLockMixin
 from .destructuring import DestructuringMixin
-from ..digest import Digest
+from ..digest import Digest, DIGEST_LENGTH
 
 from pyiron_snippets.import_alarm import ImportAlarm
 
@@ -25,6 +26,14 @@ with ImportAlarm(
 VersionValidator = Literal["exact", "semantic-minor", "semantic-major", "none"]
 
 
+def _validate_prefix_length(prefix_length: int | None) -> None:
+    if prefix_length is not None and not 1 <= prefix_length <= DIGEST_LENGTH:
+        raise ValueError(
+            f"prefix_length must be None or between 1 and {DIGEST_LENGTH}, "
+            f"got {prefix_length}!"
+        )
+
+
 @dataclass(frozen=True)
 class BagOfHoldingH5FileBackend(FileStorage):
     version_validator: VersionValidator | None = None
@@ -37,6 +46,68 @@ class BagOfHoldingH5FileBackend(FileStorage):
     def __post_init__(self):
         if hasattr(super(), "__post_init__"):
             super().__post_init__()
+        _validate_prefix_length(self.prefix_length)
+        self._check_prefix_consistency()
+
+    def _check_prefix_consistency(self) -> None:
+        """Raise :class:`ValueError` if files already in :attr:`root` were
+        written with a different prefix length.
+
+        Multi-bag files are named ``{prefix}.h5`` and per-key files by the
+        full digest, so the prefix length a file was written with can be read
+        off its name.  Files this backend never writes (locks, dotfiles,
+        anything else) are ignored.
+        """
+        if not self.root.is_dir():
+            return
+        for p in self.root.iterdir():
+            if not p.is_file() or p.name.startswith(".") or p.name.endswith(".lock"):
+                continue
+            if p.name.endswith(".h5"):
+                observed = len(p.name) - len(".h5")
+            elif len(p.name) == DIGEST_LENGTH:
+                observed = None
+            else:
+                continue
+            if observed != self.prefix_length:
+                raise ValueError(
+                    f"prefix_length={self.prefix_length} does not match "
+                    f"{p.name!r} in {self.root}, which was written with "
+                    f"prefix_length={observed}; open the storage with "
+                    f"prefix_length={observed} and call "
+                    f"refix({self.prefix_length}) to migrate it."
+                )
+
+    def refix(self, prefix_length: int | None) -> None:
+        """Re-shard every stored entry to a new prefix length, in place.
+
+        Each entry is copied into the new layout before being removed from
+        the old one, then this instance's :attr:`prefix_length` is updated so
+        all subsequent operations use the new layout.  The migration is not
+        atomic: if interrupted, no data is lost, but entries remain split
+        across both layouts and must be consolidated by hand before the
+        storage can be opened again.
+        """
+        _validate_prefix_length(prefix_length)
+        if prefix_length == self.prefix_length:
+            return
+        # A twin of this storage addressing the new layout.  copy.copy skips
+        # __init__ (unlike dataclasses.replace), because the consistency check
+        # in __post_init__ would reject the root while both layouts coexist.
+        target = copy.copy(self)
+        object.__setattr__(target, "prefix_length", prefix_length)
+        for key in list(self.list()):
+            with self._operation_context(key):
+                try:
+                    value = self.get(key)
+                except KeyError:
+                    logger.warning(
+                        "Skipping unreadable entry %s during prefix-length migration", key
+                    )
+                    continue
+                target.put(value, key)
+                self._evict(key)
+        object.__setattr__(self, "prefix_length", prefix_length)
 
     def _to_file(self, value: Any, path: Path) -> None:
         try:
