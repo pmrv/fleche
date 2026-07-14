@@ -313,6 +313,66 @@ def test_refix_noop(tmp_path):
     assert s.get(key) == "value"
 
 
+def test_refix_unlinks_old_bags_as_soon_as_drained(tmp_path, monkeypatch):
+    """Each old bag must be gone before the next one's entries are copied,
+    so disk usage never balloons beyond one bag's worth of duplicates."""
+    pytest.importorskip("bagofholding")
+    import fleche.storage.bagofholding_file as boh_mod
+    from pathlib import Path
+
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    key1 = Digest("ab" + "1" * 62)
+    key2 = Digest("cd" + "2" * 62)
+    s.put("first", key1)
+    s.put("second", key2)
+
+    real_save = boh_mod.H5Bag.save
+    bags_at_save = {}
+
+    def spying_save(value, path):
+        bags_at_save[Path(path).name] = {p.name for p in tmp_path.glob("*.h5")}
+        return real_save(value, path)
+
+    monkeypatch.setattr(boh_mod.H5Bag, "save", staticmethod(spying_save))
+
+    s.refix(4)
+
+    # bags are drained in sorted order, so ab.h5 must already be unlinked by
+    # the time cd.h5's entry is copied into the new layout
+    assert "ab.h5" not in bags_at_save[str(key2)]
+    assert s.get(key1) == "first"
+    assert s.get(key2) == "second"
+
+
+def test_refix_keeps_unreadable_entries_in_old_layout(tmp_path, monkeypatch):
+    pytest.importorskip("bagofholding")
+    import h5py
+
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    key1 = Digest("ab" + "1" * 62)
+    key2 = Digest("ab" + "2" * 62)
+    s.put("first", key1)
+    s.put("second", key2)
+
+    real_from_file = BagOfHoldingH5FileBackend._from_file
+
+    def failing_from_file(self, path):
+        if path.name == key1:
+            raise KeyError(path)
+        return real_from_file(self, path)
+
+    monkeypatch.setattr(BagOfHoldingH5FileBackend, "_from_file", failing_from_file)
+
+    s.refix(None)
+
+    # the migrated sibling moved out and was dropped from the old bag, the
+    # unreadable entry stayed behind
+    assert (tmp_path / key2).is_file()
+    assert (tmp_path / "ab.h5").is_file()
+    with h5py.File(tmp_path / "ab.h5", "r") as f:
+        assert set(f.keys()) == {key1}
+
+
 def test_refix_rejects_invalid(tmp_path):
     pytest.importorskip("bagofholding")
     s = BagOfHoldingH5FileBackend(tmp_path)

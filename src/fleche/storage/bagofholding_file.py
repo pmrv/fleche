@@ -81,12 +81,17 @@ class BagOfHoldingH5FileBackend(FileStorage):
     def refix(self, prefix_length: int | None) -> None:
         """Re-shard every stored entry to a new prefix length, in place.
 
-        Each entry is copied into the new layout before being removed from
-        the old one, then this instance's :attr:`prefix_length` is updated so
-        all subsequent operations use the new layout.  The migration is not
-        atomic: if interrupted, no data is lost, but entries remain split
-        across both layouts and must be consolidated by hand before the
-        storage can be opened again.
+        Originals are deleted as soon as their entries are copied into the
+        new layout, keeping the transient extra disk usage bounded by a
+        single entry (per-key mode) or a single bag file (multi-bag mode):
+        per-key files are unlinked right after their entry is copied, and old
+        bag files are unlinked whole as soon as all of their entries are
+        copied out — deleting groups one by one would return no disk space,
+        because HDF5 files do not shrink.  Afterwards this instance's
+        :attr:`prefix_length` is updated so all subsequent operations use the
+        new layout.  The migration is not atomic: if interrupted, no data is
+        lost, but entries remain split across both layouts and must be
+        consolidated by hand before the storage can be opened again.
         """
         _validate_prefix_length(prefix_length)
         if prefix_length == self.prefix_length:
@@ -96,18 +101,62 @@ class BagOfHoldingH5FileBackend(FileStorage):
         # in __post_init__ would reject the root while both layouts coexist.
         target = copy.copy(self)
         object.__setattr__(target, "prefix_length", prefix_length)
-        for key in list(self.list()):
-            with self._operation_context(key):
+        if self.prefix_length is None:
+            for key in list(self.list()):
+                with self._operation_context(key):
+                    try:
+                        value = self.get(key)
+                    except KeyError:
+                        logger.warning(
+                            "Skipping unreadable entry %s during prefix-length migration", key
+                        )
+                        continue
+                    target.put(value, key)
+                    self._evict(key)
+        else:
+            for bag_path in sorted(self.root.glob("*.h5")):
                 try:
-                    value = self.get(key)
-                except KeyError:
-                    logger.warning(
-                        "Skipping unreadable entry %s during prefix-length migration", key
+                    with h5py.File(bag_path, "r") as f:
+                        keys = [Digest(name) for name in f.keys()]
+                except OSError as e:
+                    logger.error(
+                        "Corrupt file present in cache at path %s: %s",
+                        bag_path, e, exc_info=True,
                     )
                     continue
-                target.put(value, key)
-                self._evict(key)
+                migrated = []
+                for key in keys:
+                    with self._operation_context(key):
+                        try:
+                            value = self.get(key)
+                        except KeyError:
+                            logger.warning(
+                                "Skipping unreadable entry %s during prefix-length migration",
+                                key,
+                            )
+                            continue
+                        target.put(value, key)
+                        migrated.append(key)
+                self._drop_bag(bag_path, migrated)
         object.__setattr__(self, "prefix_length", prefix_length)
+
+    def _drop_bag(self, bag_path: Path, migrated: list[Digest]) -> None:
+        """Remove the *migrated* keys from a bag file, unlinking the file
+        outright when nothing else is left in it."""
+        lock_path = Path(f"{bag_path}.lock")
+        with filelock.FileLock(lock_path, timeout=self.lock_timeout):
+            try:
+                with h5py.File(bag_path, "a") as f:
+                    remaining = set(f.keys()) - set(migrated)
+                    if remaining:
+                        for key in migrated:
+                            if key in f:
+                                del f[key]
+            except OSError:
+                return
+            if not remaining:
+                bag_path.unlink(missing_ok=True)
+                lock_path.unlink(missing_ok=True)
 
     def _to_file(self, value: Any, path: Path) -> None:
         try:
