@@ -63,12 +63,12 @@ def test_cache_shrink_dispatches_to_call_storage_when_key_is_a_call():
     calls = Mock()
     values = Mock()
     calls.contains.return_value = True
-    calls.shrink.return_value = Digest("abcd")
+    calls._shrink.return_value = (Digest("abcd"),)
     cache = Cache(values, calls)
 
     assert cache.shrink("a" * 64) == "abcd"
     values.contains.assert_not_called()
-    values.shrink.assert_not_called()
+    values._shrink.assert_not_called()
 
 
 def test_cache_shrink_dispatches_to_value_storage_when_key_is_a_value():
@@ -77,11 +77,11 @@ def test_cache_shrink_dispatches_to_value_storage_when_key_is_a_value():
     values = Mock()
     calls.contains.return_value = False
     values.contains.return_value = True
-    values.shrink.return_value = Digest("beef")
+    values._shrink.return_value = (Digest("beef"),)
     cache = Cache(values, calls)
 
     assert cache.shrink("b" * 64) == "beef"
-    calls.shrink.assert_not_called()
+    calls._shrink.assert_not_called()
 
 
 def test_cache_shrink_missing_key_raises_keyerror():
@@ -94,8 +94,8 @@ def test_cache_shrink_missing_key_raises_keyerror():
 
     with pytest.raises(KeyError):
         cache.shrink("c" * 64)
-    calls.shrink.assert_not_called()
-    values.shrink.assert_not_called()
+    calls._shrink.assert_not_called()
+    values._shrink.assert_not_called()
 
 
 def test_cache_shrink_multiple_keys_returns_tuple_in_order():
@@ -127,13 +127,13 @@ def test_cache_shrink_batches_per_sub_storage():
     calls = Mock()
     values = Mock()
     calls.contains.return_value = True
-    calls.shrink.return_value = (Digest("aaaa"), Digest("bbbb"))
+    calls._shrink.return_value = (Digest("aaaa"), Digest("bbbb"))
     cache = Cache(values, calls)
 
     result = cache.shrink("a" * 64, "b" * 64)
     assert result == (Digest("aaaa"), Digest("bbbb"))
-    calls.shrink.assert_called_once_with("a" * 64, "b" * 64)
-    values.shrink.assert_not_called()
+    calls._shrink.assert_called_once_with("a" * 64, "b" * 64)
+    values._shrink.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -204,27 +204,27 @@ def test_cache_stack_shrink_returns_longest_across_layers():
     c2 = Mock()
     c1.contains.return_value = True
     c2.contains.return_value = True
-    c1.shrink.return_value = Digest("abcd")
-    c2.shrink.return_value = Digest("abcdef")
+    c1._shrink.return_value = (Digest("abcd"),)
+    c2._shrink.return_value = (Digest("abcdef"),)
     stack = CacheStack((c1, c2))
 
     assert stack.shrink("a" * 64) == "abcdef"
 
 
 def test_cache_stack_shrink_multiple_keys_batches_per_layer():
-    """``shrink(k1, k2)`` makes one batched ``shrink(*present)`` per layer."""
+    """``shrink(k1, k2)`` makes one batched ``_shrink(*present)`` per layer."""
     c1 = Mock()
     c2 = Mock()
     c1.contains.return_value = True
     c2.contains.return_value = True
-    c1.shrink.return_value = (Digest("aaaa"), Digest("bbbb"))
-    c2.shrink.return_value = (Digest("aaaaaa"), Digest("bbbbbb"))
+    c1._shrink.return_value = (Digest("aaaa"), Digest("bbbb"))
+    c2._shrink.return_value = (Digest("aaaaaa"), Digest("bbbbbb"))
     stack = CacheStack((c1, c2))
 
     out = stack.shrink("a" * 64, "b" * 64)
     assert out == (Digest("aaaaaa"), Digest("bbbbbb"))
-    c1.shrink.assert_called_once_with("a" * 64, "b" * 64)
-    c2.shrink.assert_called_once_with("a" * 64, "b" * 64)
+    c1._shrink.assert_called_once_with("a" * 64, "b" * 64)
+    c2._shrink.assert_called_once_with("a" * 64, "b" * 64)
 
 
 def test_cache_stack_shrink_multiple_keys_skips_layers_without_key():
@@ -234,14 +234,14 @@ def test_cache_stack_shrink_multiple_keys_skips_layers_without_key():
     # c1 has k1 only; c2 has k2 only.
     c1.contains.side_effect = lambda k: k == "a" * 64
     c2.contains.side_effect = lambda k: k == "b" * 64
-    c1.shrink.return_value = Digest("aaaa")
-    c2.shrink.return_value = Digest("bbbb")
+    c1._shrink.return_value = (Digest("aaaa"),)
+    c2._shrink.return_value = (Digest("bbbb"),)
     stack = CacheStack((c1, c2))
 
     out = stack.shrink("a" * 64, "b" * 64)
     assert out == (Digest("aaaa"), Digest("bbbb"))
-    c1.shrink.assert_called_once_with("a" * 64)
-    c2.shrink.assert_called_once_with("b" * 64)
+    c1._shrink.assert_called_once_with("a" * 64)
+    c2._shrink.assert_called_once_with("b" * 64)
 
 
 # ---------------------------------------------------------------------------

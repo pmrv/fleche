@@ -320,9 +320,7 @@ class Cache(PerKeyLockMixin, BaseCache):
         for sub, ks in ((self.calls, call_keys), (self.values, value_keys)):
             if not ks:
                 continue
-            r = sub.shrink(*ks)
-            if len(ks) == 1:
-                r = (r,)
+            r = sub._shrink(*ks)
             for k, s in zip(ks, r):
                 results[k] = s
         return tuple(results[k] for k in keys)
@@ -474,9 +472,7 @@ class CacheWrapper(BaseCache):
         return self.cache.expand(key)
 
     def _shrink(self, *keys: Digest | str) -> "tuple[Digest, ...]":
-        if len(keys) == 1:
-            return (self.cache.shrink(keys[0]),)
-        return self.cache.shrink(*keys)
+        return self.cache._shrink(*keys)
 
     def _query(self, call: call.QueryCall) -> Iterable[LazyCall]:
         return self.cache.query(call)
@@ -600,9 +596,7 @@ class _MultiCache(BaseCache):
             present = [k for k in keys if cache.contains(k)]
             if not present:
                 continue
-            r = cache.shrink(*present)
-            if len(present) == 1:
-                r = (r,)
+            r = cache._shrink(*present)
             for k, s in zip(present, r):
                 per_key[k].append(s)
         out_list = []
