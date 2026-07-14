@@ -8,7 +8,7 @@ from fleche.storage.bagofholding_file import BagOfHoldingH5FileBackend
 
 
 def test_load_corrupt_h5_file(tmp_path, caplog):
-    storage = BagOfHoldingH5FileBackend(tmp_path)
+    storage = BagOfHoldingH5FileBackend(tmp_path, prefix_length=None)
 
     key = Digest("corrupt_key")
     path = storage._path(key)
@@ -28,6 +28,12 @@ def test_version_validator_default_is_none(tmp_path):
     pytest.importorskip("bagofholding")
     s = BagOfHoldingH5FileBackend(tmp_path)
     assert s.version_validator is None
+
+
+def test_prefix_length_default_is_2(tmp_path):
+    pytest.importorskip("bagofholding")
+    s = BagOfHoldingH5FileBackend(tmp_path)
+    assert s.prefix_length == 2
 
 
 def test_version_validator_field_accepted(tmp_path):
@@ -78,7 +84,7 @@ def test_rebag_calls_load_and_save(tmp_path, monkeypatch):
     mock_h5bag.return_value.load.return_value = 99
     monkeypatch.setattr(boh_mod, "H5Bag", mock_h5bag)
 
-    s = BagOfHoldingH5FileBackend(tmp_path)
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=None)
     key = Digest("resave_key")
     s._path(key).write_bytes(b"dummy")
 
@@ -96,7 +102,7 @@ def test_rebag_skips_oserror(tmp_path, monkeypatch, caplog):
     mock_h5bag.return_value.load.side_effect = OSError("broken bag")
     monkeypatch.setattr(boh_mod, "H5Bag", mock_h5bag)
 
-    s = BagOfHoldingH5FileBackend(tmp_path)
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=None)
     key = Digest("broken_key")
     s._path(key).write_bytes(b"dummy")
 
@@ -132,7 +138,7 @@ def test_rebag_passes_skip_load_to_h5bag(tmp_path, monkeypatch):
     mock_h5bag.return_value.load.return_value = 1
     monkeypatch.setattr(boh_mod, "H5Bag", mock_h5bag)
 
-    s = BagOfHoldingH5FileBackend(tmp_path)
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=None)
     key = Digest("rebag_skip_load_key")
     s._path(key).write_bytes(b"dummy")
 
@@ -150,7 +156,7 @@ def test_rebag_default_validator_is_none(tmp_path, monkeypatch):
     mock_h5bag.return_value.load.return_value = 1
     monkeypatch.setattr(boh_mod, "H5Bag", mock_h5bag)
 
-    s = BagOfHoldingH5FileBackend(tmp_path)
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=None)
     key = Digest("default_key")
     s._path(key).write_bytes(b"dummy")
 

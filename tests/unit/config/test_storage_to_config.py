@@ -7,7 +7,7 @@ from fleche.config import storage_to_config, storage_from_config
 
 def test_memory():
     s = storage.ValueMemory({})
-    assert storage_to_config(s) == {"type": "memory", "remaining_depth": 0}
+    assert storage_to_config(s) == {"type": "memory", "remaining_depth": 1}
 
 
 def test_void():
@@ -61,7 +61,7 @@ def test_bagofholding_h5file_prefix_length_default(tmp_path):
     root = tmp_path / "values"
     s = storage.ValueBagOfHoldingH5File(root=root)
     cfg = storage_to_config(s)
-    assert cfg["prefix_length"] is None
+    assert cfg["prefix_length"] == 2
 
 
 @pytest.mark.parametrize("prefix_length", [None, 2, 4])
@@ -102,7 +102,7 @@ def test_roundtrip_memory():
     cfg = {"type": "memory"}
     s = storage_from_config(cfg, "value")
     assert isinstance(s, storage.ValueMemory)
-    assert storage_to_config(s) == {"type": "memory", "remaining_depth": 0}
+    assert storage_to_config(s) == {"type": "memory", "remaining_depth": 1}
 
 
 def test_roundtrip_void():

@@ -241,20 +241,20 @@ Key descriptions
     ``bagofholding``'s own default applies.
 
 ``prefix_length``
-    (int, default ``None``) — *``bagofholding_hdf`` only.*  Multiplexes keys
+    (int, default ``2``) — *``bagofholding_hdf`` only.*  Multiplexes keys
     into shared HDF5 files instead of one file per key; see
     `Multi-bagging (bagofholding_hdf)`_ below.
 
 ``remaining_depth``
-    (int, default ``0``) — destructuring depth; see `Destructuring`_ below.
+    (int, default ``1``) — destructuring depth; see `Destructuring`_ below.
 
 Multi-bagging (``bagofholding_hdf``)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-By default, ``"bagofholding_hdf"`` writes one ``.h5`` file per cache key —
-fine for a handful of large arrays, but a lot of small files if you cache
-many small results, since every file carries HDF5's fixed per-file overhead
-and each ``put``/``get`` opens and closes its own file.
+With ``prefix_length = None``, ``"bagofholding_hdf"`` writes one ``.h5``
+file per cache key — fine for a handful of large arrays, but a lot of small
+files if you cache many small results, since every file carries HDF5's fixed
+per-file overhead and each ``put``/``get`` opens and closes its own file.
 
 Setting ``prefix_length`` groups keys that share the first *N* characters of
 their digest into a single file at ``root/{key[:N]}.h5``, storing each key as
@@ -269,19 +269,20 @@ prefix bucket grows.
    [hdf5_multi]
    values.type = "bagofholding_hdf"
    values.root = "~/.cache/fleche/hdf5_values"
-   values.prefix_length = 2   # up to 256 keys share each *.h5 file
+   values.prefix_length = 3   # spread keys across up to 4096 *.h5 files
    calls.type = "sql"
    calls.url = "sqlite:///~/.cache/fleche/calls.db"
 
-Since digests are SHA256 hex strings, ``prefix_length = 2`` spreads keys
-across up to 256 files (``"00.h5"`` .. ``"ff.h5"``); larger values group more
-keys per file (fewer files, more contention per file), smaller values group
-fewer. Digests are already uniformly distributed, so bucket sizes stay
-roughly even without any extra bookkeeping. ``prefix_length`` is fixed for
-the lifetime of a ``root`` directory — changing it on an existing cache
-leaves old bags where they are and starts writing new ones under the new
-scheme, so existing entries become unreachable. Leave it unset
-(``None``, the default) to keep the original one-file-per-key layout.
+Since digests are SHA256 hex strings, the default ``prefix_length = 2``
+spreads keys across up to 256 files (``"00.h5"`` .. ``"ff.h5"``); smaller
+values group more keys per file (fewer files, more contention per file),
+larger values group fewer. Digests are already uniformly distributed, so
+bucket sizes stay roughly even without any extra bookkeeping.
+``prefix_length`` is fixed for the lifetime of a ``root`` directory —
+changing it on an existing cache leaves old bags where they are and starts
+writing new ones under the new scheme, so existing entries become
+unreachable. Set it to ``None`` (only possible when constructing the backend
+from Python — TOML cannot express ``None``) for the one-file-per-key layout.
 
 Destructuring
 ^^^^^^^^^^^^^
@@ -293,7 +294,7 @@ independently under its own cache key, and on load the original structure is
 reassembled.  This avoids redundant storage of shared sub-structures across
 different cached calls.
 
-The optional ``remaining_depth`` key (integer, default ``0``) controls the granularity:
+The optional ``remaining_depth`` key (integer, default ``1``) controls the granularity:
 
 * ``remaining_depth = 0`` — maximum splitting: every element at every nesting level is
   stored as a separate entry.
@@ -301,9 +302,10 @@ The optional ``remaining_depth`` key (integer, default ``0``) controls the granu
   are stored inline within their parent entry rather than as separate entries.
   Depth is measured from the deepest scalar leaf: scalars (:class:`int`, :class:`str`,
   etc.) have depth 0; a container has depth ``1 + max(children depths)``.
-  With ``remaining_depth = 1``, scalars (depth 0) are inlined into their parent
-  container, so a flat list or dict of only scalars becomes a single cache entry.
-  Nested sub-collections (depth ≥ 1) are still stored as separate entries.
+  With ``remaining_depth = 1`` (the default), scalars (depth 0) are inlined into
+  their parent container, so a flat list or dict of only scalars becomes a single
+  cache entry.  Nested sub-collections (depth ≥ 1) are still stored as separate
+  entries.
 
 Higher values mean fewer, larger storage entries and less structural sharing between calls.
 
@@ -314,7 +316,7 @@ Example:
    [mycache]
    values.type = "cloudpickle"
    values.root = "~/.cache/fleche/values"
-   values.remaining_depth = 1   # inline scalars into their parent container
+   values.remaining_depth = 0   # split every element into its own entry
    calls.type = "cloudpickle"
    calls.root = "~/.cache/fleche/calls"
 
