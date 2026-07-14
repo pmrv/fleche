@@ -81,6 +81,21 @@ brackets, e.g. ``pip install "fleche[sqlalchemy,ssh]"``.
    ``executorlib``, ``docs`` and ``tests`` extras are pip-only -- install
    ``executorlib`` from conda-forge separately if you need it.
 
+Companion packages
+------------------
+
+Digest support for third-party libraries ships as separate companion packages
+that register themselves via :doc:`entry points <digests/entry_points>` —
+installing them alongside ``fleche`` is all that is needed:
+
+* ``fleche-ase`` (`PyPI <https://pypi.org/project/fleche-ase/>`__) — digest
+  hooks for the Atomic Simulation Environment: ``ase.Atoms``,
+  ``VibrationsData`` and ``Calculator`` objects.
+
+.. code-block:: bash
+
+   pip install fleche-ase
+
 Installing documentation (optional)
 -----------------------------------
 
