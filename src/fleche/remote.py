@@ -802,10 +802,11 @@ class SshCache(BaseCache):
         return self._rpc("expand", key)
 
     def _shrink(self, *keys: Digest | str) -> "tuple[Digest, ...]":
-        # Variadic single-vs-tuple unwrap stays here rather than in
-        # `_CLIENT_METHODS` — it's the same special case shared by
-        # `Cache`/`CacheStack`/`CacheWrapper` and has its own refactor
-        # proposal (#687), out of scope for the dispatcher collapse.
+        # Unlike `Cache`/`CacheStack`/`CacheWrapper` (#687), which now call
+        # the inner layer's tuple-returning `_shrink` directly, this class
+        # has no local inner layer to call `_shrink` on — the server-side
+        # dispatch calls the public `shrink()` (which unwraps for a single
+        # key), so the wrap has to happen here at the wire boundary.
         if len(keys) == 1:
             return (self._rpc("shrink", keys[0]),)
         return self._rpc("shrink", *keys)
