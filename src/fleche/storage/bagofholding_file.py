@@ -1,4 +1,5 @@
 import copy
+import itertools
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, Iterable
@@ -101,8 +102,13 @@ class BagOfHoldingH5FileBackend(FileStorage):
         # in __post_init__ would reject the root while both layouts coexist.
         target = copy.copy(self)
         object.__setattr__(target, "prefix_length", prefix_length)
+        # sorted() forces full collection before the first write, so files the
+        # twin creates in the same root can never leak into the iteration, and
+        # makes keys sharing a bag contiguous so each bag can be dropped as
+        # soon as its last entry is copied out.
+        keys = sorted(self.list())
         if self.prefix_length is None:
-            for key in list(self.list()):
+            for key in keys:
                 with self._operation_context(key):
                     try:
                         value = self.get(key)
@@ -114,18 +120,9 @@ class BagOfHoldingH5FileBackend(FileStorage):
                     target.put(value, key)
                     self._evict(key)
         else:
-            for bag_path in sorted(self.root.glob("*.h5")):
-                try:
-                    with h5py.File(bag_path, "r") as f:
-                        keys = [Digest(name) for name in f.keys()]
-                except OSError as e:
-                    logger.error(
-                        "Corrupt file present in cache at path %s: %s",
-                        bag_path, e, exc_info=True,
-                    )
-                    continue
+            for bag_path, bag_keys in itertools.groupby(keys, key=self._bag_file):
                 migrated = []
-                for key in keys:
+                for key in bag_keys:
                     with self._operation_context(key):
                         try:
                             value = self.get(key)
