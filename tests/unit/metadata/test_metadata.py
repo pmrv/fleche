@@ -323,3 +323,51 @@ def test_configurable_decorator_registers_and_names():
 
 def test_tags_not_in_configurable():
     assert Tags not in CONFIGURABLE.values()
+
+
+@pytest.mark.parametrize(
+    "cls, expected_keys",
+    [
+        (Runtime, {"timestart": float, "timestop": float, "walltime": float}),
+        (
+            Environment,
+            {
+                "hostname": str,
+                "username": str,
+                "cwd": str,
+                "fleche_version": str,
+                "python_version": str,
+            },
+        ),
+        (Git, {"root": str, "commit": str, "branch": str, "dirty": bool}),
+    ],
+    ids=["runtime", "environment", "git"],
+)
+def test_builtin_metadata_keys_schema(cls, expected_keys):
+    """Zero-arg built-ins publish a fixed schema via the ``keys`` property.
+
+    Contract (``MetaData.keys`` docstring): "Defines the schema of the
+    metadata, mapping metadata keys to their expected types."  Downstream
+    consumers (e.g. Sql metadata pushdown, future column projection) rely on
+    this schema; PR #690 unified ``keys`` as a ``@property`` across every
+    built-in so subclass authors implement it exactly one way.  This pins
+    each built-in's published schema against its own docstring.
+    """
+    assert cls().keys == expected_keys
+
+
+def test_tags_keys_derives_from_tag_dict():
+    """``Tags.keys`` reflects the tag dict passed at construction time.
+
+    Unlike the ``@configurable`` built-ins (which return a fixed schema),
+    ``Tags`` takes a user-supplied ``tags`` dict and infers per-value types
+    via ``type(v)`` — an empty dict yields an empty schema, and mixed-type
+    values yield a mixed schema.  This is the only ``keys`` property in the
+    module that varies per instance rather than per class.
+    """
+    assert Tags(tags={}).keys == {}
+    assert Tags(tags={"user": "test", "n": 3, "on": True}).keys == {
+        "user": str,
+        "n": int,
+        "on": bool,
+    }
