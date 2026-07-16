@@ -291,9 +291,10 @@ leaving the old entries unreachable.  To re-shard an existing cache, open it
 with its current ``prefix_length`` and call
 :meth:`~fleche.storage.bagofholding_file.BagOfHoldingH5FileBackend.refix`
 with the new length (``0`` for per-key), which moves every stored entry into
-the new layout and switches the live instance over to it.  A root left with
-*several* layouts — e.g. by an interrupted ``refix`` — cannot be opened
-normally; repair it with
+the new layout and returns a storage addressing it (the original instance is
+left untouched and sees the drained old layout).  A root left with *several*
+layouts — e.g. by an interrupted ``refix`` — cannot be opened normally;
+repair it with
 :meth:`~fleche.storage.bagofholding_file.BagOfHoldingH5FileBackend.consolidate`,
 which migrates every prefix length it finds to a target length and returns
 the resulting storage.

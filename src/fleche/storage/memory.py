@@ -4,7 +4,7 @@ from typing import Any, Iterable
 from .base import ValueMixin, CallMixin, StorageBackend
 from .destructuring import DestructuringMixin
 from .thread_safe import PerKeyLockMixin
-from ..digest import digest, Digest
+from ..digest import Digest
 from copy import deepcopy
 
 
@@ -35,9 +35,7 @@ class MemoryBackend(StorageBackend):
     def list(self) -> Iterable[Digest]:
         return tuple(self.storage.keys())
 
-    def put(self, value: Any, key: Digest | None = None) -> Digest:
-        if key is None:
-            key = digest(value)
+    def put(self, value: Any, key: Digest) -> Digest:
         self.storage[key] = deepcopy(value)
         return key
 

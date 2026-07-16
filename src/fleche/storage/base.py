@@ -237,8 +237,7 @@ class StorageBackend(KeyManagement):
     """
 
     @abstractmethod
-    def put(self, value: Any, key: Digest | None = None) -> Digest:
-        """Store *value* under *key*, digesting the value when no key is given."""
+    def put(self, value: Any, key: Digest) -> Digest: ...
 
     @abstractmethod
     def get(self, key: Digest) -> Any: ...

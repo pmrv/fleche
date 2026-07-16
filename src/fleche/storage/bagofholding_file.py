@@ -1,4 +1,3 @@
-import itertools
 from dataclasses import dataclass, field, replace, InitVar
 from pathlib import Path
 from typing import Any, Literal, Iterable
@@ -111,51 +110,53 @@ class BagOfHoldingH5FileBackend(FileStorage):
                 f"{type(self).__name__}.consolidate() to unify a mixed root."
             )
 
-    def refix(self, prefix_length: int) -> None:
-        """Re-shard every stored entry to a new prefix length, in place.
+    def refix(self, prefix_length: int) -> "BagOfHoldingH5FileBackend":
+        """Copy every stored entry into a new prefix-length layout.
 
-        The target must be explicit: an integer between ``0`` (one file per
-        key) and :data:`~fleche.digest.DIGEST_LENGTH`.  Originals are deleted
-        as soon as their entries are copied into the new layout, keeping the
-        transient extra disk usage bounded by a single entry (per-key mode)
-        or a single bag file (multi-bag mode): per-key files are unlinked
-        right after their entry is copied, and old bag files are unlinked
-        whole as soon as all of their entries are copied out — deleting
-        groups one by one would return no disk space, because HDF5 files do
-        not shrink.  Afterwards this instance's :attr:`prefix_length` is
-        updated so all subsequent operations use the new layout.
+        Originals are evicted as soon as their entries are copied, so the
+        transient extra disk usage stays bounded by a single entry (per-key
+        mode) or a single bag file (multi-bag mode — the old bag is unlinked
+        by :meth:`_evict` the moment its last entry goes, and HDF5 files do
+        not shrink before that anyway).  ``self`` is left untouched: it keeps
+        addressing the old — afterwards empty — layout, and the returned
+        storage addresses the new one.
 
-        The migration is not atomic.  An unreadable entry raises
-        :class:`RuntimeError` immediately — silently skipping it would make
-        the *next* instantiation fail its consistency check instead — and an
-        interrupted or aborted run leaves both layouts present (no data is
-        lost).  :meth:`consolidate` repairs such a mixed root; entries
-        already present in the target layout are skipped, so re-running a
-        migration never re-copies work already done.
+        The migration is not atomic, but resumable: entries already present
+        in the target layout are skipped, so re-running never re-copies work
+        already done, and :meth:`consolidate` repairs a root left with both
+        layouts by an interrupted or aborted run (no data is lost either
+        way).
+
+        Args:
+            prefix_length: target prefix length, between ``0`` (one file per
+                key) and :data:`~fleche.digest.DIGEST_LENGTH`.  Must be
+                explicit — ``None`` is not accepted.
+
+        Returns:
+            BagOfHoldingH5FileBackend: a storage of the same type at the same
+                root addressing the new layout; ``self`` when *prefix_length*
+                already matches.
+
+        Raises:
+            ValueError: if *prefix_length* is not an integer in range.
+            RuntimeError: if an entry cannot be read — silently skipping it
+                would make the *next* instantiation fail its consistency
+                check instead.  Migration aborts immediately, leaving both
+                layouts present.
         """
         _validate_prefix_length(prefix_length)
         if prefix_length == self.prefix_length:
-            return
+            return self
         target = replace(self, prefix_length=prefix_length, check_consistency=False)
         # sorted() forces full collection before the first write, so files the
         # target creates in the same root can never leak into the iteration,
-        # and makes keys sharing a bag contiguous so each bag can be dropped
-        # as soon as its last entry is copied out.
-        keys = sorted(self.list())
-        if self.prefix_length == 0:
-            for key in keys:
-                with self._operation_context(key):
-                    self._refix_one(target, key)
-                    self._evict(key)
-        else:
-            for bag_path, bag_keys in itertools.groupby(keys, key=self._bag_file):
-                migrated = []
-                for key in bag_keys:
-                    with self._operation_context(key):
-                        self._refix_one(target, key)
-                        migrated.append(key)
-                self._drop_bag(bag_path, migrated)
-        object.__setattr__(self, "prefix_length", prefix_length)
+        # and keeps keys sharing a bag contiguous so each old bag is drained —
+        # and thereby unlinked by _evict — before the next one is touched.
+        for key in sorted(self.list()):
+            with self._operation_context(key):
+                self._refix_one(target, key)
+                self._evict(key)
+        return target
 
     def _refix_one(self, target: "BagOfHoldingH5FileBackend", key: Digest) -> None:
         """Copy one entry into *target*'s layout, skipping entries a previous
@@ -183,6 +184,17 @@ class BagOfHoldingH5FileBackend(FileStorage):
         once — e.g. after an interrupted :meth:`refix`, or after entries were
         written with different ``prefix_length`` settings.  Every other
         prefix length found in *root* is converted via :meth:`refix`.
+
+        Args:
+            root: storage directory to open.
+            prefix_length: target prefix length, between ``0`` (one file per
+                key) and :data:`~fleche.digest.DIGEST_LENGTH`.
+            **kwargs: forwarded to the constructor (e.g. ``lock_timeout``,
+                ``version_validator``).
+
+        Returns:
+            BagOfHoldingH5FileBackend: a consistency-checked storage at
+                *root* with every entry stored under *prefix_length*.
         """
         _validate_prefix_length(prefix_length)
         root = Path(root)
@@ -192,24 +204,6 @@ class BagOfHoldingH5FileBackend(FileStorage):
                 prefix_length
             )
         return cls(root, prefix_length=prefix_length, **kwargs)
-
-    def _drop_bag(self, bag_path: Path, migrated: list[Digest]) -> None:
-        """Remove the *migrated* keys from a bag file, unlinking the file
-        outright when nothing else is left in it."""
-        lock_path = Path(f"{bag_path}.lock")
-        with filelock.FileLock(lock_path, timeout=self.lock_timeout):
-            try:
-                with h5py.File(bag_path, "a") as f:
-                    remaining = set(f.keys()) - set(migrated)
-                    if remaining:
-                        for key in migrated:
-                            if key in f:
-                                del f[key]
-            except OSError:
-                return
-            if not remaining:
-                bag_path.unlink(missing_ok=True)
-                lock_path.unlink(missing_ok=True)
 
     def _to_file(self, value: Any, path: Path) -> None:
         try:
