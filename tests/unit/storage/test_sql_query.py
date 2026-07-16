@@ -1,6 +1,6 @@
 import pytest
 
-from hypothesis import given, strategies as st
+from hypothesis import given, settings, strategies as st
 
 from fleche.storage.sql import Sql
 from fleche.storage import ValueMemory
@@ -351,6 +351,9 @@ def test_sql_query_by_string_version(store):
 # ---------------------------------------------------------------------------
 
 
+# Each example sets up a fresh in-memory sqlite DB, which can blow the default
+# 200ms deadline on a cold CI runner and get flagged as flaky.
+@settings(deadline=None)
 @given(
     st.lists(
         st.fixed_dictionaries(
