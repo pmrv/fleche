@@ -40,8 +40,8 @@ class BagOfHoldingH5FileBackend(FileStorage):
     version_validator: VersionValidator | None = None
     # When set, keys sharing the first `prefix_length` characters are multiplexed as
     # sibling groups (named by the full key) into one file at root/{prefix}.h5, instead
-    # of each key getting its own file.
-    prefix_length: int | None = None
+    # of each key getting its own file.  `None` keeps one file per key.
+    prefix_length: int | None = 2
 
     @bagofholding_alarm
     def __post_init__(self):

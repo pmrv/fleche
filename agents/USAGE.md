@@ -123,7 +123,7 @@ re-deriving the TOML by hand.
 | `"memory"` | in-process dict | — | lost on process exit |
 | `"void"` | no-op | — | discards everything |
 | `"pickle"` / `"cloudpickle"` / `"dill"` | filesystem, one file per entry | `root` | `cloudpickle`/`dill` handle lambdas/closures stdlib `pickle` can't; optional `compress`, `secret_key` (HMAC signing) |
-| `"bagofholding_hdf"` | HDF5 file(s) via `bagofholding` | `root` | optional `version_validator`, `prefix_length` (multiplex keys sharing an N-char digest prefix into one shared `.h5` file instead of one file per key; validated against existing files in `root` at construction — migrate a live storage with `refix(n)`) |
+| `"bagofholding_hdf"` | HDF5 file(s) via `bagofholding` | `root` | optional `version_validator`, `prefix_length` (multiplex keys sharing an N-char digest prefix into one shared `.h5` file instead of one file per key; default `2`, `None` for one file per key; validated against existing files in `root` at construction — migrate a live storage with `refix(n)`) |
 | `"sql"` | SQLAlchemy | `url` | **calls only** — pair with a value backend above |
 | `"ssh"` | forwards to a remote `python -m fleche remote --serve` process | `host` | whole-cache forwarding, not a per-key backend |
 
@@ -149,6 +149,25 @@ Decorator kwargs on `@fleche(...)`:
   uses `os.chdir`).
 - Per-argument: `Ignored[T]` / `Required[T]` type annotations do the same
   thing as `ignore=`/`require=`, inline in the signature.
+
+## Digesting third-party / custom types
+
+Three mechanisms, in precedence order (highest first):
+
+1. `fleche.digest.add_hook((MyType, digest_fn))` — manual registration,
+   overrides everything else for that type.
+2. **Entry points** — installed packages register hooks in the `fleche`
+   entry-point group under the name `digest`; fleche loads them lazily the
+   first time `digest()` hits a value it can't handle. Notably,
+   [`fleche-ase`](https://pypi.org/project/fleche-ase/) ships hooks for
+   ASE's `Atoms`, `VibrationsData`, and `Calculator` types — `pip install
+   fleche-ase` and ASE objects digest correctly with no further setup, so
+   don't hand-roll digests for ASE types.
+3. A `__digest__` method on the class itself.
+
+Full details: `docs/digests/entry_points.rst` (the entry-point mechanism,
+fleche-ase, authoring your own plugin) and `docs/dev/custom_digests.rst`
+(writing good digest functions).
 
 Use `D(value)` (from `fleche`) to pass an existing digest/key as a lookup
 shortcut instead of the real value — the cache expands it back to the

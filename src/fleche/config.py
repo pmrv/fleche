@@ -10,7 +10,7 @@ following **lowercase** identifiers:
 ``"memory"``
     In-memory dict (:class:`~fleche.storage.ValueMemory` /
     :class:`~fleche.storage.CallMemory`).  No required keys.
-    Optional (value backend): ``remaining_depth`` (int, default ``0``).
+    Optional (value backend): ``remaining_depth`` (int, default ``1``).
 
 ``"void"``
     No-op — discards all data (:class:`~fleche.storage.ValueVoid` /
@@ -26,7 +26,7 @@ following **lowercase** identifiers:
     Optional: ``secret_key`` (list of hex strings) — HMAC-SHA256 signing keys;
     each element is a hex-encoded byte string (same format as ``FLECHE_SECRET_KEY``).
     If omitted, falls back to the ``FLECHE_SECRET_KEY`` environment variable.
-    Optional (value backend): ``remaining_depth`` (int, default ``0``).
+    Optional (value backend): ``remaining_depth`` (int, default ``1``).
 
 ``"cloudpickle"``
     Filesystem backend serialised with ``cloudpickle`` — handles more
@@ -35,7 +35,7 @@ following **lowercase** identifiers:
     Optional: ``compress`` (bool, default ``False``) — gzip-compress files.
     Optional: ``lock_timeout`` (float, default ``1.0``) — file-lock acquisition timeout (s).
     Optional: ``secret_key`` (list of hex strings) — same as ``"pickle"``.
-    Optional (value backend): ``remaining_depth`` (int, default ``0``).
+    Optional (value backend): ``remaining_depth`` (int, default ``1``).
 
 ``"dill"``
     Filesystem backend serialised with ``dill``.
@@ -43,7 +43,7 @@ following **lowercase** identifiers:
     Optional: ``compress`` (bool, default ``False``) — gzip-compress files.
     Optional: ``lock_timeout`` (float, default ``1.0``) — file-lock acquisition timeout (s).
     Optional: ``secret_key`` (list of hex strings) — same as ``"pickle"``.
-    Optional (value backend): ``remaining_depth`` (int, default ``0``).
+    Optional (value backend): ``remaining_depth`` (int, default ``1``).
 
 ``"bagofholding_hdf"``
     HDF5-backed storage via the ``bagofholding`` library
@@ -54,11 +54,12 @@ following **lowercase** identifiers:
     Optional: ``version_validator`` (str, default omitted) — version validation
     strategy passed to :meth:`bagofholding:bagofholding.h5.bag.H5Bag.load`.  One of ``"exact"``, ``"semantic-minor"``,
     ``"semantic-major"``, ``"none"``.  When omitted, bagofholding's default applies.
-    Optional: ``prefix_length`` (int, default ``None``) — when set, keys sharing
-    the first ``prefix_length`` characters are multiplexed as sibling groups
-    (named by the full key) into one file at ``root/{key[:prefix_length]}.h5``,
-    instead of each key getting its own file.  ``None`` keeps one file per key.
-    Optional (value backend): ``remaining_depth`` (int, default ``0``).
+    Optional: ``prefix_length`` (int, default ``2``) — keys sharing the first
+    ``prefix_length`` characters are multiplexed as sibling groups (named by
+    the full key) into one file at ``root/{key[:prefix_length]}.h5``, instead
+    of each key getting its own file.  ``None`` keeps one file per key
+    (only settable from Python; TOML cannot express ``None``).
+    Optional (value backend): ``remaining_depth`` (int, default ``1``).
 
 ``"sql"``
     SQL database via SQLAlchemy (:class:`~fleche.storage.Sql`).

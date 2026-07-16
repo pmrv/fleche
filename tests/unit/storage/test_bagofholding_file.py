@@ -8,7 +8,7 @@ from fleche.storage.bagofholding_file import BagOfHoldingH5FileBackend
 
 
 def test_load_corrupt_h5_file(tmp_path, caplog):
-    storage = BagOfHoldingH5FileBackend(tmp_path)
+    storage = BagOfHoldingH5FileBackend(tmp_path, prefix_length=None)
 
     key = Digest("corrupt_key")
     path = storage._path(key)
@@ -28,6 +28,12 @@ def test_version_validator_default_is_none(tmp_path):
     pytest.importorskip("bagofholding")
     s = BagOfHoldingH5FileBackend(tmp_path)
     assert s.version_validator is None
+
+
+def test_prefix_length_default_is_2(tmp_path):
+    pytest.importorskip("bagofholding")
+    s = BagOfHoldingH5FileBackend(tmp_path)
+    assert s.prefix_length == 2
 
 
 def test_version_validator_field_accepted(tmp_path):
@@ -78,7 +84,7 @@ def test_rebag_calls_load_and_save(tmp_path, monkeypatch):
     mock_h5bag.return_value.load.return_value = 99
     monkeypatch.setattr(boh_mod, "H5Bag", mock_h5bag)
 
-    s = BagOfHoldingH5FileBackend(tmp_path)
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=None)
     key = Digest("resave_key")
     s._path(key).write_bytes(b"dummy")
 
@@ -96,7 +102,7 @@ def test_rebag_skips_oserror(tmp_path, monkeypatch, caplog):
     mock_h5bag.return_value.load.side_effect = OSError("broken bag")
     monkeypatch.setattr(boh_mod, "H5Bag", mock_h5bag)
 
-    s = BagOfHoldingH5FileBackend(tmp_path)
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=None)
     key = Digest("broken_key")
     s._path(key).write_bytes(b"dummy")
 
@@ -132,7 +138,7 @@ def test_rebag_passes_skip_load_to_h5bag(tmp_path, monkeypatch):
     mock_h5bag.return_value.load.return_value = 1
     monkeypatch.setattr(boh_mod, "H5Bag", mock_h5bag)
 
-    s = BagOfHoldingH5FileBackend(tmp_path)
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=None)
     key = Digest("rebag_skip_load_key")
     s._path(key).write_bytes(b"dummy")
 
@@ -150,7 +156,7 @@ def test_rebag_default_validator_is_none(tmp_path, monkeypatch):
     mock_h5bag.return_value.load.return_value = 1
     monkeypatch.setattr(boh_mod, "H5Bag", mock_h5bag)
 
-    s = BagOfHoldingH5FileBackend(tmp_path)
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=None)
     key = Digest("default_key")
     s._path(key).write_bytes(b"dummy")
 
@@ -251,7 +257,7 @@ def test_multi_bag_different_prefix_lengths(tmp_path):
 
 def test_refix_from_per_key(tmp_path):
     pytest.importorskip("bagofholding")
-    s = BagOfHoldingH5FileBackend(tmp_path)
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=None)
     key1 = Digest("ab" + "1" * 62)
     key2 = Digest("cd" + "2" * 62)
     s.put("first", key1)
@@ -384,7 +390,7 @@ def test_refix_rejects_invalid(tmp_path):
 
 def test_reopen_after_refix(tmp_path):
     pytest.importorskip("bagofholding")
-    s = BagOfHoldingH5FileBackend(tmp_path)
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=None)
     key = _digest_like("a")
     s.put("value", key)
 
@@ -408,18 +414,18 @@ def test_init_rejects_prefix_mismatch_on_multi_bag_layout(tmp_path):
     with pytest.raises(ValueError, match="prefix_length"):
         BagOfHoldingH5FileBackend(tmp_path, prefix_length=4)
     with pytest.raises(ValueError, match="prefix_length"):
-        BagOfHoldingH5FileBackend(tmp_path)
+        BagOfHoldingH5FileBackend(tmp_path, prefix_length=None)
     BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)  # matching layout is fine
 
 
 def test_init_rejects_prefix_on_per_key_layout(tmp_path):
     pytest.importorskip("bagofholding")
-    s = BagOfHoldingH5FileBackend(tmp_path)
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=None)
     s.put("value", _digest_like("a"))
 
     with pytest.raises(ValueError, match="prefix_length"):
         BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
-    BagOfHoldingH5FileBackend(tmp_path)  # matching layout is fine
+    BagOfHoldingH5FileBackend(tmp_path, prefix_length=None)  # matching layout is fine
 
 
 def test_init_check_ignores_unrelated_files(tmp_path):
@@ -428,7 +434,7 @@ def test_init_check_ignores_unrelated_files(tmp_path):
     (tmp_path / ".hidden").write_text("not fleche's")
     (tmp_path / "ab.h5.lock").write_text("")
 
-    BagOfHoldingH5FileBackend(tmp_path)
+    BagOfHoldingH5FileBackend(tmp_path, prefix_length=None)
     BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
 
 

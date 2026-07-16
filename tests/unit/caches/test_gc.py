@@ -82,58 +82,65 @@ def test_gc_returns_evicted_keys(gc_cache):
 # ---- Tests below exercise destructuring-specific reachability behaviour ----
 
 
-def test_gc_keeps_destructured_subtree(clean_cache):
+@pytest.fixture
+def split_cache():
+    """A Cache that destructures down to scalar leaves (remaining_depth=0),
+    so every sub-key exists as its own entry for reachability checks."""
+    return Cache(values=ValueMemory({}, remaining_depth=0), calls=CallMemory({}))
+
+
+def test_gc_keeps_destructured_subtree(split_cache):
     """A call referencing a nested list must keep every key in its subtree."""
     call = Call(name="f", arguments={"xs": [1, [2, 3]]}, result=[4, 5])
-    clean_cache.save(call)
+    split_cache.save(call)
 
-    keys_before = set(clean_cache.values.list())
-    evicted = clean_cache.gc()
+    keys_before = set(split_cache.values.list())
+    evicted = split_cache.gc()
 
     assert evicted == set(), (
         "GC should retain the root and every transitive destructured sub-key. "
         f"Evicted: {evicted}; before: {keys_before}"
     )
-    assert set(clean_cache.values.list()) == keys_before
+    assert set(split_cache.values.list()) == keys_before
 
 
-def test_gc_keeps_shared_subtree_referenced_by_one_call(clean_cache):
+def test_gc_keeps_shared_subtree_referenced_by_one_call(split_cache):
     """A leaf shared between two structures stays alive if any parent is reachable."""
     shared = [2, 3]
     call = Call(name="f", arguments={"xs": [1, shared]}, result=None)
-    clean_cache.save(call)
+    split_cache.save(call)
 
     # Save another structure directly referencing `shared`, then orphan it
     # (no call points to it).  The shared subtree is still referenced by the
     # live call, so GC must keep it.
-    other_key = clean_cache.values.save([4, shared])
-    assert other_key in clean_cache.values.list()
+    other_key = split_cache.values.save([4, shared])
+    assert other_key in split_cache.values.list()
 
-    evicted = clean_cache.gc()
+    evicted = split_cache.gc()
 
     assert other_key in evicted, "Orphaned top-level container should be evicted"
     # The shared [2, 3] leaf and its scalar children must survive
     shared_key = digest([2, 3])
-    assert shared_key in clean_cache.values.list()
-    assert digest(2) in clean_cache.values.list()
-    assert digest(3) in clean_cache.values.list()
+    assert shared_key in split_cache.values.list()
+    assert digest(2) in split_cache.values.list()
+    assert digest(3) in split_cache.values.list()
 
 
-def test_gc_evicts_deeply_unreachable_structure(clean_cache):
+def test_gc_evicts_deeply_unreachable_structure(split_cache):
     """A whole orphan tree — root and every descendant — should be swept."""
     # Seed a reachable call so the cache isn't entirely empty.
-    clean_cache.save(Call(name="live", arguments={"x": 42}, result=0))
-    reachable_before = set(clean_cache.values.list())
+    split_cache.save(Call(name="live", arguments={"x": 42}, result=0))
+    reachable_before = set(split_cache.values.list())
 
-    orphan_root = clean_cache.values.save([[10, 20], [30, 40]])
+    orphan_root = split_cache.values.save([[10, 20], [30, 40]])
     orphan_leaf_only = digest(10)
-    assert orphan_root in clean_cache.values.list()
-    assert orphan_leaf_only in clean_cache.values.list()
+    assert orphan_root in split_cache.values.list()
+    assert orphan_leaf_only in split_cache.values.list()
 
-    evicted = clean_cache.gc()
+    evicted = split_cache.gc()
 
     # Everything that was only reachable from `orphan_root` is gone.
     assert orphan_root in evicted
     assert orphan_leaf_only in evicted
     # Previously-live keys still present.
-    assert reachable_before.issubset(set(clean_cache.values.list()))
+    assert reachable_before.issubset(set(split_cache.values.list()))

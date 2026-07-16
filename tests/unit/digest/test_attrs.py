@@ -197,7 +197,9 @@ class DestructuringMemory(DestructuringMixin, ValueMixin, MemoryBackend):
 
 @pytest.fixture
 def ds():
-    return DestructuringMemory(storage={})
+    # remaining_depth=0 (full splitting) so raw stored records expose the
+    # Digested* structure these tests assert on.
+    return DestructuringMemory(storage={}, remaining_depth=0)
 
 
 def test_attrs_destructuring_roundtrip(ds):
