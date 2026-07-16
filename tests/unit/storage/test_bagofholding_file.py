@@ -8,7 +8,7 @@ from fleche.storage.bagofholding_file import BagOfHoldingH5FileBackend
 
 
 def test_load_corrupt_h5_file(tmp_path, caplog):
-    storage = BagOfHoldingH5FileBackend(tmp_path, prefix_length=None)
+    storage = BagOfHoldingH5FileBackend(tmp_path, prefix_length=0)
 
     key = Digest("corrupt_key")
     path = storage._path(key)
@@ -84,8 +84,8 @@ def test_rebag_calls_load_and_save(tmp_path, monkeypatch):
     mock_h5bag.return_value.load.return_value = 99
     monkeypatch.setattr(boh_mod, "H5Bag", mock_h5bag)
 
-    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=None)
-    key = Digest("resave_key")
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=0)
+    key = Digest("a" * 64)
     s._path(key).write_bytes(b"dummy")
 
     s.rebag(version_validator="none")
@@ -102,8 +102,8 @@ def test_rebag_skips_oserror(tmp_path, monkeypatch, caplog):
     mock_h5bag.return_value.load.side_effect = OSError("broken bag")
     monkeypatch.setattr(boh_mod, "H5Bag", mock_h5bag)
 
-    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=None)
-    key = Digest("broken_key")
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=0)
+    key = Digest("b" * 64)
     s._path(key).write_bytes(b"dummy")
 
     with caplog.at_level(logging.WARNING, logger="fleche.storage.bagofholding_file"):
@@ -138,8 +138,8 @@ def test_rebag_passes_skip_load_to_h5bag(tmp_path, monkeypatch):
     mock_h5bag.return_value.load.return_value = 1
     monkeypatch.setattr(boh_mod, "H5Bag", mock_h5bag)
 
-    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=None)
-    key = Digest("rebag_skip_load_key")
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=0)
+    key = Digest("c" * 64)
     s._path(key).write_bytes(b"dummy")
 
     s.rebag()
@@ -156,8 +156,8 @@ def test_rebag_default_validator_is_none(tmp_path, monkeypatch):
     mock_h5bag.return_value.load.return_value = 1
     monkeypatch.setattr(boh_mod, "H5Bag", mock_h5bag)
 
-    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=None)
-    key = Digest("default_key")
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=0)
+    key = Digest("d" * 64)
     s._path(key).write_bytes(b"dummy")
 
     s.rebag()
@@ -257,80 +257,133 @@ def test_multi_bag_different_prefix_lengths(tmp_path):
 
 def test_refix_from_per_key(tmp_path):
     pytest.importorskip("bagofholding")
-    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=None)
-    key1 = Digest("ab" + "1" * 62)
-    key2 = Digest("cd" + "2" * 62)
-    s.put("first", key1)
-    s.put("second", key2)
+    import h5py
+
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=0)
+    keys = [
+        Digest("ab" + "1" * 62),
+        Digest("ab" + "2" * 62),
+        Digest("cd" + "3" * 62),
+        Digest("cd" + "4" * 62),
+    ]
+    for i, key in enumerate(keys):
+        s.put(f"value{i}", key)
 
     s.refix(2)
 
     assert s.prefix_length == 2
-    assert not (tmp_path / key1).exists()
-    assert not (tmp_path / key2).exists()
     assert {p.name for p in tmp_path.glob("*.h5")} == {"ab.h5", "cd.h5"}
-    assert s.get(key1) == "first"
-    assert s.get(key2) == "second"
+    for key in keys:
+        assert not (tmp_path / key).exists()
+    with h5py.File(tmp_path / "ab.h5", "r") as f:
+        assert set(f.keys()) == {keys[0], keys[1]}  # siblings share one file
+    for i, key in enumerate(keys):
+        assert s.get(key) == f"value{i}"
 
 
 def test_refix_to_per_key(tmp_path):
     pytest.importorskip("bagofholding")
     s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
-    key1 = Digest("ab" + "1" * 62)
-    key2 = Digest("ab" + "2" * 62)
-    s.put("first", key1)
-    s.put("second", key2)
+    keys = [
+        Digest("ab" + "1" * 62),
+        Digest("ab" + "2" * 62),
+        Digest("cd" + "3" * 62),
+    ]
+    for i, key in enumerate(keys):
+        s.put(f"value{i}", key)
 
-    s.refix(None)
+    s.refix(0)
 
-    assert s.prefix_length is None
+    assert s.prefix_length == 0
     assert not list(tmp_path.glob("*.h5"))
-    assert (tmp_path / key1).is_file()
-    assert (tmp_path / key2).is_file()
-    assert s.get(key1) == "first"
-    assert s.get(key2) == "second"
+    for i, key in enumerate(keys):
+        assert (tmp_path / key).is_file()
+        assert s.get(key) == f"value{i}"
 
 
-def test_refix_between_prefixes(tmp_path):
+def test_refix_splits_bags(tmp_path):
     pytest.importorskip("bagofholding")
+    import h5py
+
     s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
-    key1 = Digest("ab" + "1" * 62)
-    key2 = Digest("ab" + "2" * 62)
-    s.put("first", key1)
-    s.put("second", key2)
+    keys = [
+        Digest("ab11" + "1" * 60),
+        Digest("ab11" + "2" * 60),
+        Digest("ab22" + "3" * 60),
+    ]
+    for i, key in enumerate(keys):
+        s.put(f"value{i}", key)
+    assert {p.name for p in tmp_path.glob("*.h5")} == {"ab.h5"}
 
     s.refix(4)
 
-    assert s.prefix_length == 4
     assert {p.name for p in tmp_path.glob("*.h5")} == {"ab11.h5", "ab22.h5"}
+    with h5py.File(tmp_path / "ab11.h5", "r") as f:
+        assert set(f.keys()) == {keys[0], keys[1]}
+    for i, key in enumerate(keys):
+        assert s.get(key) == f"value{i}"
+
+
+def test_refix_merges_bags(tmp_path):
+    pytest.importorskip("bagofholding")
+    import h5py
+
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=4)
+    keys = [
+        Digest("ab11" + "1" * 60),
+        Digest("ab22" + "2" * 60),
+        Digest("cd11" + "3" * 60),
+    ]
+    for i, key in enumerate(keys):
+        s.put(f"value{i}", key)
+    assert len(list(tmp_path.glob("*.h5"))) == 3
+
+    s.refix(2)
+
+    assert {p.name for p in tmp_path.glob("*.h5")} == {"ab.h5", "cd.h5"}
+    with h5py.File(tmp_path / "ab.h5", "r") as f:
+        assert set(f.keys()) == {keys[0], keys[1]}  # merged into one file
+    for i, key in enumerate(keys):
+        assert s.get(key) == f"value{i}"
+
+
+def test_refix_noop_does_not_touch_filesystem(tmp_path, monkeypatch):
+    pytest.importorskip("bagofholding")
+    import fleche.storage.bagofholding_file as boh_mod
+
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    key1 = s.put("first")
+    key2 = s.put("second")
+    before = sorted((p.name, p.stat().st_mtime_ns, p.stat().st_size) for p in tmp_path.iterdir())
+
+    saves = []
+    monkeypatch.setattr(
+        boh_mod.H5Bag, "save", staticmethod(lambda value, path: saves.append(path))
+    )
+
+    s.refix(2)
+
+    assert not saves
+    after = sorted((p.name, p.stat().st_mtime_ns, p.stat().st_size) for p in tmp_path.iterdir())
+    assert after == before
     assert s.get(key1) == "first"
     assert s.get(key2) == "second"
 
 
-def test_refix_noop(tmp_path):
-    pytest.importorskip("bagofholding")
-    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
-    key = _digest_like("a")
-    s.put("value", key)
-
-    s.refix(2)
-
-    assert s.prefix_length == 2
-    assert s.get(key) == "value"
-
-
 def test_refix_unlinks_old_bags_as_soon_as_drained(tmp_path, monkeypatch):
-    """Each old bag must be gone before the next one's entries are copied,
-    so disk usage never balloons beyond one bag's worth of duplicates."""
+    """Each old bag must be gone before the next one\'s entries are copied,
+    so disk usage never balloons beyond one bag\'s worth of duplicates."""
     pytest.importorskip("bagofholding")
     import fleche.storage.bagofholding_file as boh_mod
     from pathlib import Path
 
     s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
     key1 = Digest("ab" + "1" * 62)
-    key2 = Digest("cd" + "2" * 62)
+    key2 = Digest("ab" + "2" * 62)
+    key3 = Digest("cd" + "3" * 62)
     s.put("first", key1)
     s.put("second", key2)
+    s.put("third", key3)
 
     real_save = boh_mod.H5Bag.save
     bags_at_save = {}
@@ -344,13 +397,15 @@ def test_refix_unlinks_old_bags_as_soon_as_drained(tmp_path, monkeypatch):
     s.refix(4)
 
     # bags are drained in sorted order, so ab.h5 must already be unlinked by
-    # the time cd.h5's entry is copied into the new layout
-    assert "ab.h5" not in bags_at_save[str(key2)]
-    assert s.get(key1) == "first"
-    assert s.get(key2) == "second"
+    # the time cd.h5\'s entry is copied into the new layout
+    assert "ab.h5" not in bags_at_save[str(key3)]
+    for key, value in ((key1, "first"), (key2, "second"), (key3, "third")):
+        assert s.get(key) == value
 
 
-def test_refix_keeps_unreadable_entries_in_old_layout(tmp_path, monkeypatch):
+def test_refix_raises_on_unreadable_entry(tmp_path, monkeypatch):
+    """Silently skipping an unreadable entry would leave a mixed root whose
+    *next* instantiation fails, so refix must alert the user immediately."""
     pytest.importorskip("bagofholding")
     import h5py
 
@@ -363,78 +418,176 @@ def test_refix_keeps_unreadable_entries_in_old_layout(tmp_path, monkeypatch):
     real_from_file = BagOfHoldingH5FileBackend._from_file
 
     def failing_from_file(self, path):
-        if path.name == key1:
+        if path.name == key2:
             raise KeyError(path)
         return real_from_file(self, path)
 
     monkeypatch.setattr(BagOfHoldingH5FileBackend, "_from_file", failing_from_file)
 
-    s.refix(None)
+    with pytest.raises(RuntimeError, match="consolidate"):
+        s.refix(0)
 
-    # the migrated sibling moved out and was dropped from the old bag, the
-    # unreadable entry stayed behind
-    assert (tmp_path / key2).is_file()
-    assert (tmp_path / "ab.h5").is_file()
+    # nothing was dropped from the old bag, the readable entry was copied
     with h5py.File(tmp_path / "ab.h5", "r") as f:
-        assert set(f.keys()) == {key1}
+        assert set(f.keys()) == {key1, key2}
+    assert (tmp_path / key1).is_file()
 
 
-def test_refix_rejects_invalid(tmp_path):
+def test_refix_rejects_unspecific_or_invalid_target(tmp_path):
     pytest.importorskip("bagofholding")
     s = BagOfHoldingH5FileBackend(tmp_path)
-    with pytest.raises(ValueError, match="prefix_length"):
-        s.refix(0)
-    with pytest.raises(ValueError, match="prefix_length"):
-        s.refix(65)
+    for bad in (None, -1, 65):
+        with pytest.raises(ValueError, match="prefix_length"):
+            s.refix(bad)
 
 
 def test_reopen_after_refix(tmp_path):
     pytest.importorskip("bagofholding")
-    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=None)
-    key = _digest_like("a")
-    s.put("value", key)
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=0)
+    key1 = s.put("first")
+    key2 = s.put("second")
 
     s.refix(2)
 
     reopened = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
-    assert reopened.get(key) == "value"
+    assert reopened.get(key1) == "first"
+    assert reopened.get(key2) == "second"
+
+
+def _mixed_root(tmp_path):
+    """A root holding two layouts at once: two keys in ab.h5 plus one per-key file."""
+    s2 = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    key1 = Digest("ab" + "1" * 62)
+    key2 = Digest("ab" + "2" * 62)
+    s2.put("first", key1)
+    s2.put("second", key2)
+    s0 = BagOfHoldingH5FileBackend(tmp_path, prefix_length=0, check_consistency=False)
+    key3 = Digest("ef" + "3" * 62)
+    s0.put("third", key3)
+    return key1, key2, key3
+
+
+def test_consolidate_repairs_mixed_root(tmp_path):
+    pytest.importorskip("bagofholding")
+    import h5py
+
+    key1, key2, key3 = _mixed_root(tmp_path)
+    # a mixed root cannot be opened normally with either prefix length
+    with pytest.raises(ValueError, match="prefix_length"):
+        BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    with pytest.raises(ValueError, match="prefix_length"):
+        BagOfHoldingH5FileBackend(tmp_path, prefix_length=0)
+
+    s = BagOfHoldingH5FileBackend.consolidate(tmp_path, prefix_length=2)
+
+    assert s.prefix_length == 2
+    assert {p.name for p in tmp_path.glob("*.h5")} == {"ab.h5", "ef.h5"}
+    assert not (tmp_path / key3).exists()
+    with h5py.File(tmp_path / "ab.h5", "r") as f:
+        assert set(f.keys()) == {key1, key2}
+    for key, value in ((key1, "first"), (key2, "second"), (key3, "third")):
+        assert s.get(key) == value
+
+
+def test_consolidate_on_uniform_root(tmp_path):
+    pytest.importorskip("bagofholding")
+    s2 = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    key1 = s2.put("first")
+    key2 = s2.put("second")
+
+    s = BagOfHoldingH5FileBackend.consolidate(tmp_path, prefix_length=4)
+
+    assert s.prefix_length == 4
+    assert s.get(key1) == "first"
+    assert s.get(key2) == "second"
+
+
+def test_blind_instance_sees_only_its_own_layout(tmp_path):
+    pytest.importorskip("bagofholding")
+    key1, key2, key3 = _mixed_root(tmp_path)
+
+    s2 = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2, check_consistency=False)
+    s0 = BagOfHoldingH5FileBackend(tmp_path, prefix_length=0, check_consistency=False)
+
+    assert set(s2.list()) == {key1, key2}
+    assert set(s0.list()) == {key3}
+    assert not s2.contains(key3)
+    assert not s0.contains(key1)
+
+
+def test_check_consistency_false_requires_explicit_prefix(tmp_path):
+    pytest.importorskip("bagofholding")
+    with pytest.raises(ValueError, match="explicit prefix_length"):
+        BagOfHoldingH5FileBackend(tmp_path, prefix_length=None, check_consistency=False)
+
+
+def test_infer_prefix_length_from_existing_files(tmp_path):
+    pytest.importorskip("bagofholding")
+    s4 = BagOfHoldingH5FileBackend(tmp_path / "four", prefix_length=4)
+    key = s4.put("value")
+    s0 = BagOfHoldingH5FileBackend(tmp_path / "zero", prefix_length=0)
+    key0 = s0.put("value")
+
+    inferred4 = BagOfHoldingH5FileBackend(tmp_path / "four", prefix_length=None)
+    inferred0 = BagOfHoldingH5FileBackend(tmp_path / "zero", prefix_length=None)
+
+    assert inferred4.prefix_length == 4
+    assert inferred4.get(key) == "value"
+    assert inferred0.prefix_length == 0
+    assert inferred0.get(key0) == "value"
+
+
+def test_infer_prefix_length_empty_root_uses_default(tmp_path):
+    pytest.importorskip("bagofholding")
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=None)
+    assert s.prefix_length == 2
+
+
+def test_infer_prefix_length_mixed_root_raises(tmp_path):
+    pytest.importorskip("bagofholding")
+    _mixed_root(tmp_path)
+    with pytest.raises(ValueError, match="consolidate"):
+        BagOfHoldingH5FileBackend(tmp_path, prefix_length=None)
 
 
 def test_init_rejects_invalid_prefix_length(tmp_path):
     pytest.importorskip("bagofholding")
-    with pytest.raises(ValueError, match="prefix_length"):
-        BagOfHoldingH5FileBackend(tmp_path, prefix_length=0)
+    for bad in (-1, 65):
+        with pytest.raises(ValueError, match="prefix_length"):
+            BagOfHoldingH5FileBackend(tmp_path, prefix_length=bad)
 
 
 def test_init_rejects_prefix_mismatch_on_multi_bag_layout(tmp_path):
     pytest.importorskip("bagofholding")
     s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
-    s.put("value", _digest_like("a"))
+    s.put("first")
+    s.put("second")
 
     with pytest.raises(ValueError, match="prefix_length"):
         BagOfHoldingH5FileBackend(tmp_path, prefix_length=4)
     with pytest.raises(ValueError, match="prefix_length"):
-        BagOfHoldingH5FileBackend(tmp_path, prefix_length=None)
+        BagOfHoldingH5FileBackend(tmp_path, prefix_length=0)
     BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)  # matching layout is fine
 
 
 def test_init_rejects_prefix_on_per_key_layout(tmp_path):
     pytest.importorskip("bagofholding")
-    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=None)
-    s.put("value", _digest_like("a"))
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=0)
+    s.put("first")
+    s.put("second")
 
     with pytest.raises(ValueError, match="prefix_length"):
         BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
-    BagOfHoldingH5FileBackend(tmp_path, prefix_length=None)  # matching layout is fine
+    BagOfHoldingH5FileBackend(tmp_path, prefix_length=0)  # matching layout is fine
 
 
 def test_init_check_ignores_unrelated_files(tmp_path):
     pytest.importorskip("bagofholding")
-    (tmp_path / "notes.txt").write_text("not fleche's")
-    (tmp_path / ".hidden").write_text("not fleche's")
+    (tmp_path / "notes.txt").write_text("not fleche\'s")
+    (tmp_path / ".hidden").write_text("not fleche\'s")
     (tmp_path / "ab.h5.lock").write_text("")
 
-    BagOfHoldingH5FileBackend(tmp_path, prefix_length=None)
+    BagOfHoldingH5FileBackend(tmp_path, prefix_length=0)
     BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
 
 

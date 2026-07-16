@@ -1,6 +1,5 @@
-import copy
 import itertools
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace, InitVar
 from pathlib import Path
 from typing import Any, Literal, Iterable
 import logging
@@ -26,116 +25,173 @@ with ImportAlarm(
 
 VersionValidator = Literal["exact", "semantic-minor", "semantic-major", "none"]
 
+_DEFAULT_PREFIX_LENGTH = 2
 
-def _validate_prefix_length(prefix_length: int | None) -> None:
-    if prefix_length is not None and not 1 <= prefix_length <= DIGEST_LENGTH:
+
+def _validate_prefix_length(prefix_length: Any) -> None:
+    if not isinstance(prefix_length, int) or not 0 <= prefix_length <= DIGEST_LENGTH:
         raise ValueError(
-            f"prefix_length must be None or between 1 and {DIGEST_LENGTH}, "
-            f"got {prefix_length}!"
+            f"prefix_length must be an integer between 0 (one file per key) and "
+            f"{DIGEST_LENGTH}, got {prefix_length!r}!"
         )
+
+
+def _observed_prefix_lengths(root: Path) -> set[int]:
+    """Prefix lengths of all fleche-written files in *root* (``0`` = per-key).
+
+    Multi-bag files are named ``{prefix}.h5`` and per-key files by the full
+    digest, so the prefix length a file was written with can be read off its
+    name.  Files this backend never writes (locks, dotfiles, anything else)
+    are ignored.
+    """
+    observed = set()
+    if not root.is_dir():
+        return observed
+    for p in root.iterdir():
+        if not p.is_file() or p.name.startswith(".") or p.name.endswith(".lock"):
+            continue
+        if p.name.endswith(".h5"):
+            observed.add(len(p.name) - len(".h5"))
+        elif len(p.name) == DIGEST_LENGTH:
+            observed.add(0)
+    return observed
 
 
 @dataclass(frozen=True)
 class BagOfHoldingH5FileBackend(FileStorage):
     version_validator: VersionValidator | None = None
-    # When set, keys sharing the first `prefix_length` characters are multiplexed as
-    # sibling groups (named by the full key) into one file at root/{prefix}.h5, instead
-    # of each key getting its own file.  `None` keeps one file per key.
-    prefix_length: int | None = 2
+    # Keys sharing the first `prefix_length` characters are multiplexed as sibling
+    # groups (named by the full key) into one file at root/{prefix}.h5, instead of
+    # each key getting its own file.  `0` keeps one file per key; `None` infers the
+    # length from the files already in root (falling back to the default on an
+    # empty root), so it is always an int after construction.
+    prefix_length: int | None = _DEFAULT_PREFIX_LENGTH
+    # Init-only: skip the check that `prefix_length` matches the files already in
+    # root.  Only allowed together with an explicit `prefix_length`; the storage
+    # then blindly operates on files of exactly that length, ignoring all others —
+    # this is how `refix`/`consolidate` address one layout of a mixed root.
+    check_consistency: InitVar[bool] = True
 
     @bagofholding_alarm
-    def __post_init__(self):
+    def __post_init__(self, check_consistency: bool = True):
         if hasattr(super(), "__post_init__"):
             super().__post_init__()
-        _validate_prefix_length(self.prefix_length)
-        self._check_prefix_consistency()
+        if self.prefix_length is None:
+            if not check_consistency:
+                raise ValueError(
+                    "check_consistency=False requires an explicit prefix_length!"
+                )
+            object.__setattr__(self, "prefix_length", self._infer_prefix_length())
+        else:
+            _validate_prefix_length(self.prefix_length)
+            if check_consistency:
+                self._check_prefix_consistency()
+
+    def _infer_prefix_length(self) -> int:
+        observed = _observed_prefix_lengths(self.root)
+        if len(observed) > 1:
+            raise ValueError(
+                f"Cannot infer prefix_length: files in {self.root} mix prefix "
+                f"lengths {sorted(observed)} (0 = one file per key); repair with "
+                f"{type(self).__name__}.consolidate()."
+            )
+        return observed.pop() if observed else _DEFAULT_PREFIX_LENGTH
 
     def _check_prefix_consistency(self) -> None:
         """Raise :class:`ValueError` if files already in :attr:`root` were
-        written with a different prefix length.
+        written with a different prefix length."""
+        others = _observed_prefix_lengths(self.root) - {self.prefix_length}
+        if others:
+            raise ValueError(
+                f"prefix_length={self.prefix_length} does not match existing "
+                f"files in {self.root} written with prefix length(s) "
+                f"{sorted(others)} (0 = one file per key); open the storage "
+                f"with the matching prefix_length and call "
+                f"refix({self.prefix_length}) to migrate, or use "
+                f"{type(self).__name__}.consolidate() to unify a mixed root."
+            )
 
-        Multi-bag files are named ``{prefix}.h5`` and per-key files by the
-        full digest, so the prefix length a file was written with can be read
-        off its name.  Files this backend never writes (locks, dotfiles,
-        anything else) are ignored.
-        """
-        if not self.root.is_dir():
-            return
-        for p in self.root.iterdir():
-            if not p.is_file() or p.name.startswith(".") or p.name.endswith(".lock"):
-                continue
-            if p.name.endswith(".h5"):
-                observed = len(p.name) - len(".h5")
-            elif len(p.name) == DIGEST_LENGTH:
-                observed = None
-            else:
-                continue
-            if observed != self.prefix_length:
-                raise ValueError(
-                    f"prefix_length={self.prefix_length} does not match "
-                    f"{p.name!r} in {self.root}, which was written with "
-                    f"prefix_length={observed}; open the storage with "
-                    f"prefix_length={observed} and call "
-                    f"refix({self.prefix_length}) to migrate it."
-                )
-
-    def refix(self, prefix_length: int | None) -> None:
+    def refix(self, prefix_length: int) -> None:
         """Re-shard every stored entry to a new prefix length, in place.
 
-        Originals are deleted as soon as their entries are copied into the
-        new layout, keeping the transient extra disk usage bounded by a
-        single entry (per-key mode) or a single bag file (multi-bag mode):
-        per-key files are unlinked right after their entry is copied, and old
-        bag files are unlinked whole as soon as all of their entries are
-        copied out — deleting groups one by one would return no disk space,
-        because HDF5 files do not shrink.  Afterwards this instance's
-        :attr:`prefix_length` is updated so all subsequent operations use the
-        new layout.  The migration is not atomic: if interrupted, no data is
-        lost, but entries remain split across both layouts and must be
-        consolidated by hand before the storage can be opened again.
+        The target must be explicit: an integer between ``0`` (one file per
+        key) and :data:`~fleche.digest.DIGEST_LENGTH`.  Originals are deleted
+        as soon as their entries are copied into the new layout, keeping the
+        transient extra disk usage bounded by a single entry (per-key mode)
+        or a single bag file (multi-bag mode): per-key files are unlinked
+        right after their entry is copied, and old bag files are unlinked
+        whole as soon as all of their entries are copied out — deleting
+        groups one by one would return no disk space, because HDF5 files do
+        not shrink.  Afterwards this instance's :attr:`prefix_length` is
+        updated so all subsequent operations use the new layout.
+
+        The migration is not atomic.  An unreadable entry raises
+        :class:`RuntimeError` immediately — silently skipping it would make
+        the *next* instantiation fail its consistency check instead — and an
+        interrupted or aborted run leaves both layouts present (no data is
+        lost).  :meth:`consolidate` repairs such a mixed root; entries
+        already present in the target layout are skipped, so re-running a
+        migration never re-copies work already done.
         """
         _validate_prefix_length(prefix_length)
         if prefix_length == self.prefix_length:
             return
-        # A twin of this storage addressing the new layout.  copy.copy skips
-        # __init__ (unlike dataclasses.replace), because the consistency check
-        # in __post_init__ would reject the root while both layouts coexist.
-        target = copy.copy(self)
-        object.__setattr__(target, "prefix_length", prefix_length)
+        target = replace(self, prefix_length=prefix_length, check_consistency=False)
         # sorted() forces full collection before the first write, so files the
-        # twin creates in the same root can never leak into the iteration, and
-        # makes keys sharing a bag contiguous so each bag can be dropped as
-        # soon as its last entry is copied out.
+        # target creates in the same root can never leak into the iteration,
+        # and makes keys sharing a bag contiguous so each bag can be dropped
+        # as soon as its last entry is copied out.
         keys = sorted(self.list())
-        if self.prefix_length is None:
+        if self.prefix_length == 0:
             for key in keys:
                 with self._operation_context(key):
-                    try:
-                        value = self.get(key)
-                    except KeyError:
-                        logger.warning(
-                            "Skipping unreadable entry %s during prefix-length migration", key
-                        )
-                        continue
-                    target.put(value, key)
+                    self._refix_one(target, key)
                     self._evict(key)
         else:
             for bag_path, bag_keys in itertools.groupby(keys, key=self._bag_file):
                 migrated = []
                 for key in bag_keys:
                     with self._operation_context(key):
-                        try:
-                            value = self.get(key)
-                        except KeyError:
-                            logger.warning(
-                                "Skipping unreadable entry %s during prefix-length migration",
-                                key,
-                            )
-                            continue
-                        target.put(value, key)
+                        self._refix_one(target, key)
                         migrated.append(key)
                 self._drop_bag(bag_path, migrated)
         object.__setattr__(self, "prefix_length", prefix_length)
+
+    def _refix_one(self, target: "BagOfHoldingH5FileBackend", key: Digest) -> None:
+        """Copy one entry into *target*'s layout, skipping entries a previous
+        (aborted) migration already moved."""
+        if target._contains(key):
+            return
+        try:
+            value = self.get(key)
+        except KeyError:
+            raise RuntimeError(
+                f"Aborting refix: entry {key} could not be read. The storage "
+                f"now contains both layouts; remove or restore the unreadable "
+                f"entry, then repair with {type(self).__name__}.consolidate()."
+            ) from None
+        target.put(value, key)
+
+    @classmethod
+    def consolidate(
+        cls, root: Path | str, prefix_length: int = _DEFAULT_PREFIX_LENGTH, **kwargs
+    ) -> "BagOfHoldingH5FileBackend":
+        """Open *root* regardless of which prefix lengths it contains, migrate
+        everything to *prefix_length*, and return the resulting storage.
+
+        This is the repair constructor for roots holding several layouts at
+        once — e.g. after an interrupted :meth:`refix`, or after entries were
+        written with different ``prefix_length`` settings.  Every other
+        prefix length found in *root* is converted via :meth:`refix`.
+        """
+        _validate_prefix_length(prefix_length)
+        root = Path(root)
+        probe = cls(root, prefix_length=prefix_length, check_consistency=False, **kwargs)
+        for length in sorted(_observed_prefix_lengths(probe.root) - {prefix_length}):
+            cls(root, prefix_length=length, check_consistency=False, **kwargs).refix(
+                prefix_length
+            )
+        return cls(root, prefix_length=prefix_length, **kwargs)
 
     def _drop_bag(self, bag_path: Path, migrated: list[Digest]) -> None:
         """Remove the *migrated* keys from a bag file, unlinking the file
@@ -184,17 +240,17 @@ class BagOfHoldingH5FileBackend(FileStorage):
     def _path(self, key: str) -> Path:
         """Path to hand to :class:`H5Bag`: the plain per-key file, or the
         composite ``file.h5/{key}`` group path in multi-bag mode."""
-        if self.prefix_length is None:
+        if self.prefix_length == 0:
             return super()._path(key)
         return self._bag_file(key) / key
 
     def _lock_path(self, key: str) -> Path:
-        if self.prefix_length is None:
+        if self.prefix_length == 0:
             return super()._lock_path(key)
         return Path(f"{self._bag_file(key)}.lock")
 
     def _contains(self, key: Digest) -> bool:
-        if self.prefix_length is None:
+        if self.prefix_length == 0:
             return super()._contains(key)
         file_path = self._bag_file(key)
         if not file_path.is_file():
@@ -206,7 +262,7 @@ class BagOfHoldingH5FileBackend(FileStorage):
             return False
 
     def _evict(self, key: Digest) -> None:
-        if self.prefix_length is None:
+        if self.prefix_length == 0:
             return super()._evict(key)
         file_path = self._bag_file(key)
         lock_path = self._lock_path(key)
@@ -222,12 +278,23 @@ class BagOfHoldingH5FileBackend(FileStorage):
                 lock_path.unlink(missing_ok=True)
 
     def list(self) -> Iterable[Digest]:
-        if self.prefix_length is None:
-            return super().list()
+        # Only files of exactly this instance's prefix length are considered,
+        # so a storage constructed with check_consistency=False can address one
+        # layout of a mixed root without seeing the others' files.
         self.root.mkdir(parents=True, exist_ok=True)
+        if self.prefix_length == 0:
+            return [
+                Digest(p.name)
+                for p in self.root.iterdir()
+                if p.is_file() and len(p.name) == DIGEST_LENGTH
+            ]
         keys = []
         for p in self.root.iterdir():
-            if not p.is_file() or not p.name.endswith(".h5"):
+            if (
+                not p.is_file()
+                or not p.name.endswith(".h5")
+                or len(p.name) - len(".h5") != self.prefix_length
+            ):
                 continue
             try:
                 with h5py.File(p, "r") as f:

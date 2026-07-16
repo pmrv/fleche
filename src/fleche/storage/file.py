@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Iterable, Any, Generator
 
 from .base import StorageBackend
-from ..digest import Digest
+from ..digest import digest, Digest
 
 logger = logging.getLogger("fleche.storage")
 
@@ -78,7 +78,9 @@ class FileStorage(StorageBackend):
         self._path(key).unlink(missing_ok=True)
         self._lock_path(key).unlink(missing_ok=True)
 
-    def put(self, value: Any, key: Digest) -> Digest:
+    def put(self, value: Any, key: Digest | None = None) -> Digest:
+        if key is None:
+            key = digest(value)
         with filelock.FileLock(self._lock_path(key), timeout=self.lock_timeout):
             self._to_file(value, self._path(key))
         return key
