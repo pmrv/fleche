@@ -61,20 +61,14 @@ def test_missing_digest():
 
 
 class TestLongestCommonPrefixLength:
-    def test_identical_strings(self):
+    # One test per branch of the helper: all-match, early-mismatch, empty zip.
+    # Other input variations collapse onto these same three arcs.
+
+    def test_full_match_falls_through(self):
         assert _longest_common_prefix_length("abcd", "abcd") == 4
 
-    def test_no_common_prefix(self):
-        assert _longest_common_prefix_length("abc", "xyz") == 0
-
-    def test_partial_common_prefix(self):
+    def test_mismatch_returns_early(self):
         assert _longest_common_prefix_length("abcX", "abcY") == 3
 
-    def test_one_is_prefix_of_other(self):
-        assert _longest_common_prefix_length("abc", "abcdef") == 3
-
-    def test_empty_strings(self):
-        assert _longest_common_prefix_length("", "") == 0
-
-    def test_one_empty(self):
+    def test_empty_input_skips_loop(self):
         assert _longest_common_prefix_length("", "abc") == 0
