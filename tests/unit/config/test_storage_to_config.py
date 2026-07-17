@@ -64,7 +64,7 @@ def test_bagofholding_h5file_prefix_length_default(tmp_path):
     assert cfg["prefix_length"] == 2
 
 
-@pytest.mark.parametrize("prefix_length", [None, 2, 4])
+@pytest.mark.parametrize("prefix_length", [0, 2, 4])
 def test_bagofholding_h5file_prefix_length_roundtrip(tmp_path, prefix_length):
     pytest.importorskip("bagofholding")
     root = tmp_path / "values"
@@ -74,6 +74,18 @@ def test_bagofholding_h5file_prefix_length_roundtrip(tmp_path, prefix_length):
     reconstructed = storage_from_config(cfg, "value")
     assert isinstance(reconstructed, storage.ValueBagOfHoldingH5File)
     assert reconstructed.prefix_length == prefix_length
+
+
+def test_bagofholding_h5file_prefix_length_none_roundtrips_resolved(tmp_path):
+    """prefix_length=None resolves at construction, so configs round-trip the
+    resolved integer rather than the un-inferable None."""
+    pytest.importorskip("bagofholding")
+    root = tmp_path / "values"
+    original = storage.ValueBagOfHoldingH5File(root=root, prefix_length=None)
+    cfg = storage_to_config(original)
+    assert cfg["prefix_length"] == 2
+    reconstructed = storage_from_config(cfg, "value")
+    assert reconstructed.prefix_length == 2
 
 
 def test_sql():

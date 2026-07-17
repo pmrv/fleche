@@ -242,8 +242,9 @@ Key descriptions
 
 ``prefix_length``
     (int, default ``2``) — *``bagofholding_hdf`` only.*  Multiplexes keys
-    into shared HDF5 files instead of one file per key; see
-    `Multi-bagging (bagofholding_hdf)`_ below.
+    into shared HDF5 files instead of one file per key; ``0`` keeps one file
+    per key, ``None`` infers the length from the files already in ``root``.
+    See `Multi-bagging (bagofholding_hdf)`_ below.
 
 ``remaining_depth``
     (int, default ``1``) — destructuring depth; see `Destructuring`_ below.
@@ -251,7 +252,7 @@ Key descriptions
 Multi-bagging (``bagofholding_hdf``)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-With ``prefix_length = None``, ``"bagofholding_hdf"`` writes one ``.h5``
+With ``prefix_length = 0``, ``"bagofholding_hdf"`` writes one ``.h5``
 file per cache key — fine for a handful of large arrays, but a lot of small
 files if you cache many small results, since every file carries HDF5's fixed
 per-file overhead and each ``put``/``get`` opens and closes its own file.
@@ -277,12 +278,26 @@ Since digests are SHA256 hex strings, the default ``prefix_length = 2``
 spreads keys across up to 256 files (``"00.h5"`` .. ``"ff.h5"``); smaller
 values group more keys per file (fewer files, more contention per file),
 larger values group fewer. Digests are already uniformly distributed, so
-bucket sizes stay roughly even without any extra bookkeeping.
-``prefix_length`` is fixed for the lifetime of a ``root`` directory —
-changing it on an existing cache leaves old bags where they are and starts
-writing new ones under the new scheme, so existing entries become
-unreachable. Set it to ``None`` (only possible when constructing the backend
-from Python — TOML cannot express ``None``) for the one-file-per-key layout.
+bucket sizes stay roughly even without any extra bookkeeping. Set it to
+``0`` for the one-file-per-key layout, or to ``None`` (only possible when
+constructing the backend from Python — TOML cannot express ``None``) to
+infer the length from the files already in ``root``, falling back to the
+default on an empty root.
+
+``prefix_length`` is checked against the files already present in ``root``
+when the storage is constructed: opening an existing cache directory with a
+different ``prefix_length`` raises a ``ValueError`` instead of silently
+leaving the old entries unreachable.  To re-shard an existing cache, open it
+with its current ``prefix_length`` and call
+:meth:`~fleche.storage.bagofholding_file.BagOfHoldingH5FileBackend.refix`
+with the new length (``0`` for per-key), which moves every stored entry into
+the new layout and returns a storage addressing it (the original instance is
+left untouched and sees the drained old layout).  A root left with *several*
+layouts — e.g. by an interrupted ``refix`` — cannot be opened normally;
+repair it with
+:meth:`~fleche.storage.bagofholding_file.BagOfHoldingH5FileBackend.consolidate`,
+which migrates every prefix length it finds to a target length and returns
+the resulting storage.
 
 Destructuring
 ^^^^^^^^^^^^^

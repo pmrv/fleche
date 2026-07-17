@@ -57,8 +57,14 @@ following **lowercase** identifiers:
     Optional: ``prefix_length`` (int, default ``2``) — keys sharing the first
     ``prefix_length`` characters are multiplexed as sibling groups (named by
     the full key) into one file at ``root/{key[:prefix_length]}.h5``, instead
-    of each key getting its own file.  ``None`` keeps one file per key
-    (only settable from Python; TOML cannot express ``None``).
+    of each key getting its own file.  ``0`` keeps one file per key; ``None``
+    (only settable from Python; TOML cannot express ``None``) infers the
+    length from the files already present in ``root``, falling back to the
+    default on an empty root.  The value is checked against existing files at
+    construction; re-shard a live storage with
+    :meth:`~fleche.storage.bagofholding_file.BagOfHoldingH5FileBackend.refix`
+    or repair a mixed root with
+    :meth:`~fleche.storage.bagofholding_file.BagOfHoldingH5FileBackend.consolidate`.
     Optional (value backend): ``remaining_depth`` (int, default ``1``).
 
 ``"sql"``
