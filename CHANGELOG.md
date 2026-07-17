@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.20.0](https://github.com/pmrv/fleche/compare/0.19.2...0.20.0) (2026-07-17)
+
+
+### Features
+
+* **storage:** default prefix_length=2 and remaining_depth=1 ([#749](https://github.com/pmrv/fleche/issues/749)) ([7be2504](https://github.com/pmrv/fleche/commit/7be25041a6088e1002bd3c10d7c29a4b95be514b))
+* **storage:** refix() re-sharding and prefix-length layout validation for HDF5 backend ([#748](https://github.com/pmrv/fleche/issues/748)) ([efb1c84](https://github.com/pmrv/fleche/commit/efb1c84d66ad05faaaa6ca6224eb66e4cb6e64ec))
+* **storage:** support fixed prefix-length multi-bagging for HDF5 backend ([#746](https://github.com/pmrv/fleche/issues/746)) ([7eb272a](https://github.com/pmrv/fleche/commit/7eb272a5590940aaf84d3ed28eba2a50f434c64a))
+
 ## [0.19.2](https://github.com/pmrv/fleche/compare/0.19.1...0.19.2) (2026-07-06)
 
 
