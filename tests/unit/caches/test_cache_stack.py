@@ -31,14 +31,6 @@ def test_cache_stack_load_hit():
     assert result == call
 
 
-def test_cache_stack_load_miss():
-    c1 = Mock()
-    c1.load.side_effect = KeyError
-    c2 = Mock()
-    c2.load.side_effect = KeyError
-    CacheStack((c1, c2))
-
-
 def test_cachestack_query_bottom_to_top_and_dedupe():
     """CacheStack.query should query bottom-to-top and deduplicate results.
 
@@ -130,30 +122,6 @@ def test_cache_stack_load_transfers_call():
     assert res_call.result == "result"
 
     # Now c1 SHOULD have it due to automatic transfer
-    assert c1.contains(key)
-    assert c1.load(key).result == "result"
-
-
-def test_cache_stack_load_lazy_transfers_call():
-    """Verify that a load from a higher cache is transferred to the base cache."""
-    # Setup two caches
-    c1 = Cache(ValueMemory({}), CallMemory({}))
-    c2 = Cache(ValueMemory({}), CallMemory({}))
-
-    call = Call(name="test", arguments={"x": 1}, result="result")
-    key = call.to_lookup_key()
-
-    # Save call to c2 only
-    c2.save(call)
-
-    stack = CacheStack((c1, c2))
-
-    # Load from stack (always lazy now)
-    lazy_call = stack.load(key)
-
-    assert lazy_call.result == "result"
-
-    # Now c1 SHOULD have it
     assert c1.contains(key)
     assert c1.load(key).result == "result"
 
