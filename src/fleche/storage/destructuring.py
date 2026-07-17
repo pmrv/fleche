@@ -26,8 +26,43 @@ class Digested(ABC):
     def mend(self, storage: 'DestructuringMixin'): ...
 
     @classmethod
+    def sunder(cls, intern: Callable[[Any], tuple[Any, int | float]], value: Any):
+        """Recurse into *value*'s children via *intern*, then decide inline-vs-store.
+
+        Shared template for every concrete subclass: enumerate child slots (via
+        :meth:`_slots`), intern each one, and either return the rebuilt plain value
+        (:meth:`_rebuild_plain`, no child became a Digest back-reference) or a *cls*
+        wrapper around the interned children (:meth:`_rebuild_digest`, at least one did).
+        """
+        slots = cls._slots(value)
+        if slots is None:
+            # opt-out: value resists destructuring, treat as opaque
+            return value, float("inf")
+        if not slots:
+            return value, 0
+
+        labels, raw_children = zip(*slots)
+        children, depths = zip(*(intern(v) for v in raw_children))
+        depth = 1 + max(depths)
+
+        if all(not isinstance(c, digest.Digest) for c in children):
+            return cls._rebuild_plain(value, labels, children), depth
+        return cls._rebuild_digest(value, labels, children), depth
+
+    @classmethod
     @abstractmethod
-    def sunder(cls, intern: Callable[[Any], tuple[Any, int | float]], value: Any): ...
+    def _slots(cls, value: Any) -> list[tuple[Any, Any]] | None:
+        """Enumerate ``(label, child)`` pairs to recurse into, or ``None`` to opt out."""
+
+    @classmethod
+    @abstractmethod
+    def _rebuild_plain(cls, value: Any, labels: tuple, children: tuple) -> Any:
+        """Rebuild the result when no interned child became a Digest back-reference."""
+
+    @classmethod
+    @abstractmethod
+    def _rebuild_digest(cls, value: Any, labels: tuple, children: tuple) -> Any:
+        """Build the *cls* wrapper when some interned child became a Digest back-reference."""
 
     @staticmethod
     def get(storage, key):
@@ -47,14 +82,16 @@ class DigestedIterable(Digested):
         return type(self.items)(map(lambda v: self.get(storage, v), self.items))
 
     @classmethod
-    def sunder(cls, intern: Callable[[Any], tuple[Any, int | float]], value: list | tuple):
-        children, depths = zip(*(intern(v) for v in value))
-        depth = 1 + max(depths)
-        items = type(value)(children)
-        if all(not isinstance(r, digest.Digest) for r in items):
-            # intern did do anything to our children because we're out of depth, return them verbatim
-            return items, depth
-        return cls(items), depth
+    def _slots(cls, value: list | tuple) -> list[tuple[None, Any]]:
+        return [(None, v) for v in value]
+
+    @classmethod
+    def _rebuild_plain(cls, value: list | tuple, labels: tuple, children: tuple) -> list | tuple:
+        return type(value)(children)
+
+    @classmethod
+    def _rebuild_digest(cls, value: list | tuple, labels: tuple, children: tuple) -> 'DigestedIterable':
+        return cls(type(value)(children))
 
 
 @dataclass
@@ -69,15 +106,19 @@ class DigestedDict(Digested):
                     for k, v in self.items.items()}
 
     @classmethod
-    def sunder(cls, intern: Callable[[Any], tuple[Any, int | float]], value: dict):
-        kk, k_depths = zip(*(intern(k) for k in value))
-        vv, v_depths = zip(*(intern(v) for v in value.values()))
-        depth = 1 + max(max(k_depths), max(v_depths))
-        items = dict(zip(kk, vv))
-        if all(not isinstance(r, digest.Digest) for r in (*items.keys(), *items.values())):
-            # intern did not do anything to our children because we're out of depth, return them verbatim
-            return items, depth
-        return cls(items), depth
+    def _slots(cls, value: dict) -> list[tuple[None, Any]]:
+        # keys and values interned as one flat sequence; _rebuild_* re-pairs them by
+        # position using len(value) as the key/value split point.
+        return [(None, k) for k in value] + [(None, v) for v in value.values()]
+
+    @classmethod
+    def _rebuild_plain(cls, value: dict, labels: tuple, children: tuple) -> dict:
+        n = len(value)
+        return dict(zip(children[:n], children[n:]))
+
+    @classmethod
+    def _rebuild_digest(cls, value: dict, labels: tuple, children: tuple) -> 'DigestedDict':
+        return cls(cls._rebuild_plain(value, labels, children))
 
 
 @dataclass
@@ -118,23 +159,21 @@ class DigestedFields(Digested):
     def _field_items(value: Any) -> list[tuple[str, Any]]: ...
 
     @classmethod
-    def sunder(cls, intern: Callable[[Any], tuple[Any, int | float]], value: Any):
+    def _slots(cls, value: Any) -> list[tuple[str, Any]] | None:
         try:
-            items = cls._field_items(value)
+            return cls._field_items(value)
         except (AttributeError, TypeError):
-            return value, float("inf")
+            return None
 
-        if not items:
-            return value, 0
+    @classmethod
+    def _rebuild_plain(cls, value: Any, labels: tuple, children: tuple) -> Any:
+        # no field was replaced by a Digest -> value is already the right result,
+        # unlike DigestedIterable/DigestedDict there is no plain container to rebuild into
+        return value
 
-        names, field_values = zip(*items)
-        children, depths = zip(*(intern(v) for v in field_values))
-        depth = 1 + max(depths)
-
-        if all(not isinstance(c, digest.Digest) for c in children):
-            return value, depth
-
-        return cls(type(value), dict(zip(names, children))), depth
+    @classmethod
+    def _rebuild_digest(cls, value: Any, labels: tuple, children: tuple) -> 'DigestedFields':
+        return cls(type(value), dict(zip(labels, children)))
 
 
 @dataclass
