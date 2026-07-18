@@ -356,6 +356,23 @@ def test_builtin_metadata_keys_schema(cls, expected_keys):
     assert cls().keys == expected_keys
 
 
+@pytest.mark.parametrize("cls", [Runtime, Environment, Git], ids=["runtime", "environment", "git"])
+def test_builtin_metadata_pre_post_keys_match_schema(cls):
+    """The keys ``pre``/``post`` actually emit must match the declared ``_keys`` schema.
+
+    Refs #738: before this, each built-in declared its schema twice — once as
+    the literal dict keys returned by ``pre``/``post``, once in the ``keys``
+    property — with nothing checking the two stayed in sync. Now ``keys``
+    reads the single ``_keys`` class attribute, but that only helps if a test
+    pins ``_keys`` against what ``pre``/``post`` emit at runtime.
+    """
+    instance = cls()
+    call = Call(name="test", arguments={})
+    pre = instance.pre(call)
+    post = instance.post(pre, call)
+    assert set(pre) | set(post) == set(cls._keys)
+
+
 def test_tags_keys_derives_from_tag_dict():
     """``Tags.keys`` reflects the tag dict passed at construction time.
 
