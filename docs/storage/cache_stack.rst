@@ -53,7 +53,7 @@ context-manager shortcut ``cache(new_cache, stack=True)``:
 
     >>> from fleche import cache
 
-    >>> cache(remote_cache)  # sticky: remote_cache becomes the active cache
+    >>> _ = cache(remote_cache)  # sticky: remote_cache becomes the active cache
 
     >>> with cache(local_cache, stack=True):
     ...     # local_cache is pushed on top: it is now stack[0] (checked and
