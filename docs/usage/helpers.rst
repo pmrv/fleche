@@ -11,7 +11,16 @@ The following methods are added to the decorated function:
 ``.call(*args, **kwargs)``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Returns a ``Call`` object corresponding to the provided arguments. This object contains metadata about the call, such as the function name, arguments, and version, but does not execute the function.
+Returns a ``Call`` object representing the cache key for the given arguments.
+The object carries the function name, module, version, and the arguments that
+participate in the key — but it is **not** a complete record of the call:
+
+- Arguments annotated with :class:`~fleche.call.Ignored` are stripped from
+  ``call.arguments``.
+- ``version``, ``module``, and ``code_digest`` are set to ``None`` when the
+  corresponding ``hash_*`` flag is ``False``.
+
+The function is not executed.
 
 ``.digest(*args, **kwargs)``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -75,11 +84,13 @@ Optionally pre-applies ``*args`` and ``**kwargs`` via :func:`functools.partial`.
    >>> result = bound(1, 2)
    >>> assert result == 3
 
-   >>> # Pre-apply arguments
+   >>> # Pre-apply arguments — bind inside the context, call outside it
    >>> with cache("memory"):
    ...     bound_partial = add.bind(1, 2)
-   ...     result = bound_partial()   # equivalent to add(1, 2) in the frozen context
-   ...     assert result == 3
+   ...
+   >>> # bound_partial carries the "memory" cache even though the context has exited
+   >>> result = bound_partial()   # equivalent to add(1, 2) in the frozen context
+   >>> assert result == 3
 
 See :class:`~fleche.state.BoundWrapper` for the full API, including pickling support.
 
