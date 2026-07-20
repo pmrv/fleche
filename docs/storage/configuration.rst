@@ -218,8 +218,10 @@ Key descriptions
     (bool, default ``false``) — gzip-compress each stored file.
 
 ``lock_timeout``
-    (float, default ``1.0``) — maximum seconds to wait for a concurrent write lock
-    before attempting a read anyway.
+    (float, default ``1.0``) — maximum seconds to wait to acquire a file lock.
+    On reads, if the timeout expires the lock is skipped and the read proceeds
+    with a ``WARNING`` logged.  On writes, if the timeout expires
+    ``filelock.Timeout`` is raised.
 
 ``secret_key``
     (list of hex strings) — HMAC-SHA256 signing keys for tamper detection;
