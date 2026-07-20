@@ -158,18 +158,21 @@ arguments that template requires:
    root = "~/.fleche"           # ...values at root/values, calls at root/calls
 
    [sqlbacked]
-   template = "sql"             # cloudpickle values + SQL call storage
-   root = "~/.fleche/values"
-   url = "sqlite:///~/.fleche/calls.db"
+   template = "sql"             # filesystem values + SQL call storage
+   root = "~/.fleche"           # values at root/values,
+                                # calls at sqlite:///root/calls.db
 
 The symmetric templates — ``memory``, ``void``, ``pickle``, ``cloudpickle``,
 ``dill``, ``bagofholding_hdf`` — use one backend for both ``values`` and
 ``calls``; the filesystem ones split a single ``root`` into ``root/values``
-and ``root/calls``. The ``sql`` template pairs ``cloudpickle`` values with
-SQL call storage. ``read_only`` / ``max_size`` may be combined with a
-template. Anything a template does not cover — mixed backends, or per-backend
-options such as ``compress`` or ``secret_key`` — uses the explicit
-``values`` / ``calls`` form below instead.
+and ``root/calls``. The ``sql`` template stores values on the filesystem
+under ``root/values`` and calls in a SQL database. Its value backend defaults
+to ``cloudpickle`` (override with ``values = "pickle"`` etc.) and its call
+``url`` defaults to ``sqlite:///root/calls.db`` (override with an explicit
+``url``). ``read_only`` / ``max_size`` may be combined with a template.
+Anything a template does not cover — mixed backends, or per-backend options
+such as ``compress`` or ``secret_key`` — uses the explicit ``values`` /
+``calls`` form below instead.
 
 The same config dicts can be built in Python and activated directly, e.g.
 ``cache({"template": "cloudpickle", "root": "~/.fleche"})``.

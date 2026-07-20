@@ -208,16 +208,37 @@ def test_template_cloudpickle(tmp_path):
     assert c.calls.root == (tmp_path / "calls").resolve()
 
 
-def test_template_sql(tmp_path):
+def test_template_sql_derives_url_from_root(tmp_path):
+    """The sql template derives value root and SQLite url from a single root."""
     pytest.importorskip("sqlalchemy")
     pytest.importorskip("cloudpickle")
-    url = f"sqlite:///{tmp_path / 'calls.db'}"
-    c = cache_from_config({"template": "sql", "root": str(tmp_path / "values"), "url": url})
+    c = cache_from_config({"template": "sql", "root": str(tmp_path)})
     assert isinstance(c, Cache)
+    # Value backend defaults to cloudpickle, stored under root/values.
+    assert isinstance(c.values, storage.ValuePickleFile)
+    assert c.values.root == (tmp_path / "values").resolve()
+    # Call storage is SQL with a url derived from the root.
+    assert isinstance(c.calls, storage.Sql)
+    assert c.calls.url == f"sqlite:///{tmp_path / 'calls.db'}"
+
+
+def test_template_sql_url_override(tmp_path):
+    """An explicit url overrides the derived default."""
+    pytest.importorskip("sqlalchemy")
+    pytest.importorskip("cloudpickle")
+    url = f"sqlite:///{tmp_path / 'custom.db'}"
+    c = cache_from_config({"template": "sql", "root": str(tmp_path), "url": url})
+    assert isinstance(c.calls, storage.Sql)
+    assert c.calls.url == url
+
+
+def test_template_sql_value_backend_override(tmp_path):
+    """The sql template pairs with any filesystem value backend, not just cloudpickle."""
+    pytest.importorskip("sqlalchemy")
+    c = cache_from_config({"template": "sql", "root": str(tmp_path), "values": "pickle"})
     assert isinstance(c.values, storage.ValuePickleFile)
     assert c.values.root == (tmp_path / "values").resolve()
     assert isinstance(c.calls, storage.Sql)
-    assert c.calls.url == url
 
 
 def test_template_with_read_only():

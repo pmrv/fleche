@@ -175,14 +175,18 @@ predefined shape, plus the (required) storage arguments that shape needs::
     root = "~/.fleche"          # -> values at root/values, calls at root/calls
 
     [sqlbacked]
-    template = "sql"            # cloudpickle values + SQL call storage
-    root = "~/.fleche/values"
-    url = "sqlite:///~/.fleche/calls.db"
+    template = "sql"            # filesystem values + SQL call storage
+    root = "~/.fleche"          # -> values at root/values,
+                                #    calls at sqlite:///root/calls.db
 
 Symmetric templates (``memory``, ``void``, ``pickle``, ``cloudpickle``,
 ``dill``, ``bagofholding_hdf``) use the same backend for both values and
 calls; the filesystem ones split ``root`` into ``root/values`` and
-``root/calls``.  ``read_only``/``max_size`` may be combined with a template.
+``root/calls``.  The ``sql`` template stores values on the filesystem under
+``root/values`` and calls in a SQL database; its value backend defaults to
+``cloudpickle`` (override with ``values = "pickle"`` etc.) and its call
+``url`` defaults to ``sqlite:///root/calls.db`` (override with an explicit
+``url``).  ``read_only``/``max_size`` may be combined with a template.
 Anything a template does not cover (mixed backends, per-backend options like
 ``compress`` or ``secret_key``) is expressed with an explicit
 ``values``/``calls`` config instead.
@@ -487,12 +491,21 @@ def _template_symmetric_file(style: str) -> "Callable[..., tuple[dict[str, Any],
     return build
 
 
-def _template_value_plus_sql(value_style: str) -> "Callable[..., tuple[dict[str, Any], dict[str, Any]]]":
-    """Filesystem values under ``root`` paired with SQL call storage at ``url``."""
-    def build(root: str, url: str) -> "tuple[dict[str, Any], dict[str, Any]]":
+def _template_sql(default_value_style: str = "cloudpickle") -> "Callable[..., tuple[dict[str, Any], dict[str, Any]]]":
+    """Filesystem values paired with SQL call storage, both derived from ``root``.
+
+    Values go to ``root/values`` using the ``values`` backend (any filesystem
+    value backend — ``pickle``/``cloudpickle``/``dill``/``bagofholding_hdf`` —
+    defaulting to ``cloudpickle``).  The SQL connection ``url`` defaults to a
+    SQLite database at ``root/calls.db`` but may be overridden explicitly.
+    """
+    def build(
+        root: str, values: str = default_value_style, url: "str | None" = None
+    ) -> "tuple[dict[str, Any], dict[str, Any]]":
+        base = Path(root)
         return (
-            {"type": value_style, "root": str(Path(root))},
-            {"type": "sql", "url": url},
+            {"type": values, "root": str(base / "values")},
+            {"type": "sql", "url": url if url is not None else f"sqlite:///{base / 'calls.db'}"},
         )
     return build
 
@@ -508,7 +521,7 @@ _CACHE_TEMPLATES: "dict[str, Callable[..., tuple[dict[str, Any], dict[str, Any]]
     "cloudpickle": _template_symmetric_file("cloudpickle"),
     "dill": _template_symmetric_file("dill"),
     "bagofholding_hdf": _template_symmetric_file("bagofholding_hdf"),
-    "sql": _template_value_plus_sql("cloudpickle"),
+    "sql": _template_sql(),
 }
 
 
@@ -567,9 +580,12 @@ def cache_from_config(d: "dict[str, Any] | list[dict[str, Any]]") -> caches.Base
       config.  Templates are a shorthand for the common cases: the symmetric
       backends (``memory``, ``void``, ``pickle``, ``cloudpickle``, ``dill``,
       ``bagofholding_hdf``) use one backend for both values and calls, and
-      ``sql`` pairs ``cloudpickle`` values with SQL call storage.  Filesystem
-      templates require a ``root``; ``sql`` requires ``root`` and ``url``.
-      ``read_only``/``max_size`` may be combined with a template.
+      ``sql`` pairs a filesystem value backend with SQL call storage.
+      Filesystem templates require a ``root``; the ``sql`` template requires a
+      ``root`` and optionally takes ``values`` (the value backend, default
+      ``cloudpickle``) and ``url`` (the SQL URL, default
+      ``sqlite:///root/calls.db``).  ``read_only``/``max_size`` may be
+      combined with a template.
     - A **dict** containing a ``max_size`` key creates a
       :class:`~fleche.caches.SizeLimitedCache`.
     - A **dict** containing ``read_only: true`` wraps the resulting cache in a
