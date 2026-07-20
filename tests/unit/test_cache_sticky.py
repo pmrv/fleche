@@ -136,6 +136,26 @@ def test_cache_no_args_returns_current():
     assert cache() is c
 
 
+def test_cache_accepts_config_dict():
+    """cache(dict) builds an ad-hoc cache via cache_from_config and activates it."""
+    with cache({"values": {"type": "memory"}, "calls": {"type": "memory"}}):
+        assert isinstance(cache(), Cache)
+
+
+def test_cache_accepts_template_dict():
+    """cache({'template': ...}) expands the template and activates it."""
+    with cache({"template": "memory"}):
+        active = cache()
+        assert isinstance(active, Cache)
+        assert isinstance(active.values, ValueMemory)
+
+
+def test_cache_accepts_config_list_as_stack():
+    """cache(list) builds a CacheStack via cache_from_config."""
+    with cache([{"template": "memory"}, {"template": "void"}]):
+        assert isinstance(cache(), CacheStack)
+
+
 # ---------------------------------------------------------------------------
 # Sticky meta() behaviour
 # ---------------------------------------------------------------------------

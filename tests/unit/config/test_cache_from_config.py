@@ -175,3 +175,93 @@ def test_cache_sql(tmp_path):
     assert isinstance(c, Cache)
     assert isinstance(c.calls, storage.Sql)
     assert c.calls.url == url
+
+
+# --- templates ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize("template", ["memory", "void"])
+def test_template_symmetric_transient(template):
+    c = cache_from_config({"template": template})
+    assert isinstance(c, Cache)
+    expected_value = {"memory": storage.ValueMemory, "void": storage.ValueVoid}[template]
+    expected_call = {"memory": storage.CallMemory, "void": storage.CallVoid}[template]
+    assert isinstance(c.values, expected_value)
+    assert isinstance(c.calls, expected_call)
+
+
+def test_template_pickle_splits_root(tmp_path):
+    c = cache_from_config({"template": "pickle", "root": str(tmp_path)})
+    assert isinstance(c, Cache)
+    assert isinstance(c.values, storage.ValuePickleFile)
+    assert isinstance(c.calls, storage.CallPickleFile)
+    # Values and calls live in distinct sub-directories under the shared root.
+    assert c.values.root == (tmp_path / "values").resolve()
+    assert c.calls.root == (tmp_path / "calls").resolve()
+
+
+def test_template_cloudpickle(tmp_path):
+    pytest.importorskip("cloudpickle")
+    c = cache_from_config({"template": "cloudpickle", "root": str(tmp_path)})
+    assert isinstance(c, Cache)
+    assert c.values.root == (tmp_path / "values").resolve()
+    assert c.calls.root == (tmp_path / "calls").resolve()
+
+
+def test_template_sql(tmp_path):
+    pytest.importorskip("sqlalchemy")
+    pytest.importorskip("cloudpickle")
+    url = f"sqlite:///{tmp_path / 'calls.db'}"
+    c = cache_from_config({"template": "sql", "root": str(tmp_path / "values"), "url": url})
+    assert isinstance(c, Cache)
+    assert isinstance(c.values, storage.ValuePickleFile)
+    assert c.values.root == (tmp_path / "values").resolve()
+    assert isinstance(c.calls, storage.Sql)
+    assert c.calls.url == url
+
+
+def test_template_with_read_only():
+    c = cache_from_config({"template": "memory", "read_only": True})
+    assert isinstance(c, ReadOnlyCache)
+    assert isinstance(c.cache, Cache)
+
+
+def test_template_with_max_size():
+    c = cache_from_config({"template": "memory", "max_size": 7})
+    assert isinstance(c, SizeLimitedCache)
+    assert c.max_size == 7
+
+
+def test_template_in_stack(tmp_path):
+    """Templates compose inside the list/pool recursion."""
+    c = cache_from_config(
+        [
+            {"template": "memory"},
+            {"template": "pickle", "root": str(tmp_path)},
+        ]
+    )
+    assert isinstance(c, CacheStack)
+    assert isinstance(c.stack[0], Cache)
+    assert isinstance(c.stack[1].values, storage.ValuePickleFile)
+
+
+def test_template_does_not_mutate_input(tmp_path):
+    cfg = {"template": "pickle", "root": str(tmp_path)}
+    original = dict(cfg)
+    cache_from_config(cfg)
+    assert cfg == original
+
+
+def test_template_unknown_raises():
+    with pytest.raises(ValueError, match="Unknown cache template"):
+        cache_from_config({"template": "does-not-exist"})
+
+
+def test_template_missing_required_arg_raises():
+    with pytest.raises(ValueError, match="Invalid arguments for cache template 'pickle'"):
+        cache_from_config({"template": "pickle"})
+
+
+def test_template_unexpected_arg_raises(tmp_path):
+    with pytest.raises(ValueError, match="Invalid arguments for cache template 'memory'"):
+        cache_from_config({"template": "memory", "root": str(tmp_path)})

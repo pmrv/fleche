@@ -144,6 +144,36 @@ You can define multiple cache configurations in the same file, each in its own s
 
 Each cache section must define two storage backends: ``values`` and ``calls``. ``values`` is used to store the results of function calls, and ``calls`` is used to store the function call details.
 
+Cache templates
+~~~~~~~~~~~~~~~
+
+Spelling out both backends is redundant for the common cases where they
+share a type. A section may instead name a ``template`` plus the storage
+arguments that template requires:
+
+.. code-block:: toml
+
+   [terse]
+   template = "cloudpickle"     # both backends cloudpickle...
+   root = "~/.fleche"           # ...values at root/values, calls at root/calls
+
+   [sqlbacked]
+   template = "sql"             # cloudpickle values + SQL call storage
+   root = "~/.fleche/values"
+   url = "sqlite:///~/.fleche/calls.db"
+
+The symmetric templates — ``memory``, ``void``, ``pickle``, ``cloudpickle``,
+``dill``, ``bagofholding_hdf`` — use one backend for both ``values`` and
+``calls``; the filesystem ones split a single ``root`` into ``root/values``
+and ``root/calls``. The ``sql`` template pairs ``cloudpickle`` values with
+SQL call storage. ``read_only`` / ``max_size`` may be combined with a
+template. Anything a template does not cover — mixed backends, or per-backend
+options such as ``compress`` or ``secret_key`` — uses the explicit
+``values`` / ``calls`` form below instead.
+
+The same config dicts can be built in Python and activated directly, e.g.
+``cache({"template": "cloudpickle", "root": "~/.fleche"})``.
+
 Storage backends
 ~~~~~~~~~~~~~~~~
 

@@ -99,6 +99,15 @@ calls.type = "cloudpickle"
 calls.root = "~/.cache/fleche/calls"
 ```
 
+For the common cases a section can instead name a `template` plus its
+required storage args — `template = "cloudpickle"` with a single `root`
+splits into `root/values` + `root/calls`; `memory`/`void`/`pickle`/`dill`/
+`bagofholding_hdf` work the same way, and `template = "sql"` pairs
+`cloudpickle` values (`root`) with SQL call storage (`url`). The same dicts
+work in Python via `cache({"template": "cloudpickle", "root": ".cache"})`.
+Anything a template doesn't cover (mixed backends, per-backend options)
+falls back to the explicit `values`/`calls` form below.
+
 Every cache section (`[persistent]` above) needs a `values` backend
 (stores function results) and a `calls` backend (stores call
 metadata/arguments) — see the backend table below for `type` options.
