@@ -16,7 +16,7 @@ Security can be enabled in two ways:
 
     export FLECHE_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_hex(32))')"
 
-The value must be a colon-separated list of hex-encoded byte strings (``[0-9a-f]+``).
+The value must be a colon-separated list of hex-encoded byte strings (``[0-9a-fA-F]+``).
 ``fleche`` decodes each segment to raw bytes before use.
 
 **Via config file** (``fleche.toml``):
