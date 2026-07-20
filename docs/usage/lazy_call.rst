@@ -17,7 +17,7 @@ When you call ``cache().load(key)`` or iterate over ``cache().query(...)``, you 
    ... def process(x):
    ...     return x * 2
    ...
-   >>> process(21)                   # populate the cache
+   >>> process(21)                   # populate the cache; returns 42
    >>> key = process.digest(21)      # SHA-256 digest for this call
 
    >>> # Default: returns a LazyCall — cheap, no deserialization yet
@@ -39,7 +39,7 @@ Parity with Call
 
 ``LazyCall`` is a drop-in stand-in for ``Call``:
 
-* **Digests**: ``digest(lazy_call)`` is identical to ``digest(original_call)``.
+* **Digests**: A ``LazyCall`` produces the same digest as the corresponding fully-loaded ``Call`` with identical field values.
 * **Lookup Keys**: ``lazy_call.to_lookup_key()`` returns the same key.
 * **Immutability**: ``LazyCall`` is a frozen dataclass — its fields cannot be reassigned after creation.
 
@@ -52,5 +52,5 @@ When lazy loading helps most
 -----------------------------
 
 1. **Browsing large caches**: When iterating over many calls via ``query()``, you can inspect names, digests, and metadata without deserializing any results.
-2. **Existence checks**: ``contains()`` uses lazy loading internally — it never deserializes a result just to confirm something is cached.
+2. **Existence checks**: ``contains()`` never deserializes a result — it queries the call index directly without touching value storage.
 3. **Selective access**: When you only need one or two arguments out of a call that stores many large objects.
