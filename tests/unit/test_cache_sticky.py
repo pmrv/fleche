@@ -152,7 +152,7 @@ def test_cache_accepts_template_dict():
 
 def test_cache_accepts_config_list_as_stack():
     """cache(list) builds a CacheStack via cache_from_config."""
-    with cache([{"template": "memory"}, {"template": "void"}]):
+    with cache([{"template": "memory"}, {"values": {"type": "void"}, "calls": {"type": "void"}}]):
         assert isinstance(cache(), CacheStack)
 
 

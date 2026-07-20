@@ -180,14 +180,17 @@ def test_cache_sql(tmp_path):
 # --- templates ---------------------------------------------------------------
 
 
-@pytest.mark.parametrize("template", ["memory", "void"])
-def test_template_symmetric_transient(template):
-    c = cache_from_config({"template": template})
+def test_template_memory():
+    c = cache_from_config({"template": "memory"})
     assert isinstance(c, Cache)
-    expected_value = {"memory": storage.ValueMemory, "void": storage.ValueVoid}[template]
-    expected_call = {"memory": storage.CallMemory, "void": storage.CallVoid}[template]
-    assert isinstance(c.values, expected_value)
-    assert isinstance(c.calls, expected_call)
+    assert isinstance(c.values, storage.ValueMemory)
+    assert isinstance(c.calls, storage.CallMemory)
+
+
+def test_template_void_is_not_a_template():
+    """`void` is reachable via cache('void'); it is intentionally not a template."""
+    with pytest.raises(ValueError, match="Unknown cache template"):
+        cache_from_config({"template": "void"})
 
 
 def test_template_pickle_splits_root(tmp_path):
@@ -211,11 +214,11 @@ def test_template_cloudpickle(tmp_path):
 def test_template_sql_derives_url_from_root(tmp_path):
     """The sql template derives value root and SQLite url from a single root."""
     pytest.importorskip("sqlalchemy")
-    pytest.importorskip("cloudpickle")
+    pytest.importorskip("bagofholding")
     c = cache_from_config({"template": "sql", "root": str(tmp_path)})
     assert isinstance(c, Cache)
-    # Value backend defaults to cloudpickle, stored under root/values.
-    assert isinstance(c.values, storage.ValuePickleFile)
+    # Value backend defaults to bagofholding_hdf, stored under root/values.
+    assert isinstance(c.values, storage.ValueBagOfHoldingH5File)
     assert c.values.root == (tmp_path / "values").resolve()
     # Call storage is SQL with a url derived from the root.
     assert isinstance(c.calls, storage.Sql)
@@ -225,9 +228,8 @@ def test_template_sql_derives_url_from_root(tmp_path):
 def test_template_sql_url_override(tmp_path):
     """An explicit url overrides the derived default."""
     pytest.importorskip("sqlalchemy")
-    pytest.importorskip("cloudpickle")
     url = f"sqlite:///{tmp_path / 'custom.db'}"
-    c = cache_from_config({"template": "sql", "root": str(tmp_path), "url": url})
+    c = cache_from_config({"template": "sql", "root": str(tmp_path), "values": "pickle", "url": url})
     assert isinstance(c.calls, storage.Sql)
     assert c.calls.url == url
 

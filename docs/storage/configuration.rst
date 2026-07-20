@@ -162,12 +162,12 @@ arguments that template requires:
    root = "~/.fleche"           # values at root/values,
                                 # calls at sqlite:///root/calls.db
 
-The symmetric templates — ``memory``, ``void``, ``pickle``, ``cloudpickle``,
-``dill``, ``bagofholding_hdf`` — use one backend for both ``values`` and
-``calls``; the filesystem ones split a single ``root`` into ``root/values``
-and ``root/calls``. The ``sql`` template stores values on the filesystem
-under ``root/values`` and calls in a SQL database. Its value backend defaults
-to ``cloudpickle`` (override with ``values = "pickle"`` etc.) and its call
+The symmetric templates — ``memory``, ``pickle``, ``cloudpickle``, ``dill``,
+``bagofholding_hdf`` — use one backend for both ``values`` and ``calls``; the
+filesystem ones split a single ``root`` into ``root/values`` and
+``root/calls``. The ``sql`` template stores values on the filesystem under
+``root/values`` and calls in a SQL database. Its value backend defaults to
+``bagofholding_hdf`` (override with ``values = "pickle"`` etc.) and its call
 ``url`` defaults to ``sqlite:///root/calls.db`` (override with an explicit
 ``url``). ``read_only`` / ``max_size`` may be combined with a template.
 Anything a template does not cover — mixed backends, or per-backend options

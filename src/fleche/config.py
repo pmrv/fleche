@@ -179,14 +179,14 @@ predefined shape, plus the (required) storage arguments that shape needs::
     root = "~/.fleche"          # -> values at root/values,
                                 #    calls at sqlite:///root/calls.db
 
-Symmetric templates (``memory``, ``void``, ``pickle``, ``cloudpickle``,
-``dill``, ``bagofholding_hdf``) use the same backend for both values and
-calls; the filesystem ones split ``root`` into ``root/values`` and
-``root/calls``.  The ``sql`` template stores values on the filesystem under
-``root/values`` and calls in a SQL database; its value backend defaults to
-``cloudpickle`` (override with ``values = "pickle"`` etc.) and its call
-``url`` defaults to ``sqlite:///root/calls.db`` (override with an explicit
-``url``).  ``read_only``/``max_size`` may be combined with a template.
+Symmetric templates (``memory``, ``pickle``, ``cloudpickle``, ``dill``,
+``bagofholding_hdf``) use the same backend for both values and calls; the
+filesystem ones split ``root`` into ``root/values`` and ``root/calls``.  The
+``sql`` template stores values on the filesystem under ``root/values`` and
+calls in a SQL database; its value backend defaults to ``bagofholding_hdf``
+(override with ``values = "pickle"`` etc.) and its call ``url`` defaults to
+``sqlite:///root/calls.db`` (override with an explicit ``url``).
+``read_only``/``max_size`` may be combined with a template.
 Anything a template does not cover (mixed backends, per-backend options like
 ``compress`` or ``secret_key``) is expressed with an explicit
 ``values``/``calls`` config instead.
@@ -491,13 +491,13 @@ def _template_symmetric_file(style: str) -> "Callable[..., tuple[dict[str, Any],
     return build
 
 
-def _template_sql(default_value_style: str = "cloudpickle") -> "Callable[..., tuple[dict[str, Any], dict[str, Any]]]":
+def _template_sql(default_value_style: str = "bagofholding_hdf") -> "Callable[..., tuple[dict[str, Any], dict[str, Any]]]":
     """Filesystem values paired with SQL call storage, both derived from ``root``.
 
     Values go to ``root/values`` using the ``values`` backend (any filesystem
     value backend — ``pickle``/``cloudpickle``/``dill``/``bagofholding_hdf`` —
-    defaulting to ``cloudpickle``).  The SQL connection ``url`` defaults to a
-    SQLite database at ``root/calls.db`` but may be overridden explicitly.
+    defaulting to ``bagofholding_hdf``).  The SQL connection ``url`` defaults to
+    a SQLite database at ``root/calls.db`` but may be overridden explicitly.
     """
     def build(
         root: str, values: str = default_value_style, url: "str | None" = None
@@ -516,7 +516,6 @@ def _template_sql(default_value_style: str = "cloudpickle") -> "Callable[..., tu
 # missing or unexpected key surfaces as a clear error (see cache_from_config).
 _CACHE_TEMPLATES: "dict[str, Callable[..., tuple[dict[str, Any], dict[str, Any]]]]" = {
     "memory": _template_symmetric_transient("memory"),
-    "void": _template_symmetric_transient("void"),
     "pickle": _template_symmetric_file("pickle"),
     "cloudpickle": _template_symmetric_file("cloudpickle"),
     "dill": _template_symmetric_file("dill"),
@@ -578,12 +577,12 @@ def cache_from_config(d: "dict[str, Any] | list[dict[str, Any]]") -> caches.Base
     - A **dict** containing a ``template`` key is expanded via a named template
       (see :data:`_CACHE_TEMPLATES`) into an equivalent ``values``/``calls``
       config.  Templates are a shorthand for the common cases: the symmetric
-      backends (``memory``, ``void``, ``pickle``, ``cloudpickle``, ``dill``,
+      backends (``memory``, ``pickle``, ``cloudpickle``, ``dill``,
       ``bagofholding_hdf``) use one backend for both values and calls, and
       ``sql`` pairs a filesystem value backend with SQL call storage.
       Filesystem templates require a ``root``; the ``sql`` template requires a
       ``root`` and optionally takes ``values`` (the value backend, default
-      ``cloudpickle``) and ``url`` (the SQL URL, default
+      ``bagofholding_hdf``) and ``url`` (the SQL URL, default
       ``sqlite:///root/calls.db``).  ``read_only``/``max_size`` may be
       combined with a template.
     - A **dict** containing a ``max_size`` key creates a
