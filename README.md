@@ -18,7 +18,7 @@ A persistent caching solution for arbitrary Python functions - like `lru_cache` 
 - **Query Support**: Search and retrieve cached results with metadata filtering
 - **Configurable**: Control what gets hashed (version, module, code, arguments)
 - **Multiple Backends**: File (pickle, cloudpickle, dill), SQLAlchemy, Bagofholding, and more
-- **Thread-Safe**: Safe for concurrent use; see `isolate=True` caveat below
+- **Thread-Safe**: Safe for use in multi-threaded environments
 - **Type-Aware**: Works seamlessly with NumPy, Pandas, and custom types
 
 ## Installation
@@ -130,8 +130,6 @@ call = compute.call(5)
     hash_code=False,     # Include function code in cache key
     require=None,        # Required argument for caching
     ignore=None,         # Arguments to ignore in cache key
-    isolate=False,       # Run function in an isolated temporary working directory
-                         # (not thread-safe — uses os.chdir, a process-wide call)
 )
 def my_function(x):
     return x * 2
