@@ -156,6 +156,21 @@ def test_cache_accepts_config_list_as_stack():
         assert isinstance(cache(), CacheStack)
 
 
+def test_cache_accepts_config_kwargs():
+    """cache(**kwargs) is shorthand for cache(dict(**kwargs))."""
+    with cache(template="memory"):
+        active = cache()
+        assert isinstance(active, Cache)
+        assert isinstance(active.values, ValueMemory)
+
+
+def test_cache_kwargs_and_positional_conflict():
+    """Passing both a positional cache and keyword config is an error."""
+    c = _make_cache()
+    with pytest.raises(TypeError):
+        cache(c, template="memory")
+
+
 # ---------------------------------------------------------------------------
 # Sticky meta() behaviour
 # ---------------------------------------------------------------------------
