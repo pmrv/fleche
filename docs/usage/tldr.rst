@@ -45,13 +45,15 @@ The essentials beyond that:
 
    from fleche import cache
 
-   cache("persistent")         # switch the active cache by config name
-   cache("void")               # turn caching off without touching code
+   # Cache switching — bare call is sticky (permanent); use as context manager for
+   # a temporary switch: `with cache("persistent"): ...`
+   cache("persistent")         # permanently switch the active cache by config name
+   cache("void")               # permanently turn caching off without touching code
 
    expensive.contains(1, 2)    # is this call cached?
    expensive.load(1, 2)        # fetch a result without executing (KeyError on miss)
    expensive.rerun(1, 2)       # force re-execution and overwrite the entry
-   expensive.query().table()   # all stored calls as a pandas DataFrame
+   expensive.query().table()   # stored calls for this function as a pandas DataFrame
 
 That is all you need for everyday use.  The rest of this section covers the
 helper methods in depth (:doc:`helpers`), lazy loading of large cached
