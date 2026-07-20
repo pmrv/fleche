@@ -32,7 +32,7 @@ You can use the convenience wrapper ``D`` to mark a string as a value digest:
     >>> result_b = func_b(D(value_digest))
     >>> assert result_b == 12
 
-Note the distinction between a **call lookup key** (returned by ``func.digest()``) and a **value digest** (the SHA256 of the Python object itself, obtained via ``fleche.digest.digest()``). ``D()`` works with value digests because it resolves arguments through the value storage.
+Note the distinction between a **call lookup key** (returned by ``func.digest(*args, **kwargs)``) and a **value digest** (the SHA256 of the Python object itself, obtained via ``fleche.digest.digest()``). ``D()`` works with value digests because it resolves arguments through the value storage.
 
 Behavior
 --------
