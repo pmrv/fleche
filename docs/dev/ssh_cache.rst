@@ -144,14 +144,16 @@ Three streams cross the SSH boundary:
 
   The logger name is constructed in
   :meth:`fleche.remote._SshConnection._open` from the SSH host string;
-  dots and ``@`` are substituted with ``_`` so the host name doesn't
-  fragment the logger hierarchy.  Because the name uses ``.`` as the
-  separator, each host's logger is a real child of ``fleche.remote``
-  and standard logger configuration propagates: setting
+  dots become ``_`` and ``@`` becomes ``_at_`` so the host name doesn't
+  fragment the logger hierarchy.  For example, ``user@bigpc.example.com``
+  produces ``fleche.remote.host.user_at_bigpc_example_com``.  Because
+  the name uses ``.`` as the separator, each host's logger is a real
+  child of ``fleche.remote`` and standard logger configuration
+  propagates: setting
   ``logging.getLogger("fleche.remote").setLevel(...)`` controls every
   per-host child, while
-  ``logging.getLogger("fleche.remote.host.bigpc_example_com")`` lets
-  you raise or silence one host independently.
+  ``logging.getLogger("fleche.remote.host.user_at_bigpc_example_com")``
+  lets you raise or silence one host independently.
 
 Wire protocol
 -------------
@@ -174,13 +176,13 @@ formatted traceback so the client at least sees what went wrong.
 Server-side dispatch
 ~~~~~~~~~~~~~~~~~~~~
 
-:func:`fleche.remote._dispatch` is an explicit ``if`` chain — one branch
-per :class:`~fleche.caches.BaseCache` method, plus ``info`` handled at
-the :func:`~fleche.remote.serve` level.  The explicit table is
-deliberate: it documents the full API surface, gives any future method
-addition a clear place to wire up server-side translation, and avoids
-giving remote callers reflective access to arbitrary attributes of the
-cache.
+:func:`fleche.remote._dispatch` is a single dict lookup into
+``_REMOTE_METHODS`` — one entry per :class:`~fleche.caches.BaseCache`
+method, plus ``info`` handled at the :func:`~fleche.remote.serve` level.
+The explicit table is deliberate: it documents the full API surface, gives
+any future method addition a clear place to wire up server-side
+translation, and avoids giving remote callers reflective access to
+arbitrary attributes of the cache.
 
 Two pieces need server-side translation rather than raw passthrough:
 
@@ -303,9 +305,9 @@ Diagnostics: the ``info`` RPC
 :func:`fleche.remote._server_info` is the introspection back-channel.
 It is the only method dispatched at the :func:`~fleche.remote.serve`
 level (alongside the data plane in :func:`~fleche.remote._dispatch`),
-because it needs access to two things the dispatcher doesn't have: the
-``cache_name`` the server was launched with, and the active cache from
-the :data:`fleche.state._CACHE` ``ContextVar``.
+because it needs access to ``cache_name`` — the ``--cache`` argument
+the server was launched with — which is not passed into
+:func:`~fleche.remote._dispatch`.
 
 It returns:
 
@@ -399,15 +401,18 @@ Adding a new RPC
 
 The path is short and entirely mechanical:
 
-1. Add a server-side branch in :func:`fleche.remote._dispatch` (or, if
-   the RPC needs server-only state like ``cache_name``, branch in
-   :func:`~fleche.remote.serve` itself the way ``info`` does).  Be
-   explicit about translating any cache-bound return value via
-   :func:`~fleche.remote._strip_cache`.
-2. Add a client method on :class:`~fleche.remote.SshCache` that calls
-   ``self._conn.call("method_name", *args)``.  If the response carries
-   :class:`~fleche.call.DigestedCall` instances, ``.fetch(self)`` them
-   back into client-bound :class:`~fleche.call.LazyCall`\\ s.
+1. Add a ``_RemoteMethod`` entry to ``_REMOTE_METHODS`` in
+   :mod:`fleche.remote` (or, if the RPC needs server-only state like
+   ``cache_name``, handle it in :func:`~fleche.remote.serve` itself
+   the way ``info`` does).  Be explicit about translating any
+   cache-bound return value via :func:`~fleche.remote._strip_cache`.
+2. Add a ``_ClientMethod`` entry to ``_CLIENT_METHODS``, setting
+   ``write``, ``unwrap``, and ``reject_message`` as needed.  Then add a
+   one-line method body on :class:`~fleche.remote.SshCache` that calls
+   ``self._rpc("method_name", *args)``.  If the response carries
+   :class:`~fleche.call.DigestedCall` instances, pass an ``unwrap``
+   callable that calls ``.fetch(self)`` to re-bind them as client-side
+   :class:`~fleche.call.LazyCall`\\ s.
 3. Add tests at both layers: a unit test that drives the new method
    through the in-process pipe, and (when it's worth it) an
    integration test that exercises it across the subprocess boundary.
