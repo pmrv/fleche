@@ -9,12 +9,20 @@ hold the same numeric value, and ``digest((1, 2)) != digest([1, 2])`` because th
 container type matters.  This page documents the deliberate equivalences ``fleche``
 guarantees, and the boundaries you should keep in mind.
 
-The digest function is content-based: it walks each value, salts the running hash
-with ``type(value).__name__`` for type discrimination, and folds in a representation
-that is stable across processes and Python versions (where the underlying object's
-representation allows it).  When two values *of different concrete Python types* are
-considered equivalent at the value level (``1`` and ``1.0``, an ``int`` subclass with
-the same numeric value, ...), the digest reflects that.
+The digest function is content-based: it walks each value, typically salts the
+running hash with ``type(value).__name__`` for type discrimination, and folds in a
+representation that is stable across processes and Python versions (where the
+underlying object's representation allows it).
+
+Number types (``int``, ``float``, ``complex``, and subclasses) are an explicit
+exception: their digest is computed via Python's numeric hash protocol
+(``hash(value)``), which itself guarantees ``hash(1) == hash(1.0) == hash(1+0j)``.
+The type name is therefore **not** carried into the final digest for numbers, which is
+precisely why ``digest(1) == digest(1.0) == digest(1+0j)``.
+
+For all other types the type-name salt is applied normally, so
+``digest((1, 2)) != digest([1, 2])`` because "tuple" and "list" diverge before
+the elements are processed.
 
 Dataclasses and ``attrs`` classes
 ---------------------------------
