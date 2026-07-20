@@ -30,7 +30,8 @@ The wrapper-based API builds the correct Call template for you.
    >>> with tags(project="beta", phase="eval"):
    ...     add(10, 5)
 
-   >>> # Find calls tagged with project="alpha"
+   >>> # Find calls with a=1, b=2 that are also tagged project="alpha"
+   >>> # (omit positional args to match any a/b combination)
    >>> for call in add.query(1, 2, metadata={"tags": {"project": "alpha"}}):
    ...     assert call.name == "add"
    ...     assert call.metadata["tags"]["project"] == "alpha"
@@ -38,7 +39,7 @@ The wrapper-based API builds the correct Call template for you.
    ...     print(call.result)                # e.g. 3
    ...     # call.arguments is a lazy proxy — each key triggers a separate load
    ...     print(call.arguments["a"])        # e.g. 1
-   ...     print(dict(call.arguments))       # load all arguments at once
+   ...     print(dict(call.arguments))       # iterates keys, one load per key
 
 Notes:
 - ``metadata={"tags": {}}`` matches any call with a "tags" metadata entry (presence check).
@@ -66,7 +67,7 @@ You can also construct a ``QueryCall`` template manually and query against the a
 
 Behavior details
 ----------------
-- None is a wildcard for name/module/version and also for individual argument values (interpreted as "key present").
+- None is a wildcard for any ``QueryCall`` field (``name``, ``module``, ``version``, ``result``, ``code_digest``) and also for individual argument values (interpreted as "key present").
 - For arguments and result, equality is by digest: the template value and the stored value are each passed through :func:`~fleche.digest.digest` and the resulting hex strings are compared.  Pass a :class:`~fleche.digest.Digest` instance (e.g. via :func:`~fleche.D`) to match by a known digest without re-hashing; a plain ``str`` — even one that looks like a hex digest — is hashed as a string value and will not match.
 - Metadata filtering supports presence checks (empty dict) and equality on simple types (str, bool, int, float). Complex types (e.g., lists) are handled correctly via client-side filtering.
 
