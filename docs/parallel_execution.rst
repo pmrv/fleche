@@ -54,9 +54,9 @@ automatically, serving cache hits from a pre-completed
 Alternatively, use :class:`~fleche.BoundWrapper` when you need explicit
 control over which callable is submitted — for example, to share a single
 bound callable across multiple pools or helper modules.
-``BoundWrapper.bind(func)`` captures the active cache at bind time and
-restores it on every call — including inside worker threads — so all tasks
-write to the same store:
+``BoundWrapper.bind(func)`` captures the active cache **and metadata** at
+bind time and restores both on every call — including inside worker threads
+— so all tasks write to the same store with the same metadata context:
 
 .. code-block:: pycon
 
@@ -246,17 +246,20 @@ executor **instance** (no subclassing — callers pass us instances of
 third-party executors) so that fleche-decorated functions are handled
 automatically:
 
-- Non-fleche callables are bound via :meth:`~fleche.BoundWrapper.bind` before
+- Non-fleche callables are wrapped in :class:`~fleche.BoundWrapper` before
   being forwarded to the original ``submit``, so the parent's cache and
   metadata are available in the worker even for a plain function that only
-  *calls* a fleche-decorated function somewhere in its body. A callable that
+  *calls* a fleche-decorated function somewhere in its body.  A callable that
   is already a :class:`~fleche.BoundWrapper` is forwarded unchanged instead
   of being bound again.
 - Cache hits (for fleche-decorated callables submitted directly) are served
   from an already-completed :class:`~concurrent.futures.Future` without ever
   touching the executor, avoiding submit/serialise overhead on cached inputs.
-- Cache misses are bound via :meth:`~fleche.BoundWrapper.bind` so the parent's
-  cache and metadata travel with the call into the worker.
+- Cache misses: the args are pre-applied to the wrapper via
+  :func:`functools.partial` and the resulting partial is wrapped in a
+  :class:`~fleche.BoundWrapper`, which is then submitted to the executor with
+  no positional arguments.  The worker invokes ``bound()`` which calls
+  ``partial(wrapper, *args)()`` with the captured cache and metadata context.
 
 .. code-block:: pycon
 
