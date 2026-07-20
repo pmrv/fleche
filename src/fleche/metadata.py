@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+from abc import ABC
 from dataclasses import dataclass
 import getpass
 import os
@@ -6,7 +6,7 @@ import platform
 import socket
 import subprocess
 import time
-from typing import Any, TypeAlias
+from typing import Any, ClassVar, TypeAlias
 
 from .call import Call
 
@@ -54,8 +54,15 @@ class MetaData(ABC):
         """
         return {}
 
+    _keys: ClassVar[dict[str, type]] = {}
+    """Constant schema for subclasses whose keys don't depend on instance state.
+
+    Subclasses with a static schema declare this once instead of overriding
+    ``keys``; subclasses whose schema depends on instance state (e.g. ``Tags``)
+    override the ``keys`` property directly instead.
+    """
+
     @property
-    @abstractmethod
     def keys(self) -> dict[str, type]:
         """
         Defines the schema of the metadata, mapping metadata keys to their expected types.
@@ -63,7 +70,7 @@ class MetaData(ABC):
         Returns:
             dict[str, type]: A dictionary representing the metadata schema.
         """
-        ...
+        return self._keys
 
     name: str
     """The unique name of this metadata type."""
@@ -97,6 +104,12 @@ class Runtime(MetaData):
     Notes:
         Values are JSON-serializable.
     """
+    _keys: ClassVar[dict[str, type]] = {
+        'timestart': float,
+        'timestop': float,
+        'walltime': float,
+    }
+
     def pre(self, call: Call) -> dict[str, Any]:
         """
         Records the start time before function execution.
@@ -110,14 +123,6 @@ class Runtime(MetaData):
         return {
             'timestop': (t := time.time()),
             'walltime': t - pre['timestart'],
-        }
-
-    @property
-    def keys(self) -> dict[str, type]:
-        return {
-            'timestart': float,
-            'timestop': float,
-            'walltime': float,
         }
 
 
@@ -134,6 +139,14 @@ class Environment(MetaData):
             ``_version.py`` (e.g. an editable checkout without a build).
         python_version (str): The CPython runtime version (``platform.python_version()``).
     """
+    _keys: ClassVar[dict[str, type]] = {
+        'hostname': str,
+        'username': str,
+        'cwd': str,
+        'fleche_version': str,
+        'python_version': str,
+    }
+
     def pre(self, call: Call) -> dict[str, Any]:
         return {
             'hostname': socket.gethostname(),
@@ -141,16 +154,6 @@ class Environment(MetaData):
             'cwd': os.getcwd(),
             'fleche_version': _fleche_version,
             'python_version': platform.python_version(),
-        }
-
-    @property
-    def keys(self) -> dict[str, type]:
-        return {
-            'hostname': str,
-            'username': str,
-            'cwd': str,
-            'fleche_version': str,
-            'python_version': str,
         }
 
 
@@ -184,6 +187,13 @@ class Git(MetaData):
     All keys are ``None`` when not inside a git repository or when the ``git``
     executable is missing.
     """
+    _keys: ClassVar[dict[str, type]] = {
+        'root': str,
+        'commit': str,
+        'branch': str,
+        'dirty': bool,
+    }
+
     def pre(self, call: Call) -> dict[str, Any]:
         root = _git('rev-parse', '--show-toplevel')
         if root is None:
@@ -194,15 +204,6 @@ class Git(MetaData):
             'commit': _git('rev-parse', 'HEAD'),
             'branch': _git('rev-parse', '--abbrev-ref', 'HEAD'),
             'dirty': bool(status) if status is not None else None,
-        }
-
-    @property
-    def keys(self) -> dict[str, type]:
-        return {
-            'root': str,
-            'commit': str,
-            'branch': str,
-            'dirty': bool,
         }
 
 
