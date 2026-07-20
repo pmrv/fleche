@@ -17,7 +17,7 @@ A persistent caching solution for arbitrary Python functions - like `lru_cache` 
 - **Intelligent Hashing**: Automatically generates cache keys from function arguments
 - **Query Support**: Search and retrieve cached results with metadata filtering
 - **Configurable**: Control what gets hashed (version, module, code, arguments)
-- **Multiple Backends**: File (pickle, JSON), SQLAlchemy, Bagofholding, and more
+- **Multiple Backends**: File (pickle, cloudpickle, dill), SQLAlchemy, Bagofholding, and more
 - **Thread-Safe**: Safe for use in multi-threaded environments
 - **Type-Aware**: Works seamlessly with NumPy, Pandas, and custom types
 
@@ -130,7 +130,6 @@ call = compute.call(5)
     hash_code=False,     # Include function code in cache key
     require=None,        # Required argument for caching
     ignore=None,         # Arguments to ignore in cache key
-    isolate=False,       # Isolate cache by working directory
 )
 def my_function(x):
     return x * 2
@@ -191,15 +190,15 @@ Find cached results matching specific criteria (only after issuing a correspondi
 ```python
 @fleche()
 def fetch_data(user_id, date):
-    return get_data(user_id, date)
+    return {"user": user_id, "date": date}
 
 # Issue a call to cache the result
 fetch_data(user_id=123, date='2024-01-01')
 
-# Get all cached results
+# Get all cached results for fetch_data
 all_results = list(fetch_data.query())
 
-# Get results matching specific arguments (None acts as wildcard)
+# Get results where user_id=123, any date (omitted arguments act as wildcards)
 results = list(fetch_data.query(user_id=123))
 
 # Inspect a result
