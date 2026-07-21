@@ -1,101 +1,105 @@
-"""Regression reproducer: wrap_executor payload carries an unpicklable lock.
+"""Regression: the wrap_executor payload is cloudpicklable by value.
 
 ``wrap_executor``'s patched ``submit`` hands the underlying executor
 ``func.fleche.bind(*args)`` — a :class:`~fleche.BoundWrapper` wrapping
 ``functools.partial(wrapper, *args)``, where ``wrapper`` is the closure built
-by :func:`fleche.wrapper.make_wrapper`.  That closure closes over
+by :func:`fleche.wrapper.make_wrapper`.  That closure used to close over a raw
+``threading.Lock`` (``_in_flight_lock``), which is unpicklable.
 
-    _in_flight_lock = threading.Lock()   # a raw _thread.lock
-
-(see ``src/fleche/wrapper.py``).  A raw lock is unpicklable.
-
-Why this matters: a cloudpickling **cluster backend** (executorlib, dask, ...)
-ships user code *by value* so worker nodes need not import it — commonly via
-``cloudpickle.register_pickle_by_value(module)``, and always for functions
-defined in ``__main__`` or a notebook.  Serialising ``wrapper`` by value walks
-its closure cells and hits the lock:
+A cloudpickling cluster backend (executorlib, dask, ...) ships user code *by
+value* whenever it cannot assume the worker can import it.  That happens far
+more easily than by ``__main__`` / notebooks or an explicit
+``register_pickle_by_value``: simply **rebinding** a decorated function to a
+name other than its own — ``func = fleche.fleche(some_other)`` — is enough.
+The wrapper carries ``@wraps(some_other)``, so its ``__qualname__`` is
+``some_other``; cloudpickle's by-reference lookup finds the *plain* function
+(or nothing) under that name, not the wrapper, and falls back to by value —
+walking the closure cells and, formerly, hitting the lock:
 
     TypeError: cannot pickle '_thread.lock' object
 
-So ``wrap_executor`` + a cloudpickling cluster backend fundamentally cannot
-ship the wrapper.  The "just drop it into ``wrap_executor``" prose in
-``docs/parallel_execution.rst`` (the ``ProcessPoolExecutor`` / executorlib
-examples) was never actually exercised on this path — in an ordinary
-importable module cloudpickle serialises ``wrapper`` *by reference*, so the
-closure cells (and the lock) are never touched.
+(The ordinary ``@fleche.fleche`` decorator form dodges this, because the
+decorated name shadows the original and by-reference lookup resolves back to
+the wrapper — which is why the happy-path docs examples never exercised it.)
 
-This test pins the *root cause* directly and deterministically: the wrapper
-closure that ends up inside the ``wrap_executor`` payload must not carry a
-raw, unpicklable lock.  It deliberately does **not** call ``cloudpickle`` —
-the exact by-value failure varies by cloudpickle/Python version (older
-cloudpickle raises ``IndexError`` from its bytecode walk before it ever
-reaches the lock), which would make an end-to-end pickle assertion a flaky,
-version-dependent sentinel.  Inspecting the closure is exact and stable.
-
-Marked ``xfail(strict=True)`` so it flips to a hard failure the moment the
-wrapper stops closing over an unpicklable lock (e.g. the lock is
-reconstructed lazily, or given ``__reduce__`` support) — i.e. when the payload
-becomes shippable to a cloudpickling backend.
+The fix bundles the in-flight map and its lock into a small picklable helper
+(:class:`fleche.wrapper._InFlight`) that reconstructs fresh on unpickle, so the
+wrapper serialises by value.  These tests guard that.
 """
 
 import functools
-import pickle
 import threading
 
 import pytest
 
 import fleche
+from fleche.caches import Cache
+from fleche.storage.memory import ValueMemory, CallMemory
 
 _LOCK_TYPE = type(threading.Lock())
 
 
-@fleche.fleche
-def _sample_iso(i):
+def _plain_iso(i):
     return i * i
 
 
-def _unwrap_payload_callable(bound):
-    """Return the ``make_wrapper`` closure buried inside a bind() payload.
+# Rebind the decorated wrapper to a name other than its __qualname__
+# ('_plain_iso').  In an ordinary importable module this alone forces
+# cloudpickle onto its by-value path — exactly where the wrapper closure (and
+# formerly its lock) must be serialised.
+_rebound_iso = fleche.fleche(_plain_iso)
 
-    ``func.fleche.bind(*args)`` yields a ``BoundWrapper`` whose ``func`` is
-    ``functools.partial(wrapper, *args)`` (or ``wrapper`` itself when no args
-    are bound).  A cluster backend must serialise exactly this object.
-    """
+
+def _wrapper_closure(bound):
+    """Return the make_wrapper closure buried in a ``bind()`` payload."""
     func = bound.func
     if isinstance(func, functools.partial):
         func = func.func
     return func
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="make_wrapper's closure closes over a raw threading.Lock, so the "
-    "wrap_executor payload cannot be cloudpickled by value (cluster backends)",
-    raises=AssertionError,
-)
-def test_wrap_executor_payload_has_no_unpicklable_lock():
-    """The wrap_executor payload must not carry an unpicklable object by value.
+def test_wrap_executor_payload_has_no_raw_lock_in_closure():
+    """The wrapper closure must not carry a raw, unpicklable lock.
 
-    This is exactly what a cloudpickling cluster backend has to ship, and the
-    raw ``threading.Lock`` in the wrapper closure is what makes it fail.
+    Deterministic and version-independent — it never invokes cloudpickle, so
+    it holds even on environments whose cloudpickle cannot serialise the
+    wrapper's bytecode by value for unrelated reasons.
     """
-    wrapper = _unwrap_payload_callable(_sample_iso.fleche.bind(3))
+    wrapper = _wrapper_closure(_rebound_iso.fleche.bind(3))
 
-    lock_cells = [
+    raw_locks = [
         cell.cell_contents
         for cell in (wrapper.__closure__ or ())
         if isinstance(cell.cell_contents, _LOCK_TYPE)
     ]
 
-    # Sanity: if the wrapper ever stops carrying a lock at all, this test has
-    # become stale rather than passing for the right reason — surface that.
-    if lock_cells:
-        with pytest.raises(TypeError, match="cannot pickle"):
-            pickle.dumps(lock_cells[0])
-
-    assert not lock_cells, (
-        "make_wrapper's wrapper closure carries a raw, unpicklable lock "
-        f"({lock_cells!r}); a cloudpickling cluster backend that ships the "
-        "wrap_executor payload by value fails with "
-        "\"cannot pickle '_thread.lock' object\"."
+    assert not raw_locks, (
+        "make_wrapper's wrapper closure carries a raw threading.Lock "
+        f"({raw_locks!r}); this makes the wrap_executor payload unpicklable by "
+        "value, so a cloudpickling cluster backend cannot ship it."
     )
+
+
+def test_wrap_executor_payload_cloudpickles_by_value():
+    """End-to-end: the by-value payload survives a cloudpickle round-trip.
+
+    Skipped only when the environment's cloudpickle cannot serialise the
+    wrapper by value for a reason unrelated to the lock (older cloudpickle
+    releases raise ``IndexError`` from their bytecode walk on newer Python);
+    a re-emergence of the lock ``TypeError`` still fails loudly.
+    """
+    cloudpickle = pytest.importorskip("cloudpickle")
+
+    with fleche.cache(Cache(ValueMemory({}), CallMemory({}))):
+        payload = _rebound_iso.fleche.bind(3)
+
+    try:
+        data = cloudpickle.dumps(payload)
+    except TypeError as exc:
+        if "_thread.lock" in str(exc):
+            raise  # the regression these tests guard against
+        pytest.skip(f"cloudpickle cannot serialise the wrapper here: {exc}")
+    except Exception as exc:  # e.g. old cloudpickle's bytecode-walk IndexError
+        pytest.skip(f"cloudpickle by-value unsupported in this env: {exc!r}")
+
+    assert cloudpickle.loads(data)() == 9

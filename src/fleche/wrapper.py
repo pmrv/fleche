@@ -168,14 +168,41 @@ def make_rerun(func, wrapper):
     return _rerun_func
 
 
+class _InFlight:
+    """Futures whose done-callback is currently executing the cache write.
+
+    ``map`` is populated at the start of ``_cache()`` and removed in its
+    finally clause, so an entry exists only during the narrow window between
+    ``Future.set_result()`` releasing the condition lock and ``cache.save()``
+    completing; ``lock`` guards mutations of ``map``.
+
+    A raw :class:`threading.Lock` is unpicklable, and it lives in the
+    ``make_wrapper`` closure that fleche's wrapper carries.  When that wrapper
+    is cloudpickled **by value** — the shape a cross-process / cluster backend
+    needs whenever the decorated function is not importable by reference (bound
+    to a name other than its ``__qualname__``, or defined in ``__main__`` / a
+    notebook) — the lock would abort serialisation with
+    ``cannot pickle '_thread.lock' object``.  Bundling map and lock here lets
+    the object pickle as a fresh, empty instance: in-flight state and the lock
+    are process-local, so a worker that receives the wrapper by value correctly
+    starts with an empty map and its own lock.
+    """
+
+    __slots__ = ("map", "lock")
+
+    def __init__(self):
+        self.map: dict[str, Future] = {}
+        self.lock = threading.Lock()
+
+    def __reduce__(self):
+        # Reconstruct fresh on unpickle; never ship the (unpicklable) lock or
+        # the process-local in-flight map.
+        return (_InFlight, ())
+
+
 def make_wrapper(func, policy, meta, isolate, get_call):
     """Build the cached wrapper returned by :func:`fleche`."""
-    # Tracks futures whose done-callback is currently executing the cache write.
-    # Populated at the start of _cache() and removed in its finally clause, so
-    # the entry only exists during the narrow window between Future.set_result()
-    # releasing the condition lock and cache.save() completing.
-    _in_flight: dict[str, Future] = {}
-    _in_flight_lock = threading.Lock()
+    _in_flight = _InFlight()
 
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> _T:
@@ -216,7 +243,7 @@ def make_wrapper(func, policy, meta, isolate, get_call):
         # CPython gap between condition.notify_all() and _invoke_callbacks()).
         # If so, the future is already resolved — .result() returns immediately
         # and the future's result is exactly the function result.
-        if (f := _in_flight.get(key)) is not None:
+        if (f := _in_flight.map.get(key)) is not None:
             return f.result()
 
         def _run_and_cache():
@@ -229,8 +256,8 @@ def make_wrapper(func, policy, meta, isolate, get_call):
 
             def _cache(future=None):
                 if future is not None:
-                    with _in_flight_lock:
-                        _in_flight[key] = future
+                    with _in_flight.lock:
+                        _in_flight.map[key] = future
                 try:
                     if future is None:
                         call.result = result
@@ -261,8 +288,8 @@ def make_wrapper(func, policy, meta, isolate, get_call):
                     return call.result
                 finally:
                     if future is not None:
-                        with _in_flight_lock:
-                            _in_flight.pop(key, None)
+                        with _in_flight.lock:
+                            _in_flight.map.pop(key, None)
 
             if not isinstance(result, Future):
                 return _cache()
