@@ -1,5 +1,6 @@
+import fleche
 from fleche import storage
-from fleche.caches import Cache, CachePool, CacheStack, ReadOnlyCache, SizeLimitedCache
+from fleche.caches import BaseCache, Cache, CachePool, CacheStack, ReadOnlyCache, SizeLimitedCache
 from fleche.config import cache_from_config
 import pytest
 
@@ -288,3 +289,23 @@ def test_template_missing_required_arg_raises():
 def test_template_unexpected_arg_raises(tmp_path):
     with pytest.raises(ValueError, match="Invalid arguments for cache template 'memory'"):
         cache_from_config({"template": "memory", "root": str(tmp_path)})
+
+
+# --- public entry points -----------------------------------------------------
+
+
+def test_cache_from_config_exposed_at_top_level():
+    """cache_from_config is part of the public fleche API."""
+    assert fleche.cache_from_config is cache_from_config
+    assert "cache_from_config" in fleche.__all__
+    c = fleche.cache_from_config({"template": "memory"})
+    assert isinstance(c, Cache)
+
+
+def test_basecache_from_config_classmethod():
+    """BaseCache.from_config wraps cache_from_config, dispatching on shape."""
+    c = BaseCache.from_config({"template": "memory"})
+    assert isinstance(c, Cache)
+    # Inherited on subclasses; still dispatches on config shape, not on cls.
+    stack = Cache.from_config([{"template": "memory"}, {"template": "memory"}])
+    assert isinstance(stack, CacheStack)

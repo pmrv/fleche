@@ -15,6 +15,7 @@ from .state import (
 )
 from .wrapper import fleche, Ignored, Required
 from .executor import wrap_executor
+from .config import cache_from_config
 
 
 def D(value) -> digest.Digest:
@@ -56,4 +57,5 @@ __all__ = [
         "Required",
         "D",
         "wrap_executor",
+        "cache_from_config",
 ]
