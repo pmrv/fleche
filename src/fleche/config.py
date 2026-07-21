@@ -163,6 +163,34 @@ Example fleche.toml
                                         # the server, so the remote can import
                                         # the project's local modules
 
+Cache templates
+---------------
+
+For the common cases a full ``values``/``calls`` pair is more verbose than it
+needs to be.  A cache config may instead use a ``template`` key naming a
+predefined shape, plus the (required) storage arguments that shape needs::
+
+    [terse]
+    template = "cloudpickle"
+    root = "~/.fleche"          # -> values at root/values, calls at root/calls
+
+    [sqlbacked]
+    template = "sql"            # filesystem values + SQL call storage
+    root = "~/.fleche"          # -> values at root/values,
+                                #    calls at sqlite:///root/calls.db
+
+Symmetric templates (``memory``, ``pickle``, ``cloudpickle``, ``dill``,
+``bagofholding_hdf``) use the same backend for both values and calls; the
+filesystem ones split ``root`` into ``root/values`` and ``root/calls``.  The
+``sql`` template stores values on the filesystem under ``root/values`` and
+calls in a SQL database; its value backend defaults to ``bagofholding_hdf``
+(override with ``values = "pickle"`` etc.) and its call ``url`` defaults to
+``sqlite:///root/calls.db`` (override with an explicit ``url``).
+``read_only``/``max_size`` may be combined with a template.
+Anything a template does not cover (mixed backends, per-backend options like
+``compress`` or ``secret_key``) is expressed with an explicit
+``values``/``calls`` config instead.
+
 Config file discovery
 ---------------------
 
@@ -197,7 +225,7 @@ import dataclasses
 from dataclasses import asdict
 import tomllib
 import logging
-from typing import Literal, cast, overload
+from typing import Callable, Literal, cast, overload
 from pathlib import Path
 import os
 from typing import Any
@@ -440,6 +468,102 @@ def storage_to_config(s: storage.ValueStorage | storage.CallStorage) -> dict[str
     return config
 
 
+def _template_symmetric_transient(style: str) -> "Callable[..., tuple[dict[str, Any], dict[str, Any]]]":
+    """Both value and call storage use the same transient backend (no ``root``)."""
+    def build() -> "tuple[dict[str, Any], dict[str, Any]]":
+        return {"type": style}, {"type": style}
+    return build
+
+
+def _template_symmetric_file(style: str) -> "Callable[..., tuple[dict[str, Any], dict[str, Any]]]":
+    """Both value and call storage use the same filesystem backend under ``root``.
+
+    Values go to ``root/values`` and calls to ``root/calls`` so the two never
+    collide in one directory.  The ``root`` is kept as a string (``~`` and
+    relative paths are resolved later by the backend).
+    """
+    def build(root: str) -> "tuple[dict[str, Any], dict[str, Any]]":
+        base = Path(root)
+        return (
+            {"type": style, "root": str(base / "values")},
+            {"type": style, "root": str(base / "calls")},
+        )
+    return build
+
+
+def _template_sql(default_value_style: str = "bagofholding_hdf") -> "Callable[..., tuple[dict[str, Any], dict[str, Any]]]":
+    """Filesystem values paired with SQL call storage, both derived from ``root``.
+
+    Values go to ``root/values`` using the ``values`` backend (any filesystem
+    value backend — ``pickle``/``cloudpickle``/``dill``/``bagofholding_hdf`` —
+    defaulting to ``bagofholding_hdf``).  The SQL connection ``url`` defaults to
+    a SQLite database at ``root/calls.db`` but may be overridden explicitly.
+    """
+    def build(
+        root: str, values: str = default_value_style, url: "str | None" = None
+    ) -> "tuple[dict[str, Any], dict[str, Any]]":
+        base = Path(root)
+        return (
+            {"type": values, "root": str(base / "values")},
+            {"type": "sql", "url": url if url is not None else f"sqlite:///{base / 'calls.db'}"},
+        )
+    return build
+
+
+# Named cache templates.  Each entry maps a ``template`` string to a builder
+# that turns the remaining (required) config keys into a ``(values, calls)``
+# pair of storage configs.  The builders take explicit keyword arguments so a
+# missing or unexpected key surfaces as a clear error (see cache_from_config).
+_CACHE_TEMPLATES: "dict[str, Callable[..., tuple[dict[str, Any], dict[str, Any]]]]" = {
+    "memory": _template_symmetric_transient("memory"),
+    "pickle": _template_symmetric_file("pickle"),
+    "cloudpickle": _template_symmetric_file("cloudpickle"),
+    "dill": _template_symmetric_file("dill"),
+    "bagofholding_hdf": _template_symmetric_file("bagofholding_hdf"),
+    "sql": _template_sql(),
+}
+
+
+def _cache_from_template(d: "dict[str, Any]") -> caches.BaseCache:
+    """Expand a ``{"template": ..., ...}`` dict into a full cache config.
+
+    The builder for the named template consumes the storage arguments (the
+    "union of the sub-args required to fill the value and call storage
+    configs") and produces explicit ``values``/``calls`` sections.  Cache-level
+    modifiers (``read_only``, ``max_size``) are preserved and applied by
+    recursing through :func:`cache_from_config`.
+    """
+    d = dict(d)
+    template = d.pop("template")
+    builder = _CACHE_TEMPLATES.get(template)
+    if builder is None:
+        raise ValueError(
+            f"Unknown cache template {template!r}; "
+            f"choose from {sorted(_CACHE_TEMPLATES)}"
+        )
+
+    # Cache-level modifiers pass through to the expanded config rather than the
+    # storage builder.
+    read_only = d.pop("read_only", False)
+    max_size = d.pop("max_size", None)
+
+    try:
+        values_config, calls_config = builder(**d)
+    except TypeError as e:
+        raise ValueError(
+            f"Invalid arguments for cache template {template!r}: {e}. "
+            f"Use an explicit 'values'/'calls' config for anything the "
+            f"template doesn't cover."
+        ) from None
+
+    expanded: dict[str, Any] = {"values": values_config, "calls": calls_config}
+    if read_only:
+        expanded["read_only"] = read_only
+    if max_size is not None:
+        expanded["max_size"] = max_size
+    return cache_from_config(expanded)
+
+
 def cache_from_config(d: "dict[str, Any] | list[dict[str, Any]]") -> caches.BaseCache:
     """Construct a :class:`~fleche.caches.BaseCache` from a config dict or list.
 
@@ -450,6 +574,17 @@ def cache_from_config(d: "dict[str, Any] | list[dict[str, Any]]") -> caches.Base
     - A **dict** containing a ``pool`` key (a list of dicts) creates a
       read-only :class:`~fleche.caches.CachePool`, with each element of the
       list processed recursively.
+    - A **dict** containing a ``template`` key is expanded via a named template
+      (see :data:`_CACHE_TEMPLATES`) into an equivalent ``values``/``calls``
+      config.  Templates are a shorthand for the common cases: the symmetric
+      backends (``memory``, ``pickle``, ``cloudpickle``, ``dill``,
+      ``bagofholding_hdf``) use one backend for both values and calls, and
+      ``sql`` pairs a filesystem value backend with SQL call storage.
+      Filesystem templates require a ``root``; the ``sql`` template requires a
+      ``root`` and optionally takes ``values`` (the value backend, default
+      ``bagofholding_hdf``) and ``url`` (the SQL URL, default
+      ``sqlite:///root/calls.db``).  ``read_only``/``max_size`` may be
+      combined with a template.
     - A **dict** containing a ``max_size`` key creates a
       :class:`~fleche.caches.SizeLimitedCache`.
     - A **dict** containing ``read_only: true`` wraps the resulting cache in a
@@ -461,6 +596,10 @@ def cache_from_config(d: "dict[str, Any] | list[dict[str, Any]]") -> caches.Base
     Examples:
 
         >>> c = cache_from_config({"values": {"type": "memory"}, "calls": {"type": "memory"}})
+        >>> type(c).__name__
+        'Cache'
+
+        >>> c = cache_from_config({"template": "memory"})
         >>> type(c).__name__
         'Cache'
 
@@ -481,6 +620,9 @@ def cache_from_config(d: "dict[str, Any] | list[dict[str, Any]]") -> caches.Base
 
     if "pool" in d:
         return caches.CachePool(tuple(cache_from_config(c) for c in d["pool"]))
+
+    if "template" in d:
+        return _cache_from_template(d)
 
     d = dict(d)
     if d.get("type") == "ssh":

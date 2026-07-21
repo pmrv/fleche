@@ -33,6 +33,21 @@ DigestedDict = storage.destructuring.DigestedDict
 
 class BaseCache(OperationContext):
 
+    @classmethod
+    def from_config(cls, config: "dict[str, Any] | list[dict[str, Any]]") -> "BaseCache":
+        """Build a cache from a config dict/list.
+
+        Thin wrapper around :func:`fleche.config.cache_from_config`.  The
+        concrete cache type is chosen from the *shape* of ``config`` (plain
+        cache, stack, pool, size-limited, read-only, ``template`` shorthand,
+        ...), so the returned instance is not necessarily of type ``cls``.
+
+        :mod:`fleche.config` is imported lazily here because it imports this
+        module at import time; a module-level import would be circular.
+        """
+        from . import config as _config
+        return _config.cache_from_config(config)
+
     @abstractmethod
     def save(self, call: Call) -> str:
         ...

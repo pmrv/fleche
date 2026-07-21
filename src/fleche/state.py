@@ -60,6 +60,9 @@ def cache(
             configuration.  The string ``'default'`` activates whichever cache the config
             file designates as the default — note that this is **not** the same as passing
             ``None``, which returns the *currently active* cache without changing anything.
+            To activate a cache built from a config dict/list, construct it first with
+            :meth:`~fleche.caches.BaseCache.from_config` and pass the result, e.g.
+            ``cache(Cache.from_config({"template": "pickle", "root": ".cache"}))``.
         stack: If ``True``, wrap ``new_cache`` in a :class:`.CacheStack` on top of the current cache.
 
     Returns:

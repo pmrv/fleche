@@ -136,6 +136,13 @@ def test_cache_no_args_returns_current():
     assert cache() is c
 
 
+def test_cache_activates_cache_built_from_config():
+    """A cache built from a config via BaseCache.from_config activates like any other."""
+    built = Cache.from_config({"template": "memory"})
+    with cache(built):
+        assert cache() is built
+
+
 # ---------------------------------------------------------------------------
 # Sticky meta() behaviour
 # ---------------------------------------------------------------------------

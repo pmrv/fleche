@@ -1,5 +1,5 @@
 from fleche import storage
-from fleche.caches import Cache, CachePool, CacheStack, ReadOnlyCache, SizeLimitedCache
+from fleche.caches import BaseCache, Cache, CachePool, CacheStack, ReadOnlyCache, SizeLimitedCache
 from fleche.config import cache_from_config
 import pytest
 
@@ -175,3 +175,132 @@ def test_cache_sql(tmp_path):
     assert isinstance(c, Cache)
     assert isinstance(c.calls, storage.Sql)
     assert c.calls.url == url
+
+
+# --- templates ---------------------------------------------------------------
+
+
+def test_template_memory():
+    c = cache_from_config({"template": "memory"})
+    assert isinstance(c, Cache)
+    assert isinstance(c.values, storage.ValueMemory)
+    assert isinstance(c.calls, storage.CallMemory)
+
+
+def test_template_void_is_not_a_template():
+    """`void` is reachable via cache('void'); it is intentionally not a template."""
+    with pytest.raises(ValueError, match="Unknown cache template"):
+        cache_from_config({"template": "void"})
+
+
+@pytest.mark.parametrize(
+    "template, dep, value_cls, call_cls",
+    [
+        ("pickle", None, storage.ValuePickleFile, storage.CallPickleFile),
+        ("cloudpickle", "cloudpickle", storage.ValuePickleFile, storage.CallPickleFile),
+        ("dill", "dill", storage.ValuePickleFile, storage.CallPickleFile),
+        ("bagofholding_hdf", "bagofholding", storage.ValueBagOfHoldingH5File, storage.CallBagOfHoldingH5File),
+    ],
+)
+def test_template_symmetric_file_splits_root(template, dep, value_cls, call_cls, tmp_path):
+    """Filesystem templates use one backend for both sides, split under root."""
+    if dep is not None:
+        pytest.importorskip(dep)
+    c = cache_from_config({"template": template, "root": str(tmp_path)})
+    assert isinstance(c, Cache)
+    assert isinstance(c.values, value_cls)
+    assert isinstance(c.calls, call_cls)
+    # Values and calls live in distinct sub-directories under the shared root.
+    assert c.values.root == (tmp_path / "values").resolve()
+    assert c.calls.root == (tmp_path / "calls").resolve()
+
+
+def test_template_sql_derives_url_from_root(tmp_path):
+    """The sql template derives value root and SQLite url from a single root."""
+    pytest.importorskip("sqlalchemy")
+    pytest.importorskip("bagofholding")
+    c = cache_from_config({"template": "sql", "root": str(tmp_path)})
+    assert isinstance(c, Cache)
+    # Value backend defaults to bagofholding_hdf, stored under root/values.
+    assert isinstance(c.values, storage.ValueBagOfHoldingH5File)
+    assert c.values.root == (tmp_path / "values").resolve()
+    # Call storage is SQL with a url derived from the root.
+    assert isinstance(c.calls, storage.Sql)
+    assert c.calls.url == f"sqlite:///{tmp_path / 'calls.db'}"
+
+
+def test_template_sql_url_override(tmp_path):
+    """An explicit url overrides the derived default."""
+    pytest.importorskip("sqlalchemy")
+    url = f"sqlite:///{tmp_path / 'custom.db'}"
+    c = cache_from_config({"template": "sql", "root": str(tmp_path), "values": "pickle", "url": url})
+    assert isinstance(c.calls, storage.Sql)
+    assert c.calls.url == url
+
+
+def test_template_sql_value_backend_override(tmp_path):
+    """The sql template pairs with any filesystem value backend, not just cloudpickle."""
+    pytest.importorskip("sqlalchemy")
+    c = cache_from_config({"template": "sql", "root": str(tmp_path), "values": "pickle"})
+    assert isinstance(c.values, storage.ValuePickleFile)
+    assert c.values.root == (tmp_path / "values").resolve()
+    assert isinstance(c.calls, storage.Sql)
+
+
+def test_template_with_read_only():
+    c = cache_from_config({"template": "memory", "read_only": True})
+    assert isinstance(c, ReadOnlyCache)
+    assert isinstance(c.cache, Cache)
+
+
+def test_template_with_max_size():
+    c = cache_from_config({"template": "memory", "max_size": 7})
+    assert isinstance(c, SizeLimitedCache)
+    assert c.max_size == 7
+
+
+def test_template_in_stack(tmp_path):
+    """Templates compose inside the list/pool recursion."""
+    c = cache_from_config(
+        [
+            {"template": "memory"},
+            {"template": "pickle", "root": str(tmp_path)},
+        ]
+    )
+    assert isinstance(c, CacheStack)
+    assert isinstance(c.stack[0], Cache)
+    assert isinstance(c.stack[1].values, storage.ValuePickleFile)
+
+
+def test_template_does_not_mutate_input(tmp_path):
+    cfg = {"template": "pickle", "root": str(tmp_path)}
+    original = dict(cfg)
+    cache_from_config(cfg)
+    assert cfg == original
+
+
+def test_template_unknown_raises():
+    with pytest.raises(ValueError, match="Unknown cache template"):
+        cache_from_config({"template": "does-not-exist"})
+
+
+def test_template_missing_required_arg_raises():
+    with pytest.raises(ValueError, match="Invalid arguments for cache template 'pickle'"):
+        cache_from_config({"template": "pickle"})
+
+
+def test_template_unexpected_arg_raises(tmp_path):
+    with pytest.raises(ValueError, match="Invalid arguments for cache template 'memory'"):
+        cache_from_config({"template": "memory", "root": str(tmp_path)})
+
+
+# --- public entry point ------------------------------------------------------
+
+
+def test_basecache_from_config_classmethod():
+    """BaseCache.from_config wraps cache_from_config, dispatching on shape."""
+    c = BaseCache.from_config({"template": "memory"})
+    assert isinstance(c, Cache)
+    # Inherited on subclasses; still dispatches on config shape, not on cls.
+    stack = Cache.from_config([{"template": "memory"}, {"template": "memory"}])
+    assert isinstance(stack, CacheStack)
