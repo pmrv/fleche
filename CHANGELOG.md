@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.21.0](https://github.com/pmrv/fleche/compare/0.20.0...0.21.0) (2026-07-21)
+
+
+### Features
+
+* **config:** add cache templates and BaseCache.from_config ([#777](https://github.com/pmrv/fleche/issues/777)) ([bc43482](https://github.com/pmrv/fleche/commit/bc43482d16216643efb30e5f515531f43e3426ea)), closes [#732](https://github.com/pmrv/fleche/issues/732)
+
+
+### Bug Fixes
+
+* **wrapper:** make the cached wrapper cloudpicklable by value ([#778](https://github.com/pmrv/fleche/issues/778)) ([e240a3a](https://github.com/pmrv/fleche/commit/e240a3ae71292249f0eb2fec8f161e2b1f1996cb))
+
 ## [0.20.0](https://github.com/pmrv/fleche/compare/0.19.2...0.20.0) (2026-07-17)
 
 
