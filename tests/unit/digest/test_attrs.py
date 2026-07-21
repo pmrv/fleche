@@ -7,9 +7,13 @@ integration with the @fleche decorator and destructuring storage.
 
 from dataclasses import dataclass, make_dataclass
 
-import attr
-import attrs
 import pytest
+
+# ``attrs`` is an optional dependency.  Skip the whole module (rather than
+# erroring during collection) when it is absent -- e.g. in the packaged conda
+# test environment, where ``pytest -m smoke`` still imports every test module.
+attr = pytest.importorskip("attr")
+attrs = pytest.importorskip("attrs")
 
 from fleche import fleche, cache
 from fleche.caches import Cache
