@@ -147,35 +147,62 @@ Each cache section must define two storage backends: ``values`` and ``calls``. `
 Cache templates
 ~~~~~~~~~~~~~~~
 
-Spelling out both backends is redundant for the common cases where they
-share a type. A section may instead name a ``template`` plus the storage
-arguments that template requires:
+A **template** is a shorthand for a whole cache section. Instead of spelling
+out separate ``values`` and ``calls`` backends, name a ``template`` and give
+it a handful of keys; fleche expands that into the full ``values`` / ``calls``
+configuration. ``read_only`` and ``max_size`` may be added alongside any
+template. Anything a template does not cover — mixed backends, or per-backend
+options such as ``compress`` or ``secret_key`` — is written out with the
+explicit ``values`` / ``calls`` form described below.
+
+Two families of template are available.
+
+**Symmetric templates** use a single backend for both ``values`` and
+``calls``: ``memory``, ``pickle``, ``cloudpickle``, ``dill``, and
+``bagofholding_hdf``. The filesystem ones take a single ``root`` and split it
+into ``root/values`` and ``root/calls``; ``memory`` takes no further keys.
 
 .. code-block:: toml
 
    [terse]
-   template = "cloudpickle"     # both backends cloudpickle...
-   root = "~/.fleche"           # ...values at root/values, calls at root/calls
+   template = "cloudpickle"     # values -> root/values, calls -> root/calls
+   root = "~/.fleche"
+
+**The sql template** stores values on the filesystem and calls in a SQL
+database. It accepts:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 15 15 70
+
+   * - Key
+     - Required
+     - Meaning
+   * - ``root``
+     - yes
+     - Base directory; values are stored under ``root/values``.
+   * - ``values``
+     - no
+     - Value storage backend, default ``bagofholding_hdf``. Any filesystem
+       backend: ``pickle`` / ``cloudpickle`` / ``dill`` / ``bagofholding_hdf``.
+   * - ``url``
+     - no
+     - SQLAlchemy URL for call storage, default ``sqlite:///root/calls.db``.
+
+.. code-block:: toml
 
    [sqlbacked]
-   template = "sql"             # filesystem values + SQL call storage
-   root = "~/.fleche"           # values at root/values,
-                                # calls at sqlite:///root/calls.db
+   template = "sql"
+   root = "~/.fleche"           # values -> root/values,
+                                # calls -> sqlite:///root/calls.db
 
-The symmetric templates — ``memory``, ``pickle``, ``cloudpickle``, ``dill``,
-``bagofholding_hdf`` — use one backend for both ``values`` and ``calls``; the
-filesystem ones split a single ``root`` into ``root/values`` and
-``root/calls``. The ``sql`` template stores values on the filesystem under
-``root/values`` and calls in a SQL database. Its value backend defaults to
-``bagofholding_hdf`` (override with ``values = "pickle"`` etc.) and its call
-``url`` defaults to ``sqlite:///root/calls.db`` (override with an explicit
-``url``). ``read_only`` / ``max_size`` may be combined with a template.
-Anything a template does not cover — mixed backends, or per-backend options
-such as ``compress`` or ``secret_key`` — uses the explicit ``values`` /
-``calls`` form below instead.
+In Python, build a cache from the same config with
+:meth:`~fleche.caches.BaseCache.from_config` and activate it with ``cache``::
 
-The same config dicts can be built in Python and activated directly, e.g.
-``cache({"template": "cloudpickle", "root": "~/.fleche"})``.
+   from fleche import cache
+   from fleche.caches import Cache
+
+   cache(Cache.from_config({"template": "cloudpickle", "root": "~/.fleche"}))
 
 Storage backends
 ~~~~~~~~~~~~~~~~

@@ -1,4 +1,3 @@
-import fleche
 from fleche import storage
 from fleche.caches import BaseCache, Cache, CachePool, CacheStack, ReadOnlyCache, SizeLimitedCache
 from fleche.config import cache_from_config
@@ -194,20 +193,24 @@ def test_template_void_is_not_a_template():
         cache_from_config({"template": "void"})
 
 
-def test_template_pickle_splits_root(tmp_path):
-    c = cache_from_config({"template": "pickle", "root": str(tmp_path)})
+@pytest.mark.parametrize(
+    "template, dep, value_cls, call_cls",
+    [
+        ("pickle", None, storage.ValuePickleFile, storage.CallPickleFile),
+        ("cloudpickle", "cloudpickle", storage.ValuePickleFile, storage.CallPickleFile),
+        ("dill", "dill", storage.ValuePickleFile, storage.CallPickleFile),
+        ("bagofholding_hdf", "bagofholding", storage.ValueBagOfHoldingH5File, storage.CallBagOfHoldingH5File),
+    ],
+)
+def test_template_symmetric_file_splits_root(template, dep, value_cls, call_cls, tmp_path):
+    """Filesystem templates use one backend for both sides, split under root."""
+    if dep is not None:
+        pytest.importorskip(dep)
+    c = cache_from_config({"template": template, "root": str(tmp_path)})
     assert isinstance(c, Cache)
-    assert isinstance(c.values, storage.ValuePickleFile)
-    assert isinstance(c.calls, storage.CallPickleFile)
+    assert isinstance(c.values, value_cls)
+    assert isinstance(c.calls, call_cls)
     # Values and calls live in distinct sub-directories under the shared root.
-    assert c.values.root == (tmp_path / "values").resolve()
-    assert c.calls.root == (tmp_path / "calls").resolve()
-
-
-def test_template_cloudpickle(tmp_path):
-    pytest.importorskip("cloudpickle")
-    c = cache_from_config({"template": "cloudpickle", "root": str(tmp_path)})
-    assert isinstance(c, Cache)
     assert c.values.root == (tmp_path / "values").resolve()
     assert c.calls.root == (tmp_path / "calls").resolve()
 
@@ -291,15 +294,7 @@ def test_template_unexpected_arg_raises(tmp_path):
         cache_from_config({"template": "memory", "root": str(tmp_path)})
 
 
-# --- public entry points -----------------------------------------------------
-
-
-def test_cache_from_config_exposed_at_top_level():
-    """cache_from_config is part of the public fleche API."""
-    assert fleche.cache_from_config is cache_from_config
-    assert "cache_from_config" in fleche.__all__
-    c = fleche.cache_from_config({"template": "memory"})
-    assert isinstance(c, Cache)
+# --- public entry point ------------------------------------------------------
 
 
 def test_basecache_from_config_classmethod():

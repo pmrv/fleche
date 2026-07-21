@@ -1,7 +1,7 @@
 from contextlib import AbstractContextManager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
-from typing import Any, overload, Callable
+from typing import overload, Callable
 
 from . import caches, config, metadata
 
@@ -38,14 +38,12 @@ def cache(new_cache: None = None, stack: bool = False) -> caches.BaseCache: ...
 
 @overload
 def cache(
-    new_cache: "caches.BaseCache | str | dict[str, Any] | list[dict[str, Any]]",
-    stack: bool = False,
+    new_cache: caches.BaseCache | str, stack: bool = False
 ) -> AbstractContextManager[None]: ...
 
 
 def cache(
-    new_cache: "caches.BaseCache | str | dict[str, Any] | list[dict[str, Any]] | None" = None,
-    stack: bool = False,
+    new_cache: caches.BaseCache | str | None = None, stack: bool = False
 ) -> "caches.BaseCache | AbstractContextManager[None]":
     """
     Manages the active cache for Fleche.
@@ -57,15 +55,14 @@ def cache(
     context manager is discarded the new cache remains active (sticky behaviour).
 
     Args:
-        new_cache: Cache object, named cache string, or config to activate, or
-            ``None`` to query.  The strings ``'memory'`` and ``'void'`` return
-            transient backends regardless of configuration.  The string
-            ``'default'`` activates whichever cache the config file designates
-            as the default — note that this is **not** the same as passing
-            ``None``, which returns the *currently active* cache without
-            changing anything.  A ``dict`` or ``list`` is passed straight to
-            :func:`~fleche.config.cache_from_config`, so an ad-hoc cache can be
-            built inline, e.g. ``cache({"template": "pickle", "root": ".cache"})``.
+        new_cache: Cache object or named cache string to activate, or ``None`` to query.
+            The strings ``'memory'`` and ``'void'`` return transient backends regardless of
+            configuration.  The string ``'default'`` activates whichever cache the config
+            file designates as the default — note that this is **not** the same as passing
+            ``None``, which returns the *currently active* cache without changing anything.
+            To activate a cache built from a config dict/list, construct it first with
+            :meth:`~fleche.caches.BaseCache.from_config` and pass the result, e.g.
+            ``cache(Cache.from_config({"template": "pickle", "root": ".cache"}))``.
         stack: If ``True``, wrap ``new_cache`` in a :class:`.CacheStack` on top of the current cache.
 
     Returns:
@@ -75,19 +72,15 @@ def cache(
     if new_cache is None:
         return _CACHE.get()
 
-    if isinstance(new_cache, caches.BaseCache):
-        resolved = new_cache
-    elif isinstance(new_cache, str):
-        resolved = config.load_cache_config(new_cache)
-    elif isinstance(new_cache, (dict, list)):
-        resolved = config.cache_from_config(new_cache)
-    else:
+    if isinstance(new_cache, str):
+        new_cache = config.load_cache_config(new_cache)
+    if not isinstance(new_cache, caches.BaseCache):
         raise ValueError(new_cache)
 
     if stack:
-        resolved = _CACHE.get().push(resolved)
+        new_cache = _CACHE.get().push(new_cache)
 
-    token = _CACHE.set(resolved)
+    token = _CACHE.set(new_cache)
     return _StickyContext(_CACHE, token)
 
 

@@ -136,24 +136,11 @@ def test_cache_no_args_returns_current():
     assert cache() is c
 
 
-def test_cache_accepts_config_dict():
-    """cache(dict) builds an ad-hoc cache via cache_from_config and activates it."""
-    with cache({"values": {"type": "memory"}, "calls": {"type": "memory"}}):
-        assert isinstance(cache(), Cache)
-
-
-def test_cache_accepts_template_dict():
-    """cache({'template': ...}) expands the template and activates it."""
-    with cache({"template": "memory"}):
-        active = cache()
-        assert isinstance(active, Cache)
-        assert isinstance(active.values, ValueMemory)
-
-
-def test_cache_accepts_config_list_as_stack():
-    """cache(list) builds a CacheStack via cache_from_config."""
-    with cache([{"template": "memory"}, {"values": {"type": "void"}, "calls": {"type": "void"}}]):
-        assert isinstance(cache(), CacheStack)
+def test_cache_activates_cache_built_from_config():
+    """A cache built from a config via BaseCache.from_config activates like any other."""
+    built = Cache.from_config({"template": "memory"})
+    with cache(built):
+        assert cache() is built
 
 
 # ---------------------------------------------------------------------------
