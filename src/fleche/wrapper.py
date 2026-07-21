@@ -15,6 +15,7 @@ from . import state
 from . import metadata
 from .call import Call, AnyCall, FunctionProfile, Ignored, QueryCall, Required, bind, _get_profile
 from .caches import Rejected, BaseCache, RefreshingCache
+from .storage.thread_safe import _PicklableLock
 
 
 import logging
@@ -174,8 +175,17 @@ def make_wrapper(func, policy, meta, isolate, get_call):
     # Populated at the start of _cache() and removed in its finally clause, so
     # the entry only exists during the narrow window between Future.set_result()
     # releasing the condition lock and cache.save() completing.
+    #
+    # A raw threading.Lock is unpicklable, and this lives in the wrapper's
+    # closure.  When the wrapper is cloudpickled *by value* — the shape a
+    # cross-process / cluster backend needs whenever the decorated function is
+    # not importable by reference (bound to a name other than its __qualname__,
+    # or defined in __main__ / a notebook) — a raw lock would abort
+    # serialisation with "cannot pickle '_thread.lock' object".  _PicklableLock
+    # reconstructs a fresh lock on unpickle, which is correct here: in-flight
+    # state is process-local, so a worker starts with its own lock.
     _in_flight: dict[str, Future] = {}
-    _in_flight_lock = threading.Lock()
+    _in_flight_lock = _PicklableLock()
 
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> _T:
