@@ -324,6 +324,19 @@ payload:
    not return a proxy.  The call is idempotent: wrapping an already-wrapped
    executor a second time is a no-op.
 
+.. tip::
+
+   For process-based and cluster backends, prefer decorating a **module-level**
+   function with ``@fleche.fleche`` and submitting *that*.  Its wrapper is then
+   importable by reference, so the serialiser ships a tiny name reference
+   instead of the whole wrapper closure.  Rebinding to a different name
+   (``compute = fleche.fleche(some_other)``) or decorating a function defined
+   in ``__main__`` / a notebook forces cloudpickle to serialise the wrapper
+   *by value* — heavier, and only possible with a cloudpickling backend
+   (executorlib, dask; not a stdlib :class:`~concurrent.futures.ProcessPoolExecutor`,
+   which uses plain :mod:`pickle` and cannot serialise a function by value at
+   all).
+
 When to prefer each pattern
 ---------------------------
 
