@@ -43,20 +43,14 @@ def cache(
 ) -> AbstractContextManager[None]: ...
 
 
-@overload
-def cache(*, stack: bool = False, **kwargs: Any) -> AbstractContextManager[None]: ...
-
-
 def cache(
     new_cache: "caches.BaseCache | str | dict[str, Any] | list[dict[str, Any]] | None" = None,
     stack: bool = False,
-    **kwargs: Any,
 ) -> "caches.BaseCache | AbstractContextManager[None]":
     """
     Manages the active cache for Fleche.
 
-    If ``new_cache`` is ``None`` (and no keyword config is given), returns the
-    currently active cache.
+    If ``new_cache`` is ``None``, returns the currently active cache.
 
     Otherwise, immediately sets ``new_cache`` as the active cache and returns a context manager.
     When used in a ``with`` statement the previous cache is restored on exit; when the returned
@@ -73,23 +67,11 @@ def cache(
             :func:`~fleche.config.cache_from_config`, so an ad-hoc cache can be
             built inline, e.g. ``cache({"template": "pickle", "root": ".cache"})``.
         stack: If ``True``, wrap ``new_cache`` in a :class:`.CacheStack` on top of the current cache.
-        **kwargs: A config dict may also be spelled as keyword arguments — e.g.
-            ``cache(template="pickle", root=".cache")`` is shorthand for
-            ``cache({"template": "pickle", "root": ".cache"})``.  Cannot be
-            combined with a positional ``new_cache``.
 
     Returns:
         The current :class:`.BaseCache` when called without arguments, otherwise a
         :class:`._StickyContext` context manager.
     """
-    if kwargs:
-        if new_cache is not None:
-            raise TypeError(
-                "cache() takes either a positional cache/name/config or keyword "
-                "config arguments, not both"
-            )
-        new_cache = kwargs
-
     if new_cache is None:
         return _CACHE.get()
 
