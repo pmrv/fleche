@@ -232,3 +232,83 @@ def test_project_with_block_restores():
     with project("temp"):
         assert _state._METADATA.get() != original
     assert _state._METADATA.get() == original
+
+
+# ---------------------------------------------------------------------------
+# _sticky_set / _hard_set primitives (issue #740)
+# ---------------------------------------------------------------------------
+
+
+def test_sticky_set_activates_immediately():
+    """_sticky_set(var, value) must set var without entering the with-block."""
+    var = _state.ContextVar("test_sticky_set_activates_immediately", default=None)
+    _state._sticky_set(var, "value")
+    assert var.get() == "value"
+
+
+def test_sticky_set_returns_sticky_context():
+    """_sticky_set must return a _StickyContext usable as a context manager."""
+    var = _state.ContextVar("test_sticky_set_returns_sticky_context", default=None)
+    cm = _state._sticky_set(var, "value")
+    assert isinstance(cm, _state._StickyContext)
+
+
+def test_sticky_set_with_block_restores_on_exit():
+    """with _sticky_set(var, value) must restore the previous value on exit."""
+    var = _state.ContextVar("test_sticky_set_with_block_restores_on_exit", default="original")
+    with _state._sticky_set(var, "value"):
+        assert var.get() == "value"
+    assert var.get() == "original"
+
+
+def test_sticky_set_discard_leaves_value_active():
+    """Discarding the returned context manager leaves value active permanently."""
+    var = _state.ContextVar("test_sticky_set_discard_leaves_value_active", default="original")
+    _state._sticky_set(var, "value")  # discarded
+    assert var.get() == "value"
+
+
+def test_hard_set_activates_every_var_immediately():
+    """_hard_set([(var, value), ...]) must set every var before the block starts."""
+    var_a = _state.ContextVar("test_hard_set_a", default="a0")
+    var_b = _state.ContextVar("test_hard_set_b", default="b0")
+    with _state._hard_set([(var_a, "a1"), (var_b, "b1")]):
+        assert var_a.get() == "a1"
+        assert var_b.get() == "b1"
+
+
+def test_hard_set_restores_all_on_normal_exit():
+    """_hard_set must reset every var to its previous value on exit."""
+    var_a = _state.ContextVar("test_hard_set_restores_a", default="a0")
+    var_b = _state.ContextVar("test_hard_set_restores_b", default="b0")
+    with _state._hard_set([(var_a, "a1"), (var_b, "b1")]):
+        pass
+    assert var_a.get() == "a0"
+    assert var_b.get() == "b0"
+
+
+def test_hard_set_restores_all_on_exception():
+    """_hard_set must reset every var even when the block raises."""
+    var_a = _state.ContextVar("test_hard_set_exc_a", default="a0")
+    var_b = _state.ContextVar("test_hard_set_exc_b", default="b0")
+    with pytest.raises(ValueError):
+        with _state._hard_set([(var_a, "a1"), (var_b, "b1")]):
+            raise ValueError("boom")
+    assert var_a.get() == "a0"
+    assert var_b.get() == "b0"
+
+
+def test_hard_set_resets_in_reverse_order():
+    """_hard_set must reset vars in reverse of the order they were set.
+
+    Mirrors BoundWrapper.__call__'s pre-refactor convention (metadata reset before
+    cache, i.e. the reverse of the set order) by observing reset order directly
+    against a single var re-set twice via two entries.
+    """
+    var = _state.ContextVar("test_hard_set_reverse_order", default="base")
+    var.set("outer")
+    with _state._hard_set([(var, "middle"), (var, "inner")]):
+        assert var.get() == "inner"
+    # after exit, the inner-most set (registered last) is undone first, unwinding
+    # back through "middle" to "outer" - net effect is full restoration to "outer".
+    assert var.get() == "outer"
