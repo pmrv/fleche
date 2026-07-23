@@ -1,7 +1,7 @@
-from contextlib import AbstractContextManager
+from contextlib import AbstractContextManager, contextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
-from typing import overload, Callable
+from typing import overload, Callable, Iterator
 
 from . import caches, config, metadata
 
@@ -30,6 +30,30 @@ class _StickyContext:
 
     def __exit__(self, *args: object) -> None:
         self._var.reset(self._token)
+
+
+def _sticky_set(var: ContextVar, value: object) -> _StickyContext:
+    """Set *var* to *value* immediately and return a sticky context manager.
+
+    Entering the returned context manager as a ``with``-block restores the previous
+    value on exit; discarding it leaves *value* active.
+    """
+    return _StickyContext(var, var.set(value))
+
+
+@contextmanager
+def _hard_set(pairs: list[tuple[ContextVar, object]]) -> Iterator[None]:
+    """Set every ``ContextVar`` in *pairs* immediately; reset in reverse order on exit.
+
+    Unlike :func:`_sticky_set`, this is a hard scope: the values are always reset when
+    the ``with``-block exits, regardless of how it exits.
+    """
+    tokens = [(var, var.set(value)) for var, value in pairs]
+    try:
+        yield
+    finally:
+        for var, token in reversed(tokens):
+            var.reset(token)
 
 
 @overload
@@ -80,8 +104,7 @@ def cache(
     if stack:
         new_cache = _CACHE.get().push(new_cache)
 
-    token = _CACHE.set(new_cache)
-    return _StickyContext(_CACHE, token)
+    return _sticky_set(_CACHE, new_cache)
 
 
 _METADATA: ContextVar[tuple[metadata.MetaData, ...]] = ContextVar(
@@ -110,8 +133,7 @@ def meta(
     if stack:
         new_metadata = _METADATA.get() + new_metadata
 
-    token = _METADATA.set(new_metadata)
-    return _StickyContext(_METADATA, token)
+    return _sticky_set(_METADATA, new_metadata)
 
 
 def tags(**kwargs):
@@ -167,10 +189,5 @@ class BoundWrapper:
         return cls(func, _CACHE.get(), _METADATA.get())
 
     def __call__(self, *args, **kwargs):
-        token_cache = _CACHE.set(self.cache)
-        token_meta = _METADATA.set(self.meta)
-        try:
+        with _hard_set([(_CACHE, self.cache), (_METADATA, self.meta)]):
             return self.func(*args, **kwargs)
-        finally:
-            _METADATA.reset(token_meta)
-            _CACHE.reset(token_cache)
