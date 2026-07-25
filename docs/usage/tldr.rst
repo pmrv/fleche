@@ -55,8 +55,13 @@ The essentials beyond that:
    expensive.rerun(1, 2)       # force re-execution and overwrite the entry
    expensive.query().table()   # stored calls for this function as a pandas DataFrame
 
+Functions may also take and return :class:`~pathlib.Path` objects: files and
+directories are cached by **content** (not by path string), and a cache hit
+returns a freshly materialized copy under a temporary path.  See
+:doc:`file_semantics` for the exact contract.
+
 That is all you need for everyday use.  The rest of this section covers the
-helper methods in depth (:doc:`helpers`), lazy loading of large cached
-objects (:doc:`lazy_call`), and querying stored calls (:doc:`query`);
-storage backends and configuration details live under
-:doc:`/storage/configuration`.
+helper methods in depth (:doc:`helpers`), the file/path contract
+(:doc:`file_semantics`), lazy loading of large cached objects
+(:doc:`lazy_call`), and querying stored calls (:doc:`query`); storage backends
+and configuration details live under :doc:`/storage/configuration`.

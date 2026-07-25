@@ -96,6 +96,7 @@ own value.
 See also
 --------
 
+* :doc:`/usage/file_semantics` — the user-facing contract this implements.
 * :doc:`/recipes/files_and_paths` — copy-paste recipes.
 * :doc:`/notebooks/Files` — a runnable walkthrough.
 * :doc:`custom_digests` — the tuple-digest idiom these blobs use.

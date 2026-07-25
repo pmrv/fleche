@@ -2,8 +2,17 @@ Caching Functions that Work with Files
 ======================================
 
 Short, copy-paste recipes for caching functions that produce or consume files
-and directories.  For *why* any of this works, see :doc:`/dev/path_storage`; for
-a runnable walkthrough, see the :doc:`/notebooks/Files` notebook.
+and directories.  For the precise contract (identity, materialization,
+lifetime, nesting), see :doc:`/usage/file_semantics`; for *why* any of this
+works, see :doc:`/dev/path_storage`; for a runnable walkthrough, see the
+:doc:`/notebooks/Files` notebook.
+
+.. note::
+
+   A cache hit returns a **fresh temporary copy**, not the original location.
+   The copy lives as long as you hold a ``Path`` object pointing into it —
+   copy it out (``shutil.copy``) if you need it at a stable place.  Details:
+   :doc:`/usage/file_semantics`.
 
 Return a file from a cached function
 ------------------------------------

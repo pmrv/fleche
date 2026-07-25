@@ -32,6 +32,7 @@ Welcome to the **Fleche** library documentation.
 
    usage/tldr
    usage/helpers
+   usage/file_semantics
    usage/lazy_call
    usage/query
 
