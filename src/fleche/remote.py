@@ -57,7 +57,7 @@ from pyiron_snippets.import_alarm import ImportAlarm
 
 from . import call as _call
 from .caches import BaseCache, Rejected
-from .call import Call, DigestedCall, LazyCall, QueryCall
+from .call import DigestedCall, LazyCall, QueryCall
 from .digest import Digest
 
 logger = logging.getLogger("fleche.remote")
@@ -148,6 +148,7 @@ _REMOTE_METHODS: dict[str, _RemoteMethod] = {
     "save": _RemoteMethod(lambda cache, args: cache.save(*args)),
     "load": _RemoteMethod(lambda cache, args: _strip_cache(cache.load(*args))),
     "load_value": _RemoteMethod(lambda cache, args: cache.load_value(*args)),
+    "save_value": _RemoteMethod(lambda cache, args: cache.save_value(*args)),
     "evict": _RemoteMethod(lambda cache, args: cache.evict(*args), void=True),
     "contains": _RemoteMethod(lambda cache, args: cache.contains(*args)),
     "expand": _RemoteMethod(lambda cache, args: cache.expand(*args)),
@@ -680,6 +681,7 @@ _CLIENT_METHODS: dict[str, _ClientMethod] = {
     "save": _ClientMethod(write=True),
     "load": _ClientMethod(unwrap=_fetch_lazy_call),
     "load_value": _ClientMethod(),
+    "save_value": _ClientMethod(write=True),
     "evict": _ClientMethod(
         write=True, reject_message="Cannot evict from a read-only remote cache"
     ),
@@ -783,7 +785,7 @@ class SshCache(BaseCache):
             raise Rejected(self, *args)
         return spec.unwrap(self, self._conn.call(name, *args))
 
-    def save(self, call: Call) -> str:
+    def save(self, call: DigestedCall | _call.Call) -> str:
         return self._rpc("save", call)
 
     def load(self, key: str) -> LazyCall:
@@ -791,6 +793,13 @@ class SshCache(BaseCache):
 
     def load_value(self, key: str) -> Any:
         return self._rpc("load_value", key)
+
+    def save_value(self, value: Any) -> Digest:
+        # One round trip per value (no batching yet).  Values travel by
+        # cloudpickle, so a Path value ships its path *string*, not its
+        # content — the same limitation the previous ship-the-whole-Call
+        # protocol had; paths over SSH remain unsupported.
+        return self._rpc("save_value", value)
 
     def evict(self, key: str | Digest) -> None:
         self._rpc("evict", key)

@@ -112,6 +112,9 @@ def test_cache_to_config_unknown_raises():
         def load_value(self, key):
             raise KeyError(key)
 
+        def save_value(self, value):
+            return ""
+
         def evict(self, key):
             pass
 

@@ -235,7 +235,20 @@ def make_wrapper(func, policy, meta, isolate, get_call):
             for m in active_meta:
                 metadata[m.name] |= m.pre(replace(call, metadata={}))
 
-            result: _T = func(*args, **kwargs)
+            # Two-phase save: argument values are stored and the record's key
+            # sealed *before* the body runs, so the recorded identity is the
+            # arguments as passed — even if the body mutates them (e.g. writes
+            # into a directory it received).  A read-only cache stashes
+            # nothing here (digest-only prepare) and rejects at commit time,
+            # so the call still runs and returns uncached, as it previously
+            # did when the post-body save was rejected.
+            prepared = cache.prepare(call)
+
+            try:
+                result: _T = func(*args, **kwargs)
+            except BaseException:
+                prepared.abandon()
+                raise
 
             def _cache(future=None):
                 if future is not None:
@@ -245,7 +258,11 @@ def make_wrapper(func, policy, meta, isolate, get_call):
                     if future is None:
                         call.result = result
                     else:
-                        call.result = future.result()
+                        try:
+                            call.result = future.result()
+                        except BaseException:
+                            prepared.abandon()
+                            raise
                     if call.result is None:
                         if isinstance(cache, RefreshingCache):
                             try:
@@ -257,6 +274,7 @@ def make_wrapper(func, policy, meta, isolate, get_call):
                                 logger.warning("Cache rejected evict: %s", e.args)
                         else:
                             logger.warning("Function returned None, not caching")
+                        prepared.abandon()
                         return None
                     for m in active_meta:
                         metadata[m.name] |= m.post(
@@ -265,7 +283,7 @@ def make_wrapper(func, policy, meta, isolate, get_call):
                     try:
                         call.metadata = metadata
                         logger.debug("Saving result for %s with key %s", call.name, key)
-                        cache.save(call)
+                        prepared.commit(call.result, metadata)
                     except Rejected as e:
                         logger.warning("Cache rejected save: %s", e.args)
                     return call.result

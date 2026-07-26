@@ -199,8 +199,13 @@ class Call:
         return digest.digest(call)
 
     def _to_digested(self, save_fn: Callable[[Any], Digest]) -> "DigestedCall":
-        """Generic conversion to DigestedCall using *save_fn* to handle each value."""
-        result = save_fn(self.result)
+        """Generic conversion to DigestedCall using *save_fn* to handle each value.
+
+        A ``None`` result stays ``None`` (an incomplete record awaiting its
+        result — see :meth:`fleche.caches.BaseCache.prepare`) rather than being
+        run through *save_fn*.
+        """
+        result = None if self.result is None else save_fn(self.result)
         arguments: dict[str, Digest] = {}
         for k, v in self.arguments.items():
             if isinstance(v, Digest):
@@ -322,6 +327,80 @@ class DigestedCall:
             version=self.version,
             code_digest=self.code_digest,
         )
+
+
+@dataclass
+class PreparedCall:
+    """A call admitted to a cache: arguments stored, key sealed, result awaited.
+
+    The middle state of a call's lifecycle, between :class:`Call` (live values,
+    nothing stored) and :class:`DigestedCall` (fully recorded).  Created by
+    :meth:`fleche.caches.BaseCache.prepare`, which injects the cache whose
+    value storage received the arguments; finished by exactly one of
+    :meth:`commit` or :meth:`abandon`.
+
+    Also usable as a context manager in synchronous code: leaving the block
+    without having committed abandons the call.
+
+    .. code-block:: python
+
+        with cache.prepare(call) as prepared:
+            prepared.commit(func(...))       # skipped on exception -> abandoned
+    """
+
+    call: Call
+    digested: DigestedCall
+    key: Digest
+    cache: Any
+    _finished: bool = field(default=False, init=False, repr=False)
+
+    def commit(self, result: Any, metadata: dict | None = None) -> Digest:
+        """Store *result*, attach *metadata*, and file the call record.
+
+        The second half of the two-phase save protocol: the result is written to
+        ``cache.values`` (capturing its content *as returned* — including any
+        argument the body mutated and passed back out), and the completed
+        :class:`DigestedCall` is filed under :attr:`key`.
+
+        Args:
+            result: The function's return value.
+            metadata: Optional metadata mapping stored on the record.
+
+        Returns:
+            Digest: the record key (equal to :attr:`key`).
+
+        Raises:
+            fleche.caches.Rejected: if the result cannot be stored or the cache
+                refuses the record.
+        """
+        from .storage.base import SaveError  # lazy import: storage.base depends on call
+        try:
+            self.digested.result = self.cache.save_value(result)
+        except SaveError as e:
+            from .caches import Rejected  # lazy import: caches depends on call
+            raise Rejected(e) from None
+        if metadata is not None:
+            self.digested.metadata = metadata
+        self._finished = True
+        return self.cache.save(self.digested)
+
+    def abandon(self) -> None:
+        """Release the call without recording it.
+
+        Called when the function body raises or its result is not cacheable.
+        The default is a no-op: argument values stored by :meth:`Call.prepare`
+        are content-addressed orphans that a later garbage collection sweep
+        reclaims.  Subclasses may hook cleanup here.
+        """
+        self._finished = True
+
+    def __enter__(self) -> "PreparedCall":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        if not self._finished:
+            self.abandon()
+        return False
 
 
 class LazyArguments(Mapping):
