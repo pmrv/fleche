@@ -40,7 +40,7 @@ Returns ``True`` if the result for the given call is already present in the cach
 ``.query(*args, metadata={}, **kwargs)``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Returns matching cached calls from the active cache. Any argument passed as ``None`` acts as a wildcard, matching any stored value for that parameter. The ``metadata`` keyword argument accepts a dictionary of metadata tags to further filter results (e.g., ``metadata={"tags": {"project": "alpha"}}``).
+Returns a :class:`~fleche.query.QueryIterator` over matching cached calls from the active cache. Any argument passed as ``None`` acts as a wildcard, matching any stored value for that parameter. The ``metadata`` keyword argument accepts a dictionary of metadata tags to further filter results (e.g., ``metadata={"tags": {"project": "alpha"}}``). The iterator supports chainable methods such as ``.filter()``, ``.table()``, ``.count()``, ``.results()``, ``.evict()``, and more.
 
 .. warning::
 
