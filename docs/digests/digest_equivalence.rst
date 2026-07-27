@@ -15,9 +15,13 @@ representation that is stable across processes and Python versions (where the
 underlying object's representation allows it).
 
 Number types (``int``, ``float``, ``complex``, and subclasses) are an explicit
-exception: their digest is computed via Python's numeric hash protocol
-(``hash(value)``), which itself guarantees ``hash(1) == hash(1.0) == hash(1+0j)``.
-The type name is therefore **not** carried into the final digest for numbers, which is
+exception designed to make ``digest(1) == digest(1.0) == digest(1+0j)`` hold.
+Integers are encoded directly from their binary value; floats and complex numbers
+are first reduced to an equivalent integer via Python's numeric hash protocol
+(``hash(value)``), which guarantees ``hash(1) == hash(1.0) == hash(1+0j)``, and
+then follow the integer path.  As a consequence the concrete type name
+(``"float"``, ``"complex"``) is **not** carried into the final digest — all three
+collapse to the same ``"int"``-prefixed hash of the underlying integer — which is
 precisely why ``digest(1) == digest(1.0) == digest(1+0j)``.
 
 For all other types the type-name salt is applied normally, so
