@@ -1,15 +1,84 @@
 import bisect
 import contextlib
+import dataclasses
 import logging
 
 from abc import ABC, abstractmethod
 from enum import StrEnum
-from typing import Iterable, Any, Callable, Sequence, overload
+from typing import ClassVar, Iterable, Any, Callable, Literal, Sequence, overload
 
 from ..digest import digest, Digest, DIGEST_LENGTH
 from ..call import DigestedCall, QueryCall
 
 logger = logging.getLogger("fleche.storage")
+
+StorageKind = Literal["value", "call"]
+
+_STORAGE_CONSTRUCTORS: "dict[tuple[str, StorageKind], Callable[..., StorageBackend]]" = {}
+
+
+def register_storage(
+    name: str,
+    kind: StorageKind,
+    *,
+    factory: "Callable[..., StorageBackend] | None" = None,
+    set_name: bool = True,
+) -> "Callable[[Any], Any]":
+    """Register a storage backend constructor for config (de)serialisation.
+
+    ``fleche.config.storage_from_config({"type": name, ...}, kind)`` looks
+    up ``(name, kind)`` here and calls the registered constructor with the
+    remaining config keys as keyword arguments — by default the decorated
+    class itself (``cls(**kwargs)``); pass an explicit *factory* when
+    construction needs an alternate entry point (a classmethod, or a
+    positional argument the config dict doesn't carry).
+
+    *set_name* (default ``True``) also stamps ``cls._fleche_storage_name =
+    name``, which the default :meth:`StorageBackend.to_config` uses to
+    recover the ``type`` key for the reverse direction. Pass
+    ``set_name=False`` for a backend reachable under more than one name via
+    alternate constructors (the pickle-family serializers) — there is no
+    single class-wide canonical name, so such a backend must override
+    ``to_config`` to determine its name dynamically (see
+    ``PickleFileBackend``).
+
+    Used as a plain class decorator for the common one-name-per-class case::
+
+        @register_storage("void", kind="value")
+        @dataclass(frozen=True)
+        class ValueVoid(ValueMixin, VoidBackend): ...
+
+    Or called directly, after the class is fully defined, when *factory*
+    must reference one of the class's own methods::
+
+        register_storage("memory", kind="value", factory=ValueMemory.from_config)(ValueMemory)
+
+    *cls* is intentionally untyped (``Any``): most registrants are
+    ``StorageBackend`` subclasses, but ``Sql`` (a ``CallStorage`` that
+    doesn't go through the ``StorageBackend``/``to_config`` default at all)
+    registers here too.
+    """
+    def decorator(cls: Any) -> Any:
+        _STORAGE_CONSTRUCTORS[(name, kind)] = factory if factory is not None else cls
+        if set_name:
+            cls._fleche_storage_name = name
+        return cls
+    return decorator
+
+
+def get_storage_constructor(name: str, kind: StorageKind) -> "Callable[..., StorageBackend] | None":
+    """Look up the registered constructor for ``(name, kind)``, or ``None`` if unregistered."""
+    return _STORAGE_CONSTRUCTORS.get((name, kind))
+
+
+def _asdict_init_only(obj) -> dict[str, Any]:
+    """Like ``dataclasses.asdict()`` but restricted to ``init=True`` fields.
+
+    ``init=False`` fields are internal state (locks, caches) that must not
+    appear in serialised config.
+    """
+    non_init = {f.name for f in dataclasses.fields(obj) if not f.init}
+    return {k: v for k, v in dataclasses.asdict(obj).items() if k not in non_init}
 
 
 class SaveError(Exception):
@@ -236,6 +305,9 @@ class StorageBackend(KeyManagement):
     add domain-specific logic on top.
     """
 
+    _fleche_storage_name: ClassVar[str | None] = None
+    """Canonical config ``type`` name, set by :func:`register_storage`."""
+
     @abstractmethod
     def put(self, value: Any, key: Digest) -> Digest: ...
 
@@ -249,6 +321,22 @@ class StorageBackend(KeyManagement):
                 return True
             except KeyError:
                 return False
+
+    def to_config(self) -> dict[str, Any]:
+        """Convert this backend to a config dict (see ``fleche.config.storage_to_config``).
+
+        Default: every ``init=True`` dataclass field plus the canonical
+        ``type`` name set by :func:`register_storage`. Override when the
+        round trip needs extra shaping — dropping/renaming fields, or (for a
+        backend registered under several names) determining the name
+        dynamically — see ``MemoryBackend``, ``PickleFileBackend``,
+        ``BagOfHoldingH5FileBackend``.
+        """
+        if self._fleche_storage_name is None:
+            raise ValueError(f"Cannot convert storage of type {type(self).__name__!r} to config")
+        config = _asdict_init_only(self)
+        config["type"] = self._fleche_storage_name
+        return config
 
 
 class ValueStorage(KeyManagement):

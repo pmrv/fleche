@@ -221,8 +221,6 @@ whatever ``fleche.toml`` happens to live in a parent directory or ``$HOME``::
     root = true              # ignore any fleche.toml farther up the tree
 """
 
-import dataclasses
-from dataclasses import asdict
 import tomllib
 import logging
 from typing import Callable, Literal, cast, overload
@@ -342,33 +340,6 @@ def load_default_metadata():
 
     return tuple(meta_objects)
 
-_STORAGE_NAME_MAPPING = {
-        ("memory", "value"): storage.ValueMemory,
-        ("memory", "call"): storage.CallMemory,
-        ("void", "value"): storage.ValueVoid,
-        ("void", "call"): storage.CallVoid,
-        ("bagofholding_hdf", "value"): storage.ValueBagOfHoldingH5File,
-        ("bagofholding_hdf", "call"): storage.CallBagOfHoldingH5File,
-        ("pickle", "value"): storage.ValuePickleFile.with_pickle,
-        ("pickle", "call"): storage.CallPickleFile.with_pickle,
-        ("dill", "value"): storage.ValuePickleFile.with_dill,
-        ("dill", "call"): storage.CallPickleFile.with_dill,
-        ("cloudpickle", "value"): storage.ValuePickleFile.with_cloudpickle,
-        ("cloudpickle", "call"): storage.CallPickleFile.with_cloudpickle,
-}
-
-_STORAGE_CLASS_TO_NAME: dict[type, str] = {
-    storage.ValueMemory: "memory",
-    storage.CallMemory: "memory",
-    storage.ValueVoid: "void",
-    storage.CallVoid: "void",
-    storage.ValueBagOfHoldingH5File: "bagofholding_hdf",
-    storage.CallBagOfHoldingH5File: "bagofholding_hdf",
-    storage.ValuePickleFile: "pickle",   # serializer determines the actual name
-    storage.CallPickleFile: "pickle",
-}
-
-
 @overload
 def storage_from_config(d: dict[str, Any], type: Literal["call"]) -> storage.CallStorage: ...
 
@@ -380,7 +351,8 @@ def storage_from_config(d: dict[str, Any], type: Literal["call", "value"]) -> st
 
     The dict must contain a ``"type"`` key (case-sensitive, lowercase) and any
     additional parameters required by that storage backend.  The input dict is
-    **not** mutated.
+    **not** mutated. ``"type"`` is looked up against the backends registered
+    via :func:`fleche.storage.register_storage`.
 
     Supported type values and their parameters:
 
@@ -403,69 +375,25 @@ def storage_from_config(d: dict[str, Any], type: Literal["call", "value"]) -> st
     """
     d = dict(d)
     backend = d.pop("type")
-    match backend:
-        case "memory":
-            return _STORAGE_NAME_MAPPING[backend, type]({}, **d)  # type: ignore
-        case "void":
-            return _STORAGE_NAME_MAPPING[backend, type]()  # type: ignore
-        case "bagofholding_hdf" | "pickle" | "dill" | "cloudpickle":
-            return _STORAGE_NAME_MAPPING[backend, type](**d)
-        case "sql" if type == "call":
-            return storage.Sql(**d)
-        case _:
-            raise ValueError(f"Unknown storage type '{backend}' for {type} storage!")
-
-
-def _asdict_init_only(obj) -> dict[str, Any]:
-    """Like ``dataclasses.asdict()`` but restricted to ``init=True`` fields.
-
-    ``init=False`` fields are internal state (locks, caches) that must not
-    appear in serialised config.
-    """
-    non_init = {f.name for f in dataclasses.fields(obj) if not f.init}
-    return {k: v for k, v in asdict(obj).items() if k not in non_init}
+    ctor = storage.get_storage_constructor(backend, type)
+    if ctor is None:
+        raise ValueError(f"Unknown storage type {backend!r} for {type} storage!")
+    return cast("storage.ValueStorage | storage.CallStorage", ctor(**d))
 
 
 def storage_to_config(s: storage.ValueStorage | storage.CallStorage) -> dict[str, Any]:
     """Convert a Storage instance to a config dict (inverse of ``storage_from_config``).
 
     The returned dict contains a ``"type"`` key and any additional parameters
-    needed to reconstruct the storage via :func:`storage_from_config`.
+    needed to reconstruct the storage via :func:`storage_from_config`. Delegates
+    to the backend's own ``to_config()`` (see ``StorageBackend.to_config`` and
+    :func:`fleche.storage.register_storage`); backends that never registered
+    (custom subclasses that don't define ``to_config``) raise.
     """
-    cls = type(s)
-    if cls not in _STORAGE_CLASS_TO_NAME and not isinstance(s, storage.Sql):
-        raise ValueError(f"Cannot convert storage of type {cls.__name__!r} to config")
-
-    match s:
-        case storage.memory.MemoryBackend():
-            config = _asdict_init_only(s)
-            config["type"] = "memory"
-            del config["storage"]
-        case storage.void.VoidBackend():
-            config = _asdict_init_only(s)
-            config["type"] = "void"
-        case storage.pickle_file.PickleFileBackend():
-            config = _asdict_init_only(s)
-            serializer_name = s.dumps.__module__.split(".")[0].lstrip("_")
-            if serializer_name not in ("pickle", "dill", "cloudpickle"):
-                raise ValueError(f"Unknown PickleFile serializer: {serializer_name!r}")
-            config["type"] = serializer_name
-            del config["dumps"]
-            del config["loads"]
-            if config["secret_key"]:
-                config["secret_key"] = [k.hex() for k in config["secret_key"]]
-            else:
-                del config["secret_key"]
-            config["root"] = str(config["root"])
-        case storage.bagofholding_file.BagOfHoldingH5FileBackend():
-            config = _asdict_init_only(s)
-            config["type"] = "bagofholding_hdf"
-            config["root"] = str(config["root"])
-        case storage.sql.Sql():
-            config = {"type": "sql", "url": s.url, "echo": s.echo}
-        case _:
-            raise ValueError(f"Cannot convert storage of type {cls.__name__!r} to config")
-    return config
+    to_config = getattr(s, "to_config", None)
+    if to_config is None:
+        raise ValueError(f"Cannot convert storage of type {type(s).__name__!r} to config")
+    return to_config()
 
 
 def _template_symmetric_transient(style: str) -> "Callable[..., tuple[dict[str, Any], dict[str, Any]]]":

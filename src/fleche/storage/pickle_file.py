@@ -7,7 +7,7 @@ from typing import Any, Callable
 import filelock
 
 from .file import FileStorage
-from .base import ValueMixin, CallMixin
+from .base import ValueMixin, CallMixin, register_storage, _asdict_init_only
 from .thread_safe import PerKeyLockMixin
 from .destructuring import DestructuringMixin
 from ..security import get_secret_key, normalize_secret_key, SignedBytes, SignatureError
@@ -111,9 +111,47 @@ class PickleFileBackend(FileStorage):
             lambda c: gzip.decompress(c) if c[:2] == b"\x1f\x8b" else None
         )
 
+    def to_config(self) -> dict[str, Any]:
+        """Determine the ``type`` name dynamically from the bound serializer.
+
+        One class is reachable under three names (``pickle``/``dill``/
+        ``cloudpickle``) via the ``with_*`` alternate constructors, so there
+        is no single class-wide ``_fleche_storage_name`` to fall back on
+        (see :func:`register_storage`'s ``set_name=False`` for this case).
+        """
+        config = _asdict_init_only(self)
+        serializer_name = self.dumps.__module__.split(".")[0].lstrip("_")
+        if serializer_name not in ("pickle", "dill", "cloudpickle"):
+            raise ValueError(f"Unknown PickleFile serializer: {serializer_name!r}")
+        config["type"] = serializer_name
+        del config["dumps"]
+        del config["loads"]
+        if config["secret_key"]:
+            config["secret_key"] = [k.hex() for k in config["secret_key"]]
+        else:
+            del config["secret_key"]
+        config["root"] = str(config["root"])
+        return config
+
 
 @dataclass(frozen=True)
 class ValuePickleFile(PerKeyLockMixin, DestructuringMixin, ValueMixin, PickleFileBackend): ...
 
 @dataclass(frozen=True)
 class CallPickleFile(PerKeyLockMixin, CallMixin, PickleFileBackend): ...
+
+for _name, _ctor in (
+    ("pickle", ValuePickleFile.with_pickle),
+    ("dill", ValuePickleFile.with_dill),
+    ("cloudpickle", ValuePickleFile.with_cloudpickle),
+):
+    register_storage(_name, kind="value", factory=_ctor, set_name=False)(ValuePickleFile)
+
+for _name, _ctor in (
+    ("pickle", CallPickleFile.with_pickle),
+    ("dill", CallPickleFile.with_dill),
+    ("cloudpickle", CallPickleFile.with_cloudpickle),
+):
+    register_storage(_name, kind="call", factory=_ctor, set_name=False)(CallPickleFile)
+
+del _name, _ctor

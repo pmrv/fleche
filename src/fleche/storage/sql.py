@@ -5,7 +5,7 @@ import threading
 from typing import Iterable, Any, List
 from pathlib import Path
 from dataclasses import dataclass, field
-from .base import Intent, KeyManagement, CallStorage, _resolve_prefix
+from .base import Intent, KeyManagement, CallStorage, _resolve_prefix, register_storage
 from .thread_safe import PerKeyLockMixin
 from ..call import DigestedCall, QueryCall
 from ..digest import Digest, DIGEST_LENGTH, digest
@@ -196,6 +196,12 @@ class Sql(PerKeyLockMixin, CallStorage):
         # Constructor args are the complete durable state; __post_init__ rebuilds
         # engine/session and the mixin's lock fields are self-contained picklable types.
         return (type(self), (self.url, self.echo))
+
+    def to_config(self) -> dict[str, Any]:
+        # Sql does not subclass StorageBackend (it implements CallStorage's
+        # save/load/query directly, no put/get primitives), so it defines its
+        # own to_config rather than inheriting the default.
+        return {"type": "sql", "url": self.url, "echo": self.echo}
 
     @contextlib.contextmanager
     def _session_context(self):
@@ -479,3 +485,6 @@ class Sql(PerKeyLockMixin, CallStorage):
             c = self.load(k)
             if meta_matches(c):
                 yield c
+
+
+register_storage("sql", kind="call")(Sql)

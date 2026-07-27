@@ -5,7 +5,7 @@ import logging
 import filelock
 
 from .file import FileStorage
-from .base import SaveError, ValueMixin, CallMixin
+from .base import SaveError, ValueMixin, CallMixin, register_storage
 from .thread_safe import PerKeyLockMixin
 from .destructuring import DestructuringMixin
 from ..digest import Digest, DIGEST_LENGTH
@@ -312,9 +312,18 @@ class BagOfHoldingH5FileBackend(FileStorage):
                 except OSError as e:
                     logger.warning("Failed to rebag %s: %s", key, e)
 
+    def to_config(self) -> dict[str, Any]:
+        config = super().to_config()
+        config["root"] = str(config["root"])
+        return config
+
 
 @dataclass(frozen=True)
 class ValueBagOfHoldingH5File(PerKeyLockMixin, DestructuringMixin, ValueMixin, BagOfHoldingH5FileBackend): ...
 
+register_storage("bagofholding_hdf", kind="value")(ValueBagOfHoldingH5File)
+
 @dataclass(frozen=True)
 class CallBagOfHoldingH5File(PerKeyLockMixin, CallMixin, BagOfHoldingH5FileBackend): ...
+
+register_storage("bagofholding_hdf", kind="call")(CallBagOfHoldingH5File)

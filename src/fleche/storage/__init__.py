@@ -15,6 +15,8 @@ from .base import (
     ValueMixin,
     CallStorage,
     CallMixin,
+    register_storage,
+    get_storage_constructor,
 )
 from .destructuring import DestructuringMixin, register_destructurer
 from .memory import ValueMemory, CallMemory
@@ -36,6 +38,8 @@ __all__ = [
     "ValueMixin",
     "CallStorage",
     "CallMixin",
+    "register_storage",
+    "get_storage_constructor",
     "DestructuringMixin",
     "register_destructurer",
     "ValueMemory",
