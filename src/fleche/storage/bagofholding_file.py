@@ -312,18 +312,11 @@ class BagOfHoldingH5FileBackend(FileStorage):
                 except OSError as e:
                     logger.warning("Failed to rebag %s: %s", key, e)
 
-    def to_config(self) -> dict[str, Any]:
-        config = super().to_config()
-        config["root"] = str(config["root"])
-        return config
 
-
+@register_storage("bagofholding_hdf", kind="value")
 @dataclass(frozen=True)
 class ValueBagOfHoldingH5File(PerKeyLockMixin, DestructuringMixin, ValueMixin, BagOfHoldingH5FileBackend): ...
 
-register_storage("bagofholding_hdf", kind="value")(ValueBagOfHoldingH5File)
-
+@register_storage("bagofholding_hdf", kind="call")
 @dataclass(frozen=True)
 class CallBagOfHoldingH5File(PerKeyLockMixin, CallMixin, BagOfHoldingH5FileBackend): ...
-
-register_storage("bagofholding_hdf", kind="call")(CallBagOfHoldingH5File)

@@ -1,8 +1,24 @@
 
+import threading
+from dataclasses import dataclass
+
 import pytest
 
 from fleche import storage
+from fleche.storage.base import _STORAGE_CLASS_NAMES, _STORAGE_CONSTRUCTORS
 from fleche.config import storage_to_config, storage_from_config
+
+
+@pytest.fixture
+def clean_registry():
+    """Undo any backend registration a test performs."""
+    constructors = dict(_STORAGE_CONSTRUCTORS)
+    names = dict(_STORAGE_CLASS_NAMES)
+    yield
+    _STORAGE_CONSTRUCTORS.clear()
+    _STORAGE_CONSTRUCTORS.update(constructors)
+    _STORAGE_CLASS_NAMES.clear()
+    _STORAGE_CLASS_NAMES.update(names)
 
 
 def test_memory():
@@ -160,3 +176,57 @@ def test_storage_from_config_does_not_mutate():
 def test_storage_from_config_unknown_type():
     with pytest.raises(ValueError, match="UnknownType"):
         storage_from_config({"type": "UnknownType"}, "value")
+
+
+def test_storage_from_config_wrong_kind():
+    pytest.importorskip("sqlalchemy")
+    with pytest.raises(ValueError, match="sql"):
+        storage_from_config({"type": "sql", "url": "sqlite:///:memory:"}, "value")
+
+
+def test_unregistered_subclass_raises():
+    """A subclass is not the class that was registered: serialising it as the
+    parent's type would silently round-trip back as the parent."""
+
+    @dataclass(frozen=True)
+    class MyMemory(storage.ValueMemory):
+        __hash__ = object.__hash__
+
+    with pytest.raises(ValueError, match="MyMemory"):
+        storage_to_config(MyMemory({}))
+
+
+def test_memory_config_ignores_undeepcopyable_entries():
+    """The live store is dropped before the field copy, so what a memory
+    storage happens to hold can never break `storage_to_config`."""
+    s = storage.ValueMemory({})
+    s.storage["a" * 64] = threading.Lock()  # not deep-copyable
+    assert storage_to_config(s) == {"type": "memory", "remaining_depth": 1}
+
+
+def test_register_storage_roundtrips_a_third_party_backend(clean_registry):
+    """Registering is the whole contract for a new backend: both directions of
+    the config round trip follow from the one decorator."""
+
+    @storage.register_storage("shouting", kind="value")
+    @dataclass(frozen=True)
+    class ValueShouting(storage.ValueMixin, storage.StorageBackend):
+        volume: int = 11
+
+        def put(self, value, key):
+            return key
+
+        def get(self, key):
+            raise KeyError(key)
+
+        def list(self):
+            return ()
+
+        def _evict(self, key):
+            pass
+
+    cfg = storage_to_config(ValueShouting(volume=3))
+    assert cfg == {"type": "shouting", "volume": 3}
+    reconstructed = storage_from_config(cfg, "value")
+    assert isinstance(reconstructed, ValueShouting)
+    assert reconstructed.volume == 3

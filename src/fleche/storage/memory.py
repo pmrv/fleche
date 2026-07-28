@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any, ClassVar, Iterable
 
 from .base import ValueMixin, CallMixin, StorageBackend, register_storage
 from .destructuring import DestructuringMixin
@@ -15,6 +15,10 @@ class MemoryBackend(StorageBackend):
     """
 
     storage: dict[Digest, Any]
+
+    # The live store is runtime state, not configuration; from_config seeds a
+    # fresh one instead.
+    _config_exclude: ClassVar[tuple[str, ...]] = ("storage",)
 
     # Each storage instance is its own world: hash on identity so that frozen
     # dataclass subclasses can serve as WeakKeyDictionary keys in PerKeyLockMixin
@@ -47,11 +51,6 @@ class MemoryBackend(StorageBackend):
 
     def _evict(self, key: Digest) -> None:
         self.storage.pop(key, None)
-
-    def to_config(self) -> dict[str, Any]:
-        config = super().to_config()
-        del config["storage"]
-        return config
 
     @classmethod
     def from_config(cls, **kwargs) -> "MemoryBackend":
