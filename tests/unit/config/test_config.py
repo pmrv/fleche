@@ -4,7 +4,7 @@ import textwrap
 import pytest
 from dataclasses import dataclass
 
-from fleche import storage, cache
+from fleche import state, storage, cache
 from fleche.config import load_cache_config, load_default_metadata, _live_caches
 from fleche.caches import Cache, BaseCache, SizeLimitedCache, ReadOnlyCache, CacheStack
 from fleche.metadata import Runtime
@@ -95,13 +95,16 @@ def _reset_live_caches():
     _live_caches.clear()
 
 
-@pytest.fixture
-def restore_fleche_state():
-    """Reload fleche.state after each test to undo any importlib.reload side effects."""
+@pytest.fixture(autouse=True)
+def _reset_fleche_state_defaults():
+    """Drop fleche.state's memoised config defaults around each test.
+
+    The tests here patch ``XDG_CONFIG_HOME``, so a default resolved from an
+    earlier config file must not leak in either direction.
+    """
+    state._DEFAULTS.clear()
     yield
-    import importlib
-    import fleche.state
-    importlib.reload(fleche.state)
+    state._DEFAULTS.clear()
 
 
 def test_load_cache_config_default(monkeypatch, config_file):
@@ -217,42 +220,29 @@ def test_cache_default_activates_default_cache(monkeypatch, config_file):
         assert cache() is default
 
 
-def test_load_default_metadata(restore_fleche_state, monkeypatch, config_file):
+def test_load_default_metadata(monkeypatch, config_file):
     monkeypatch.setenv("XDG_CONFIG_HOME", config_file)
 
-    import importlib
-    import fleche.state
-
-    importlib.reload(fleche.state)
-
-    meta = fleche.state._METADATA.get()
+    meta = state.get_metadata()
     assert len(meta) == 1
     assert isinstance(meta[0], Runtime)
 
 
-def test_load_default_cache(restore_fleche_state, monkeypatch, config_file):
+def test_load_default_cache(monkeypatch, config_file):
     monkeypatch.setenv("XDG_CONFIG_HOME", config_file)
 
-    import importlib
-    import fleche.state
-
-    importlib.reload(fleche.state)
-
-    cache_obj = fleche.state._CACHE.get()
+    cache_obj = state.get_cache()
     assert isinstance(cache_obj, BaseCache)
     assert isinstance(cache_obj, Cache)
     assert isinstance(cache_obj.values, storage.ValueMemory)
     assert isinstance(cache_obj.calls, storage.CallMemory)
 
 
-def test_tags_disallowed(restore_fleche_state, monkeypatch, config_file_with_tags):
+def test_tags_disallowed(monkeypatch, config_file_with_tags):
     monkeypatch.setenv("XDG_CONFIG_HOME", config_file_with_tags)
 
-    import importlib
-    import fleche.state
-
     with pytest.raises(ValueError):
-        importlib.reload(fleche.state)
+        state.get_metadata()
 
 
 def test_load_cache_config_memory_special_case(monkeypatch, config_file):
