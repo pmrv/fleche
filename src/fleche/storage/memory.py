@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-from .base import ValueMixin, CallMixin, StorageBackend
+from .base import ValueMixin, CallMixin, StorageBackend, register_storage
 from .destructuring import DestructuringMixin
 from .thread_safe import PerKeyLockMixin
 from ..digest import Digest
@@ -48,11 +48,33 @@ class MemoryBackend(StorageBackend):
     def _evict(self, key: Digest) -> None:
         self.storage.pop(key, None)
 
+    @classmethod
+    def from_config(cls, **kwargs) -> "MemoryBackend":
+        """Alternate constructor for ``storage_from_config``.
+
+        The config carries no ``storage`` dict (it's runtime state, not
+        configuration), so seed a fresh empty one.
+        """
+        return cls({}, **kwargs)
+
 
 @dataclass(frozen=True)
 class ValueMemory(PerKeyLockMixin, DestructuringMixin, ValueMixin, MemoryBackend):
     __hash__ = object.__hash__
 
+    def to_config(self) -> dict[str, Any]:
+        # `storage` is the live store — runtime state, not configuration;
+        # from_config seeds a fresh one instead.
+        return {"type": "memory", "remaining_depth": self.remaining_depth}
+
+register_storage("memory", kind="value", factory=ValueMemory.from_config)(ValueMemory)
+
+
 @dataclass(frozen=True)
 class CallMemory(PerKeyLockMixin, CallMixin, MemoryBackend):
     __hash__ = object.__hash__
+
+    def to_config(self) -> dict[str, Any]:
+        return {"type": "memory"}
+
+register_storage("memory", kind="call", factory=CallMemory.from_config)(CallMemory)

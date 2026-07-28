@@ -7,7 +7,7 @@ from typing import Any, Callable
 import filelock
 
 from .file import FileStorage
-from .base import ValueMixin, CallMixin
+from .base import ValueMixin, CallMixin, register_storage
 from .thread_safe import PerKeyLockMixin
 from .destructuring import DestructuringMixin
 from ..security import get_secret_key, normalize_secret_key, SignedBytes, SignatureError
@@ -113,7 +113,51 @@ class PickleFileBackend(FileStorage):
 
 
 @dataclass(frozen=True)
-class ValuePickleFile(PerKeyLockMixin, DestructuringMixin, ValueMixin, PickleFileBackend): ...
+class ValuePickleFile(PerKeyLockMixin, DestructuringMixin, ValueMixin, PickleFileBackend):
+    def to_config(self) -> dict[str, Any]:
+        # `dumps`/`loads` are not config data: the `type` name is what selects
+        # them again on the way back in, and it comes off the instance rather
+        # than the class because one class serves three names.
+        serializer = self.dumps.__module__.split(".")[0].lstrip("_")
+        if serializer not in ("pickle", "dill", "cloudpickle"):
+            raise ValueError(f"Unknown PickleFile serializer: {serializer!r}")
+        config: dict[str, Any] = {
+            "type": serializer,
+            # `root` is a Path; config dicts must stay TOML/JSON-representable.
+            "root": str(self.root),
+            "lock_timeout": self.lock_timeout,
+            "compress": self.compress,
+            "remaining_depth": self.remaining_depth,
+        }
+        # Keys are bytes; store them hex-encoded, and omit the key list
+        # entirely when unset so the config stays minimal.
+        if self.secret_key:
+            config["secret_key"] = [k.hex() for k in self.secret_key]
+        return config
 
 @dataclass(frozen=True)
-class CallPickleFile(PerKeyLockMixin, CallMixin, PickleFileBackend): ...
+class CallPickleFile(PerKeyLockMixin, CallMixin, PickleFileBackend):
+    def to_config(self) -> dict[str, Any]:
+        serializer = self.dumps.__module__.split(".")[0].lstrip("_")
+        if serializer not in ("pickle", "dill", "cloudpickle"):
+            raise ValueError(f"Unknown PickleFile serializer: {serializer!r}")
+        config: dict[str, Any] = {
+            "type": serializer,
+            "root": str(self.root),
+            "lock_timeout": self.lock_timeout,
+            "compress": self.compress,
+        }
+        if self.secret_key:
+            config["secret_key"] = [k.hex() for k in self.secret_key]
+        return config
+
+# One class per kind, three config names each: the serializer is chosen by the
+# `with_*` constructor rather than by a config key, so each `to_config` reads
+# it back off the instance.
+register_storage("pickle", kind="value", factory=ValuePickleFile.with_pickle)(ValuePickleFile)
+register_storage("dill", kind="value", factory=ValuePickleFile.with_dill)(ValuePickleFile)
+register_storage("cloudpickle", kind="value", factory=ValuePickleFile.with_cloudpickle)(ValuePickleFile)
+
+register_storage("pickle", kind="call", factory=CallPickleFile.with_pickle)(CallPickleFile)
+register_storage("dill", kind="call", factory=CallPickleFile.with_dill)(CallPickleFile)
+register_storage("cloudpickle", kind="call", factory=CallPickleFile.with_cloudpickle)(CallPickleFile)
