@@ -126,8 +126,6 @@ def test_bound_wrapper_picklable():
         bound = fleche_state.BoundWrapper.bind(_pickle_func)
 
     restored = pickle.loads(pickle.dumps(bound))
-    # Use the live module reference to handle the case where fleche.state was
-    # reloaded (by config tests) between the import and this assertion.
     assert isinstance(restored, fleche_state.BoundWrapper)
 
     result = restored(10)

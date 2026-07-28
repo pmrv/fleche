@@ -153,7 +153,7 @@ def make_query(func, policy):
                 "Function argument 'metadata' shadowed by query argument"
             )
         call.metadata = metadata
-        return state._CACHE.get().query(call)
+        return state.get_cache().query(call)
 
     wraps(func)(_query_func)
     return _query_func
@@ -163,7 +163,7 @@ def make_rerun(func, wrapper):
     """Build the `.rerun` helper that forces recursive reevaluation through a :class:`RefreshingCache`."""
     @wraps(func)
     def _rerun_func(*args, **kwargs):
-        cache: BaseCache = state._CACHE.get()
+        cache: BaseCache = state.get_cache()
         with state.cache(RefreshingCache(cache)):
             return wrapper(*args, **kwargs)
     return _rerun_func
@@ -189,7 +189,7 @@ def make_wrapper(func, policy, meta, isolate, get_call):
 
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> _T:
-        cache: BaseCache = state._CACHE.get()
+        cache: BaseCache = state.get_cache()
 
         # expand args passed as digest early so that everything else below sees the real values
         args = tuple(
@@ -230,7 +230,7 @@ def make_wrapper(func, policy, meta, isolate, get_call):
             return f.result()
 
         def _run_and_cache():
-            active_meta = state._METADATA.get() + tuple(meta)
+            active_meta = state.get_metadata() + tuple(meta)
             metadata: Dict[str, Any] = defaultdict(dict)
             for m in active_meta:
                 metadata[m.name] |= m.pre(replace(call, metadata={}))
@@ -323,7 +323,7 @@ _PRE_WRAPPER_SPECS: list[_HelperSpec] = [
         name="load",
         doc_prefix="Load result from cache for",
         builder=lambda ctx: wraps(ctx.func)(
-            lambda *a, **kw: state._CACHE.get().load(ctx.digest_func(*a, **kw)).result
+            lambda *a, **kw: state.get_cache().load(ctx.digest_func(*a, **kw)).result
         ),
     ),
     _HelperSpec(
@@ -331,7 +331,7 @@ _PRE_WRAPPER_SPECS: list[_HelperSpec] = [
         doc_prefix="Check if result is in cache for",
         ret=bool,
         builder=lambda ctx: wraps(ctx.func)(
-            lambda *a, **kw: state._CACHE.get().contains(ctx.digest_func(*a, **kw))
+            lambda *a, **kw: state.get_cache().contains(ctx.digest_func(*a, **kw))
         ),
     ),
 ]
