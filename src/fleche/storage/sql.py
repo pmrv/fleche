@@ -198,9 +198,6 @@ class Sql(PerKeyLockMixin, CallStorage):
         return (type(self), (self.url, self.echo))
 
     def to_config(self) -> dict[str, Any]:
-        # Sql does not subclass StorageBackend (it implements CallStorage's
-        # save/load/query directly, no put/get primitives), so it defines its
-        # own to_config rather than inheriting the default.
         return {"type": "sql", "url": self.url, "echo": self.echo}
 
     @contextlib.contextmanager

@@ -1,12 +1,10 @@
 import bisect
 import contextlib
-import copy
-import dataclasses
 import logging
 
 from abc import ABC, abstractmethod
 from enum import StrEnum
-from typing import ClassVar, Iterable, Any, Callable, Literal, Sequence, overload
+from typing import Iterable, Any, Callable, Literal, Sequence, overload
 
 from ..digest import digest, Digest, DIGEST_LENGTH
 from ..call import DigestedCall, QueryCall
@@ -17,9 +15,8 @@ StorageKind = Literal["value", "call"]
 
 _STORAGE_CONSTRUCTORS: "dict[tuple[str, StorageKind], Callable[..., Any]]" = {}
 
-_STORAGE_CLASS_NAMES: "dict[type, str | None]" = {}
-"""Registered class -> its canonical config ``type`` name, or ``None`` when the
-class is reachable under several names (the pickle family) and so has none."""
+_STORAGE_CLASSES: "set[type]" = set()
+"""Every class passed to :func:`register_storage`, exactly (not subclasses)."""
 
 
 def register_storage(
@@ -37,21 +34,15 @@ def register_storage(
     construction needs an alternate entry point (a classmethod, or a
     positional argument the config dict doesn't carry).
 
-    Registering also records *cls* as the canonical class for *name*, which
-    the reverse direction relies on twice: the default
-    :meth:`StorageBackend.to_config` recovers the ``type`` key from it, and
-    it is what makes ``to_config`` refuse unregistered classes (an
-    unregistered subclass would otherwise serialise to its parent's ``type``
-    and silently round-trip back as the parent).
+    The other direction is the class's own ``to_config()``: every registered
+    class writes out its config dict by hand, ``type`` key included (there is
+    no inherited default — see :func:`fleche.config.storage_to_config`).
+    Registering is also what makes ``storage_to_config`` accept the class at
+    all: it refuses any class not registered *exactly*, because an
+    unregistered subclass would otherwise serialise under its parent's
+    ``type`` and silently round-trip back as the parent.
 
-    Registering the *same* class under more than one name — the pickle
-    family, where ``ValuePickleFile`` is reachable as ``pickle``/``dill``/
-    ``cloudpickle`` via its ``with_*`` constructors — leaves it with no
-    canonical name; such a backend must override
-    :meth:`StorageBackend._config_type_name` to determine its name from
-    instance state (see ``PickleFileBackend``).
-
-    Used as a plain class decorator for the common one-name-per-class case::
+    Used as a plain class decorator for the common case::
 
         @register_storage("void", kind="value")
         @dataclass(frozen=True)
@@ -62,15 +53,18 @@ def register_storage(
 
         register_storage("memory", kind="value", factory=ValueMemory.from_config)(ValueMemory)
 
+    A class may register under several names — ``ValuePickleFile`` is
+    reachable as ``pickle``/``dill``/``cloudpickle`` via its ``with_*``
+    constructors — in which case its ``to_config`` is responsible for
+    picking the right one back off the instance.
+
     *cls* is intentionally untyped (``Any``): most registrants are
-    ``StorageBackend`` subclasses, but ``Sql`` (a ``CallStorage`` that
-    doesn't go through the ``StorageBackend``/``to_config`` default at all)
-    registers here too.
+    ``StorageBackend`` subclasses, but ``Sql`` implements ``CallStorage``
+    directly and registers here too.
     """
     def decorator(cls: Any) -> Any:
         _STORAGE_CONSTRUCTORS[(name, kind)] = factory if factory is not None else cls
-        if _STORAGE_CLASS_NAMES.setdefault(cls, name) != name:
-            _STORAGE_CLASS_NAMES[cls] = None
+        _STORAGE_CLASSES.add(cls)
         return cls
     return decorator
 
@@ -80,21 +74,15 @@ def get_storage_constructor(name: str, kind: StorageKind) -> "Callable[..., Any]
     return _STORAGE_CONSTRUCTORS.get((name, kind))
 
 
-def _config_fields(obj, exclude: Iterable[str] = ()) -> dict[str, Any]:
-    """The ``init=True`` dataclass fields of *obj*, minus *exclude*, deep-copied.
+def is_registered_storage(cls: type) -> bool:
+    """Whether *cls* itself was passed to :func:`register_storage`.
 
-    ``init=False`` fields are internal state (locks, caches) that must not
-    appear in serialised config.  *exclude* drops further fields *before* the
-    copy, so a backend never pays to duplicate state it is about to discard
-    (``MemoryBackend.storage`` is the whole live cache, and may hold values
-    that cannot be deep-copied at all).
+    Deliberately an exact-class check: a subclass inherits its parent's
+    ``to_config`` and would serialise under the parent's ``type``, so
+    ``storage_to_config`` refuses it rather than silently round-tripping it
+    back as the parent.
     """
-    skip = set(exclude)
-    return {
-        f.name: copy.deepcopy(getattr(obj, f.name))
-        for f in dataclasses.fields(obj)
-        if f.init and f.name not in skip
-    }
+    return cls in _STORAGE_CLASSES
 
 
 class SaveError(Exception):
@@ -319,10 +307,13 @@ class StorageBackend(KeyManagement):
     Backends implement the low-level ``put``/``get``/``_evict``/``list``
     operations.  Higher-level classes (:class:`ValueMixin`, :class:`CallMixin`)
     add domain-specific logic on top.
-    """
 
-    _config_exclude: ClassVar[tuple[str, ...]] = ()
-    """Fields that :meth:`to_config` drops (runtime state, or shaped by hand)."""
+    Backends that are constructible from a config dict additionally spell out
+    a ``to_config()`` returning that dict — see :func:`register_storage`.
+    There is deliberately no default implementation here: the config keys of
+    a backend are a hand-maintained contract, not whatever its dataclass
+    fields happen to be.
+    """
 
     @abstractmethod
     def put(self, value: Any, key: Digest) -> Digest: ...
@@ -337,42 +328,6 @@ class StorageBackend(KeyManagement):
                 return True
             except KeyError:
                 return False
-
-    def to_config(self) -> dict[str, Any]:
-        """Convert this backend to a config dict (see ``fleche.config.storage_to_config``).
-
-        Default: every ``init=True`` dataclass field except
-        :attr:`_config_exclude`, plus the ``type`` name from
-        :meth:`_config_type_name`. Override when the round trip needs extra
-        shaping beyond dropping fields — see ``FileStorage`` (``root`` must
-        be a string) and ``PickleFileBackend`` (``secret_key`` must be hex).
-
-        Raises:
-            ValueError: if this exact class was never passed to
-                :func:`register_storage` — its config would name a backend
-                that ``storage_from_config`` reconstructs as some *other*
-                class.
-        """
-        if type(self) not in _STORAGE_CLASS_NAMES:
-            raise ValueError(f"Cannot convert storage of type {type(self).__name__!r} to config")
-        config = _config_fields(self, exclude=self._config_exclude)
-        config["type"] = self._config_type_name()
-        return config
-
-    def _config_type_name(self) -> str:
-        """The ``type`` name :meth:`to_config` stamps into the config dict.
-
-        Defaults to the name this class was registered under.  Override in a
-        backend registered under several names, where the name follows from
-        instance state rather than from the class (see ``PickleFileBackend``).
-        """
-        name = _STORAGE_CLASS_NAMES.get(type(self))
-        if name is None:
-            raise ValueError(
-                f"{type(self).__name__!r} is registered under several storage type names; "
-                "it must override _config_type_name() to pick one"
-            )
-        return name
 
 
 class ValueStorage(KeyManagement):

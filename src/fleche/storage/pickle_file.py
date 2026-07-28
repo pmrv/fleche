@@ -2,7 +2,7 @@ import pickle
 import gzip
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, ClassVar
+from typing import Any, Callable
 
 import filelock
 
@@ -39,10 +39,6 @@ class PickleFileBackend(FileStorage):
     dumps: Callable = field(repr=False)
     loads: Callable = field(repr=False)
     compress: bool = False
-
-    # The serializer functions are not config data — the `type` name
-    # (pickle/dill/cloudpickle) is what selects them on the way back in.
-    _config_exclude: ClassVar[tuple[str, ...]] = ("dumps", "loads")
 
     def __post_init__(self):
         super().__post_init__()
@@ -115,39 +111,49 @@ class PickleFileBackend(FileStorage):
             lambda c: gzip.decompress(c) if c[:2] == b"\x1f\x8b" else None
         )
 
-    def _config_type_name(self) -> str:
-        """Determine the ``type`` name from the bound serializer.
 
-        One class is reachable under three names (``pickle``/``dill``/
-        ``cloudpickle``) via the ``with_*`` alternate constructors, so unlike
-        every other backend it has no class-wide canonical name to fall back
-        on (see :func:`register_storage`).
-        """
-        serializer_name = self.dumps.__module__.split(".")[0].lstrip("_")
-        if serializer_name not in ("pickle", "dill", "cloudpickle"):
-            raise ValueError(f"Unknown PickleFile serializer: {serializer_name!r}")
-        return serializer_name
-
+@dataclass(frozen=True)
+class ValuePickleFile(PerKeyLockMixin, DestructuringMixin, ValueMixin, PickleFileBackend):
     def to_config(self) -> dict[str, Any]:
-        config = super().to_config()
+        # `dumps`/`loads` are not config data: the `type` name is what selects
+        # them again on the way back in, and it comes off the instance rather
+        # than the class because one class serves three names.
+        serializer = self.dumps.__module__.split(".")[0].lstrip("_")
+        if serializer not in ("pickle", "dill", "cloudpickle"):
+            raise ValueError(f"Unknown PickleFile serializer: {serializer!r}")
+        config: dict[str, Any] = {
+            "type": serializer,
+            # `root` is a Path; config dicts must stay TOML/JSON-representable.
+            "root": str(self.root),
+            "lock_timeout": self.lock_timeout,
+            "compress": self.compress,
+            "remaining_depth": self.remaining_depth,
+        }
         # Keys are bytes; store them hex-encoded, and omit the key list
         # entirely when unset so the config stays minimal.
-        if config["secret_key"]:
-            config["secret_key"] = [k.hex() for k in config["secret_key"]]
-        else:
-            del config["secret_key"]
+        if self.secret_key:
+            config["secret_key"] = [k.hex() for k in self.secret_key]
         return config
 
-
 @dataclass(frozen=True)
-class ValuePickleFile(PerKeyLockMixin, DestructuringMixin, ValueMixin, PickleFileBackend): ...
-
-@dataclass(frozen=True)
-class CallPickleFile(PerKeyLockMixin, CallMixin, PickleFileBackend): ...
+class CallPickleFile(PerKeyLockMixin, CallMixin, PickleFileBackend):
+    def to_config(self) -> dict[str, Any]:
+        serializer = self.dumps.__module__.split(".")[0].lstrip("_")
+        if serializer not in ("pickle", "dill", "cloudpickle"):
+            raise ValueError(f"Unknown PickleFile serializer: {serializer!r}")
+        config: dict[str, Any] = {
+            "type": serializer,
+            "root": str(self.root),
+            "lock_timeout": self.lock_timeout,
+            "compress": self.compress,
+        }
+        if self.secret_key:
+            config["secret_key"] = [k.hex() for k in self.secret_key]
+        return config
 
 # One class per kind, three config names each: the serializer is chosen by the
-# `with_*` constructor rather than by a config key, so `_config_type_name`
-# reads it back off the instance.
+# `with_*` constructor rather than by a config key, so each `to_config` reads
+# it back off the instance.
 register_storage("pickle", kind="value", factory=ValuePickleFile.with_pickle)(ValuePickleFile)
 register_storage("dill", kind="value", factory=ValuePickleFile.with_dill)(ValuePickleFile)
 register_storage("cloudpickle", kind="value", factory=ValuePickleFile.with_cloudpickle)(ValuePickleFile)

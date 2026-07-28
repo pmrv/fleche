@@ -386,16 +386,16 @@ def storage_to_config(s: storage.ValueStorage | storage.CallStorage) -> dict[str
 
     The returned dict contains a ``"type"`` key and any additional parameters
     needed to reconstruct the storage via :func:`storage_from_config`.
-    Delegates to the storage's own ``to_config()`` (see
-    ``StorageBackend.to_config``).
+    Every backend spells its own ``to_config()`` out by hand; this function
+    only checks that the storage is one whose config means anything.
 
     Raises:
-        ValueError: for a storage that cannot name itself in a config — one
-            that defines no ``to_config`` at all, or whose exact class was
-            never passed to :func:`fleche.storage.register_storage`.
+        ValueError: for a storage whose exact class was never passed to
+            :func:`fleche.storage.register_storage`, or that defines no
+            ``to_config`` at all.
     """
     to_config = getattr(s, "to_config", None)
-    if to_config is None:
+    if to_config is None or not storage.is_registered_storage(type(s)):
         raise ValueError(f"Cannot convert storage of type {type(s).__name__!r} to config")
     return to_config()
 

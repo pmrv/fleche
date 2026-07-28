@@ -57,12 +57,6 @@ class FileStorage(StorageBackend):
     def __post_init__(self) -> None:
         object.__setattr__(self, "root", Path(self.root).expanduser().absolute().resolve())
 
-    def to_config(self) -> dict[str, Any]:
-        # `root` is a Path; config dicts must stay TOML/JSON-representable.
-        config = super().to_config()
-        config["root"] = str(config["root"])
-        return config
-
     def _path(self, key: str) -> Path:
         self.root.mkdir(parents=True, exist_ok=True)
         return self.root / key

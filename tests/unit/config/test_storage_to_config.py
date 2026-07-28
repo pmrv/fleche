@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import pytest
 
 from fleche import storage
-from fleche.storage.base import _STORAGE_CLASS_NAMES, _STORAGE_CONSTRUCTORS
+from fleche.storage.base import _STORAGE_CLASSES, _STORAGE_CONSTRUCTORS
 from fleche.config import storage_to_config, storage_from_config
 
 
@@ -13,12 +13,12 @@ from fleche.config import storage_to_config, storage_from_config
 def clean_registry():
     """Undo any backend registration a test performs."""
     constructors = dict(_STORAGE_CONSTRUCTORS)
-    names = dict(_STORAGE_CLASS_NAMES)
+    classes = set(_STORAGE_CLASSES)
     yield
     _STORAGE_CONSTRUCTORS.clear()
     _STORAGE_CONSTRUCTORS.update(constructors)
-    _STORAGE_CLASS_NAMES.clear()
-    _STORAGE_CLASS_NAMES.update(names)
+    _STORAGE_CLASSES.clear()
+    _STORAGE_CLASSES.update(classes)
 
 
 def test_memory():
@@ -197,21 +197,24 @@ def test_unregistered_subclass_raises():
 
 
 def test_memory_config_ignores_undeepcopyable_entries():
-    """The live store is dropped before the field copy, so what a memory
-    storage happens to hold can never break `storage_to_config`."""
+    """`to_config` never reads the live store, so what a memory storage happens
+    to hold can never break `storage_to_config`."""
     s = storage.ValueMemory({})
     s.storage["a" * 64] = threading.Lock()  # not deep-copyable
     assert storage_to_config(s) == {"type": "memory", "remaining_depth": 1}
 
 
 def test_register_storage_roundtrips_a_third_party_backend(clean_registry):
-    """Registering is the whole contract for a new backend: both directions of
-    the config round trip follow from the one decorator."""
+    """A new backend needs exactly two things: the decorator (config -> storage)
+    and its own to_config (storage -> config).  Nothing is inherited."""
 
     @storage.register_storage("shouting", kind="value")
     @dataclass(frozen=True)
     class ValueShouting(storage.ValueMixin, storage.StorageBackend):
         volume: int = 11
+
+        def to_config(self):
+            return {"type": "shouting", "volume": self.volume}
 
         def put(self, value, key):
             return key

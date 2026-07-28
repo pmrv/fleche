@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, ClassVar, Iterable
+from typing import Any, Iterable
 
 from .base import ValueMixin, CallMixin, StorageBackend, register_storage
 from .destructuring import DestructuringMixin
@@ -15,10 +15,6 @@ class MemoryBackend(StorageBackend):
     """
 
     storage: dict[Digest, Any]
-
-    # The live store is runtime state, not configuration; from_config seeds a
-    # fresh one instead.
-    _config_exclude: ClassVar[tuple[str, ...]] = ("storage",)
 
     # Each storage instance is its own world: hash on identity so that frozen
     # dataclass subclasses can serve as WeakKeyDictionary keys in PerKeyLockMixin
@@ -66,11 +62,19 @@ class MemoryBackend(StorageBackend):
 class ValueMemory(PerKeyLockMixin, DestructuringMixin, ValueMixin, MemoryBackend):
     __hash__ = object.__hash__
 
+    def to_config(self) -> dict[str, Any]:
+        # `storage` is the live store — runtime state, not configuration;
+        # from_config seeds a fresh one instead.
+        return {"type": "memory", "remaining_depth": self.remaining_depth}
+
 register_storage("memory", kind="value", factory=ValueMemory.from_config)(ValueMemory)
 
 
 @dataclass(frozen=True)
 class CallMemory(PerKeyLockMixin, CallMixin, MemoryBackend):
     __hash__ = object.__hash__
+
+    def to_config(self) -> dict[str, Any]:
+        return {"type": "memory"}
 
 register_storage("memory", kind="call", factory=CallMemory.from_config)(CallMemory)
