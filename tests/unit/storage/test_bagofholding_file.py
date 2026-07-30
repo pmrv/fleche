@@ -699,6 +699,47 @@ def test_multi_bag_contains_sees_external_writes(tmp_path):
     assert s.contains(key2)
 
 
+def test_read_retries_once_on_broken_cached_handle(tmp_path, monkeypatch):
+    """A cached handle that errors mid-read (e.g. the file was rewritten in a
+    way the stat signature missed) must be dropped and the read repeated from
+    a fresh open instead of being reported as a miss."""
+    pytest.importorskip("bagofholding")
+    import fleche.storage.bagofholding_file as boh_mod
+
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    key = _digest_like("a")
+    s.put("value", key)
+    assert s.contains(key)  # warm the handle cache
+
+    broken = MagicMock()
+    broken.__contains__.side_effect = OSError("torn read")
+    real_acquire = boh_mod._bag_handles.acquire
+    handed_out = iter([broken])
+
+    def flaky_acquire(path):
+        return next(handed_out, None) or real_acquire(path)
+
+    monkeypatch.setattr(boh_mod._bag_handles, "acquire", flaky_acquire)
+
+    assert s.contains(key)
+
+
+def test_acquire_reopens_closed_handle(tmp_path):
+    """A closed h5py handle silently answers False to `key in f` instead of
+    raising, so acquire must validate cached handles and reopen dead ones."""
+    pytest.importorskip("bagofholding")
+    import fleche.storage.bagofholding_file as boh_mod
+
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    key = _digest_like("a")
+    s.put("value", key)
+    assert s.contains(key)  # warm the handle cache
+
+    boh_mod._bag_handles._files[str(s._bag_file(key))].close()
+
+    assert s.contains(key)
+
+
 def test_open_handle_cache_is_bounded(tmp_path):
     pytest.importorskip("bagofholding")
     import fleche.storage.bagofholding_file as boh_mod

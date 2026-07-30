@@ -64,7 +64,7 @@ def _observed_prefix_lengths(root: Path) -> set[int]:
 # Cap on read-only bag-file handles kept open between operations.  Handles are
 # shared process-wide (keyed by absolute path), so this also bounds the
 # process's open-fd contribution regardless of how many storages exist.
-_MAX_OPEN_BAGS = 32
+_MAX_OPEN_BAGS = 8
 
 
 def _open_readonly(path: Path) -> "h5py.File":
@@ -161,13 +161,19 @@ class _BagHandleCache:
         signature = (st.st_ino, st.st_mtime_ns, st.st_size)
         with self._meta_lock:
             f = self._files.get(key)
-            if f is not None and self._signatures.get(key) != signature:
+            # `not f` is h5py validity: a handle closed behind our back would
+            # silently answer False to `key in f` rather than raise.
+            if f is not None and (self._signatures.get(key) != signature or not f):
                 # Rewritten by another process (or storage instance): safe to
                 # close because we hold the bag lock, so no reader is mid-use.
                 f.close()
                 f = None
         if f is None:
             f = _open_readonly(path)
+        # Dropping _meta_lock around the open is race-free because the caller
+        # holds the bag lock: no other thread can acquire or invalidate *this*
+        # path meanwhile, and activity on other paths never touches this
+        # path's entries (MRU eviction only drops their strong references).
         with self._meta_lock:
             self._files[key] = f
             self._signatures[key] = signature
@@ -341,20 +347,28 @@ class BagOfHoldingH5FileBackend(FileStorage):
             )
         return cls(root, prefix_length=prefix_length, **kwargs)
 
-    @contextlib.contextmanager
-    def _bag_reader(self, file_path: Path):
-        """Yield a cached read-only handle for *file_path*, or ``None`` when
-        the file does not exist, holding the in-process bag lock throughout so
-        no writer can close the handle mid-use.  On ``OSError`` — an
-        unreadable file, or a handle broken by an external rewrite — the
-        cached handle is dropped before the error propagates, so the next
-        operation starts from a fresh open."""
+    def _read_bag(self, file_path: Path, reader):
+        """Run *reader* on a cached read-only handle for *file_path*, holding
+        the in-process bag lock throughout so no writer can close the handle
+        mid-use.  Returns ``None`` when the file does not exist.
+
+        A cached handle that errors mid-read — e.g. broken by an external
+        rewrite the stat signature missed — is dropped and the read repeated
+        once from a fresh open; only if that fails too does the error
+        propagate (the file really is unreadable)."""
         with _bag_handles.lock(file_path):
-            try:
-                yield _bag_handles.acquire(file_path)
-            except OSError:
-                _bag_handles.invalidate(file_path)
-                raise
+            for retry in (False, True):
+                f = _bag_handles.acquire(file_path)
+                if f is None:
+                    return None
+                try:
+                    return reader(f)
+                except (OSError, ValueError):
+                    # ValueError is h5py's "invalid identifier" from a handle
+                    # invalidated behind our back; OSError is a torn/corrupt read.
+                    _bag_handles.invalidate(file_path)
+                    if retry:
+                        raise
 
     @contextlib.contextmanager
     def _bag_writer(self, key: str):
@@ -422,8 +436,7 @@ class BagOfHoldingH5FileBackend(FileStorage):
         if self.prefix_length == 0:
             return super()._contains(key)
         try:
-            with self._bag_reader(self._bag_file(key)) as f:
-                return f is not None and key in f
+            return bool(self._read_bag(self._bag_file(key), lambda f: key in f))
         except OSError:
             return False
 
@@ -467,9 +480,8 @@ class BagOfHoldingH5FileBackend(FileStorage):
             ):
                 continue
             try:
-                with self._bag_reader(p) as f:
-                    if f is not None:
-                        keys.extend(Digest(name) for name in f.keys())
+                bag_keys = self._read_bag(p, lambda f: [Digest(name) for name in f.keys()])
+                keys.extend(bag_keys or ())
             except OSError as e:
                 logger.error("Corrupt file present in cache at path %s: %s", p, e, exc_info=True)
         return keys
