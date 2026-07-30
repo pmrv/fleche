@@ -240,8 +240,17 @@ class KeyManagement(OperationContext):
             if len(key) < 4:
                 raise KeyError(key)
 
-            candidates = sorted(k for k in self.list() if k.startswith(key))
-            return _resolve_prefix(str(key), candidates[:2])
+            return _resolve_prefix(str(key), self._prefix_candidates(str(key)))
+
+    def _prefix_candidates(self, prefix: str) -> "Iterable[Digest]":
+        """Return at most the two lexicographically smallest keys starting with *prefix*.
+
+        Default: a Python-side filter over :meth:`list`. Override for a
+        backend that can push the prefix scan down (e.g. SQL ``LIKE ... LIMIT
+        2``); :meth:`expand` only needs the two smallest candidates to decide
+        between a unique match and an :class:`AmbiguousDigestError`.
+        """
+        return sorted(k for k in self.list() if k.startswith(prefix))[:2]
 
     @overload
     def shrink(self, key: Digest | str, /) -> Digest: ...

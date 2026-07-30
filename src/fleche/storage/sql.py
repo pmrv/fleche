@@ -5,7 +5,7 @@ import threading
 from typing import Iterable, Any, List
 from pathlib import Path
 from dataclasses import dataclass, field
-from .base import Intent, KeyManagement, CallStorage, _resolve_prefix, register_storage
+from .base import Intent, KeyManagement, CallStorage, register_storage
 from .thread_safe import PerKeyLockMixin
 from ..call import DigestedCall, QueryCall
 from ..digest import Digest, DIGEST_LENGTH, digest
@@ -298,21 +298,14 @@ class Sql(PerKeyLockMixin, CallStorage):
         with self._session_context():
             return [Digest(row[0]) for row in self._local.session.execute(select(CallModel.key))]
 
-    def expand(self, key: Digest | str) -> Digest:
-        with self._operation_context(key):
-            if len(key) >= DIGEST_LENGTH:
-                return Digest(str(key))
-            if len(key) < 4:
-                raise KeyError(key)
-
-            prefix = str(key)
-            rows = self._local.session.execute(
-                select(CallModel.key)
-                .where(CallModel.key.like(f"{prefix}%"))
-                .order_by(CallModel.key)
-                .limit(2)
-            ).all()
-            return _resolve_prefix(prefix, [Digest(r[0]) for r in rows])
+    def _prefix_candidates(self, prefix: str) -> Iterable[Digest]:
+        rows = self._local.session.execute(
+            select(CallModel.key)
+            .where(CallModel.key.like(f"{prefix}%"))
+            .order_by(CallModel.key)
+            .limit(2)
+        ).all()
+        return [Digest(r[0]) for r in rows]
 
     def _evict(self, key: Digest) -> None:
         session = self._local.session
