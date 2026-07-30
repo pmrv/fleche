@@ -1,7 +1,12 @@
 import pickle
 import pytest
 from fleche.storage.pickle_file import ValuePickleFile as PickleFile
-from fleche.security import normalize_secret_key
+from fleche.security import (
+    SignatureError,
+    SignedBytes,
+    get_secret_key,
+    normalize_secret_key,
+)
 
 
 def test_secure_storage_tampering(tmp_path):
@@ -179,3 +184,30 @@ def test_normalize_empty_list_returns_empty():
 def test_normalize_short_bytes_allowed():
     # HMAC has no minimum key length requirement
     assert normalize_secret_key(b"short") == [b"short"]
+
+
+# --- get_secret_key tests ---
+
+def test_get_secret_key_reads_env_var(monkeypatch):
+    # FLECHE_SECRET_KEY carries the same colon-separated hex format that
+    # normalize_secret_key accepts; get_secret_key must route through it so a
+    # value set in the environment produces the same keys as the programmatic
+    # secret_key= argument.
+    k1, k2 = "ab" * 16, "cd" * 16
+    monkeypatch.setenv("FLECHE_SECRET_KEY", f"{k1}:{k2}")
+    assert get_secret_key() == [bytes.fromhex(k1), bytes.fromhex(k2)]
+
+
+# --- SignedBytes.loads corruption paths ---
+
+def test_signed_bytes_loads_raises_on_missing_stop_opcode():
+    # loads() locates the signature boundary by rfind(pickle.STOP); a payload
+    # that never contains the STOP opcode is either corruption or a wire
+    # format the signer never produced. It must surface as SignatureError so
+    # PickleFileBackend._from_file can translate it to KeyError (cache miss)
+    # rather than crashing with an out-of-band exception.
+    signer = SignedBytes(keys=[b"K" * 32])
+    payload_without_stop = b"garbage bytes with no dot"
+    assert pickle.STOP not in payload_without_stop
+    with pytest.raises(SignatureError, match="No STOP opcode found"):
+        signer.loads(payload_without_stop)
