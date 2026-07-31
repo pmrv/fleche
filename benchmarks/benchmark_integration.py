@@ -107,19 +107,6 @@ def benchmark_integration(name, cache_obj, func, args, iterations=10):
         }
     )
 
-    # SizeLimitedCache evicts uniformly at random (see
-    # SizeLimitedMixin._pick_eviction_target), so populating a cache smaller
-    # than ``iterations`` with unique keys does not guarantee any particular
-    # subset of them survives. The "hit"-style phases below must only reuse
-    # args that are actually still resident, otherwise they silently
-    # re-measure misses (and re-inserts) for the evicted ones.
-    resident_args = []
-    with cache(cache_obj):
-        for i in range(iterations):
-            arg = args[i] if isinstance(args, list) else i
-            if func.contains(arg):
-                resident_args.append(arg)
-
     # 2. Contains (Cache Check - Miss)
     contains_miss_times = []
     for i in range(iterations):
@@ -146,7 +133,8 @@ def benchmark_integration(name, cache_obj, func, args, iterations=10):
 
     # 3. Contains (Cache Check - Hit)
     contains_hit_times = []
-    for arg in resident_args:
+    for i in range(iterations):
+        arg = args[i] if isinstance(args, list) else i
         # Use .contains method exposed by @fleche to get the key and pass to contains
         start = time.perf_counter()
         with cache(cache_obj):
@@ -158,15 +146,17 @@ def benchmark_integration(name, cache_obj, func, args, iterations=10):
         {
             "benchmark": "integration_contains_hit",
             "name": name,
-            "iterations": len(resident_args),
+            "iterations": iterations,
             "time": min(contains_hit_times),
         }
     )
 
-    # 4. Second Call (Hit). Only args still resident after the miss phase
-    # (see ``resident_args`` above) are reused here.
+    # 4. Second Call (Hit)
     hit_times = []
-    for arg in resident_args:
+    # Reuse the same args from above, they are now in cache
+    for i in range(iterations):
+        arg = args[i] if isinstance(args, list) else i
+
         start = time.perf_counter()
         with cache(cache_obj):
             func(arg)
@@ -177,7 +167,7 @@ def benchmark_integration(name, cache_obj, func, args, iterations=10):
         {
             "benchmark": "integration_hit",
             "name": name,
-            "iterations": len(resident_args),
+            "iterations": iterations,
             "time": min(hit_times),
         }
     )
@@ -211,12 +201,13 @@ def main():
                     Sql(f"sqlite:///{tmp_dir}/db_h5.sqlite"),
                 ),
             ),
-            # SizeLimitedCache: max_size smaller than iterations → evictions occur
-            (
-                "SizeLimitedCache(Memory,max=10)",
-                SizeLimitedCache(ValueMemory({}), CallMemory({}), max_size=10),
-            ),
-            # SizeLimitedCache: max_size larger than iterations → no evictions
+            # SizeLimitedCache. ``max_size`` must stay above the total number
+            # of calls this config accumulates — the instance is shared by all
+            # three functions below, so it ends up holding
+            # 3 * iterations == 60 call records. Anything smaller triggers
+            # evictions, and because SizeLimitedMixin._pick_eviction_target
+            # evicts uniformly at random there is no way to tell which keys
+            # survive; the hit phases would then silently re-measure misses.
             (
                 "SizeLimitedCache(Memory,max=100)",
                 SizeLimitedCache(ValueMemory({}), CallMemory({}), max_size=100),
