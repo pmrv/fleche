@@ -107,6 +107,19 @@ def benchmark_integration(name, cache_obj, func, args, iterations=10):
         }
     )
 
+    # SizeLimitedCache evicts uniformly at random (see
+    # SizeLimitedMixin._pick_eviction_target), so populating a cache smaller
+    # than ``iterations`` with unique keys does not guarantee any particular
+    # subset of them survives. The "hit"-style phases below must only reuse
+    # args that are actually still resident, otherwise they silently
+    # re-measure misses (and re-inserts) for the evicted ones.
+    resident_args = []
+    with cache(cache_obj):
+        for i in range(iterations):
+            arg = args[i] if isinstance(args, list) else i
+            if func.contains(arg):
+                resident_args.append(arg)
+
     # 2. Contains (Cache Check - Miss)
     contains_miss_times = []
     for i in range(iterations):
@@ -133,8 +146,7 @@ def benchmark_integration(name, cache_obj, func, args, iterations=10):
 
     # 3. Contains (Cache Check - Hit)
     contains_hit_times = []
-    for i in range(iterations):
-        arg = args[i] if isinstance(args, list) else i
+    for arg in resident_args:
         # Use .contains method exposed by @fleche to get the key and pass to contains
         start = time.perf_counter()
         with cache(cache_obj):
@@ -146,17 +158,15 @@ def benchmark_integration(name, cache_obj, func, args, iterations=10):
         {
             "benchmark": "integration_contains_hit",
             "name": name,
-            "iterations": iterations,
+            "iterations": len(resident_args),
             "time": min(contains_hit_times),
         }
     )
 
-    # 4. Second Call (Hit)
+    # 4. Second Call (Hit). Only args still resident after the miss phase
+    # (see ``resident_args`` above) are reused here.
     hit_times = []
-    # Reuse the same args from above, they are now in cache
-    for i in range(iterations):
-        arg = args[i] if isinstance(args, list) else i
-
+    for arg in resident_args:
         start = time.perf_counter()
         with cache(cache_obj):
             func(arg)
@@ -167,7 +177,7 @@ def benchmark_integration(name, cache_obj, func, args, iterations=10):
         {
             "benchmark": "integration_hit",
             "name": name,
-            "iterations": iterations,
+            "iterations": len(resident_args),
             "time": min(hit_times),
         }
     )
