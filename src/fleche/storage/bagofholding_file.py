@@ -1,3 +1,8 @@
+import contextlib
+import os
+import threading
+import weakref
+from collections import OrderedDict
 from dataclasses import dataclass, field, replace, InitVar
 from pathlib import Path
 from typing import Any, Literal, Iterable
@@ -54,6 +59,143 @@ def _observed_prefix_lengths(root: Path) -> set[int]:
         elif len(p.name) == DIGEST_LENGTH:
             observed.add(0)
     return observed
+
+
+# Cap on read-only bag-file handles kept open between operations.  Handles are
+# shared process-wide (keyed by absolute path), so this also bounds the
+# process's open-fd contribution regardless of how many storages exist.
+_MAX_OPEN_BAGS = 8
+
+
+def _open_readonly(path: Path) -> "h5py.File":
+    """Open *path* read-only without OS-level HDF5 file locking.
+
+    Cached handles stay open between operations; with default locking each
+    would hold a shared HDF5 lock that makes every write from *another
+    process* fail for as long as the handle lives.  Writes are coordinated by
+    ``filelock`` sidecar locks instead, and files rewritten behind our back
+    are caught by the stat signature in :class:`_BagHandleCache`.
+    """
+    try:
+        return h5py.File(path, "r", locking=False)
+    except (TypeError, ValueError):
+        # h5py < 3.5 (no ``locking`` kwarg) or HDF5 < 1.12.1 (no support):
+        # fall back to default locking — correct, just briefly blocks writers.
+        return h5py.File(path, "r")
+
+
+class _BagHandleCache:
+    """Process-wide cache of open read-only h5py handles for multi-bag files.
+
+    ``_files`` is a weak-value index of the open handles; ``_recent`` keeps
+    strong references to the :data:`_MAX_OPEN_BAGS` most recently used ones so
+    they survive between operations (a weak-only entry would be collected —
+    and the file closed — the moment the operation using it returns).  A
+    handle evicted from ``_recent`` is *not* closed eagerly: an operation in
+    another thread may still be reading from it, so only the strong reference
+    is dropped and the interpreter closes the file once the last user lets go.
+
+    The cache is keyed by absolute path and shared by all storage instances
+    rather than kept per-instance: HDF5 refuses to open a file for writing
+    while *any* read handle on it is open in the same process (independent of
+    OS-level file locking), so a handle cached by one instance must be
+    closable by every other instance addressing the same file.
+
+    Every access — read or write — to a bag file must happen while holding
+    that file's :meth:`lock`.  Readers hold it for the duration of their use
+    of the handle, writers across invalidate-open-write-close, so a writer
+    can never close the cached handle under a reader mid-use, and no cached
+    handle can be alive during a same-process write open.  Staleness from
+    *other* processes is caught by re-validating a ``(inode, mtime, size)``
+    stat signature on every acquisition.
+    """
+
+    def __init__(self) -> None:
+        self._pid = os.getpid()
+        self._meta_lock = threading.Lock()
+        # Per-bag locks self-prune like PerKeyLockMixin's: alive while any
+        # thread holds one (or is inside the with block), recreated otherwise.
+        self._bag_locks: weakref.WeakValueDictionary[str, threading.RLock] = (
+            weakref.WeakValueDictionary()
+        )
+        self._files: weakref.WeakValueDictionary[str, "h5py.File"] = (
+            weakref.WeakValueDictionary()
+        )
+        self._recent: OrderedDict[str, "h5py.File"] = OrderedDict()
+        self._signatures: dict[str, tuple[int, int, int]] = {}
+
+    def lock(self, path: Path) -> threading.RLock:
+        """The in-process lock guarding all access to the bag file at *path*."""
+        with self._meta_lock:
+            if self._pid != os.getpid():
+                # Forked child: inherited handles belong to the parent — drop
+                # every reference without closing eagerly (they are read-only,
+                # so the close-on-collect in the child is harmless).
+                self._pid = os.getpid()
+                self._bag_locks = weakref.WeakValueDictionary()
+                self._files = weakref.WeakValueDictionary()
+                self._recent = OrderedDict()
+                self._signatures = {}
+            # Hold a strong reference so the lock is not collected between
+            # creation and return — WeakValueDictionary only stores a weak ref.
+            key = str(path)
+            lock = self._bag_locks.get(key)
+            if lock is None:
+                lock = threading.RLock()
+                self._bag_locks[key] = lock
+            return lock
+
+    def acquire(self, path: Path) -> "h5py.File | None":
+        """A validated open read-only handle for *path*, or ``None`` when the
+        file does not exist.  The caller must hold :meth:`lock` for *path*.
+
+        Raises:
+            OSError: if the file exists but cannot be opened.
+        """
+        key = str(path)
+        try:
+            st = os.stat(key)
+        except OSError:
+            self.invalidate(path)
+            return None
+        signature = (st.st_ino, st.st_mtime_ns, st.st_size)
+        with self._meta_lock:
+            f = self._files.get(key)
+            # `not f` is h5py validity: a handle closed behind our back would
+            # silently answer False to `key in f` rather than raise.
+            if f is not None and (self._signatures.get(key) != signature or not f):
+                # Rewritten by another process (or storage instance): safe to
+                # close because we hold the bag lock, so no reader is mid-use.
+                f.close()
+                f = None
+        if f is None:
+            f = _open_readonly(path)
+        # Dropping _meta_lock around the open is race-free because the caller
+        # holds the bag lock: no other thread can acquire or invalidate *this*
+        # path meanwhile, and activity on other paths never touches this
+        # path's entries (MRU eviction only drops their strong references).
+        with self._meta_lock:
+            self._files[key] = f
+            self._signatures[key] = signature
+            self._recent[key] = f
+            self._recent.move_to_end(key)
+            while len(self._recent) > _MAX_OPEN_BAGS:
+                self._recent.popitem(last=False)
+        return f
+
+    def invalidate(self, path: Path) -> None:
+        """Close and drop any cached handle for *path*.  The caller must hold
+        :meth:`lock` for *path*."""
+        key = str(path)
+        with self._meta_lock:
+            f = self._files.pop(key, None)
+            self._recent.pop(key, None)
+            self._signatures.pop(key, None)
+        if f is not None:
+            f.close()
+
+
+_bag_handles = _BagHandleCache()
 
 
 @dataclass(frozen=True)
@@ -205,26 +347,73 @@ class BagOfHoldingH5FileBackend(FileStorage):
             )
         return cls(root, prefix_length=prefix_length, **kwargs)
 
+    def _read_bag(self, file_path: Path, reader):
+        """Run *reader* on a cached read-only handle for *file_path*, holding
+        the in-process bag lock throughout so no writer can close the handle
+        mid-use.  Returns ``None`` when the file does not exist.
+
+        A cached handle that errors mid-read — e.g. broken by an external
+        rewrite the stat signature missed — is dropped and the read repeated
+        once from a fresh open; only if that fails too does the error
+        propagate (the file really is unreadable)."""
+        with _bag_handles.lock(file_path):
+            for retry in (False, True):
+                f = _bag_handles.acquire(file_path)
+                if f is None:
+                    return None
+                try:
+                    return reader(f)
+                except (OSError, ValueError):
+                    # ValueError is h5py's "invalid identifier" from a handle
+                    # invalidated behind our back; OSError is a torn/corrupt read.
+                    _bag_handles.invalidate(file_path)
+                    if retry:
+                        raise
+
+    @contextlib.contextmanager
+    def _bag_writer(self, key: str):
+        """Hold *key*'s in-process bag lock across an operation that opens the
+        bag file itself, closing any cached read handle first.  HDF5 refuses a
+        same-process write open while any read handle is open, and refuses
+        *any* same-process open whose locking flags differ from an existing
+        handle's — so this guards not only writes but also :class:`H5Bag`
+        reads, which use the default flags rather than the cache's
+        ``locking=False``.  No-op in per-key mode, where nothing is cached."""
+        if self.prefix_length == 0:
+            yield
+            return
+        file_path = self._bag_file(key)
+        with _bag_handles.lock(file_path):
+            _bag_handles.invalidate(file_path)
+            yield
+
     def _to_file(self, value: Any, path: Path) -> None:
-        try:
-            H5Bag.save(value, path)
-        except (ValueError, TypeError):  # h5py choked on something, pass it along
-            raise SaveError(value) from None
+        # In multi-bag mode `path` is the composite `{prefix}.h5/{key}`, so
+        # the key is its final component (in per-key mode _bag_writer ignores it).
+        with self._bag_writer(path.name):
+            try:
+                H5Bag.save(value, path)
+            except (ValueError, TypeError):  # h5py choked on something, pass it along
+                raise SaveError(value) from None
 
     def _from_file(self, path: Path) -> Any:
-        try:
-            # _skip_load=True skips the constructor's _load_existing_bag_info() call,
-            # which would otherwise open and close the file just to read bag metadata
-            # before load() opens it a second time to read the actual payload.
-            bag = H5Bag(path, _skip_load=True)
-            if self.version_validator is not None:
-                return bag.load(version_validator=self.version_validator)
-            return bag.load()
-        except (FileNotFoundError, KeyError):
-            raise KeyError(path) from None
-        except OSError as e:
-            logger.error("Corrupt file present in cache at path %s: %s", path, e, exc_info=True)
-            raise KeyError(path) from e
+        # H5Bag opens the file itself, so any cached read handle must be
+        # closed first and the bag lock held across the load — otherwise the
+        # flag-mismatched open would fail (and read as a corrupt file).
+        with self._bag_writer(path.name):
+            try:
+                # _skip_load=True skips the constructor's _load_existing_bag_info() call,
+                # which would otherwise open and close the file just to read bag metadata
+                # before load() opens it a second time to read the actual payload.
+                bag = H5Bag(path, _skip_load=True)
+                if self.version_validator is not None:
+                    return bag.load(version_validator=self.version_validator)
+                return bag.load()
+            except (FileNotFoundError, KeyError):
+                raise KeyError(path) from None
+            except OSError as e:
+                logger.error("Corrupt file present in cache at path %s: %s", path, e, exc_info=True)
+                raise KeyError(path) from e
 
     def _bag_file(self, key: str) -> Path:
         """The HDF5 file backing `key` in multi-bag mode: ``root/{prefix}.h5``."""
@@ -246,12 +435,8 @@ class BagOfHoldingH5FileBackend(FileStorage):
     def _contains(self, key: Digest) -> bool:
         if self.prefix_length == 0:
             return super()._contains(key)
-        file_path = self._bag_file(key)
-        if not file_path.is_file():
-            return False
         try:
-            with h5py.File(file_path, "r") as f:
-                return key in f
+            return bool(self._read_bag(self._bag_file(key), lambda f: key in f))
         except OSError:
             return False
 
@@ -263,13 +448,17 @@ class BagOfHoldingH5FileBackend(FileStorage):
         with filelock.FileLock(lock_path, timeout=self.lock_timeout):
             if not file_path.is_file():
                 return
-            with h5py.File(file_path, "a") as f:
-                if key in f:
-                    del f[key]
-                remaining = len(f)
-            if remaining == 0:
-                file_path.unlink(missing_ok=True)
-                lock_path.unlink(missing_ok=True)
+            # The unlink stays inside _bag_writer so a reader in another
+            # thread cannot re-open (and re-cache) the file between the
+            # write-close and its removal.
+            with self._bag_writer(key):
+                with h5py.File(file_path, "a") as f:
+                    if key in f:
+                        del f[key]
+                    remaining = len(f)
+                if remaining == 0:
+                    file_path.unlink(missing_ok=True)
+                    lock_path.unlink(missing_ok=True)
 
     def list(self) -> Iterable[Digest]:
         # Only files of exactly this instance's prefix length are considered,
@@ -291,8 +480,8 @@ class BagOfHoldingH5FileBackend(FileStorage):
             ):
                 continue
             try:
-                with h5py.File(p, "r") as f:
-                    keys.extend(Digest(name) for name in f.keys())
+                bag_keys = self._read_bag(p, lambda f: [Digest(name) for name in f.keys()])
+                keys.extend(bag_keys or ())
             except OSError as e:
                 logger.error("Corrupt file present in cache at path %s: %s", p, e, exc_info=True)
         return keys
@@ -307,8 +496,11 @@ class BagOfHoldingH5FileBackend(FileStorage):
             path = self._path(key)
             with self._operation_context(key):
                 try:
-                    value = H5Bag(path, _skip_load=True).load(version_validator=version_validator)
-                    H5Bag.save(value, path)
+                    # both the load and the save open the file with H5Bag's
+                    # own (default) locking flags — see _bag_writer
+                    with self._bag_writer(key):
+                        value = H5Bag(path, _skip_load=True).load(version_validator=version_validator)
+                        H5Bag.save(value, path)
                 except OSError as e:
                     logger.warning("Failed to rebag %s: %s", key, e)
 

@@ -568,6 +568,197 @@ def test_init_check_ignores_unrelated_files(tmp_path):
     BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
 
 
+def _count_backend_h5_opens(monkeypatch):
+    """Count h5py.File opens made by the backend itself (H5Bag's internal
+    opens go through bagofholding's own import and are not counted)."""
+    import fleche.storage.bagofholding_file as boh_mod
+
+    opens = []
+    real_file = boh_mod.h5py.File
+
+    def counting_file(*args, **kwargs):
+        opens.append(args)
+        return real_file(*args, **kwargs)
+
+    monkeypatch.setattr(boh_mod.h5py, "File", counting_file)
+    return opens
+
+
+def test_multi_bag_contains_reuses_cached_handle(tmp_path, monkeypatch):
+    pytest.importorskip("bagofholding")
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    key = _digest_like("a")
+    s.put("value", key)
+
+    opens = _count_backend_h5_opens(monkeypatch)
+    for _ in range(3):
+        assert s.contains(key)
+    assert len(opens) == 1
+
+
+def test_multi_bag_list_reuses_cached_handle(tmp_path, monkeypatch):
+    pytest.importorskip("bagofholding")
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    key = _digest_like("a")
+    s.put("value", key)
+
+    opens = _count_backend_h5_opens(monkeypatch)
+    assert s.contains(key)
+    assert set(s.list()) == {key}
+    assert set(s.list()) == {key}
+    assert len(opens) == 1
+
+
+def test_multi_bag_get_with_warm_handle_cache(tmp_path):
+    """H5Bag opens files with HDF5's default locking flags, which conflict
+    with the differently-flagged cached read handle contains() leaves behind
+    — get() must close it first instead of failing the load."""
+    pytest.importorskip("bagofholding")
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    key = _digest_like("a")
+    s.put("value", key)
+
+    assert s.contains(key)
+    assert s.get(key) == "value"
+
+
+def test_multi_bag_contains_sees_sibling_writes(tmp_path):
+    pytest.importorskip("bagofholding")
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    key1 = Digest("ab" + "1" * 62)
+    key2 = Digest("ab" + "2" * 62)
+
+    s.put("first", key1)
+    assert s.contains(key1)
+    assert not s.contains(key2)
+    s.put("second", key2)  # rewrites the bag the cached handle points at
+
+    assert s.contains(key2)
+
+
+def test_multi_bag_evict_with_warm_handle_cache(tmp_path):
+    pytest.importorskip("bagofholding")
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    key1 = Digest("ab" + "1" * 62)
+    key2 = Digest("ab" + "2" * 62)
+    s.put("first", key1)
+    s.put("second", key2)
+
+    assert s.contains(key1)  # warm the handle cache
+    s.evict(key1)
+    assert not s.contains(key1)
+    assert s.contains(key2)
+    s.evict(key2)
+    assert not (tmp_path / "ab.h5").exists()  # no cached handle kept it alive
+
+
+def test_multi_bag_write_from_second_instance_with_cached_reader(tmp_path):
+    """A cached read handle must not block same-process writes from another
+    (non-equal) storage instance on the same root, and the write must be
+    visible through the first instance afterwards."""
+    pytest.importorskip("bagofholding")
+    a = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    b = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2, version_validator="none")
+    key1 = Digest("ab" + "1" * 62)
+    key2 = Digest("ab" + "2" * 62)
+
+    a.put("first", key1)
+    assert a.contains(key1)
+    b.put("second", key2)
+
+    assert a.contains(key2)
+    assert b.get(key2) == "second"
+
+
+def test_multi_bag_contains_sees_external_writes(tmp_path):
+    """Writers in other processes must neither be blocked by a cached read
+    handle (HDF5 file locking is disabled on cached handles) nor have their
+    writes masked by it (the stat signature forces a reopen)."""
+    pytest.importorskip("bagofholding")
+    import subprocess
+    import sys
+
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    key1 = Digest("ab" + "1" * 62)
+    key2 = Digest("ab" + "2" * 62)
+    s.put("first", key1)
+    assert s.contains(key1)  # warm the handle cache
+    assert not s.contains(key2)
+
+    code = (
+        "import sys, h5py\n"
+        "with h5py.File(sys.argv[1], 'a') as f:\n"
+        "    f.create_group(sys.argv[2])\n"
+    )
+    subprocess.run(
+        [sys.executable, "-c", code, str(tmp_path / "ab.h5"), str(key2)],
+        check=True,
+        capture_output=True,
+    )
+
+    assert s.contains(key2)
+
+
+def test_read_retries_once_on_broken_cached_handle(tmp_path, monkeypatch):
+    """A cached handle that errors mid-read (e.g. the file was rewritten in a
+    way the stat signature missed) must be dropped and the read repeated from
+    a fresh open instead of being reported as a miss."""
+    pytest.importorskip("bagofholding")
+    import fleche.storage.bagofholding_file as boh_mod
+
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    key = _digest_like("a")
+    s.put("value", key)
+    assert s.contains(key)  # warm the handle cache
+
+    broken = MagicMock()
+    broken.__contains__.side_effect = OSError("torn read")
+    real_acquire = boh_mod._bag_handles.acquire
+    handed_out = iter([broken])
+
+    def flaky_acquire(path):
+        return next(handed_out, None) or real_acquire(path)
+
+    monkeypatch.setattr(boh_mod._bag_handles, "acquire", flaky_acquire)
+
+    assert s.contains(key)
+
+
+def test_acquire_reopens_closed_handle(tmp_path):
+    """A closed h5py handle silently answers False to `key in f` instead of
+    raising, so acquire must validate cached handles and reopen dead ones."""
+    pytest.importorskip("bagofholding")
+    import fleche.storage.bagofholding_file as boh_mod
+
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    key = _digest_like("a")
+    s.put("value", key)
+    assert s.contains(key)  # warm the handle cache
+
+    boh_mod._bag_handles._files[str(s._bag_file(key))].close()
+
+    assert s.contains(key)
+
+
+def test_open_handle_cache_is_bounded(tmp_path):
+    pytest.importorskip("bagofholding")
+    import fleche.storage.bagofholding_file as boh_mod
+
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
+    hexes = "0123456789abcdef"
+    prefixes = [a + b for a in hexes for b in hexes]
+    keys = [
+        Digest(prefix.ljust(64, "0"))
+        for prefix in prefixes[: boh_mod._MAX_OPEN_BAGS + 4]
+    ]
+    for i, key in enumerate(keys):
+        s.put(str(i), key)
+        assert s.contains(key)
+
+    assert len(boh_mod._bag_handles._recent) <= boh_mod._MAX_OPEN_BAGS
+    assert all(s.contains(key) for key in keys)
+
+
 def test_multi_bag_rebag(tmp_path):
     pytest.importorskip("bagofholding")
     s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=2)
