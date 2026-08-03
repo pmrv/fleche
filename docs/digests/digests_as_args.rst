@@ -15,11 +15,11 @@ You can use the convenience wrapper ``D`` to mark a string as a value digest:
     >>> from fleche import fleche, D
     >>> from fleche.digest import digest
 
-    >>> @fleche
+    >>> @fleche()
     ... def func_a(x):
     ...     return x + 1
 
-    >>> @fleche
+    >>> @fleche()
     ... def func_b(y):
     ...     return y * 2
 
@@ -57,7 +57,7 @@ storage without importing ``fleche.digest.digest`` yourself.
 
      >>> from fleche import fleche, cache, D
 
-     >>> @fleche
+     >>> @fleche()
      ... def compute(x):
      ...     return x * 2
 

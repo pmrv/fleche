@@ -25,7 +25,7 @@ Example
     >>> local_cache = Cache(ValueMemory({}), CallMemory({}))
     >>> remote_cache = Cache(ValueMemory({}), CallMemory({}))
 
-    >>> @fleche
+    >>> @fleche()
     ... def my_function(x):
     ...     return x * 2
 

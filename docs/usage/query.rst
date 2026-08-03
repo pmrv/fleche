@@ -19,7 +19,7 @@ The wrapper-based API builds the correct Call template for you.
 
    >>> from fleche import fleche, cache, tags
 
-   >>> @fleche
+   >>> @fleche()
    ... def add(a, b):
    ...     return a + b
 

@@ -73,7 +73,7 @@ Optionally pre-applies ``*args`` and ``**kwargs`` via :func:`functools.partial`.
 
    >>> from fleche import fleche, cache
 
-   >>> @fleche
+   >>> @fleche()
    ... def add(a, b):
    ...     return a + b
 
@@ -125,7 +125,7 @@ The original, undecorated function is always accessible via the ``.__wrapped__``
 
 .. code-block:: pycon
 
-   >>> @fleche
+   >>> @fleche()
    ... def my_func(x):
    ...     return x * 2
 
@@ -213,7 +213,7 @@ Usage with Decorated Methods
       ...     def __digest__(self) -> Digest:
       ...         return digest((type(self).__name__, self.id))
       ...
-      ...     @fleche
+      ...     @fleche()
       ...     def compute(self, x):
       ...         return x ** 2
 
