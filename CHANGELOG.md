@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.21.1](https://github.com/pmrv/fleche/compare/0.21.0...0.21.1) (2026-08-05)
+
+
+### Bug Fixes
+
+* **config:** resolve relative fleche.toml paths against the file's own directory ([#816](https://github.com/pmrv/fleche/issues/816)) ([fbf5480](https://github.com/pmrv/fleche/commit/fbf5480a004cea39bf63ad4dac6cdfa7b5c3f52b))
+* **sql:** disable WAL journal mode on network filesystems ([#820](https://github.com/pmrv/fleche/issues/820)) ([131eecf](https://github.com/pmrv/fleche/commit/131eecf8c3e64b1d8d3ad2faf4fc6073fc67a71a))
+
 ## [0.21.0](https://github.com/pmrv/fleche/compare/0.20.0...0.21.0) (2026-07-21)
 
 
