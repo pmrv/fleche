@@ -350,7 +350,7 @@ def test_cache_query_kwargs_and_template_raises():
         c.query(QueryCall(), name="foo")
 
 
-def test_cache_query_logs_and_skips_calls_that_fail_to_fetch(caplog):
+def test_cache_query_logs_and_skips_calls_that_fail_to_fetch(clean_cache, caplog):
     """A ``DigestedCall`` whose ``fetch(cache)`` raises must be logged and skipped,
     not abort iteration.
 
@@ -360,7 +360,6 @@ def test_cache_query_logs_and_skips_calls_that_fail_to_fetch(caplog):
     break a whole query.
     """
     import logging
-    from fleche.storage.memory import ValueMemory, CallMemory
 
     class ExplodingDigestedCall:
         def fetch(self, cache):
@@ -382,10 +381,8 @@ def test_cache_query_logs_and_skips_calls_that_fail_to_fetch(caplog):
         def __getattr__(self, name):
             return getattr(self._inner, name)
 
-    values = ValueMemory({})
-    inner_calls = CallMemory({})
-    Cache(values, inner_calls).save(Call(name="f", arguments={"x": 1}, result=2))
-    cache = Cache(values, BustedCalls(inner_calls))
+    clean_cache.save(Call(name="f", arguments={"x": 1}, result=2))
+    cache = Cache(clean_cache.values, BustedCalls(clean_cache.calls))
 
     with caplog.at_level(logging.ERROR, logger="fleche.cache"):
         results = list(cache.query(QueryCall(name="f")))
