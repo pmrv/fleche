@@ -229,7 +229,7 @@ def test_dispatch_covers_every_registered_method():
         "save",
         "load",
         "load_value",
-        "save_value",
+        "prepare",
         "evict",
         "contains",
         "expand",

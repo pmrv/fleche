@@ -1,4 +1,4 @@
-"""Two-phase save protocol: Call.prepare / PreparedCall.commit / abandon.
+"""Two-phase save protocol: Cache.prepare / PreparedCall.commit / abandon.
 
 The protocol exists to fix one incoherence: the wrapper digests arguments
 *before* the function body runs (the lookup key), but the old save path
@@ -12,7 +12,7 @@ import pytest
 from fleche import fleche
 import fleche as fl
 from fleche.call import Call
-from fleche.caches import Cache, Rejected
+from fleche.caches import Cache, CacheStack, RefreshingCache, Rejected
 from fleche.digest import digest
 from fleche.storage.memory import ValueMemory, CallMemory
 
@@ -32,7 +32,7 @@ def make_call(**arguments):
 def test_prepare_seals_lookup_key(cache):
     call = make_call(x=1, y="a")
     prepared = cache.prepare(call)
-    assert prepared.key == call.to_lookup_key()
+    assert prepared.digested.to_lookup_key() == call.to_lookup_key()
 
 
 def test_prepare_stores_arguments_before_commit(cache):
@@ -45,7 +45,7 @@ def test_commit_files_record_under_sealed_key(cache):
     call = make_call(x=1)
     prepared = cache.prepare(call)
     key = prepared.commit("result", {"meta": {"k": "v"}})
-    assert key == prepared.key
+    assert key == call.to_lookup_key()
     loaded = cache.load(key)
     assert loaded.result == "result"
     assert loaded.metadata == {"meta": {"k": "v"}}
@@ -67,29 +67,29 @@ def test_abandon_leaves_no_record(cache):
     call = make_call(x=1)
     prepared = cache.prepare(call)
     prepared.abandon()
-    assert not cache.contains(prepared.key)
+    assert not cache.contains(call.to_lookup_key())
 
 
 def test_context_manager_abandons_without_commit(cache):
     call = make_call(x=1)
     with cache.prepare(call) as prepared:
         pass
-    assert not cache.contains(prepared.key)
+    assert not cache.contains(call.to_lookup_key())
 
 
 def test_context_manager_commit_sticks(cache):
     call = make_call(x=1)
     with cache.prepare(call) as prepared:
         prepared.commit(42)
-    assert cache.load(prepared.key).result == 42
+    assert cache.load(call.to_lookup_key()).result == 42
 
 
 def test_context_manager_does_not_swallow_exceptions(cache):
     call = make_call(x=1)
     with pytest.raises(RuntimeError):
-        with cache.prepare(call) as prepared:
+        with cache.prepare(call):
             raise RuntimeError("body failed")
-    assert not cache.contains(prepared.key)
+    assert not cache.contains(call.to_lookup_key())
 
 
 def test_readonly_prepare_is_digest_only_and_commit_rejects(cache):
@@ -97,11 +97,11 @@ def test_readonly_prepare_is_digest_only_and_commit_rejects(cache):
     rejection lands at commit time, after the body would have run."""
     call = make_call(x=[1, 2])
     prepared = cache.readonly().prepare(call)
-    assert prepared.key == call.to_lookup_key()
+    assert prepared.digested.to_lookup_key() == call.to_lookup_key()
     assert list(cache.values.list()) == []          # nothing was stashed
     with pytest.raises(Rejected):
         prepared.commit(42)
-    assert not cache.contains(prepared.key)
+    assert not cache.contains(call.to_lookup_key())
 
 
 def test_key_matches_one_shot_save(cache):
@@ -110,6 +110,36 @@ def test_key_matches_one_shot_save(cache):
     call.result = "r"
     one_shot = Cache(ValueMemory({}), CallMemory({}))
     assert cache.prepare(call).commit("r") == one_shot.save(call)
+
+
+# ---- wrappers and stacks: storage from the inner cache, policy from the outer ----
+
+
+def test_stack_prepares_on_stack0_and_commits_through_the_stack(cache):
+    """Arguments are stashed where the stack's saves land; the commit still
+    goes through the stack itself (its ``save`` policy, not stack[0]'s)."""
+    second = Cache(ValueMemory({}), CallMemory({}))
+    stack = CacheStack([cache, second])
+    call = make_call(x=[1, 2])
+    prepared = stack.prepare(call)
+    assert prepared.cache is stack
+    key = prepared.commit([1, 2, 3])
+    assert key == call.to_lookup_key()
+    assert cache.load(key).result == [1, 2, 3]
+    assert cache.load(key).arguments["x"] == [1, 2]
+    assert not second.contains(key)
+
+
+def test_wrapper_prepare_commits_through_the_wrapper(cache):
+    """A wrapper delegates storage to its inner cache but keeps its own save
+    policy on the commit — here the refresh wrapper's write-through."""
+    wrapper = RefreshingCache(cache)
+    call = make_call(x=[1, 2])
+    prepared = wrapper.prepare(call)
+    assert prepared.cache is wrapper
+    key = prepared.commit("r")
+    assert cache.load(key).result == "r"
+    assert cache.load(key).arguments["x"] == [1, 2]
 
 
 # ---- end-to-end: argument mutation no longer corrupts identity ----

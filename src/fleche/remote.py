@@ -57,7 +57,7 @@ from pyiron_snippets.import_alarm import ImportAlarm
 
 from . import call as _call
 from .caches import BaseCache, Rejected
-from .call import DigestedCall, LazyCall, QueryCall
+from .call import DigestedCall, LazyCall, PreparedCall, QueryCall
 from .digest import Digest
 
 logger = logging.getLogger("fleche.remote")
@@ -148,7 +148,10 @@ _REMOTE_METHODS: dict[str, _RemoteMethod] = {
     "save": _RemoteMethod(lambda cache, args: cache.save(*args)),
     "load": _RemoteMethod(lambda cache, args: _strip_cache(cache.load(*args))),
     "load_value": _RemoteMethod(lambda cache, args: cache.load_value(*args)),
-    "save_value": _RemoteMethod(lambda cache, args: cache.save_value(*args)),
+    # Only the sealed record travels back; the server-side PreparedCall is
+    # dropped (abandon is a no-op) and the client finishes the protocol with a
+    # plain ``save`` once the body has run.
+    "prepare": _RemoteMethod(lambda cache, args: cache.prepare(*args).digested),
     "evict": _RemoteMethod(lambda cache, args: cache.evict(*args), void=True),
     "contains": _RemoteMethod(lambda cache, args: cache.contains(*args)),
     "expand": _RemoteMethod(lambda cache, args: cache.expand(*args)),
@@ -681,7 +684,9 @@ _CLIENT_METHODS: dict[str, _ClientMethod] = {
     "save": _ClientMethod(write=True),
     "load": _ClientMethod(unwrap=_fetch_lazy_call),
     "load_value": _ClientMethod(),
-    "save_value": _ClientMethod(write=True),
+    # Read-only remotes never reach this entry: `SshCache.prepare` short-circuits
+    # to the local digest-only admission before dispatching.
+    "prepare": _ClientMethod(),
     "evict": _ClientMethod(
         write=True, reject_message="Cannot evict from a read-only remote cache"
     ),
@@ -794,12 +799,18 @@ class SshCache(BaseCache):
     def load_value(self, key: str) -> Any:
         return self._rpc("load_value", key)
 
-    def save_value(self, value: Any) -> Digest:
-        # One round trip per value (no batching yet).  Values travel by
-        # cloudpickle, so a Path value ships its path *string*, not its
-        # content — the same limitation the previous ship-the-whole-Call
-        # protocol had; paths over SSH remain unsupported.
-        return self._rpc("save_value", value)
+    def prepare(self, call: _call.Call) -> PreparedCall:
+        # One round trip: the whole call goes over so the remote stashes the
+        # argument values before the body runs and seals the record, which
+        # comes back for the client to complete with ``save``.  Values travel
+        # by cloudpickle, so a Path argument ships its path *string*, not its
+        # content — paths over SSH remain unsupported, as before.
+        self._ensure_handshake()
+        if self._info_cache and self._info_cache.get("read_only", False):
+            # Digest-only admission, as BaseCache: the body still runs, and the
+            # commit's ``save`` is rejected locally without a round trip.
+            return super().prepare(call)
+        return PreparedCall(digested=self._rpc("prepare", call), cache=self)
 
     def evict(self, key: str | Digest) -> None:
         self._rpc("evict", key)

@@ -266,7 +266,11 @@ class DigestedCall:
 
     name: str
     arguments: dict[str, "digest.Digest"]
-    result: "digest.Digest | None" = None
+    # Normally a Digest pointer, or None while the result is still unknown
+    # (a record prepared before its function body ran).  Between
+    # :meth:`PreparedCall.commit` and the cache's ``save`` it briefly holds the
+    # live return value, which ``save`` stores and replaces with its Digest.
+    result: "digest.Digest | Any" = None
     metadata: dict[str, dict[str, Any]] = field(default_factory=dict)
     module: str | None = None
     version: str | int | None = None
@@ -348,37 +352,30 @@ class PreparedCall:
             prepared.commit(func(...))       # skipped on exception -> abandoned
     """
 
-    call: Call
     digested: DigestedCall
-    key: Digest
     cache: Any
     _finished: bool = field(default=False, init=False, repr=False)
 
     def commit(self, result: Any, metadata: dict | None = None) -> Digest:
-        """Store *result*, attach *metadata*, and file the call record.
+        """Attach *result* and *metadata* to the record and file it.
 
-        The second half of the two-phase save protocol: the result is written to
-        ``cache.values`` (capturing its content *as returned* — including any
-        argument the body mutated and passed back out), and the completed
-        :class:`DigestedCall` is filed under :attr:`key`.
+        The second half of the two-phase save protocol.  The result is handed
+        to the cache live, so it is stored *as returned* — including any
+        argument the body mutated and passed back out — while the arguments
+        keep the digests sealed at prepare time.
 
         Args:
             result: The function's return value.
             metadata: Optional metadata mapping stored on the record.
 
         Returns:
-            Digest: the record key (equal to :attr:`key`).
+            Digest: the record key.
 
         Raises:
             fleche.caches.Rejected: if the result cannot be stored or the cache
                 refuses the record.
         """
-        from .storage.base import SaveError  # lazy import: storage.base depends on call
-        try:
-            self.digested.result = self.cache.save_value(result)
-        except SaveError as e:
-            from .caches import Rejected  # lazy import: caches depends on call
-            raise Rejected(e) from None
+        self.digested.result = result
         if metadata is not None:
             self.digested.metadata = metadata
         self._finished = True
@@ -388,9 +385,10 @@ class PreparedCall:
         """Release the call without recording it.
 
         Called when the function body raises or its result is not cacheable.
-        The default is a no-op: argument values stored by :meth:`Call.prepare`
-        are content-addressed orphans that a later garbage collection sweep
-        reclaims.  Subclasses may hook cleanup here.
+        The default is a no-op: argument values stored by
+        :meth:`~fleche.caches.BaseCache.prepare` are content-addressed orphans
+        that a later garbage collection sweep reclaims.  Subclasses may hook
+        cleanup here.
         """
         self._finished = True
 
