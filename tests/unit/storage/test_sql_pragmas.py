@@ -86,3 +86,36 @@ def test_is_network_filesystem_reads_proc_mounts(tmp_path, monkeypatch):
 
     assert sql_module._is_network_filesystem(nested / "calls.db") is True
     assert sql_module._is_network_filesystem(tmp_path / "calls.db") is False
+
+
+def test_is_network_filesystem_duplicate_mount_point_last_wins(tmp_path, monkeypatch):
+    """``/proc/mounts`` can list the same mount point twice, e.g. an autofs
+    trigger followed by the real NFS mount it resolves to. The later entry
+    must win the tie so the detector reports the actual (network) fstype
+    instead of the autofs placeholder (see #821).
+    """
+    fake_mounts = tmp_path / "mounts"
+    home = tmp_path / "home"
+    home.mkdir()
+    fake_mounts.write_text(
+        "\n".join(
+            [
+                "/dev/sda1 / ext4 rw 0 0",
+                f"/etc/auto.home {home} autofs rw,fd=57 0 0",
+                f"server:/export {home} nfs rw,vers=3 0 0",
+            ]
+        )
+        + "\n"
+    )
+
+    real_open = open
+
+    def fake_open(path, *args, **kwargs):
+        if path == "/proc/mounts":
+            return real_open(fake_mounts, *args, **kwargs)
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(sql_module, "open", fake_open, raising=False)
+    monkeypatch.setattr(sql_module.sys, "platform", "linux")
+
+    assert sql_module._is_network_filesystem(home / "calls.db") is True

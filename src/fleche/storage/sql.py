@@ -177,9 +177,10 @@ def _is_network_filesystem(path: Path) -> bool:
                 mount_point, fs_type = parts[1], parts[2]
                 if (
                     (resolved == mount_point or resolved.startswith(mount_point.rstrip("/") + "/"))
-                    and len(mount_point) > len(best_match)
+                    and len(mount_point) >= len(best_match)
                 ):
                     best_match, fstype = mount_point, fs_type
+        logger.debug("Detected filesystem type %r for %s (mount point %r)", fstype, path, best_match)
         return fstype is not None and fstype.lower() in _NETWORK_FS_TYPES
     except OSError:
         logger.debug("Could not determine filesystem type for %s", path, exc_info=True)
