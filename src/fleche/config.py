@@ -206,6 +206,20 @@ All discovered files are **shallow-merged** at the top level: files closer
 to the CWD win, and a closer file's top-level table fully replaces the
 same key in a farther file (tables are *not* recursively merged).
 
+Relative paths
+--------------
+
+A relative ``root`` (storage/template) or ``url`` (``sql`` calls) is
+resolved against the directory containing the ``fleche.toml`` that declared
+it, not against the process's current working directory.  This is what
+makes a checked-in, machine-portable config file resolve to the *same*
+cache location no matter which subdirectory it is read from during the
+walk above.  Absolute paths and ``~``-prefixed paths are unaffected.  This
+resolution only happens for paths read from a config file — a ``root``/
+``url`` passed directly to :func:`cache_from_config` or
+:func:`storage_from_config` still resolves against the CWD, as it always
+has.
+
 Stopping the walk
 -----------------
 
@@ -236,13 +250,82 @@ logger = logging.getLogger("fleche.config")
 _live_caches: dict[str | None, caches.BaseCache] = {}
 
 
+def _rebase_relative_path(value: str, base: Path) -> str:
+    """Anchor a relative ``root``-style path onto *base*.
+
+    Absolute paths and ``~``-prefixed paths already mean the same thing
+    regardless of where the declaring file lives, so they pass through
+    unchanged.
+    """
+    if value.startswith("~"):
+        return value
+    path = Path(value)
+    if path.is_absolute():
+        return value
+    return str(base / path)
+
+
+def _rebase_url(value: str, base: Path) -> str:
+    """Anchor the ``calls.url`` key onto *base*.
+
+    ``url`` may be a bare filesystem path (same handling as ``root``) or a
+    SQLAlchemy URL. Only a relative ``sqlite:///<path>`` URL needs rebasing;
+    ``:memory:``, an absolute sqlite URL (``sqlite:////...``), a
+    ``~``-prefixed path, and non-sqlite dialects (``postgresql://``, ...)
+    are left untouched.
+    """
+    prefix = "sqlite:///"
+    if value.startswith(prefix):
+        db_path = value[len(prefix):]
+        if not db_path or db_path == ":memory:" or db_path.startswith(("/", "~")):
+            return value
+        return prefix + str(base / Path(db_path))
+    if "://" in value or value.startswith("sqlite:"):
+        return value
+    return _rebase_relative_path(value, base)
+
+
+def _rebase_value(value: Any, base: Path) -> Any:
+    """Recurse through a parsed TOML value, rebasing ``root``/``url`` strings."""
+    if isinstance(value, dict):
+        return _rebase_config(value, base)
+    if isinstance(value, list):
+        return [_rebase_value(v, base) for v in value]
+    return value
+
+
+def _rebase_config(config: dict[str, Any], base: Path) -> dict[str, Any]:
+    """Rewrite relative ``root``/``url`` path values in *config* onto *base*.
+
+    Applied to a config file's parsed content right after loading, so a
+    relative path in ``fleche.toml`` means "relative to the file that
+    declared it" instead of "relative to whatever directory the process
+    happens to run from" (#810) — the config-discovery walk means the same
+    file can otherwise be read from many different working directories.
+    ``root`` (values/calls storage, templates) and ``url`` (``sql`` call
+    storage) are the only path-bearing keys; everything else — including
+    the unrelated boolean ``[default].root`` marker and remote-side keys
+    like ``workdir`` on an ``ssh`` entry — passes through untouched.
+    """
+    rebased: dict[str, Any] = {}
+    for key, value in config.items():
+        if key == "root" and isinstance(value, str):
+            rebased[key] = _rebase_relative_path(value, base)
+        elif key == "url" and isinstance(value, str):
+            rebased[key] = _rebase_url(value, base)
+        else:
+            rebased[key] = _rebase_value(value, base)
+    return rebased
+
+
 def _load_config(path: Path) -> dict[str, Any]:
     try:
         with open(path, "rb") as f:
-            return tomllib.load(f)
+            config = tomllib.load(f)
     except Exception as e:
         logger.error("Failed to load configuration from %s: %s", path, e, exc_info=True)
         return {}
+    return _rebase_config(config, path.parent)
 
 
 def _collect_config_paths() -> list[Path]:
