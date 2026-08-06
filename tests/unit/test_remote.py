@@ -5,6 +5,7 @@ streams in place of an SSH subprocess.  The same wire protocol is exercised;
 only the transport is swapped.
 """
 
+import collections
 import dataclasses
 import io
 import os
@@ -233,6 +234,7 @@ def test_dispatch_covers_every_registered_method():
         "load",
         "load_value",
         "save_value",
+        "prepare",
         "evict",
         "contains",
         "expand",
@@ -304,6 +306,77 @@ def test_read_only_short_circuits_save_and_evict():
 def test_read_only_false_for_writable_remote(remote):
     """A normal remote cache reports `read_only == False`."""
     assert remote.read_only is False
+
+
+# ---------------------------------------------------------------------------
+# Two-phase save protocol over the wire
+# ---------------------------------------------------------------------------
+
+
+def test_prepare_commit_round_trip(remote, server_cache):
+    """`prepare` stashes the arguments server-side before the body runs;
+    `commit` ships the result value and then the plain digested record —
+    a PreparedCall itself never goes over the wire."""
+    from fleche.call import PreparedCall
+
+    shipped = []
+    original_call = remote._conn.call
+
+    def spy(method, *args, **kwargs):
+        shipped.append((method, args))
+        return original_call(method, *args, **kwargs)
+
+    remote._conn.call = spy  # type: ignore[method-assign]
+
+    xs = [1, 2]
+    c = Call(name="f", arguments={"xs": xs}, module="m", version="1")
+    sealed = c.to_lookup_key()
+    prepared = remote.prepare(c)
+    assert prepared.cache is remote
+    assert prepared.digested.to_lookup_key() == sealed
+    # The argument value is already on the server before any commit.
+    assert server_cache.values.load(digest([1, 2])) == [1, 2]
+    xs.append(3)  # the "function body" mutates the argument
+    key = prepared.commit(xs)
+    assert key == sealed  # NOT c.to_lookup_key(): that drifted with the mutation
+    # The commit took two trips (result value, then the record), and nothing
+    # PreparedCall-shaped ever crossed the wire.
+    assert [m for m, _ in shipped if m in ("save_value", "save")] == ["save_value", "save"]
+    assert not any(
+        isinstance(a, PreparedCall) for _, args in shipped for a in args
+    )
+    lc = remote.load(key)
+    assert lc.result == [1, 2, 3]  # result: as returned
+    assert lc.arguments["xs"] == [1, 2]  # argument: as passed
+
+
+def test_read_only_prepare_is_local_and_commit_rejects():
+    """`prepare` against a read-only remote seals the key locally — no RPC,
+    nothing stashed — and the commit's `save` is rejected without a round trip."""
+    server = Cache(ValueMemory({}), CallMemory({})).readonly()
+    sc = _make_remote(server)
+    try:
+        # Trigger the info fetch once so the read_only flag is cached.
+        assert sc.read_only is True
+
+        rpc_calls = []
+        original_call = sc._conn.call
+
+        def spy(method, *args, **kwargs):
+            rpc_calls.append(method)
+            return original_call(method, *args, **kwargs)
+
+        sc._conn.call = spy  # type: ignore[method-assign]
+
+        c = Call(name="f", arguments={"xs": [1, 2]}, module="m", version="1")
+        prepared = sc.prepare(c)
+        assert prepared.digested.to_lookup_key() == c.to_lookup_key()
+        assert list(server.cache.values.list()) == []  # nothing stashed
+        with pytest.raises(Rejected):
+            prepared.commit(42)
+        assert rpc_calls == [], f"unexpected RPCs: {rpc_calls}"
+    finally:
+        sc.close()
 
 
 def test_reconnect_invalidates_info_cache(remote, server_cache):
@@ -1000,7 +1073,7 @@ def test_prepare_degrades_a_path_argument_to_a_digest_only_reference(remote, a_f
     """
     call = Call(name="f", arguments={"p": a_file, "n": 3})
     prepared = remote.prepare(call)
-    assert prepared.key == call.to_lookup_key()
+    assert prepared.to_lookup_key() == call.to_lookup_key()
     # The argument survives as its (locally computed) digest, not as content.
     assert prepared.digested.arguments["p"] == digest(a_file)
 
@@ -1023,7 +1096,7 @@ def test_load_value_refuses_a_path_materialized_on_the_server(
     travels back, so the client would be handed a dangling reference — one
     the server unlinks as soon as its own reference dies.
     """
-    key = server_cache.save_value(a_file)  # stored server-side, by content
+    key = server_cache.values.save(a_file)  # stored server-side, by content
     with pytest.raises(RemotePathUnsupported) as excinfo:
         remote.load_value(key)
     assert key in str(excinfo.value)
@@ -1032,7 +1105,7 @@ def test_load_value_refuses_a_path_materialized_on_the_server(
 def test_load_value_refuses_a_path_nested_in_a_container(
     remote, server_cache, a_file
 ):
-    key = server_cache.save_value({"out": [a_file]})
+    key = server_cache.values.save({"out": [a_file]})
     with pytest.raises(RemotePathUnsupported):
         remote.load_value(key)
 
@@ -1044,3 +1117,65 @@ def test_lazy_call_only_trips_on_the_path_value(remote, server_cache, a_file):
     assert dict(lc.arguments) == {"x": 1}
     with pytest.raises(RemotePathUnsupported):
         lc.result
+
+
+# ---------------------------------------------------------------------------
+# The two-phase protocol is a values-over-the-wire path too
+# ---------------------------------------------------------------------------
+
+
+_Bundle = collections.namedtuple("_Bundle", ["out", "score"])
+
+
+def test_prepare_does_not_ship_a_call_carrying_a_path(remote, server_cache, a_file):
+    """`prepare` is the one RPC that sends argument *values*, not digests.
+
+    Shipping the live call would hand the server a path string to resolve
+    against its own filesystem — the bug the guard exists to stop — so it has
+    to fall back to the local two-phase prepare instead.
+    """
+    call = Call(name="f", arguments={"p": a_file, "n": 3})
+    prepared = remote.prepare(call)
+    # Sealed locally: the key is still the one a later lookup computes.
+    assert prepared.to_lookup_key() == call.to_lookup_key()
+    assert prepared.digested.arguments["p"] == digest(a_file)
+    # Nothing about the path reached the server.
+    assert not server_cache.values.storage
+
+
+def test_prepare_still_uses_the_remote_when_no_path_is_involved(remote, server_cache):
+    """The fallback must be narrow: ordinary calls keep the one-round-trip path."""
+    prepared = remote.prepare(Call(name="f", arguments={"x": 1, "y": "two"}))
+    assert (
+        prepared.to_lookup_key()
+        == Call(name="f", arguments={"x": 1, "y": "two"}).to_lookup_key()
+    )
+    assert server_cache.values.storage  # the remote stashed the arguments
+
+
+def test_committing_a_path_result_is_rejected(remote, a_file):
+    """`commit` ships the result through `save`; a path must not slip through."""
+    prepared = remote.prepare(Call(name="f", arguments={"x": 1}))
+    with pytest.raises(Rejected):
+        prepared.commit(a_file)
+
+
+@pytest.mark.parametrize(
+    "wrap",
+    [
+        pytest.param(lambda p: _Bundle(p, 0.5), id="namedtuple"),
+        pytest.param(lambda p: {p}, id="set"),
+    ],
+)
+def test_paths_hidden_in_destructuring_opaque_containers_are_refused(
+    remote, server_cache, a_file, wrap
+):
+    """Destructuring stores these verbatim, but `digest` reads the file anyway.
+
+    So the far side would digest the same name against its own filesystem —
+    the guard has to follow `digest`, not destructuring, or the seal breaks
+    exactly as it did before.
+    """
+    with pytest.raises(RemotePathUnsupported):
+        remote.save_value(wrap(a_file))
+    assert not server_cache.values.storage

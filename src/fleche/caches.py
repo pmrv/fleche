@@ -13,7 +13,7 @@ from . import storage
 from .storage.base import _apply_shrink, _resolve_prefix, Intent, OperationContext
 from .storage.destructuring import HasChildDigests
 from .storage.thread_safe import PerKeyLockMixin, _PicklableRLock
-from .call import Call, DigestedCall, LazyCall, PreparedCall, QueryCall
+from .call import Call, LazyCall, PreparedCall, QueryCall
 from . import call
 from . import query
 
@@ -50,46 +50,32 @@ class BaseCache(OperationContext):
         from . import config as _config
         return _config.cache_from_config(config)
 
-    @abstractmethod
-    def save_value(self, value: Any) -> "Digest":
-        """Store one value, returning its content digest.
-
-        The write-side counterpart of :meth:`load_value`; also the primitive
-        :meth:`prepare` runs argument and result values through.
-        """
-        ...
-
     def prepare(self, call: Call) -> PreparedCall:
-        """Admit *call* to this cache: store its arguments, seal its lookup key.
+        """Admit *call* to this cache: seal its lookup key before the body runs.
 
-        The first half of the two-phase save protocol.  Argument values go
-        through :meth:`save_value` *now* — before the function body runs — so
-        the recorded identity always describes the arguments as they were at
-        call time, even if the body later mutates them.  Because ``digest(x)
-        == save_value(x)`` for every storable value, the sealed key equals
-        ``call.to_lookup_key()``.
+        The first half of the two-phase save protocol.  Caches that own a
+        value storage (:class:`Cache`) override this to stash the argument
+        values now, so the recorded identity describes the arguments as they
+        were at call time, even if the body later mutates them.  This base
+        implementation is the digest-only admission for caches that cannot
+        (or must not) write ahead of the body — read-only views, aggregates
+        without their own storage; ``digest(x) == values.save(x)``, so both
+        forms seal the same key.
 
         Finish the returned :class:`~fleche.call.PreparedCall` with exactly
-        one of :meth:`~fleche.call.PreparedCall.commit` (store the result,
-        file the record) or :meth:`~fleche.call.PreparedCall.abandon`.
-
-        Argument values the storage refuses (``SaveError``) fall back to a
-        digest-only reference, as in :meth:`fleche.call.Call.stash`.
+        one of :meth:`~fleche.call.PreparedCall.commit` or
+        :meth:`~fleche.call.PreparedCall.abandon`.
         """
-        digested = call._to_digested(self.save_value)
-        return PreparedCall(
-            call=call, digested=digested, key=digested.to_lookup_key(), cache=self
-        )
+        return PreparedCall(digested=call.digest(), cache=self)
 
     @abstractmethod
-    def save(self, call: DigestedCall | Call) -> str:
+    def save(self, call: PreparedCall | Call) -> str:
         """File a call record.
 
-        The primary form takes a fully digested record whose values were
-        already stored — see :meth:`fleche.call.Call.prepare` for the
-        two-phase protocol that does both in the right order.  A live
-        :class:`Call` is also accepted as the degenerate one-shot form
-        (values static, stored on the spot)."""
+        Takes either a live :class:`Call` — values are stored on the spot, the
+        one-shot form — or a :class:`~fleche.call.PreparedCall` whose argument
+        values were already stored by :meth:`prepare` and whose pending result
+        is stored now, as returned."""
         ...
 
     @abstractmethod
@@ -334,38 +320,34 @@ class Cache(PerKeyLockMixin, BaseCache):
         with self._operation_context(key):
             return self.values.load(key)
 
-    def save_value(self, value: Any) -> Digest:
-        # No cache-level lock: the key is only known once the value storage
-        # has digested the value, and value storages carry their own per-key
-        # locking (PerKeyLockMixin) where they need it.
-        return self.values.save(value)
+    def prepare(self, call: Call) -> PreparedCall:
+        # Stash the arguments *now*, before the function body runs, so the
+        # record cannot end up keyed on post-mutation content.  No cache-level
+        # lock: the keys are only known once the value storage has digested
+        # each value, and value storages carry their own per-key locking.
+        return PreparedCall(digested=call.stash(self.values), cache=self)
 
-    def save(self, call: DigestedCall | Call) -> str:
-        # Record-only: argument and result values were already written to
-        # ``self.values`` by Call.prepare / PreparedCall.commit, whose digests
-        # this record carries.  Writing them here instead would re-read mutable
-        # values (e.g. Path contents) *after* the function body ran and file
-        # the record under post-mutation content — the incoherence the
-        # two-phase protocol exists to prevent.
-        #
-        # A live Call (values not yet stored) is still accepted as the
-        # degenerate one-shot form: with no function body between digesting
-        # and filing there is nothing to drift, so stash-then-file is
-        # equivalent to prepare/commit here.  Inlined rather than routed
-        # through prepare().commit() so one logical save does not re-enter
-        # subclass save() overrides a second time.  Wrappers and stacks need
-        # no own shim — every save path lands here.
-        if isinstance(call, Call):
-            key = call.to_lookup_key()
-            with self._operation_context(key):
-                try:
-                    digested = call.stash(self.values)
-                except storage.SaveError as e:
-                    raise Rejected(e)
-                return self.calls.save(digested)
+    def save(self, call: PreparedCall | Call) -> str:
         key = call.to_lookup_key()
         with self._operation_context(key):
-            return self.calls.save(call)
+            try:
+                if isinstance(call, Call):
+                    # One-shot form: nothing was stored ahead of time, and with
+                    # no function body between digesting and filing there is
+                    # nothing to drift.
+                    digested = call.stash(self.values)
+                elif isinstance(call, PreparedCall):
+                    # Committed result, stored as returned; the arguments must
+                    # NOT be re-saved here — reading them after the body ran is
+                    # exactly the post-mutation keying prepare exists to
+                    # prevent.
+                    digested = call.resolve(self.values.save(call._result))
+                else:
+                    # Already fully digested: file as-is.
+                    digested = call
+            except storage.SaveError as e:
+                raise Rejected(e)
+            return self.calls.save(digested)
 
     def load(self, key: str) -> LazyCall:
         with self._operation_context(key):
@@ -532,10 +514,13 @@ class CacheWrapper(BaseCache):
 
     cache: BaseCache
 
-    def save_value(self, value: Any) -> Digest:
-        return self.cache.save_value(value)
+    def prepare(self, call: Call) -> PreparedCall:
+        # The inner cache decides how the arguments are stored; rebinding the
+        # cache makes the eventual commit go through *this* wrapper's ``save``,
+        # so wrapper policy (read-only, filtering, size limits) still applies.
+        return replace(self.cache.prepare(call), cache=self)
 
-    def save(self, call: DigestedCall | Call) -> str:
+    def save(self, call: PreparedCall | Call) -> str:
         return self.cache.save(call)
 
     def load(self, key: str) -> LazyCall:
@@ -585,24 +570,18 @@ class ReadOnlyMixin:
     short-circuits ``save``/``evict`` without a round-trip).
     """
 
-    def save(self, call: DigestedCall | Call):
+    def save(self, call: PreparedCall | Call):
         raise Rejected(self, call)
 
     def evict(self, key: str | Digest) -> None:
         raise Rejected("Cannot evict from a read-only cache", self, key)
 
-    def save_value(self, value: Any) -> Digest:
-        raise Rejected("Cannot save values to a read-only cache", self)
-
     def prepare(self, call: Call) -> "PreparedCall":
-        # Digest-only admission: a read-only cache stashes nothing, so the
-        # function body still runs with a correctly sealed key, and the
-        # eventual commit is rejected (save_value raises) — matching the
-        # behavior save() rejection produced before the two-phase protocol.
-        digested = call.digest()
-        return PreparedCall(
-            call=call, digested=digested, key=digested.to_lookup_key(), cache=self
-        )
+        # Digest-only admission, restated from BaseCache because this mixin is
+        # base-free and must beat CacheWrapper.prepare in the MRO: nothing is
+        # stashed, the key is still sealed, and the commit is rejected by
+        # ``save`` above — the body runs and returns uncached.
+        return PreparedCall(digested=call.digest(), cache=self)
 
 
 @dataclass(frozen=True)
@@ -848,14 +827,14 @@ class CacheStack(PerKeyLockMixin, _MultiCache):
             if isinstance(c, CacheStack):
                 raise ValueError("CacheStack cannot be nested inside another CacheStack")
 
-    def save(self, call: DigestedCall | Call):
-        self.stack[0].save(call)
+    def save(self, call: PreparedCall | Call) -> str:
+        return self.stack[0].save(call)
 
-    def save_value(self, value: Any) -> Digest:
-        # Writes always land on stack[0] (matching save); reads that need the
-        # full fan-out go through load_value, which _MultiCache spreads over
-        # every member.
-        return self.stack[0].save_value(value)
+    def prepare(self, call: Call) -> PreparedCall:
+        # Writes always land on stack[0] (matching save), so that is where the
+        # arguments are stashed; rebinding the cache routes the commit back
+        # through this stack's ``save``.
+        return replace(self.stack[0].prepare(call), cache=self)
 
     @contextlib.contextmanager
     def _operation_context(self, key, *, intent: Intent = Intent.WRITE):
@@ -1009,7 +988,7 @@ class SizeLimitedMixin(BaseCache):
                 target = self._pick_eviction_target(list(self._keys))
                 self.evict(target)
 
-    def save(self, call: call.DigestedCall | call.Call) -> str:
+    def save(self, call: call.PreparedCall | call.Call) -> str:
         with self._lock:
             key = super().save(call)
             self._keys.add(key)

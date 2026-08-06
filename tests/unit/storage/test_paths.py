@@ -5,7 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from fleche.digest import digest
+from collections import namedtuple
+
+from fleche.digest import digest, Indigestible
 from fleche.storage import ValueMixin, DestructuringMixin
 from fleche.storage.memory import MemoryBackend
 from fleche.storage.destructuring import DigestedMapping
@@ -346,6 +348,9 @@ class _Fields:
     b: object = None
 
 
+_Bundle = namedtuple("_Bundle", ["out", "score"])
+
+
 class _Opaque:
     """Not a container a destructuring save looks inside."""
 
@@ -367,7 +372,28 @@ def test_find_path_finds_a_bare_path(tmp_path):
         pytest.param(lambda p: _Fields(a=1, b={"deep": [p]}), id="dataclass-field"),
     ],
 )
-def test_find_path_descends_the_containers_a_save_descends(tmp_path, wrap):
+def test_find_path_descends_the_containers_digest_descends(tmp_path, wrap):
+    assert find_path(wrap(tmp_path)) is tmp_path
+
+
+@pytest.mark.parametrize(
+    "wrap",
+    [
+        pytest.param(lambda p: _Bundle(p, 0.5), id="namedtuple"),
+        pytest.param(lambda p: {p}, id="set"),
+        pytest.param(lambda p: frozenset({p}), id="frozenset"),
+        pytest.param(lambda p: [_Bundle(p, 0.5)], id="namedtuple-in-list"),
+    ],
+)
+def test_find_path_descends_containers_destructuring_treats_as_opaque(tmp_path, wrap):
+    """The guard must be broader than destructuring, or it lets the bug back in.
+
+    Destructuring stores a namedtuple / set verbatim, but ``digest`` recurses
+    into both and *reads the file* — so a path hidden in one still decides the
+    key.  A caller that cannot honour path semantics across a machine boundary
+    has to see it, or the far side digests the same name against its own
+    filesystem and the ``digest(x) == save_value(x)`` seal breaks silently.
+    """
     assert find_path(wrap(tmp_path)) is tmp_path
 
 
@@ -383,13 +409,23 @@ def test_find_path_returns_none_without_a_path(value):
     assert find_path(value) is None
 
 
-def test_find_path_stops_at_opaque_values(tmp_path):
-    """A Path inside a plain object is stored as part of that object.
+def test_find_path_stops_where_digest_stops(tmp_path):
+    """A plain object is `Indigestible`, so no path inside it can decide a key.
 
-    ``find_path`` mirrors the destructuring walk exactly: what it does not
-    descend into, path storage does not intercept either.
+    This is the boundary: ``find_path`` follows ``digest``, and ``digest``
+    cannot see into an arbitrary object either — it raises rather than
+    reading the file.  Nothing to warn about, so nothing to report.
     """
     assert find_path(_Opaque(tmp_path)) is None
+    with pytest.raises(Indigestible):
+        digest(_Opaque(tmp_path))
+
+
+def test_find_path_does_not_consume_a_generator(tmp_path):
+    """Walking must not have the side effect of exhausting a one-shot iterable."""
+    gen = (x for x in [tmp_path])
+    find_path(gen)
+    assert list(gen) == [tmp_path]
 
 
 def test_find_path_terminates_on_a_cycle(tmp_path):

@@ -1,31 +1,42 @@
+import dataclasses
 import os
 import sys
+from collections.abc import Iterable, Mapping
+from numbers import Number
 from pathlib import Path
 from typing import Any
 import tempfile
 import weakref
 
 from . import base
-from . import destructuring
+from .. import _attrs
 from .. import digest
 
 
 def find_path(value: Any) -> Path | None:
-    """Return a :class:`~pathlib.Path` a save of *value* would reach, if any.
+    """Return a :class:`~pathlib.Path` :func:`~fleche.digest.digest` would read, if any.
 
-    Walks *value* exactly the way a destructuring save does — via
-    :func:`~fleche.storage.destructuring.child_slots`, so lists, tuples,
-    dicts, dataclasses, and ``attrs`` instances are descended into and
-    everything else is a leaf — and stops at the first ``Path`` it reaches,
-    returning ``None`` if the value carries no path at all.  Which path comes
-    back when there are several is unspecified: this answers "is there one",
-    and the path itself is there to name in the resulting error.
+    Stops at the first ``Path`` reachable inside *value*, returning ``None``
+    if there is none.  Which one comes back when there are several is
+    unspecified: this answers "is there one", and the path itself is there to
+    name in the resulting error.
 
     This is a *predicate helper*, not part of the storage protocol: it exists
     so a caller that cannot honour path semantics (notably
     :class:`fleche.remote.SshCache`, where a path's meaning does not survive
     the hop to another filesystem) can detect the situation up front instead
     of silently storing something else.  Shared cycles are visited once.
+
+    **The walk deliberately mirrors** :func:`~fleche.digest.digest`, **not
+    destructuring**, and that difference is the whole point.  Destructuring
+    treats namedtuples, sets, and frozensets as opaque, but ``digest``
+    recurses into all of them and *reads the file* — so a path hidden in one
+    still decides the key.  Locally that is harmless, because the process
+    computing the digest is the one holding the file.  Across a machine
+    boundary it is not: the far side would digest the same name against its
+    own filesystem, which is exactly the ``digest(x) == save_value(x)`` break
+    the caller is trying to prevent.  Mirroring destructuring here would let
+    ``Bundle(path, 0.5)`` through and reintroduce it.
     """
     seen: set[int] = set()
     stack: list[Any] = [value]
@@ -33,12 +44,26 @@ def find_path(value: Any) -> Path | None:
         item = stack.pop()
         if isinstance(item, Path):
             return item
+        if isinstance(item, (digest.Digest, Number, str, bytes, bytearray)):
+            continue
         if id(item) in seen:
             continue
         seen.add(id(item))
-        slots = destructuring.child_slots(item)
-        if slots:
-            stack.extend(child for _, child in slots)
+        if isinstance(item, Mapping):
+            stack.extend(item.keys())
+            stack.extend(item.values())
+        elif dataclasses.is_dataclass(item) and not isinstance(item, type):
+            stack.extend(getattr(item, f.name) for f in dataclasses.fields(item))
+        elif _attrs.is_attrs_instance(item):
+            stack.extend(v for _, v in _attrs.field_items(item))
+        elif isinstance(item, Iterable):
+            # Covers list/tuple/set/frozenset and namedtuples — everything the
+            # ``Iterable`` arm of ``_digest_bytes`` walks.  Guarded because an
+            # arbitrary iterable may be a one-shot generator; digesting one
+            # consumes it, and so would we.
+            if not isinstance(item, (list, tuple, set, frozenset)):
+                continue
+            stack.extend(item)
     return None
 
 

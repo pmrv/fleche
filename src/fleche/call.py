@@ -266,6 +266,8 @@ class DigestedCall:
 
     name: str
     arguments: dict[str, "digest.Digest"]
+    # None while the result is still unknown (a record prepared before its
+    # function body ran).
     result: "digest.Digest | None" = None
     metadata: dict[str, dict[str, Any]] = field(default_factory=dict)
     module: str | None = None
@@ -348,49 +350,66 @@ class PreparedCall:
             prepared.commit(func(...))       # skipped on exception -> abandoned
     """
 
-    call: Call
     digested: DigestedCall
-    key: Digest
     cache: Any
     _finished: bool = field(default=False, init=False, repr=False)
+    # The live result and metadata between commit and the cache's save;
+    # DigestedCall itself only ever holds digests.
+    _result: Any = field(default=None, init=False, repr=False)
+    _metadata: "dict | None" = field(default=None, init=False, repr=False)
 
     def commit(self, result: Any, metadata: dict | None = None) -> Digest:
-        """Store *result*, attach *metadata*, and file the call record.
+        """Attach *result* and *metadata* to the record and file it.
 
-        The second half of the two-phase save protocol: the result is written to
-        ``cache.values`` (capturing its content *as returned* — including any
-        argument the body mutated and passed back out), and the completed
-        :class:`DigestedCall` is filed under :attr:`key`.
+        The second half of the two-phase save protocol.  The result is handed
+        to the cache live, so it is stored *as returned* — including any
+        argument the body mutated and passed back out — while the arguments
+        keep the digests sealed at prepare time.
 
         Args:
             result: The function's return value.
             metadata: Optional metadata mapping stored on the record.
 
         Returns:
-            Digest: the record key (equal to :attr:`key`).
+            Digest: the record key.
 
         Raises:
             fleche.caches.Rejected: if the result cannot be stored or the cache
                 refuses the record.
+            RuntimeError: if this call was already committed or abandoned.
         """
-        from .storage.base import SaveError  # lazy import: storage.base depends on call
-        try:
-            self.digested.result = self.cache.save_value(result)
-        except SaveError as e:
-            from .caches import Rejected  # lazy import: caches depends on call
-            raise Rejected(e) from None
-        if metadata is not None:
-            self.digested.metadata = metadata
+        if self._finished:
+            raise RuntimeError("PreparedCall already committed or abandoned")
         self._finished = True
-        return self.cache.save(self.digested)
+        self._result = result
+        if metadata is not None:
+            self._metadata = metadata
+        return self.cache.save(self)
+
+    def to_lookup_key(self) -> Digest:
+        return self.digested.to_lookup_key()
+
+    def resolve(self, result: Digest) -> DigestedCall:
+        """Return the final record with the pending result resolved to *result*.
+
+        The shared ending of the two-phase save: the cache stores
+        :attr:`_result` wherever its values live and hands the digest back
+        here; pending metadata is applied at the same time.
+        """
+        return replace(
+            self.digested,
+            result=result,
+            metadata=self.digested.metadata if self._metadata is None else self._metadata,
+        )
 
     def abandon(self) -> None:
         """Release the call without recording it.
 
         Called when the function body raises or its result is not cacheable.
-        The default is a no-op: argument values stored by :meth:`Call.prepare`
-        are content-addressed orphans that a later garbage collection sweep
-        reclaims.  Subclasses may hook cleanup here.
+        The default is a no-op: argument values stored by
+        :meth:`~fleche.caches.BaseCache.prepare` are content-addressed orphans
+        that a later garbage collection sweep reclaims.  Subclasses may hook
+        cleanup here.  Idempotent; only :meth:`commit` is barred afterwards.
         """
         self._finished = True
 
