@@ -831,7 +831,7 @@ class SshCache(BaseCache):
         # argument values before the body runs and seals the record, which
         # comes back for the client to complete with ``save``.  Values travel
         # by cloudpickle, so a Path argument ships its path *string*, not its
-        # content — paths over SSH remain unsupported, as before.
+        # content — paths over SSH are unsupported.
         self._ensure_handshake()
         if self._info_cache and self._info_cache.get("read_only", False):
             # Digest-only admission, as BaseCache: the body still runs, and the
