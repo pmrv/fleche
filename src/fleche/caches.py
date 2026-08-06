@@ -53,20 +53,16 @@ class BaseCache(OperationContext):
 
         The first half of the two-phase save protocol.  Caches that own a
         value storage (:class:`Cache`) override this to stash the argument
-        values *now* — before the function body runs — so the recorded
-        identity describes the arguments as they were at call time, even if
-        the body later mutates them.
-
-        This base implementation is the digest-only admission used by caches
-        that cannot (or must not) write ahead of the body — read-only views,
-        aggregates without their own value storage: the key is sealed, but
-        nothing is written and whether a record survives is decided by
-        :meth:`save` at commit time.  Because ``digest(x) == values.save(x)``
-        for every storable value, both forms seal the same key.
+        values now, so the recorded identity describes the arguments as they
+        were at call time, even if the body later mutates them.  This base
+        implementation is the digest-only admission for caches that cannot
+        (or must not) write ahead of the body — read-only views, aggregates
+        without their own storage; ``digest(x) == values.save(x)``, so both
+        forms seal the same key.
 
         Finish the returned :class:`~fleche.call.PreparedCall` with exactly
-        one of :meth:`~fleche.call.PreparedCall.commit` (store the result,
-        file the record) or :meth:`~fleche.call.PreparedCall.abandon`.
+        one of :meth:`~fleche.call.PreparedCall.commit` or
+        :meth:`~fleche.call.PreparedCall.abandon`.
         """
         return PreparedCall(digested=call.digest(), cache=self)
 
@@ -324,11 +320,9 @@ class Cache(PerKeyLockMixin, BaseCache):
 
     def prepare(self, call: Call) -> PreparedCall:
         # Stash the arguments *now*, before the function body runs, so the
-        # record cannot end up keyed on post-mutation content.  ``stash``
-        # leaves the still-unknown result as ``None``; ``save`` below stores
-        # it once ``commit`` fills it in.  No cache-level lock: the keys are
-        # only known once the value storage has digested each value, and value
-        # storages carry their own per-key locking where they need it.
+        # record cannot end up keyed on post-mutation content.  No cache-level
+        # lock: the keys are only known once the value storage has digested
+        # each value, and value storages carry their own per-key locking.
         return PreparedCall(digested=call.stash(self.values), cache=self)
 
     def save(self, call: PreparedCall | Call) -> str:
@@ -581,12 +575,10 @@ class ReadOnlyMixin:
         raise Rejected("Cannot evict from a read-only cache", self, key)
 
     def prepare(self, call: Call) -> "PreparedCall":
-        # Digest-only admission (the BaseCache default, restated because this
-        # mixin is base-free and must beat CacheWrapper.prepare in the MRO): a
-        # read-only cache stashes nothing, so the function body still runs with
-        # a correctly sealed key and the eventual commit is rejected by
-        # ``save`` above — the behavior save() rejection produced before the
-        # two-phase protocol, minus the wasted writes.
+        # Digest-only admission, restated from BaseCache because this mixin is
+        # base-free and must beat CacheWrapper.prepare in the MRO: nothing is
+        # stashed, the key is still sealed, and the commit is rejected by
+        # ``save`` above — the body runs and returns uncached.
         return PreparedCall(digested=call.digest(), cache=self)
 
 
