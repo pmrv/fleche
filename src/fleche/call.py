@@ -389,13 +389,18 @@ class PreparedCall:
     def to_lookup_key(self) -> Digest:
         return self.digested.to_lookup_key()
 
-    def __getstate__(self) -> dict:
-        # The cache binding is process-local (it may hold live locks or an SSH
-        # connection); a PreparedCall on the wire carries only the record and
-        # the pending result.
-        state = self.__dict__.copy()
-        state["cache"] = None
-        return state
+    def resolve(self, result: Digest) -> DigestedCall:
+        """Return the final record with the pending result resolved to *result*.
+
+        The shared ending of the two-phase save: the cache stores
+        :attr:`_result` wherever its values live and hands the digest back
+        here; pending metadata is applied at the same time.
+        """
+        return replace(
+            self.digested,
+            result=result,
+            metadata=self.digested.metadata if self._metadata is None else self._metadata,
+        )
 
     def abandon(self) -> None:
         """Release the call without recording it.

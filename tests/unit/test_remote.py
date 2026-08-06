@@ -229,6 +229,7 @@ def test_dispatch_covers_every_registered_method():
         "save",
         "load",
         "load_value",
+        "save_value",
         "prepare",
         "evict",
         "contains",
@@ -310,7 +311,19 @@ def test_read_only_false_for_writable_remote(remote):
 
 def test_prepare_commit_round_trip(remote, server_cache):
     """`prepare` stashes the arguments server-side before the body runs;
-    `commit` ships the live result and files the record under the sealed key."""
+    `commit` ships the result value and then the plain digested record —
+    a PreparedCall itself never goes over the wire."""
+    from fleche.call import PreparedCall
+
+    shipped = []
+    original_call = remote._conn.call
+
+    def spy(method, *args, **kwargs):
+        shipped.append((method, args))
+        return original_call(method, *args, **kwargs)
+
+    remote._conn.call = spy  # type: ignore[method-assign]
+
     xs = [1, 2]
     c = Call(name="f", arguments={"xs": xs}, module="m", version="1")
     sealed = c.to_lookup_key()
@@ -322,6 +335,12 @@ def test_prepare_commit_round_trip(remote, server_cache):
     xs.append(3)  # the "function body" mutates the argument
     key = prepared.commit(xs)
     assert key == sealed  # NOT c.to_lookup_key(): that drifted with the mutation
+    # The commit took two trips (result value, then the record), and nothing
+    # PreparedCall-shaped ever crossed the wire.
+    assert [m for m, _ in shipped if m in ("save_value", "save")] == ["save_value", "save"]
+    assert not any(
+        isinstance(a, PreparedCall) for _, args in shipped for a in args
+    )
     lc = remote.load(key)
     assert lc.result == [1, 2, 3]  # result: as returned
     assert lc.arguments["xs"] == [1, 2]  # argument: as passed
