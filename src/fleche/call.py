@@ -374,12 +374,17 @@ class PreparedCall:
         Raises:
             fleche.caches.Rejected: if the result cannot be stored or the cache
                 refuses the record.
+            RuntimeError: if this call was already committed or abandoned.
         """
-        self.digested.result = result
-        if metadata is not None:
-            self.digested.metadata = metadata
+        if self._finished:
+            raise RuntimeError("PreparedCall already committed or abandoned")
         self._finished = True
-        return self.cache.save(self.digested)
+        digested = replace(
+            self.digested,
+            result=result,
+            metadata=self.digested.metadata if metadata is None else metadata,
+        )
+        return self.cache.save(digested)
 
     def abandon(self) -> None:
         """Release the call without recording it.
@@ -388,7 +393,7 @@ class PreparedCall:
         The default is a no-op: argument values stored by
         :meth:`~fleche.caches.BaseCache.prepare` are content-addressed orphans
         that a later garbage collection sweep reclaims.  Subclasses may hook
-        cleanup here.
+        cleanup here.  Idempotent; only :meth:`commit` is barred afterwards.
         """
         self._finished = True
 
