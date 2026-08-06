@@ -370,6 +370,10 @@ class RemotePathUnsupported(SaveError):
     propagates to the caller instead: a path the server materialized into
     its own temp directory is meaningless here, and the guard's whole point
     is to say so rather than hand back a dangling name.
+
+    This is a guard, not a verdict: doing the path-to-blob reduction on the
+    *client* would make paths work over SSH with the seal intact.  Tracked in
+    issue #829.
     """
 
 

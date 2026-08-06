@@ -129,10 +129,16 @@ result becomes :class:`~fleche.caches.Rejected`, so the call runs uncached
 rather than wrongly cached.  See :ref:`file-remote-caches` for the user-facing
 version.
 
-Making paths genuinely work over SSH is a separate feature: it needs the
-*content* on the wire (client-side blob conversion before the call, plus a way
-to fetch a stored record without the server materializing it first), which is a
-change to the RPC surface rather than to this module.
+Making paths genuinely work over SSH is a separate feature, tracked in
+`issue #829 <https://github.com/pmrv/fleche/issues/829>`_.  The shape is
+already visible above: :meth:`PathValueMixin.save` reduces a path to ``bytes``
+plus a :class:`FileBlob` / :class:`DirectoryBlob`, all of which ship fine, and
+those blobs' ``__digest__`` is *defined* to match the ``Path`` arm — so running
+the reduction **client-side** keeps the seal intact by construction.  The one
+new piece is on the load side: an unmended ``load_value`` that hands back the
+blob instead of materializing it on the server, so the client materializes into
+its own temp directory and owns the :class:`TempPath` lifetime.  That is a
+change to the RPC surface, not to this module.
 
 See also
 --------
