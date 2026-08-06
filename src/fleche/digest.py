@@ -6,6 +6,7 @@ import dataclasses
 import numbers
 from numbers import Number
 import struct
+import subprocess
 from pathlib import Path
 import types
 import importlib.metadata
@@ -345,6 +346,12 @@ def _digest_bytes(value: Any) -> bytes:
             m.update(_digest_bytes(value.__func__))
         case property():
             m.update(_digest_bytes((value.fget, value.fset, value.fdel)))
+        case subprocess.CompletedProcess():
+            m.update(
+                _digest_bytes(
+                    (value.args, value.returncode, value.stdout, value.stderr)
+                )
+            )
         case _ if isinstance(value, type) and value.__module__ == 'builtins':
             # Digest a built-in type (int, str, list, …) by its qualified name.
             # Restricted to the builtins module; user-defined types remain Indigestible.

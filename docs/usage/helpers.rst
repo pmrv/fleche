@@ -38,7 +38,7 @@ Attempts to load the result of a specific call from the cache. If the result is 
 Returns ``True`` if the result for the given call is already present in the cache, ``False`` otherwise.
 
 ``.query(*args, metadata={}, **kwargs)``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Returns matching cached calls from the active cache. Any argument passed as ``None`` acts as a wildcard, matching any stored value for that parameter. The ``metadata`` keyword argument accepts a dictionary of metadata tags to further filter results (e.g., ``metadata={"tags": {"project": "alpha"}}``).
 
@@ -102,7 +102,9 @@ Functions Returning ``None``
 Functions that return ``None`` are **never cached**.  When a decorated function
 returns ``None``, ``fleche`` logs a ``WARNING`` and skips the save step
 entirely.  Subsequent calls will execute the function again rather than
-returning a cached value.
+returning a cached value — including any side effects they have, which for a
+cached function would otherwise happen on the cold call only (see
+:doc:`purity`).
 
 This applies to all code paths, with one difference for ``.rerun()``:
 

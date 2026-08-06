@@ -31,6 +31,7 @@ Welcome to the **Fleche** library documentation.
    :caption: Using Fleche
 
    usage/tldr
+   usage/purity
    usage/helpers
    usage/file_semantics
    usage/lazy_call
@@ -84,6 +85,7 @@ Welcome to the **Fleche** library documentation.
    notebooks/CacheStack
    notebooks/ConcurrentExecution
    notebooks/Files
+   notebooks/PathsInContainers
 
 .. toctree::
    :maxdepth: 2

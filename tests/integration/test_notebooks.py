@@ -10,6 +10,7 @@ NOTEBOOKS = [
         "SecureStorage.ipynb",
         "CacheStack.ipynb",
         "Files.ipynb",
+        "PathsInContainers.ipynb",
 ]
 
 
