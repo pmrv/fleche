@@ -59,6 +59,8 @@ from . import call as _call
 from .caches import BaseCache, Rejected
 from .call import DigestedCall, LazyCall, QueryCall
 from .digest import Digest
+from .storage.base import SaveError
+from .storage.paths import find_path
 
 logger = logging.getLogger("fleche.remote")
 
@@ -344,6 +346,35 @@ def serve(
 
 class RemoteConnectionError(RuntimeError):
     """Raised when the SSH subprocess cannot be reached or has died."""
+
+
+class RemotePathUnsupported(SaveError):
+    """Raised when a :class:`~pathlib.Path` would cross the SSH boundary.
+
+    Path values are stored **by content** (see
+    :class:`~fleche.storage.paths.PathValueMixin`), but the RPC ships values
+    by cloudpickle, and a pickled ``Path`` is just its *string*.  Letting one
+    through would hand the server a name to resolve against its **own**
+    filesystem: it stores whatever happens to sit at that location — a
+    different file, or nothing — under a digest that no longer matches the
+    client's ``digest(path)``.  The mismatch silently breaks the
+    ``digest(x) == save_value(x)`` seal every lookup depends on, so the
+    record is filed under a key no client can ever reproduce.
+
+    Subclasses :class:`~fleche.storage.base.SaveError` so the standard
+    save-side degradations apply and nothing has to special-case it: a path
+    *argument* falls back to a digest-only reference (correct local digest,
+    lookups still hit, only the bytes are unavailable remotely), and a path
+    *result* turns into :class:`~fleche.caches.Rejected` — the call runs and
+    returns normally, it just is not cached.  On the **load** side it
+    propagates to the caller instead: a path the server materialized into
+    its own temp directory is meaningless here, and the guard's whole point
+    is to say so rather than hand back a dangling name.
+
+    This is a guard, not a verdict: doing the path-to-blob reduction on the
+    *client* would make paths work over SSH with the seal intact.  Tracked in
+    issue #829.
+    """
 
 
 def _warn_on_version_skew(info: dict[str, Any]) -> None:
@@ -707,6 +738,13 @@ class SshCache(BaseCache):
     ControlPersist in ``~/.ssh/config`` or via *ssh_options* to share the
     underlying connection across multiple fleche runs.
 
+    **Filesystem paths do not cross this cache.**  Values travel by
+    cloudpickle, so a :class:`~pathlib.Path` would arrive as a bare string for
+    the remote to resolve against its own disk; both directions raise
+    :class:`RemotePathUnsupported` instead.  Ship the file's ``bytes``, or put
+    a local layer in front of the remote one — see that exception and
+    :ref:`file-remote-caches`.
+
     Args:
         host: SSH target, e.g. ``"user@host"`` or any alias from
             ``~/.ssh/config``.
@@ -785,20 +823,55 @@ class SshCache(BaseCache):
             raise Rejected(self, *args)
         return spec.unwrap(self, self._conn.call(name, *args))
 
+    @staticmethod
+    def _reject_path(value: Any, what: str) -> None:
+        """Raise :class:`RemotePathUnsupported` if *value* carries a ``Path``.
+
+        Scans the same object graph a destructuring save would walk, so a
+        path nested in a list, dict, dataclass, or ``attrs`` instance is
+        caught too — those reach the server's value storage exactly like a
+        bare one and fail the same way.
+        """
+        path = find_path(value)
+        if path is not None:
+            raise RemotePathUnsupported(
+                f"{what} carries the filesystem path {str(path)!r}, which cannot "
+                "cross an SshCache: values travel by cloudpickle, so only the "
+                "path string would arrive and the remote would resolve it "
+                "against its own filesystem. Return the file's `bytes` instead "
+                "to store its content, or keep path-valued calls in a local "
+                "cache layer."
+            )
+
     def save(self, call: DigestedCall | _call.Call) -> str:
+        # A DigestedCall carries only digests; the degenerate live-`Call`
+        # form still carries values, and the server would stash them itself.
+        if isinstance(call, _call.Call):
+            try:
+                self._reject_path(dict(call.arguments), "the call's arguments")
+                self._reject_path(call.result, "the call's result")
+            except RemotePathUnsupported as e:
+                raise Rejected(e) from None
         return self._rpc("save", call)
 
     def load(self, key: str) -> LazyCall:
         return self._rpc("load", key)
 
     def load_value(self, key: str) -> Any:
-        return self._rpc("load_value", key)
+        # The server materializes a stored path into a temp directory on
+        # *its* filesystem and can only ship us the name — which points
+        # nowhere here, and which the server unlinks as soon as its own
+        # reference dies.  Refuse it rather than return a dangling path.
+        value = self._rpc("load_value", key)
+        self._reject_path(value, f"the value at {key}")
+        return value
 
     def save_value(self, value: Any) -> Digest:
         # One round trip per value (no batching yet).  Values travel by
-        # cloudpickle, so a Path value ships its path *string*, not its
-        # content — the same limitation the previous ship-the-whole-Call
-        # protocol had; paths over SSH remain unsupported.
+        # cloudpickle, so a Path would ship its path *string*, not its
+        # content — see `RemotePathUnsupported` for why that is refused
+        # rather than silently stored against the server's filesystem.
+        self._reject_path(value, "the value")
         return self._rpc("save_value", value)
 
     def evict(self, key: str | Digest) -> None:

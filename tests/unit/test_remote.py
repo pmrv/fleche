@@ -5,11 +5,13 @@ streams in place of an SSH subprocess.  The same wire protocol is exercised;
 only the transport is swapped.
 """
 
+import dataclasses
 import io
 import os
 import sys
 import threading
 import types
+from typing import Any
 
 import pytest
 
@@ -17,9 +19,10 @@ import fleche.state as _state
 from fleche.call import Call, QueryCall
 from fleche.caches import Cache, Rejected
 from fleche.config import cache_to_config, load_cache_config
-from fleche.digest import Digest
+from fleche.digest import Digest, digest
 from fleche.remote import (
     RemoteConnectionError,
+    RemotePathUnsupported,
     SshCache,
     _Connection,
     _dispatch,
@@ -29,7 +32,7 @@ from fleche.remote import (
     _write_frame,
     serve,
 )
-from fleche.storage import CallMemory, ValueMemory
+from fleche.storage import CallMemory, SaveError, ValueMemory
 
 
 class _PipeConnection(_Connection):
@@ -933,3 +936,111 @@ def test_run_server_serves_active_cache_over_stdio_until_eof(monkeypatch, cache_
     assert info["cache"] == cache_to_config(expected_cache)
     # Clean EOF: no second frame queued.
     assert fake_stdout.read() == b""
+
+
+# ---------------------------------------------------------------------------
+# Paths do not cross the wire
+# ---------------------------------------------------------------------------
+
+
+@dataclasses.dataclass
+class _Holder:
+    payload: Any
+
+
+@pytest.fixture
+def a_file(tmp_path):
+    f = tmp_path / "data.txt"
+    f.write_text("client bytes")
+    return f
+
+
+def test_save_value_rejects_a_bare_path(remote, server_cache, a_file):
+    """A Path would arrive as a bare string the server resolves itself."""
+    with pytest.raises(RemotePathUnsupported) as excinfo:
+        remote.save_value(a_file)
+    assert str(a_file) in str(excinfo.value)
+    # Refused before the RPC: nothing reached the server.
+    assert not server_cache.values.storage
+
+
+@pytest.mark.parametrize(
+    "wrap",
+    [
+        pytest.param(lambda p: [1, p], id="list"),
+        pytest.param(lambda p: (p,), id="tuple"),
+        pytest.param(lambda p: {"a": {"b": p}}, id="nested-dict"),
+        pytest.param(lambda p: _Holder(payload=[p]), id="dataclass"),
+    ],
+)
+def test_save_value_rejects_a_nested_path(remote, server_cache, a_file, wrap):
+    """Destructuring walks into containers, so the guard has to as well."""
+    with pytest.raises(RemotePathUnsupported):
+        remote.save_value(wrap(a_file))
+    assert not server_cache.values.storage
+
+
+def test_save_value_still_accepts_the_bytes_escape_hatch(remote, a_file):
+    """Returning ``bytes`` is the documented way to ship content remotely."""
+    key = remote.save_value(a_file.read_bytes())
+    assert remote.load_value(key) == b"client bytes"
+
+
+def test_rejection_is_a_save_error(a_file):
+    """``SaveError`` is what the two-phase save protocol degrades on."""
+    assert issubclass(RemotePathUnsupported, SaveError)
+
+
+def test_prepare_degrades_a_path_argument_to_a_digest_only_reference(remote, a_file):
+    """The sealed key must still be the one a later lookup computes.
+
+    This is the regression the guard buys: letting the path through made the
+    server digest *its* view of that name, so the record was filed under a
+    key no client could reproduce.
+    """
+    call = Call(name="f", arguments={"p": a_file, "n": 3})
+    prepared = remote.prepare(call)
+    assert prepared.key == call.to_lookup_key()
+    # The argument survives as its (locally computed) digest, not as content.
+    assert prepared.digested.arguments["p"] == digest(a_file)
+
+
+def test_saving_a_live_call_carrying_a_path_is_rejected(remote, server_cache, a_file):
+    """The one-shot form ships values too — the server would stash them."""
+    with pytest.raises(Rejected):
+        remote.save(Call(name="f", arguments={"p": a_file}, result=1))
+    with pytest.raises(Rejected):
+        remote.save(Call(name="f", arguments={"x": 1}, result=[a_file]))
+    assert not server_cache.calls.storage
+
+
+def test_load_value_refuses_a_path_materialized_on_the_server(
+    remote, server_cache, a_file
+):
+    """A path stored remotely comes back pointing into the server's temp dir.
+
+    Materialization happens on the server's filesystem and only the *name*
+    travels back, so the client would be handed a dangling reference — one
+    the server unlinks as soon as its own reference dies.
+    """
+    key = server_cache.save_value(a_file)  # stored server-side, by content
+    with pytest.raises(RemotePathUnsupported) as excinfo:
+        remote.load_value(key)
+    assert key in str(excinfo.value)
+
+
+def test_load_value_refuses_a_path_nested_in_a_container(
+    remote, server_cache, a_file
+):
+    key = server_cache.save_value({"out": [a_file]})
+    with pytest.raises(RemotePathUnsupported):
+        remote.load_value(key)
+
+
+def test_lazy_call_only_trips_on_the_path_value(remote, server_cache, a_file):
+    """Records stay queryable; only touching the path value fails."""
+    key = server_cache.save(Call(name="f", arguments={"x": 1}, result=a_file))
+    lc = remote.load(key)
+    assert dict(lc.arguments) == {"x": 1}
+    with pytest.raises(RemotePathUnsupported):
+        lc.result

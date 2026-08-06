@@ -217,6 +217,41 @@ and re-caching adds a tiny name record, never a second copy of the bytes.  If
 you want *keys* (not just storage) to ignore the name too, return ``bytes``
 instead of a ``Path``; that is the content-only escape hatch.
 
+.. _file-remote-caches:
+
+Paths stop at a remote (SSH) cache
+----------------------------------
+
+Everything above assumes the cache and your process see the **same
+filesystem**.  A :class:`~fleche.remote.SshCache` does not: it forwards each
+operation to a fleche running on another machine, and values travel by
+cloudpickle — which reduces a ``Path`` to its *string*.  Only the name would
+arrive, and the remote would resolve it against its own filesystem, storing
+whatever happens to sit there (or nothing) under a digest that no longer
+matches yours.
+
+Rather than store something else under your key, fleche refuses:
+:class:`~fleche.remote.RemotePathUnsupported` is raised when a path — bare or
+nested in a container — would cross the wire.  Because it is a
+:class:`~fleche.storage.SaveError`, the usual degradations apply and your code
+does not have to catch anything:
+
+* a path **argument** falls back to a digest-only reference.  The call is still
+  keyed correctly (the digest is computed *here*, from your file), so lookups
+  hit and miss exactly as they should; only the file's bytes are not retrievable
+  from the remote record.
+* a path **result** is rejected: the call runs, returns your file, and is
+  logged as not cached.
+* **loading** a path stored on the remote raises too.  The remote materializes
+  into a temp directory on *its* disk and can only send back the name, which
+  means nothing here.  This is lazy — a record whose result is a path can still
+  be loaded and queried; only touching the path value raises.
+
+To share file content across machines, return the file's ``bytes``: they
+travel and deduplicate normally.  To keep full path semantics, put a local
+cache layer in front of the remote one (see :doc:`/notebooks/CacheStack`) — the
+local layer is where saves land, so paths never reach the wire.
+
 Quick reference
 ---------------
 
@@ -232,6 +267,7 @@ Return same path twice                           Two independent copies
 Return path inside namedtuple/set/custom class   The *original* location (may be stale)
 Pass a nonexistent ``Path`` argument             No caching: warns, always executes
 Write into a directory you received              Hit (keyed as passed); write not replayed
+Return a ``Path`` through an ``SshCache``        Refused: runs, warns, not cached
 ===============================================  ======================================
 
 See also

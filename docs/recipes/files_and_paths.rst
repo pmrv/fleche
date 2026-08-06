@@ -78,3 +78,21 @@ their names.
    directory's own ``.name`` is a hash (its children's names are faithful).
    Don't rely on the top-level directory name surviving a cache hit; do rely on
    everything inside it.
+
+Sharing files with a remote (SSH) cache
+---------------------------------------
+
+Return ``bytes``.  A :class:`~pathlib.Path` cannot cross a
+:class:`~fleche.remote.SshCache` — only the path string would travel, and the
+remote would resolve it against its own filesystem — so fleche refuses it and
+runs the call uncached.  Content ships and deduplicates normally:
+
+.. code-block:: python
+
+   @fleche
+   def render(text) -> bytes:          # not `-> Path`
+       return _render_to_pdf(text)
+
+If you want path semantics *and* a remote cache, put a local layer in front of
+it: saves land in the local layer, so paths never reach the wire.  See
+:ref:`file-remote-caches` for the full contract.

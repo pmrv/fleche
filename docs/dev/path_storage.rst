@@ -93,6 +93,53 @@ name is treated as incidental (typically a temp dir).  If a root name carries
 meaning, name a *child* meaningfully instead, or wrap the tree's identity in your
 own value.
 
+Why paths stop at the SSH boundary
+----------------------------------
+
+:class:`~fleche.remote.SshCache` is the one cache where "store this path"
+cannot mean what it means everywhere else, because the two sides do not share
+a filesystem.  Values cross the wire by cloudpickle, and a pickled ``Path`` is
+only its string — so a path handed to the remote is a *name it resolves
+itself*.  Three things follow, and each of them is silent:
+
+* ``save_value`` on the remote runs :class:`PathValueMixin` against the
+  **server's** disk.  If a file happens to sit at that name it is stored, under
+  the digest of *those* bytes; ``digest(path) == values.save(path)`` — the
+  invariant the seal in :meth:`~fleche.caches.BaseCache.prepare` rests on —
+  is broken, and the record lands under a key no client ever recomputes.
+* if nothing sits there, the server raises ``Indigestible`` from the middle of
+  an RPC.
+* ``load_value`` materializes into a temp directory on the **server** and can
+  only ship the name back.  The :class:`TempPath` guard does not survive the
+  hop either — ``PurePath.__reduce__`` reconstructs from ``parts`` alone, so
+  the ``_temp_root`` attribute is dropped and the class-level ``_live_roots``
+  registry is per-process — so the server frees the tree as soon as its own
+  reference dies, and the client is left with a dangling name for a filesystem
+  it cannot see.
+
+So :class:`~fleche.remote.SshCache` refuses instead, via
+:func:`~fleche.storage.paths.find_path` (which walks a value exactly the way a
+destructuring save does, using
+:func:`~fleche.storage.destructuring.child_slots`) and
+:class:`~fleche.remote.RemotePathUnsupported`.  That exception subclasses
+:class:`~fleche.storage.SaveError` so the existing two-phase-save degradations
+carry it: a path argument becomes a digest-only reference **whose digest was
+computed locally**, which keeps the seal intact and lookups correct, and a path
+result becomes :class:`~fleche.caches.Rejected`, so the call runs uncached
+rather than wrongly cached.  See :ref:`file-remote-caches` for the user-facing
+version.
+
+Making paths genuinely work over SSH is a separate feature, tracked in
+`issue #829 <https://github.com/pmrv/fleche/issues/829>`_.  The shape is
+already visible above: :meth:`PathValueMixin.save` reduces a path to ``bytes``
+plus a :class:`FileBlob` / :class:`DirectoryBlob`, all of which ship fine, and
+those blobs' ``__digest__`` is *defined* to match the ``Path`` arm — so running
+the reduction **client-side** keeps the seal intact by construction.  The one
+new piece is on the load side: an unmended ``load_value`` that hands back the
+blob instead of materializing it on the server, so the client materializes into
+its own temp directory and owns the :class:`TempPath` lifetime.  That is a
+change to the RPC surface, not to this module.
+
 See also
 --------
 

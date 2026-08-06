@@ -9,7 +9,13 @@ from fleche.digest import digest
 from fleche.storage import ValueMixin, DestructuringMixin
 from fleche.storage.memory import MemoryBackend
 from fleche.storage.destructuring import DigestedMapping
-from fleche.storage.paths import TempPath, PathValueMixin, FileBlob, DirectoryBlob
+from fleche.storage.paths import (
+    TempPath,
+    PathValueMixin,
+    FileBlob,
+    DirectoryBlob,
+    find_path,
+)
 
 
 def test_mkdtemp_returns_temp_path():
@@ -327,3 +333,68 @@ def test_empty_directory_path_roundtrip(pds, tmp_path):
     assert isinstance(loaded, Path)
     assert loaded.is_dir()
     assert list(loaded.iterdir()) == []
+
+
+# ---------------------------------------------------------------------------
+# find_path: does a save of this value reach a Path?
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _Fields:
+    a: object
+    b: object = None
+
+
+class _Opaque:
+    """Not a container a destructuring save looks inside."""
+
+    def __init__(self, p):
+        self.p = p
+
+
+def test_find_path_finds_a_bare_path(tmp_path):
+    assert find_path(tmp_path) is tmp_path
+
+
+@pytest.mark.parametrize(
+    "wrap",
+    [
+        pytest.param(lambda p: [0, [p]], id="nested-list"),
+        pytest.param(lambda p: (p,), id="tuple"),
+        pytest.param(lambda p: {"k": p}, id="dict-value"),
+        pytest.param(lambda p: {p: "v"}, id="dict-key"),
+        pytest.param(lambda p: _Fields(a=1, b={"deep": [p]}), id="dataclass-field"),
+    ],
+)
+def test_find_path_descends_the_containers_a_save_descends(tmp_path, wrap):
+    assert find_path(wrap(tmp_path)) is tmp_path
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param([1, "two", b"three"], id="scalars"),
+        pytest.param({}, id="empty"),
+        pytest.param("/not/a/path/just/a/string", id="path-shaped-string"),
+    ],
+)
+def test_find_path_returns_none_without_a_path(value):
+    assert find_path(value) is None
+
+
+def test_find_path_stops_at_opaque_values(tmp_path):
+    """A Path inside a plain object is stored as part of that object.
+
+    ``find_path`` mirrors the destructuring walk exactly: what it does not
+    descend into, path storage does not intercept either.
+    """
+    assert find_path(_Opaque(tmp_path)) is None
+
+
+def test_find_path_terminates_on_a_cycle(tmp_path):
+    cyclic = [1]
+    cyclic.append(cyclic)
+    assert find_path(cyclic) is None
+    cyclic.append(tmp_path)
+    assert find_path(cyclic) is tmp_path
