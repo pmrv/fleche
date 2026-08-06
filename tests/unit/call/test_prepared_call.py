@@ -201,6 +201,30 @@ def test_no_mislabeled_entry_for_mutated_state(cache):
     assert len(runs) == 2
 
 
+@pytest.mark.parametrize("exc", [Rejected("no admission"), OSError("storage down")])
+def test_prepare_failure_degrades_to_uncached(exc):
+    """A prepare that fails — policy rejection or actual error — must not stop
+    the call: the body runs and the result comes back uncached."""
+
+    class Broken(Cache):
+        def prepare(self, call):
+            raise exc
+
+    broken = Broken(ValueMemory({}), CallMemory({}))
+    runs = []
+
+    @fleche
+    def f(x):
+        runs.append(1)
+        return x + 1
+
+    with fl.cache(broken):
+        assert f(1) == 2
+        assert f(1) == 2
+    assert len(runs) == 2  # never cached: prepare fails on every call
+    assert list(broken.calls.list()) == []
+
+
 def test_body_exception_leaves_no_record(cache):
     runs = []
 

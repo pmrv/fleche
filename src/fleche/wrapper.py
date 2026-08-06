@@ -245,6 +245,12 @@ def make_wrapper(func, policy, meta, isolate, get_call):
             except Rejected as e:
                 logger.warning("Cache rejected prepare: %s", e.args)
                 return func(*args, **kwargs)
+            except Exception:
+                # Not a policy rejection but an actual error (storage fault,
+                # lost connection, ...): still prefer running the call uncached
+                # over failing before the body ever ran.
+                logger.warning("Cache failed to prepare call", exc_info=True)
+                return func(*args, **kwargs)
 
             try:
                 result: _T = func(*args, **kwargs)
@@ -283,7 +289,6 @@ def make_wrapper(func, policy, meta, isolate, get_call):
                             metadata[m.name], replace(call, metadata={})
                         )
                     try:
-                        call.metadata = metadata
                         logger.debug("Saving result for %s with key %s", call.name, key)
                         prepared.commit(call.result, metadata)
                     except Rejected as e:
