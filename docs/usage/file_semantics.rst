@@ -44,19 +44,20 @@ functions returning identical files share one stored body (see
 Argument mutation
 ~~~~~~~~~~~~~~~~~
 
-A call is keyed on its arguments **as passed**: argument content is captured
-*before* the function body runs.  A function that mutates its own argument —
-most commonly, writing an output file *into* a directory it received — is
-still recorded under the pre-call content, so honest repeat calls hit.  The
-mutation itself, however, is neither recorded nor replayed: a cache hit
-leaves the argument untouched, so a side effect on the input happens on cold
-calls only.
+Arguments are keyed **as passed** — captured before the body runs — and a
+mutation the body performs on one is neither recorded nor replayed.  That is
+a general rule (:ref:`argument-mutation`); its most common instance here is a
+function that writes an output file *into* a directory it received.  The call
+is recorded under the directory's pre-call tree, so honest repeat calls hit,
+but the written file does not reappear on a hit — it exists only on cold
+calls.
 
-fleche caches *pure* functions.  What a function does to its arguments
-without passing it back out is invisible to the cache — treat received paths
-as read-only and write outputs to a fresh directory (``tempfile.mkdtemp``).
-A mutated argument that *is* returned is captured faithfully in its final,
-post-mutation state: if the mutation is the point, return it.
+Returning what you wrote to is the normal shape, not a workaround for this: a
+function that writes into a directory and hands that directory back is recorded
+with it in its final, post-mutation state, and that is the intended way to
+produce files.  What is not replayed is a write to something you never return —
+so a path that is pure *input* should be treated as read-only, with new files
+written somewhere you do return (``tempfile.mkdtemp``).
 
 Only *content* changes count as mutation: permissions are not part of
 identity (see :ref:`fidelity-limits`), so a ``chmod`` on a received path is
@@ -146,13 +147,30 @@ the file.  If you need the file at a stable location, copy it out:
 Paths nested inside containers
 ------------------------------
 
-Paths are found and content-stored inside the containers fleche takes apart:
-``dict``, ``OrderedDict``, ``list``, ``tuple`` (**exact types** — see below),
-``dataclasses`` and ``attrs`` classes — nested to any depth, as values *or* as
-dict keys.  Everything above about identity, materialization, and lifetime
-applies to each nested path individually.  Container structure is otherwise
-faithful on a hit: lists and tuples keep their element order, and a mended
-dict keeps the insertion order the stored value had.
+Whether a nested path is stored by content comes down to one thing:
+**destructuring** — whether storage takes the surrounding container apart into
+independently-stored children, or pickles it whole as one opaque value.  Only
+children reach the path machinery, so the list of containers fleche
+destructures *is* the list of places a nested path gets content treatment.
+That list is
+:data:`~fleche.storage.destructuring._DESTRUCTURERS`: ``dict``,
+``OrderedDict``, ``list``, ``tuple`` (**exact types** — see below),
+``dataclasses`` and ``attrs`` classes.  See :ref:`extending-destructurer` for
+the mechanism and how to add your own container to it.
+
+Within those, paths are found nested to any depth, as values *or* as dict
+keys, and everything above about identity, materialization, and lifetime
+applies to each one individually.  Container structure is otherwise faithful
+on a hit: lists and tuples keep their element order, and a mended dict keeps
+the insertion order the stored value had.
+
+"Any depth" is not a figure of speech, and no storage setting narrows it.  A
+``Path`` matches no destructurer, so it is always written out as its own stored
+entry rather than inlined into the container above it — and being written out is
+exactly what hands it to the content machinery.  The
+``remaining_depth`` knob only decides how eagerly *destructurable* nodes are
+split into separate entries, so it cannot put a path out of reach however it is
+set.
 
 Three caveats specific to nesting:
 
@@ -175,7 +193,8 @@ Opaque containers store paths by *location*
 -------------------------------------------
 
 A path inside an opaque value (a ``namedtuple``, a ``set``, an arbitrary
-object) never reaches the content machinery.  The call is still *keyed*
+object) is never destructured out of it, and so never reaches the content
+machinery.  The call is still *keyed*
 correctly — the digest layer does look inside — but what is stored is the path
 object itself, pointing at wherever the file was when it was saved.  A hit
 returns that original *location* (whether as the same object or an equal copy
@@ -183,8 +202,9 @@ is backend-dependent — rely on neither): if the file has since been deleted or
 edited, the hit hands you a dangling or stale path, **without any warning**.
 
 Rule of thumb: return paths in plain dicts / lists / tuples / dataclasses.  If
-you need a custom container to participate, see
-:func:`~fleche.storage.destructuring.register_destructurer`.
+you need a custom container to participate, register a destructurer for it
+with :func:`~fleche.storage.destructuring.register_destructurer` — see
+:ref:`extending-destructurer`.
 
 .. _file-dedup:
 
