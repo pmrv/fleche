@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.2](https://github.com/pmrv/fleche/compare/0.21.1...0.21.2) (2026-08-06)
+
+
+### Bug Fixes
+
+* **sql:** use last-wins tie-break for duplicate /proc/mounts entries ([#822](https://github.com/pmrv/fleche/issues/822)) ([a45fb96](https://github.com/pmrv/fleche/commit/a45fb9682f8c904a529eff25da8faa400a40c1f8))
+
 ## [0.21.1](https://github.com/pmrv/fleche/compare/0.21.0...0.21.1) (2026-08-05)
 
 
