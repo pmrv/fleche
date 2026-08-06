@@ -243,6 +243,36 @@ _DESTRUCTURERS: list[tuple[Callable[[Any], bool], Callable]] = [
 ]
 
 
+def child_slots(value: Any) -> list[tuple[Any, Any]] | None:
+    """Enumerate the ``(label, child)`` pairs a save would recurse into.
+
+    The read-only half of :meth:`DestructuringMixin._intern_rec`'s dispatch:
+    same leaf rules (numbers / strings / bytes / digests / namedtuples are
+    opaque), same ``_DESTRUCTURERS`` lookup, but it only *reports* the
+    children instead of interning them.  ``None`` means "opaque leaf" — the
+    value has no children a destructuring save would look inside.
+
+    Labels follow the underlying :meth:`Digested._slots`: field names for
+    dataclass / ``attrs`` instances, ``None`` for the positional slots of
+    lists, tuples, and mappings.
+
+    A destructurer registered through :func:`register_destructurer` is only
+    visible here if it is a :class:`Digested` classmethod (i.e. exposes
+    ``_slots``); anything else is reported as an opaque leaf, since there is
+    no way to enumerate its children without also storing them.
+    """
+    if isinstance(value, (digest.Digest, Number, str, bytes)):
+        return None
+    if isinstance(value, tuple) and DestructuringMixin._is_trojan_tuple(value):
+        return None
+    for pred, sunder_fn in _DESTRUCTURERS:
+        if pred(value):
+            owner = getattr(sunder_fn, "__self__", None)
+            slots = getattr(owner, "_slots", None)
+            return None if slots is None else slots(value)
+    return None
+
+
 def register_destructurer(pred: Callable[[Any], bool], fn: Callable) -> None:
     """Register a custom container destructurer.
 

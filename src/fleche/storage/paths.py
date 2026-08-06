@@ -6,7 +6,40 @@ import tempfile
 import weakref
 
 from . import base
+from . import destructuring
 from .. import digest
+
+
+def find_path(value: Any) -> Path | None:
+    """Return a :class:`~pathlib.Path` a save of *value* would reach, if any.
+
+    Walks *value* exactly the way a destructuring save does — via
+    :func:`~fleche.storage.destructuring.child_slots`, so lists, tuples,
+    dicts, dataclasses, and ``attrs`` instances are descended into and
+    everything else is a leaf — and stops at the first ``Path`` it reaches,
+    returning ``None`` if the value carries no path at all.  Which path comes
+    back when there are several is unspecified: this answers "is there one",
+    and the path itself is there to name in the resulting error.
+
+    This is a *predicate helper*, not part of the storage protocol: it exists
+    so a caller that cannot honour path semantics (notably
+    :class:`fleche.remote.SshCache`, where a path's meaning does not survive
+    the hop to another filesystem) can detect the situation up front instead
+    of silently storing something else.  Shared cycles are visited once.
+    """
+    seen: set[int] = set()
+    stack: list[Any] = [value]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, Path):
+            return item
+        if id(item) in seen:
+            continue
+        seen.add(id(item))
+        slots = destructuring.child_slots(item)
+        if slots:
+            stack.extend(child for _, child in slots)
+    return None
 
 
 class TempPath(type(Path())):
