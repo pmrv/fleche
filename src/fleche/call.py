@@ -266,11 +266,9 @@ class DigestedCall:
 
     name: str
     arguments: dict[str, "digest.Digest"]
-    # Normally a Digest pointer, or None while the result is still unknown
-    # (a record prepared before its function body ran).  Between
-    # :meth:`PreparedCall.commit` and the cache's ``save`` it briefly holds the
-    # live return value, which ``save`` stores and replaces with its Digest.
-    result: "digest.Digest | Any" = None
+    # None while the result is still unknown (a record prepared before its
+    # function body ran).
+    result: "digest.Digest | None" = None
     metadata: dict[str, dict[str, Any]] = field(default_factory=dict)
     module: str | None = None
     version: str | int | None = None
@@ -355,6 +353,10 @@ class PreparedCall:
     digested: DigestedCall
     cache: Any
     _finished: bool = field(default=False, init=False, repr=False)
+    # The live result and metadata between commit and the cache's save;
+    # DigestedCall itself only ever holds digests.
+    _result: Any = field(default=None, init=False, repr=False)
+    _metadata: "dict | None" = field(default=None, init=False, repr=False)
 
     def commit(self, result: Any, metadata: dict | None = None) -> Digest:
         """Attach *result* and *metadata* to the record and file it.
@@ -374,12 +376,31 @@ class PreparedCall:
         Raises:
             fleche.caches.Rejected: if the result cannot be stored or the cache
                 refuses the record.
+            RuntimeError: if this call was already committed or abandoned.
         """
-        self.digested.result = result
-        if metadata is not None:
-            self.digested.metadata = metadata
+        if self._finished:
+            raise RuntimeError("PreparedCall already committed or abandoned")
         self._finished = True
-        return self.cache.save(self.digested)
+        self._result = result
+        if metadata is not None:
+            self._metadata = metadata
+        return self.cache.save(self)
+
+    def to_lookup_key(self) -> Digest:
+        return self.digested.to_lookup_key()
+
+    def resolve(self, result: Digest) -> DigestedCall:
+        """Return the final record with the pending result resolved to *result*.
+
+        The shared ending of the two-phase save: the cache stores
+        :attr:`_result` wherever its values live and hands the digest back
+        here; pending metadata is applied at the same time.
+        """
+        return replace(
+            self.digested,
+            result=result,
+            metadata=self.digested.metadata if self._metadata is None else self._metadata,
+        )
 
     def abandon(self) -> None:
         """Release the call without recording it.
@@ -388,7 +409,7 @@ class PreparedCall:
         The default is a no-op: argument values stored by
         :meth:`~fleche.caches.BaseCache.prepare` are content-addressed orphans
         that a later garbage collection sweep reclaims.  Subclasses may hook
-        cleanup here.
+        cleanup here.  Idempotent; only :meth:`commit` is barred afterwards.
         """
         self._finished = True
 

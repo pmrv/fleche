@@ -141,6 +141,22 @@ def _query_result(cache: BaseCache, args: tuple) -> tuple[DigestedCall, ...]:
     return tuple(_strip_cache(lc) for lc in cache.query(template))
 
 
+def _save_value(cache: BaseCache, value: Any) -> Digest:
+    """Store a bare *value* in the served cache and return its digest.
+
+    The write-side counterpart of ``load_value``, existing only in the wire
+    protocol.  Routed through :meth:`~fleche.caches.BaseCache.prepare` with a
+    synthetic, never-committed call, so wrappers and stacks direct the value
+    to the same storage their saves use; the value is kept (content-addressed)
+    while no call record is ever filed.
+    """
+    prepared = cache.prepare(
+        _call.Call(name="fleche.remote:save_value", arguments={"value": value})
+    )
+    prepared.abandon()
+    return prepared.digested.arguments["value"]
+
+
 # Single inventory of every method `SshCache` forwards across the wire; the
 # client-side stubs near `SshCache` call these names via `self._conn.call(...)`.
 # Adding a new RPC-exposed cache method only requires one entry here.
@@ -148,9 +164,10 @@ _REMOTE_METHODS: dict[str, _RemoteMethod] = {
     "save": _RemoteMethod(lambda cache, args: cache.save(*args)),
     "load": _RemoteMethod(lambda cache, args: _strip_cache(cache.load(*args))),
     "load_value": _RemoteMethod(lambda cache, args: cache.load_value(*args)),
+    "save_value": _RemoteMethod(lambda cache, args: _save_value(cache, *args)),
     # Only the sealed record travels back; the server-side PreparedCall is
-    # dropped (abandon is a no-op) and the client finishes the protocol with a
-    # plain ``save`` once the body has run.
+    # dropped (abandon is a no-op) and the client finishes the protocol with
+    # ``save_value`` + ``save`` once the body has run.
     "prepare": _RemoteMethod(lambda cache, args: cache.prepare(*args).digested),
     "evict": _RemoteMethod(lambda cache, args: cache.evict(*args), void=True),
     "contains": _RemoteMethod(lambda cache, args: cache.contains(*args)),
@@ -684,6 +701,9 @@ _CLIENT_METHODS: dict[str, _ClientMethod] = {
     "save": _ClientMethod(write=True),
     "load": _ClientMethod(unwrap=_fetch_lazy_call),
     "load_value": _ClientMethod(),
+    # Write-gated so a commit against a read-only remote is rejected locally
+    # before the first trip.
+    "save_value": _ClientMethod(write=True),
     # Read-only remotes never reach this entry: `SshCache.prepare` short-circuits
     # to the local digest-only admission before dispatching.
     "prepare": _ClientMethod(),
@@ -790,7 +810,14 @@ class SshCache(BaseCache):
             raise Rejected(self, *args)
         return spec.unwrap(self, self._conn.call(name, *args))
 
-    def save(self, call: DigestedCall | _call.Call) -> str:
+    def save(self, call: PreparedCall | _call.Call) -> str:
+        if isinstance(call, PreparedCall):
+            # Recreate Cache.save's ending in two trips: ship the result value,
+            # then file the plain digested record — a PreparedCall itself never
+            # goes over the wire.  A failure between the trips leaves the value
+            # as a content-addressed orphan for gc, like any abandoned call.
+            digested = call.resolve(self._rpc("save_value", call._result))
+            return self._rpc("save", digested)
         return self._rpc("save", call)
 
     def load(self, key: str) -> LazyCall:
