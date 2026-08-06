@@ -60,8 +60,9 @@ directories are cached by **content** (not by path string), and a cache hit
 returns a freshly materialized copy under a temporary path.  See
 :doc:`file_semantics` for the exact contract.
 
-That is all you need for everyday use.  The rest of this section covers the
-helper methods in depth (:doc:`helpers`), the file/path contract
+That is all you need for everyday use.  The rest of this section covers what
+fleche assumes about the functions you decorate (:doc:`purity`), the helper
+methods in depth (:doc:`helpers`), the file/path contract
 (:doc:`file_semantics`), lazy loading of large cached objects
 (:doc:`lazy_call`), and querying stored calls (:doc:`query`); storage backends
 and configuration details live under :doc:`/storage/configuration`.
