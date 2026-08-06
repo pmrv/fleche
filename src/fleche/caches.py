@@ -332,7 +332,7 @@ class Cache(PerKeyLockMixin, BaseCache):
         # storages carry their own per-key locking where they need it.
         return PreparedCall(digested=call.stash(self.values), cache=self)
 
-    def save(self, call: DigestedCall | Call) -> str:
+    def save(self, call: PreparedCall | Call) -> str:
         key = call.to_lookup_key()
         with self._operation_context(key):
             try:
@@ -342,14 +342,12 @@ class Cache(PerKeyLockMixin, BaseCache):
                     # nothing to drift, so stash-then-file is equivalent to
                     # prepare/commit here.
                     call = call.stash(self.values)
-                elif call.result is not None and not isinstance(call.result, Digest):
-                    # Second half of the two-phase protocol: the arguments are
-                    # already digests (stored by ``prepare``), only the result
-                    # arrives live from ``PreparedCall.commit``.  Not re-saving
-                    # the arguments here is the point — reading them again
-                    # *after* the body ran would file the record under
-                    # post-mutation content.
-                    call = replace(call, result=self.values.save(call.result))
+                if isinstance(call, PreparedCall):
+                    digested = call.digested
+                    digested.result = self.values.put(call._result)
+                    digested.metadata = call._metadata
+                    call = digested
+
             except storage.SaveError as e:
                 raise Rejected(e)
             return self.calls.save(call)

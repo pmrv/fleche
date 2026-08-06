@@ -355,6 +355,8 @@ class PreparedCall:
     digested: DigestedCall
     cache: Any
     _finished: bool = field(default=False, init=False, repr=False)
+    _result = field(default=False, init=False, repr=False)
+    _metadata = field(default=False, init=False, repr=False)
 
     def commit(self, result: Any, metadata: dict | None = None) -> Digest:
         """Attach *result* and *metadata* to the record and file it.
@@ -375,11 +377,11 @@ class PreparedCall:
             fleche.caches.Rejected: if the result cannot be stored or the cache
                 refuses the record.
         """
-        self.digested.result = result
+        self._result = result
         if metadata is not None:
-            self.digested.metadata = metadata
+            self._metadata = metadata
         self._finished = True
-        return self.cache.save(self.digested)
+        return self.cache.save(self)
 
     def abandon(self) -> None:
         """Release the call without recording it.

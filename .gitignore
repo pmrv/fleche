@@ -7,5 +7,6 @@ notebooks/.*
 notebooks/*.db
 notebooks/*.db-shm
 notebooks/*.db-wal
+notebooks/debug/*
 docs/_build
 src/fleche/_version.py
