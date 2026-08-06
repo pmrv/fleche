@@ -235,14 +235,16 @@ def make_wrapper(func, policy, meta, isolate, get_call):
             for m in active_meta:
                 metadata[m.name] |= m.pre(replace(call, metadata={}))
 
-            # Two-phase save: argument values are stored and the record's key
-            # sealed *before* the body runs, so the recorded identity is the
-            # arguments as passed — even if the body mutates them (e.g. writes
-            # into a directory it received).  A read-only cache stashes
-            # nothing here (digest-only prepare) and rejects at commit time,
-            # so the call still runs and returns uncached, as it previously
-            # did when the post-body save was rejected.
-            prepared = cache.prepare(call)
+            # Seal the call's identity (and stash its argument values) before
+            # the body runs, so mutations the body makes to its arguments
+            # cannot leak into the recorded key.  A read-only cache seals
+            # without writing and rejects at commit; the call still runs and
+            # returns uncached.
+            try:
+                prepared = cache.prepare(call)
+            except Rejected as e:
+                logger.warning("Cache rejected prepare: %s", e.args)
+                return func(*args, **kwargs)
 
             try:
                 result: _T = func(*args, **kwargs)
