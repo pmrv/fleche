@@ -347,13 +347,6 @@ def _digest_bytes(value: Any) -> bytes:
         case property():
             m.update(_digest_bytes((value.fget, value.fset, value.fdel)))
         case subprocess.CompletedProcess():
-            # Wrapping command-line tools is a first-class use case (see
-            # notebooks/Files.ipynb), and `run()`'s return value is neither a
-            # dataclass nor iterable, so without this arm every such function
-            # is Indigestible.  The four public fields are the whole result:
-            # what was run, how it exited, and what it wrote.  Purely
-            # additive — these values raised before, so no stored digest
-            # changes and no `hash_version` bump is implied.
             m.update(
                 _digest_bytes(
                     (value.args, value.returncode, value.stdout, value.stderr)

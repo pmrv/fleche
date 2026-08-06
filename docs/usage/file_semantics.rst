@@ -52,10 +52,12 @@ is recorded under the directory's pre-call tree, so honest repeat calls hit,
 but the written file does not reappear on a hit — it exists only on cold
 calls.
 
-So treat received paths as read-only and write outputs to a fresh directory
-(``tempfile.mkdtemp``).  If the mutation is the point, return the path: a
-mutated argument that *is* returned is stored in its final, post-mutation
-state.
+Returning what you wrote to is the normal shape, not a workaround for this: a
+function that writes into a directory and hands that directory back is recorded
+with it in its final, post-mutation state, and that is the intended way to
+produce files.  What is not replayed is a write to something you never return —
+so a path that is pure *input* should be treated as read-only, with new files
+written somewhere you do return (``tempfile.mkdtemp``).
 
 Only *content* changes count as mutation: permissions are not part of
 identity (see :ref:`fidelity-limits`), so a ``chmod`` on a received path is
@@ -161,6 +163,14 @@ keys, and everything above about identity, materialization, and lifetime
 applies to each one individually.  Container structure is otherwise faithful
 on a hit: lists and tuples keep their element order, and a mended dict keeps
 the insertion order the stored value had.
+
+"Any depth" is not a figure of speech, and no storage setting narrows it.  A
+``Path`` matches no destructurer, so it is always written out as its own stored
+entry rather than inlined into the container above it — and being written out is
+exactly what hands it to the content machinery.  The
+``remaining_depth`` knob only decides how eagerly *destructurable* nodes are
+split into separate entries, so it cannot put a path out of reach however it is
+set.
 
 Three caveats specific to nesting:
 
