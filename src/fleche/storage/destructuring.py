@@ -130,7 +130,7 @@ class DigestedMapping(Digested):
 
     def mend(self, storage: 'DestructuringMixin') -> Mapping:
         return type(self.items)(
-            (self.get(storage, k), self.get(storage, v))
+            (self.get(storage, k), self.get(storage, v))  # ty: ignore[too-many-positional-arguments]
             for k, v in self.items.items()
         )
 
@@ -143,7 +143,7 @@ class DigestedMapping(Digested):
     @classmethod
     def _rebuild_plain(cls, value: Mapping, labels: tuple, children: tuple) -> Mapping:
         n = len(value)
-        return type(value)(zip(children[:n], children[n:]))
+        return type(value)(zip(children[:n], children[n:]))  # ty: ignore[too-many-positional-arguments]
 
     @classmethod
     def _rebuild_digest(cls, value: Mapping, labels: tuple, children: tuple) -> 'DigestedMapping':

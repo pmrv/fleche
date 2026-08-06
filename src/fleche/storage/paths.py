@@ -42,7 +42,7 @@ def find_path(value: Any) -> Path | None:
     return None
 
 
-class TempPath(type(Path())):
+class TempPath(type(Path())):  # ty: ignore[unsupported-base]
     """
     A Path that deletes its backing temp tree when no references remain.
     Paths derived via /, .parent, .with_suffix, etc. share the same
