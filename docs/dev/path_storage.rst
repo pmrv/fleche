@@ -64,6 +64,42 @@ tree — with the ``"FileBlob"`` / ``"DirectoryBlob"`` salts matching
 :class:`~fleche.storage.paths.FileBlob` and
 :class:`~fleche.storage.paths.DirectoryBlob`'s ``__digest__``.
 
+Why ``remaining_depth`` cannot reach a path
+-------------------------------------------
+
+``PathValueMixin`` only ever sees a value that
+:class:`~fleche.storage.destructuring.DestructuringMixin` decided to **write
+out** — an inlined value is carried inside its parent's ``Digested`` wrapper and
+pickled with it, never handed down the MRO.  So "a nested path is always stored
+by content" holds only if a path can never be inlined, and that is arranged
+rather than hoped for: a ``Path`` matches no destructurer, so ``_intern_rec``
+leaves its depth at ``float("inf")``, and ``inf < remaining_depth`` is false for
+every setting.
+
+That is the enforcement mechanism, not a side effect of one.  It also
+propagates, since a parent's depth is ``1 + max(child_depths)``: every container
+between the root and a path inherits ``inf`` and is written out as its own
+entry too.  Sibling subtrees are untouched and inline exactly as they would
+without the path.
+
+``[[[1, 2], [3, path]], [4, 5]]`` at ``remaining_depth=10`` — a setting that
+collapses the same structure without the path into a *single* entry:
+
+.. code-block:: text
+
+   bytes             b'xyz'
+   FileBlob          FileBlob('data.txt', <bytes digest>)
+   DigestedIterable  [3, <FileBlob digest>]          <- innermost, own entry
+   DigestedIterable  [[1, 2], <digest>]              <- own entry; [1, 2] inlined
+   DigestedIterable  [<digest>, [4, 5]]              <- root;      [4, 5] inlined
+
+So one path costs *its own nesting depth* in extra entries, not the size of the
+structure around it, and the scalars beside it inline under the usual rules
+(``[1, 3, 4, path]`` stores as ``DigestedIterable([1, 3, 4, <digest>])``, not as
+four separate slots).  Tuning ``remaining_depth`` for a path-heavy workload
+therefore changes how the *non-path* parts are packed and nothing else — the
+content addressing of the paths is not on the table.
+
 Deduplication
 -------------
 
