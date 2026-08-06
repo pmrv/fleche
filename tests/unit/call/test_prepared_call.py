@@ -92,6 +92,27 @@ def test_context_manager_does_not_swallow_exceptions(cache):
     assert not cache.contains(call.to_lookup_key())
 
 
+def test_commit_is_exactly_once(cache):
+    prepared = cache.prepare(make_call(x=1))
+    prepared.commit(1)
+    with pytest.raises(RuntimeError):
+        prepared.commit(2)
+
+
+def test_abandon_is_idempotent_but_bars_commit(cache):
+    prepared = cache.prepare(make_call(x=1))
+    prepared.abandon()
+    prepared.abandon()
+    with pytest.raises(RuntimeError):
+        prepared.commit(1)
+
+
+def test_commit_does_not_mutate_the_prepared_record(cache):
+    prepared = cache.prepare(make_call(x=1))
+    prepared.commit("r")
+    assert prepared.digested.result is None
+
+
 def test_readonly_prepare_is_digest_only_and_commit_rejects(cache):
     """A read-only cache admits the call without writing anything; the
     rejection lands at commit time, after the body would have run."""
@@ -145,10 +166,9 @@ def test_wrapper_prepare_commits_through_the_wrapper(cache):
 # ---- end-to-end: argument mutation no longer corrupts identity ----
 
 
-def test_mutating_consumer_hits_on_honest_repeat():
+def test_mutating_consumer_hits_on_honest_repeat(cache):
     """A function that mutates its argument is keyed on the *pre-call* state:
     a repeat call with the same initial state is a hit."""
-    fl.cache("memory")
     runs = []
 
     @fleche
@@ -157,16 +177,16 @@ def test_mutating_consumer_hits_on_honest_repeat():
         xs.append(99)
         return sum(xs)
 
-    assert consume([1, 2]) == 102
-    assert consume([1, 2]) == 102
+    with fl.cache(cache):
+        assert consume([1, 2]) == 102
+        assert consume([1, 2]) == 102
     assert len(runs) == 1
 
 
-def test_no_mislabeled_entry_for_mutated_state():
+def test_no_mislabeled_entry_for_mutated_state(cache):
     """The post-mutation argument state is a *different* call and recomputes —
     the old behavior filed the first call under this state (a false hit that
     returned a result computed from different input)."""
-    fl.cache("memory")
     runs = []
 
     @fleche
@@ -175,13 +195,13 @@ def test_no_mislabeled_entry_for_mutated_state():
         xs.append(99)
         return len(xs)
 
-    assert consume([1, 2]) == 3
-    assert consume([1, 2, 99]) == 4      # miss: its own honest computation
+    with fl.cache(cache):
+        assert consume([1, 2]) == 3
+        assert consume([1, 2, 99]) == 4  # miss: its own honest computation
     assert len(runs) == 2
 
 
-def test_body_exception_leaves_no_record():
-    fl.cache("memory")
+def test_body_exception_leaves_no_record(cache):
     runs = []
 
     @fleche
@@ -189,8 +209,9 @@ def test_body_exception_leaves_no_record():
         runs.append(1)
         raise ValueError("no")
 
-    for _ in range(2):
-        with pytest.raises(ValueError):
-            boom(1)
-    assert len(runs) == 2                # nothing cached, body ran twice
-    assert not boom.contains(1)
+    with fl.cache(cache):
+        for _ in range(2):
+            with pytest.raises(ValueError):
+                boom(1)
+        assert len(runs) == 2            # nothing cached, body ran twice
+        assert not boom.contains(1)
