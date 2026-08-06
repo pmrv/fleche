@@ -790,7 +790,11 @@ class SshCache(BaseCache):
             raise Rejected(self, *args)
         return spec.unwrap(self, self._conn.call(name, *args))
 
-    def save(self, call: DigestedCall | _call.Call) -> str:
+    def save(self, call: PreparedCall | _call.Call) -> str:
+        # A PreparedCall pickles without its cache binding (see
+        # ``PreparedCall.__getstate__``), so only the sealed record and the
+        # pending result travel; the server's cache stores the result and files
+        # the record.
         return self._rpc("save", call)
 
     def load(self, key: str) -> LazyCall:

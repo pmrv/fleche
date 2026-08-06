@@ -13,7 +13,7 @@ from . import storage
 from .storage.base import _apply_shrink, _resolve_prefix, Intent, OperationContext
 from .storage.destructuring import HasChildDigests
 from .storage.thread_safe import PerKeyLockMixin, _PicklableRLock
-from .call import Call, DigestedCall, LazyCall, PreparedCall, QueryCall
+from .call import Call, LazyCall, PreparedCall, QueryCall
 from . import call
 from . import query
 
@@ -71,14 +71,13 @@ class BaseCache(OperationContext):
         return PreparedCall(digested=call.digest(), cache=self)
 
     @abstractmethod
-    def save(self, call: DigestedCall | Call) -> str:
+    def save(self, call: PreparedCall | Call) -> str:
         """File a call record.
 
         Takes either a live :class:`Call` — values are stored on the spot, the
-        one-shot form — or a :class:`DigestedCall` whose argument values were
-        already stored by :meth:`prepare`, in which case only its result (if
-        any) still needs storing.  See :meth:`prepare` for the two-phase
-        protocol that does both in the right order."""
+        one-shot form — or a :class:`~fleche.call.PreparedCall` whose argument
+        values were already stored by :meth:`prepare` and whose pending result
+        is stored now, as returned."""
         ...
 
     @abstractmethod
@@ -332,27 +331,33 @@ class Cache(PerKeyLockMixin, BaseCache):
         # storages carry their own per-key locking where they need it.
         return PreparedCall(digested=call.stash(self.values), cache=self)
 
-    def save(self, call: DigestedCall | Call) -> str:
+    def save(self, call: PreparedCall | Call) -> str:
         key = call.to_lookup_key()
         with self._operation_context(key):
             try:
                 if isinstance(call, Call):
-                    # One-shot form: nothing was stored ahead of time.  With no
-                    # function body between digesting and filing there is
-                    # nothing to drift, so stash-then-file is equivalent to
-                    # prepare/commit here.
-                    call = call.stash(self.values)
-                elif call.result is not None and not isinstance(call.result, Digest):
-                    # Second half of the two-phase protocol: the arguments are
-                    # already digests (stored by ``prepare``), only the result
-                    # arrives live from ``PreparedCall.commit``.  Not re-saving
-                    # the arguments here is the point — reading them again
-                    # *after* the body ran would file the record under
-                    # post-mutation content.
-                    call = replace(call, result=self.values.save(call.result))
+                    # One-shot form: nothing was stored ahead of time, and with
+                    # no function body between digesting and filing there is
+                    # nothing to drift.
+                    digested = call.stash(self.values)
+                elif isinstance(call, PreparedCall):
+                    # Committed result, stored as returned; the arguments must
+                    # NOT be re-saved here — reading them after the body ran is
+                    # exactly the post-mutation keying prepare exists to
+                    # prevent.
+                    digested = replace(
+                        call.digested,
+                        result=self.values.save(call._result),
+                        metadata=call.digested.metadata
+                        if call._metadata is None
+                        else call._metadata,
+                    )
+                else:
+                    # Already fully digested: file as-is.
+                    digested = call
             except storage.SaveError as e:
                 raise Rejected(e)
-            return self.calls.save(call)
+            return self.calls.save(digested)
 
     def load(self, key: str) -> LazyCall:
         with self._operation_context(key):
@@ -525,7 +530,7 @@ class CacheWrapper(BaseCache):
         # so wrapper policy (read-only, filtering, size limits) still applies.
         return replace(self.cache.prepare(call), cache=self)
 
-    def save(self, call: DigestedCall | Call) -> str:
+    def save(self, call: PreparedCall | Call) -> str:
         return self.cache.save(call)
 
     def load(self, key: str) -> LazyCall:
@@ -575,7 +580,7 @@ class ReadOnlyMixin:
     short-circuits ``save``/``evict`` without a round-trip).
     """
 
-    def save(self, call: DigestedCall | Call):
+    def save(self, call: PreparedCall | Call):
         raise Rejected(self, call)
 
     def evict(self, key: str | Digest) -> None:
@@ -834,9 +839,7 @@ class CacheStack(PerKeyLockMixin, _MultiCache):
             if isinstance(c, CacheStack):
                 raise ValueError("CacheStack cannot be nested inside another CacheStack")
 
-    def save(self, call: DigestedCall | Call) -> str:
-        # Returning the key (rather than dropping it, as this used to) keeps
-        # the BaseCache contract that PreparedCall.commit hands back to callers.
+    def save(self, call: PreparedCall | Call) -> str:
         return self.stack[0].save(call)
 
     def prepare(self, call: Call) -> PreparedCall:
@@ -997,7 +1000,7 @@ class SizeLimitedMixin(BaseCache):
                 target = self._pick_eviction_target(list(self._keys))
                 self.evict(target)
 
-    def save(self, call: call.DigestedCall | call.Call) -> str:
+    def save(self, call: call.PreparedCall | call.Call) -> str:
         with self._lock:
             key = super().save(call)
             self._keys.add(key)
