@@ -73,7 +73,9 @@ Welcome to the **Fleche** library documentation.
    notebooks/ExtraMethods
    notebooks/StorageBackends
    notebooks/SecureStorage
+   notebooks/Caches
    notebooks/CacheStack
+   notebooks/TransferWorkflow
    notebooks/ConcurrentExecution
 
 .. toctree::
