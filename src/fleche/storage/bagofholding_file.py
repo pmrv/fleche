@@ -5,7 +5,7 @@ import logging
 import filelock
 
 from .file import FileStorage
-from .base import SaveError, ValueMixin, CallMixin
+from .base import SaveError, ValueMixin, CallMixin, register_storage
 from .thread_safe import PerKeyLockMixin
 from .destructuring import DestructuringMixin
 from .paths import PathValueMixin
@@ -314,8 +314,28 @@ class BagOfHoldingH5FileBackend(FileStorage):
                     logger.warning("Failed to rebag %s: %s", key, e)
 
 
+@register_storage("bagofholding_hdf", kind="value")
 @dataclass(frozen=True)
-class ValueBagOfHoldingH5File(PerKeyLockMixin, DestructuringMixin, PathValueMixin, ValueMixin, BagOfHoldingH5FileBackend): ...
+class ValueBagOfHoldingH5File(PerKeyLockMixin, DestructuringMixin, PathValueMixin, ValueMixin, BagOfHoldingH5FileBackend):
+    def to_config(self) -> dict[str, Any]:
+        return {
+            "type": "bagofholding_hdf",
+            # `root` is a Path; config dicts must stay TOML/JSON-representable.
+            "root": str(self.root),
+            "lock_timeout": self.lock_timeout,
+            "version_validator": self.version_validator,
+            "prefix_length": self.prefix_length,
+            "remaining_depth": self.remaining_depth,
+        }
 
+@register_storage("bagofholding_hdf", kind="call")
 @dataclass(frozen=True)
-class CallBagOfHoldingH5File(PerKeyLockMixin, CallMixin, BagOfHoldingH5FileBackend): ...
+class CallBagOfHoldingH5File(PerKeyLockMixin, CallMixin, BagOfHoldingH5FileBackend):
+    def to_config(self) -> dict[str, Any]:
+        return {
+            "type": "bagofholding_hdf",
+            "root": str(self.root),
+            "lock_timeout": self.lock_timeout,
+            "version_validator": self.version_validator,
+            "prefix_length": self.prefix_length,
+        }

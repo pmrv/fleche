@@ -28,9 +28,7 @@ class Rejected(Exception):
 # backwards compat imports
 # from breaking introduced in 0.4.0
 DigestedIterable = storage.destructuring.DigestedIterable
-DigestedMapping = storage.destructuring.DigestedMapping
-# DigestedDict was renamed to DigestedMapping; keep the old name re-exported.
-DigestedDict = storage.destructuring.DigestedMapping
+DigestedDict = storage.destructuring.DigestedDict
 
 
 class BaseCache(OperationContext):
@@ -341,7 +339,7 @@ class Cache(PerKeyLockMixin, BaseCache):
                     # NOT be re-saved here — reading them after the body ran is
                     # exactly the post-mutation keying prepare exists to
                     # prevent.
-                    digested = call.resolve(self.values.save(call._result))
+                    digested = call.resolve(self.values)
                 else:
                     # Already fully digested: file as-is.
                     digested = call
@@ -832,9 +830,9 @@ class CacheStack(PerKeyLockMixin, _MultiCache):
 
     def prepare(self, call: Call) -> PreparedCall:
         # Writes always land on stack[0] (matching save), so that is where the
-        # arguments are stashed; rebinding the cache routes the commit back
-        # through this stack's ``save``.
-        return replace(self.stack[0].prepare(call), cache=self)
+        # arguments are stashed and where the commit files directly — this
+        # stack's own ``save`` is a pure forward to the same place.
+        return self.stack[0].prepare(call)
 
     @contextlib.contextmanager
     def _operation_context(self, key, *, intent: Intent = Intent.WRITE):

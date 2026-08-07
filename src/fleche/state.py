@@ -1,11 +1,31 @@
 from contextlib import AbstractContextManager, contextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
-from typing import overload, Callable, Iterator
+from typing import overload, Any, Callable, Iterator
 
 from . import caches, config, metadata
 
-_CACHE: ContextVar[caches.BaseCache] = ContextVar("fleche.CACHE", default=config.load_cache_config())
+_CACHE: ContextVar[caches.BaseCache] = ContextVar("fleche.CACHE")
+
+#: Memoised fallbacks for the ContextVars below, keyed by ``"cache"``/``"metadata"``.
+#: The config is only read the first time a value is actually needed, so importing
+#: :mod:`fleche` does not touch the file system and tests can pick up a patched
+#: config by clearing this dict.
+_DEFAULTS: dict[str, Any] = {}
+
+
+def get_cache() -> caches.BaseCache:
+    """Return the active cache, falling back to the configured default.
+
+    The default is resolved from the configuration files on first use and memoised
+    in :data:`_DEFAULTS`.
+    """
+    try:
+        return _CACHE.get()
+    except LookupError:
+        if "cache" not in _DEFAULTS:
+            _DEFAULTS["cache"] = config.load_cache_config()
+        return _DEFAULTS["cache"]
 
 
 class _StickyContext:
@@ -94,7 +114,7 @@ def cache(
         :class:`._StickyContext` context manager.
     """
     if new_cache is None:
-        return _CACHE.get()
+        return get_cache()
 
     if isinstance(new_cache, str):
         new_cache = config.load_cache_config(new_cache)
@@ -102,14 +122,26 @@ def cache(
         raise ValueError(new_cache)
 
     if stack:
-        new_cache = _CACHE.get().push(new_cache)
+        new_cache = get_cache().push(new_cache)
 
     return _sticky_set(_CACHE, new_cache)
 
 
-_METADATA: ContextVar[tuple[metadata.MetaData, ...]] = ContextVar(
-    "fleche.METADATA", default=config.load_default_metadata()
-)
+_METADATA: ContextVar[tuple[metadata.MetaData, ...]] = ContextVar("fleche.METADATA")
+
+
+def get_metadata() -> tuple[metadata.MetaData, ...]:
+    """Return the active metadata, falling back to the configured default.
+
+    The default is resolved from the configuration files on first use and memoised
+    in :data:`_DEFAULTS`.
+    """
+    try:
+        return _METADATA.get()
+    except LookupError:
+        if "metadata" not in _DEFAULTS:
+            _DEFAULTS["metadata"] = config.load_default_metadata()
+        return _DEFAULTS["metadata"]
 
 
 def meta(
@@ -131,7 +163,7 @@ def meta(
     """
     new_metadata = tuple(new_metadata)
     if stack:
-        new_metadata = _METADATA.get() + new_metadata
+        new_metadata = get_metadata() + new_metadata
 
     return _sticky_set(_METADATA, new_metadata)
 
@@ -186,7 +218,7 @@ class BoundWrapper:
 
         Returns:
             :class:`.BoundWrapper`: instance with the bound cache and metadata state"""
-        return cls(func, _CACHE.get(), _METADATA.get())
+        return cls(func, get_cache(), get_metadata())
 
     def __call__(self, *args, **kwargs):
         with _hard_set([(_CACHE, self.cache), (_METADATA, self.meta)]):

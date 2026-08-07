@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-from .base import ValueMixin, CallMixin, StorageBackend
+from .base import ValueMixin, CallMixin, StorageBackend, register_storage
 from ..digest import Digest
 
 
@@ -31,8 +31,14 @@ class VoidBackend(StorageBackend):
 # DestructuringMixin and, for the same reason, PathValueMixin.  Since VoidBackend
 # discards on put and raises KeyError on get, layering Path-to-blob conversion would
 # only build-then-throw-away blobs and could never materialize a Path on load.
+@register_storage("void", kind="value")
 @dataclass(frozen=True)
-class ValueVoid(ValueMixin, VoidBackend): ...
+class ValueVoid(ValueMixin, VoidBackend):
+    def to_config(self) -> dict[str, Any]:
+        return {"type": "void"}
 
+@register_storage("void", kind="call")
 @dataclass(frozen=True)
-class CallVoid(CallMixin, VoidBackend): ...
+class CallVoid(CallMixin, VoidBackend):
+    def to_config(self) -> dict[str, Any]:
+        return {"type": "void"}

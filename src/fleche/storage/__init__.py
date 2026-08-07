@@ -15,6 +15,9 @@ from .base import (
     ValueMixin,
     CallStorage,
     CallMixin,
+    register_storage,
+    get_storage_constructor,
+    is_registered_storage,
 )
 from .destructuring import DestructuringMixin, child_slots, register_destructurer
 from .paths import PathValueMixin, TempPath, FileBlob, DirectoryBlob, find_path
@@ -37,6 +40,9 @@ __all__ = [
     "ValueMixin",
     "CallStorage",
     "CallMixin",
+    "register_storage",
+    "get_storage_constructor",
+    "is_registered_storage",
     "DestructuringMixin",
     "child_slots",
     "register_destructurer",

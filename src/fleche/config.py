@@ -206,6 +206,20 @@ All discovered files are **shallow-merged** at the top level: files closer
 to the CWD win, and a closer file's top-level table fully replaces the
 same key in a farther file (tables are *not* recursively merged).
 
+Relative paths
+--------------
+
+A relative ``root`` (storage/template) or ``url`` (``sql`` calls) is
+resolved against the directory containing the ``fleche.toml`` that declared
+it, not against the process's current working directory.  This is what
+makes a checked-in, machine-portable config file resolve to the *same*
+cache location no matter which subdirectory it is read from during the
+walk above.  Absolute paths and ``~``-prefixed paths are unaffected.  This
+resolution only happens for paths read from a config file — a ``root``/
+``url`` passed directly to :func:`cache_from_config` or
+:func:`storage_from_config` still resolves against the CWD, as it always
+has.
+
 Stopping the walk
 -----------------
 
@@ -221,8 +235,6 @@ whatever ``fleche.toml`` happens to live in a parent directory or ``$HOME``::
     root = true              # ignore any fleche.toml farther up the tree
 """
 
-import dataclasses
-from dataclasses import asdict
 import tomllib
 import logging
 from typing import Callable, Literal, cast, overload
@@ -238,13 +250,82 @@ logger = logging.getLogger("fleche.config")
 _live_caches: dict[str | None, caches.BaseCache] = {}
 
 
+def _rebase_relative_path(value: str, base: Path) -> str:
+    """Anchor a relative ``root``-style path onto *base*.
+
+    Absolute paths and ``~``-prefixed paths already mean the same thing
+    regardless of where the declaring file lives, so they pass through
+    unchanged.
+    """
+    if value.startswith("~"):
+        return value
+    path = Path(value)
+    if path.is_absolute():
+        return value
+    return str(base / path)
+
+
+def _rebase_url(value: str, base: Path) -> str:
+    """Anchor the ``calls.url`` key onto *base*.
+
+    ``url`` may be a bare filesystem path (same handling as ``root``) or a
+    SQLAlchemy URL. Only a relative ``sqlite:///<path>`` URL needs rebasing;
+    ``:memory:``, an absolute sqlite URL (``sqlite:////...``), a
+    ``~``-prefixed path, and non-sqlite dialects (``postgresql://``, ...)
+    are left untouched.
+    """
+    prefix = "sqlite:///"
+    if value.startswith(prefix):
+        db_path = value[len(prefix):]
+        if not db_path or db_path == ":memory:" or db_path.startswith(("/", "~")):
+            return value
+        return prefix + str(base / Path(db_path))
+    if "://" in value or value.startswith("sqlite:"):
+        return value
+    return _rebase_relative_path(value, base)
+
+
+def _rebase_value(value: Any, base: Path) -> Any:
+    """Recurse through a parsed TOML value, rebasing ``root``/``url`` strings."""
+    if isinstance(value, dict):
+        return _rebase_config(value, base)
+    if isinstance(value, list):
+        return [_rebase_value(v, base) for v in value]
+    return value
+
+
+def _rebase_config(config: dict[str, Any], base: Path) -> dict[str, Any]:
+    """Rewrite relative ``root``/``url`` path values in *config* onto *base*.
+
+    Applied to a config file's parsed content right after loading, so a
+    relative path in ``fleche.toml`` means "relative to the file that
+    declared it" instead of "relative to whatever directory the process
+    happens to run from" (#810) — the config-discovery walk means the same
+    file can otherwise be read from many different working directories.
+    ``root`` (values/calls storage, templates) and ``url`` (``sql`` call
+    storage) are the only path-bearing keys; everything else — including
+    the unrelated boolean ``[default].root`` marker and remote-side keys
+    like ``workdir`` on an ``ssh`` entry — passes through untouched.
+    """
+    rebased: dict[str, Any] = {}
+    for key, value in config.items():
+        if key == "root" and isinstance(value, str):
+            rebased[key] = _rebase_relative_path(value, base)
+        elif key == "url" and isinstance(value, str):
+            rebased[key] = _rebase_url(value, base)
+        else:
+            rebased[key] = _rebase_value(value, base)
+    return rebased
+
+
 def _load_config(path: Path) -> dict[str, Any]:
     try:
         with open(path, "rb") as f:
-            return tomllib.load(f)
+            config = tomllib.load(f)
     except Exception as e:
         logger.error("Failed to load configuration from %s: %s", path, e, exc_info=True)
         return {}
+    return _rebase_config(config, path.parent)
 
 
 def _collect_config_paths() -> list[Path]:
@@ -342,33 +423,6 @@ def load_default_metadata():
 
     return tuple(meta_objects)
 
-_STORAGE_NAME_MAPPING = {
-        ("memory", "value"): storage.ValueMemory,
-        ("memory", "call"): storage.CallMemory,
-        ("void", "value"): storage.ValueVoid,
-        ("void", "call"): storage.CallVoid,
-        ("bagofholding_hdf", "value"): storage.ValueBagOfHoldingH5File,
-        ("bagofholding_hdf", "call"): storage.CallBagOfHoldingH5File,
-        ("pickle", "value"): storage.ValuePickleFile.with_pickle,
-        ("pickle", "call"): storage.CallPickleFile.with_pickle,
-        ("dill", "value"): storage.ValuePickleFile.with_dill,
-        ("dill", "call"): storage.CallPickleFile.with_dill,
-        ("cloudpickle", "value"): storage.ValuePickleFile.with_cloudpickle,
-        ("cloudpickle", "call"): storage.CallPickleFile.with_cloudpickle,
-}
-
-_STORAGE_CLASS_TO_NAME: dict[type, str] = {
-    storage.ValueMemory: "memory",
-    storage.CallMemory: "memory",
-    storage.ValueVoid: "void",
-    storage.CallVoid: "void",
-    storage.ValueBagOfHoldingH5File: "bagofholding_hdf",
-    storage.CallBagOfHoldingH5File: "bagofholding_hdf",
-    storage.ValuePickleFile: "pickle",   # serializer determines the actual name
-    storage.CallPickleFile: "pickle",
-}
-
-
 @overload
 def storage_from_config(d: dict[str, Any], type: Literal["call"]) -> storage.CallStorage: ...
 
@@ -380,7 +434,8 @@ def storage_from_config(d: dict[str, Any], type: Literal["call", "value"]) -> st
 
     The dict must contain a ``"type"`` key (case-sensitive, lowercase) and any
     additional parameters required by that storage backend.  The input dict is
-    **not** mutated.
+    **not** mutated. ``"type"`` is looked up against the backends registered
+    via :func:`fleche.storage.register_storage`.
 
     Supported type values and their parameters:
 
@@ -403,27 +458,10 @@ def storage_from_config(d: dict[str, Any], type: Literal["call", "value"]) -> st
     """
     d = dict(d)
     backend = d.pop("type")
-    match backend:
-        case "memory":
-            return _STORAGE_NAME_MAPPING[backend, type]({}, **d)  # type: ignore
-        case "void":
-            return _STORAGE_NAME_MAPPING[backend, type]()  # type: ignore
-        case "bagofholding_hdf" | "pickle" | "dill" | "cloudpickle":
-            return _STORAGE_NAME_MAPPING[backend, type](**d)
-        case "sql" if type == "call":
-            return storage.Sql(**d)
-        case _:
-            raise ValueError(f"Unknown storage type '{backend}' for {type} storage!")
-
-
-def _asdict_init_only(obj) -> dict[str, Any]:
-    """Like ``dataclasses.asdict()`` but restricted to ``init=True`` fields.
-
-    ``init=False`` fields are internal state (locks, caches) that must not
-    appear in serialised config.
-    """
-    non_init = {f.name for f in dataclasses.fields(obj) if not f.init}
-    return {k: v for k, v in asdict(obj).items() if k not in non_init}
+    ctor = storage.get_storage_constructor(backend, type)
+    if ctor is None:
+        raise ValueError(f"Unknown storage type {backend!r} for {type} storage!")
+    return cast("storage.ValueStorage | storage.CallStorage", ctor(**d))
 
 
 def storage_to_config(s: storage.ValueStorage | storage.CallStorage) -> dict[str, Any]:
@@ -431,41 +469,18 @@ def storage_to_config(s: storage.ValueStorage | storage.CallStorage) -> dict[str
 
     The returned dict contains a ``"type"`` key and any additional parameters
     needed to reconstruct the storage via :func:`storage_from_config`.
-    """
-    cls = type(s)
-    if cls not in _STORAGE_CLASS_TO_NAME and not isinstance(s, storage.Sql):
-        raise ValueError(f"Cannot convert storage of type {cls.__name__!r} to config")
+    Every backend spells its own ``to_config()`` out by hand; this function
+    only checks that the storage is one whose config means anything.
 
-    match s:
-        case storage.memory.MemoryBackend():
-            config = _asdict_init_only(s)
-            config["type"] = "memory"
-            del config["storage"]
-        case storage.void.VoidBackend():
-            config = _asdict_init_only(s)
-            config["type"] = "void"
-        case storage.pickle_file.PickleFileBackend():
-            config = _asdict_init_only(s)
-            serializer_name = s.dumps.__module__.split(".")[0].lstrip("_")
-            if serializer_name not in ("pickle", "dill", "cloudpickle"):
-                raise ValueError(f"Unknown PickleFile serializer: {serializer_name!r}")
-            config["type"] = serializer_name
-            del config["dumps"]
-            del config["loads"]
-            if config["secret_key"]:
-                config["secret_key"] = [k.hex() for k in config["secret_key"]]
-            else:
-                del config["secret_key"]
-            config["root"] = str(config["root"])
-        case storage.bagofholding_file.BagOfHoldingH5FileBackend():
-            config = _asdict_init_only(s)
-            config["type"] = "bagofholding_hdf"
-            config["root"] = str(config["root"])
-        case storage.sql.Sql():
-            config = {"type": "sql", "url": s.url, "echo": s.echo}
-        case _:
-            raise ValueError(f"Cannot convert storage of type {cls.__name__!r} to config")
-    return config
+    Raises:
+        ValueError: for a storage whose exact class was never passed to
+            :func:`fleche.storage.register_storage`, or that defines no
+            ``to_config`` at all.
+    """
+    to_config = getattr(s, "to_config", None)
+    if to_config is None or not storage.is_registered_storage(type(s)):
+        raise ValueError(f"Cannot convert storage of type {type(s).__name__!r} to config")
+    return to_config()
 
 
 def _template_symmetric_transient(style: str) -> "Callable[..., tuple[dict[str, Any], dict[str, Any]]]":

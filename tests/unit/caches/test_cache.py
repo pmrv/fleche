@@ -350,6 +350,54 @@ def test_cache_query_kwargs_and_template_raises():
         c.query(QueryCall(), name="foo")
 
 
+def test_cache_query_logs_and_skips_calls_that_fail_to_fetch(clean_cache, caplog):
+    """A ``DigestedCall`` whose ``fetch(cache)`` raises must be logged and skipped,
+    not abort iteration.
+
+    ``Cache._query`` wraps ``yield c.fetch(self)`` in a try/except that logs
+    ``"Indicates corrupt cache."`` and continues to the next candidate.  This
+    pins that reliability contract: one broken entry in the call store cannot
+    break a whole query.
+    """
+    import logging
+
+    class ExplodingDigestedCall:
+        def fetch(self, cache):
+            raise ValueError("simulated corruption")
+
+        def to_lookup_key(self):
+            return Digest("dead" + "0" * 60)
+
+    class BustedCalls:
+        """Wraps a real ``CallMemory`` but prepends one exploding fake to each query."""
+
+        def __init__(self, inner):
+            self._inner = inner
+
+        def query(self, template):
+            yield ExplodingDigestedCall()
+            yield from self._inner.query(template)
+
+        def __getattr__(self, name):
+            return getattr(self._inner, name)
+
+    clean_cache.save(Call(name="f", arguments={"x": 1}, result=2))
+    cache = Cache(clean_cache.values, BustedCalls(clean_cache.calls))
+
+    with caplog.at_level(logging.ERROR, logger="fleche.cache"):
+        results = list(cache.query(QueryCall(name="f")))
+
+    assert len(results) == 1
+    assert results[0].name == "f"
+    assert results[0].arguments["x"] == 1
+    assert results[0].result == 2
+    assert any(
+        "Indicates corrupt cache" in rec.getMessage()
+        and rec.levelno == logging.ERROR
+        for rec in caplog.records
+    )
+
+
 def test_load_value_plain_string_key():
     """load_value should accept a plain hex string without requiring D() wrapping."""
     from fleche.storage.memory import ValueMemory, CallMemory

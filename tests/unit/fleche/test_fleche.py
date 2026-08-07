@@ -1,18 +1,27 @@
 from unittest.mock import Mock, MagicMock
 
+import pytest
+
 from fleche import fleche
 from fleche.caches import Cache
 from fleche.state import _CACHE, cache
 from fleche.storage import ValueMemory, CallMemory
 
 
-def setup_function():
+@pytest.fixture(autouse=True)
+def mock_cache():
+    """Activate a mock cache for the duration of each test.
+
+    The token is reset on teardown so the mock does not leak into the ambient
+    context and shadow the config-derived default in later test modules.
+    """
     values_storage = Mock()
     values_storage.save.return_value = "digest_value"
     calls_storage = Mock()
     calls_storage.load.side_effect = KeyError
-    c = Cache(values_storage, calls_storage)
-    _CACHE.set(c)
+    token = _CACHE.set(Cache(values_storage, calls_storage))
+    yield
+    _CACHE.reset(token)
 
 
 def test_fleche_no_args():

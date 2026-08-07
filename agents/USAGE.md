@@ -78,6 +78,12 @@ So a project-local `./fleche.toml` overrides `~/fleche.toml`, which
 overrides the XDG fallback. If no file is found anywhere, fleche silently
 falls back to an in-memory-only cache — no error is raised.
 
+A relative `root`/`url` inside a `fleche.toml` resolves against **the
+directory containing that file**, not the CWD the process happens to run
+from — so the same config file resolves to the same cache location
+regardless of which subdirectory the walk found it from. Absolute and
+`~`-prefixed paths are unaffected.
+
 To stop that upward inheritance, set `root = true` in a file's `[default]`
 table. The walk halts at the closest `root` file: files farther up the tree
 (and the XDG fallback) are ignored, so only that file and any closer to the

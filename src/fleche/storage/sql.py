@@ -1,11 +1,12 @@
 import contextlib
 import json
 import logging
+import sys
 import threading
 from typing import Iterable, Any, List
 from pathlib import Path
 from dataclasses import dataclass, field
-from .base import Intent, KeyManagement, CallStorage, _resolve_prefix
+from .base import Intent, KeyManagement, CallStorage, register_storage
 from .thread_safe import PerKeyLockMixin
 from ..call import DigestedCall, QueryCall
 from ..digest import Digest, DIGEST_LENGTH, digest
@@ -138,10 +139,55 @@ def _coerce_sqlite_url(path_or_url: str | None) -> str:
 
 # Use constants for the PRAGMA executions to avoid raw string injection risks.
 SQLITE_FOREIGN_KEYS_ON = "PRAGMA foreign_keys=ON"
-SQLITE_WAL_MODE = "PRAGMA journal_mode=WAL"
+
+# Filesystem types (as reported by /proc/mounts) known to be network-backed.
+# SQLite's WAL mode relies on shared-memory locking between all writers, which
+# does not work once those writers are on different hosts (see
+# https://www.sqlite.org/wal.html: "All processes using a database must be on
+# the same host computer; WAL does not work over a network filesystem.").
+_NETWORK_FS_TYPES = frozenset(
+    {
+        "nfs", "nfs4", "nfsd", "cifs", "smb", "smb2", "smb3", "smbfs",
+        "afs", "afpfs", "ceph", "cephfs", "glusterfs", "9p", "lustre",
+        "gpfs", "panfs",
+    }
+)
 
 
-def _configure_sqlite_pragmas(engine) -> None:
+def _is_network_filesystem(path: Path) -> bool:
+    """Best-effort check whether ``path`` lives on a network filesystem.
+
+    Linux-only (parses ``/proc/mounts``); any failure to determine the type
+    (non-Linux platform, missing ``/proc/mounts``, permissions, an odd mount
+    line) is treated as "not a network filesystem" so a failed check never
+    blocks database creation -- it just falls back to WAL's default-on
+    behaviour.
+    """
+    if not sys.platform.startswith("linux"):
+        return False
+    try:
+        resolved = str(path.resolve())
+        best_match = ""
+        fstype = None
+        with open("/proc/mounts") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) < 3:
+                    continue
+                mount_point, fs_type = parts[1], parts[2]
+                if (
+                    (resolved == mount_point or resolved.startswith(mount_point.rstrip("/") + "/"))
+                    and len(mount_point) >= len(best_match)
+                ):
+                    best_match, fstype = mount_point, fs_type
+        logger.debug("Detected filesystem type %r for %s (mount point %r)", fstype, path, best_match)
+        return fstype is not None and fstype.lower() in _NETWORK_FS_TYPES
+    except OSError:
+        logger.debug("Could not determine filesystem type for %s", path, exc_info=True)
+        return False
+
+
+def _configure_sqlite_pragmas(engine, db_path: Path | None) -> None:
     # PRAGMA is sqlite-only; running it on Postgres/MySQL connections would
     # raise at connect time, so gate the listener on the dialect.
     if engine.dialect.name != "sqlite":
@@ -153,15 +199,32 @@ def _configure_sqlite_pragmas(engine) -> None:
 
     @event.listens_for(engine, "connect")
     def _set_sqlite_pragma(dbapi_connection, connection_record):
+        # foreign_keys is a per-connection setting in SQLite (it does not
+        # persist in the db file), so it must be re-applied on every connect.
         cursor = dbapi_connection.cursor()
         try:
-            # We use static constant strings here. We cannot use sqlalchemy.text()
+            # We use a static constant string here. We cannot use sqlalchemy.text()
             # because we are operating on a raw DBAPI cursor at the 'connect' event.
             cursor.execute(SQLITE_FOREIGN_KEYS_ON)
-            if not is_memory:
-                cursor.execute(SQLITE_WAL_MODE)
         finally:
             cursor.close()
+
+    if is_memory:
+        return
+
+    # journal_mode, unlike foreign_keys, is persisted in the database file
+    # itself, so it only needs to be set once at engine creation rather than
+    # on every connection.
+    use_wal = db_path is None or not _is_network_filesystem(db_path)
+    if not use_wal:
+        logger.warning(
+            "Cache database %s appears to be on a network filesystem; "
+            "SQLite's WAL journal mode does not work across hosts, so it "
+            "has been disabled in favor of the default rollback journal.",
+            db_path,
+        )
+    with engine.connect() as conn:
+        conn.exec_driver_sql(f"PRAGMA journal_mode={'WAL' if use_wal else 'DELETE'}")
 
 
 @dataclass(frozen=True)
@@ -185,7 +248,12 @@ class Sql(PerKeyLockMixin, CallStorage):
         is_sqlite = coerced_url.startswith("sqlite:")
         connect_args = {"check_same_thread": False} if is_sqlite else {}
         engine = create_engine(coerced_url, echo=self.echo, future=True, connect_args=connect_args)
-        _configure_sqlite_pragmas(engine)
+        db_path = None
+        if is_sqlite and coerced_url.startswith("sqlite:///"):
+            raw_path = coerced_url[len("sqlite:///"):]
+            if raw_path and raw_path != ":memory:":
+                db_path = Path(raw_path)
+        _configure_sqlite_pragmas(engine, db_path)
         Base.metadata.create_all(engine)
         object.__setattr__(self, "engine", engine)
         object.__setattr__(self, "session", sessionmaker(
@@ -196,6 +264,9 @@ class Sql(PerKeyLockMixin, CallStorage):
         # Constructor args are the complete durable state; __post_init__ rebuilds
         # engine/session and the mixin's lock fields are self-contained picklable types.
         return (type(self), (self.url, self.echo))
+
+    def to_config(self) -> dict[str, Any]:
+        return {"type": "sql", "url": self.url, "echo": self.echo}
 
     @contextlib.contextmanager
     def _session_context(self):
@@ -295,21 +366,14 @@ class Sql(PerKeyLockMixin, CallStorage):
         with self._session_context():
             return [Digest(row[0]) for row in self._local.session.execute(select(CallModel.key))]
 
-    def expand(self, key: Digest | str) -> Digest:
-        with self._operation_context(key):
-            if len(key) >= DIGEST_LENGTH:
-                return Digest(str(key))
-            if len(key) < 4:
-                raise KeyError(key)
-
-            prefix = str(key)
-            rows = self._local.session.execute(
-                select(CallModel.key)
-                .where(CallModel.key.like(f"{prefix}%"))
-                .order_by(CallModel.key)
-                .limit(2)
-            ).all()
-            return _resolve_prefix(prefix, [Digest(r[0]) for r in rows])
+    def _prefix_candidates(self, prefix: str) -> Iterable[Digest]:
+        rows = self._local.session.execute(
+            select(CallModel.key)
+            .where(CallModel.key.like(f"{prefix}%"))
+            .order_by(CallModel.key)
+            .limit(2)
+        ).all()
+        return [Digest(r[0]) for r in rows]
 
     def _evict(self, key: Digest) -> None:
         session = self._local.session
@@ -479,3 +543,6 @@ class Sql(PerKeyLockMixin, CallStorage):
             c = self.load(k)
             if meta_matches(c):
                 yield c
+
+
+register_storage("sql", kind="call")(Sql)

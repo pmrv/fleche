@@ -4,12 +4,85 @@ import logging
 
 from abc import ABC, abstractmethod
 from enum import StrEnum
-from typing import Iterable, Any, Callable, Sequence, overload
+from typing import Iterable, Any, Callable, Literal, Sequence, overload
 
 from ..digest import digest, Digest, DIGEST_LENGTH
 from ..call import DigestedCall, QueryCall
 
 logger = logging.getLogger("fleche.storage")
+
+StorageKind = Literal["value", "call"]
+
+_STORAGE_CONSTRUCTORS: "dict[tuple[str, StorageKind], Callable[..., Any]]" = {}
+
+_STORAGE_CLASSES: "set[type]" = set()
+"""Every class passed to :func:`register_storage`, exactly (not subclasses)."""
+
+
+def register_storage(
+    name: str,
+    kind: StorageKind,
+    *,
+    factory: "Callable[..., Any] | None" = None,
+) -> "Callable[[Any], Any]":
+    """Register a storage backend constructor for config (de)serialisation.
+
+    ``fleche.config.storage_from_config({"type": name, ...}, kind)`` looks
+    up ``(name, kind)`` here and calls the registered constructor with the
+    remaining config keys as keyword arguments — by default the decorated
+    class itself (``cls(**kwargs)``); pass an explicit *factory* when
+    construction needs an alternate entry point (a classmethod, or a
+    positional argument the config dict doesn't carry).
+
+    The other direction is the class's own ``to_config()``: every registered
+    class writes out its config dict by hand, ``type`` key included (there is
+    no inherited default — see :func:`fleche.config.storage_to_config`).
+    Registering is also what makes ``storage_to_config`` accept the class at
+    all: it refuses any class not registered *exactly*, because an
+    unregistered subclass would otherwise serialise under its parent's
+    ``type`` and silently round-trip back as the parent.
+
+    Used as a plain class decorator for the common case::
+
+        @register_storage("void", kind="value")
+        @dataclass(frozen=True)
+        class ValueVoid(ValueMixin, VoidBackend): ...
+
+    Or called directly, after the class is fully defined, when *factory*
+    must reference one of the class's own methods::
+
+        register_storage("memory", kind="value", factory=ValueMemory.from_config)(ValueMemory)
+
+    A class may register under several names — ``ValuePickleFile`` is
+    reachable as ``pickle``/``dill``/``cloudpickle`` via its ``with_*``
+    constructors — in which case its ``to_config`` is responsible for
+    picking the right one back off the instance.
+
+    *cls* is intentionally untyped (``Any``): most registrants are
+    ``StorageBackend`` subclasses, but ``Sql`` implements ``CallStorage``
+    directly and registers here too.
+    """
+    def decorator(cls: Any) -> Any:
+        _STORAGE_CONSTRUCTORS[(name, kind)] = factory if factory is not None else cls
+        _STORAGE_CLASSES.add(cls)
+        return cls
+    return decorator
+
+
+def get_storage_constructor(name: str, kind: StorageKind) -> "Callable[..., Any] | None":
+    """Look up the registered constructor for ``(name, kind)``, or ``None`` if unregistered."""
+    return _STORAGE_CONSTRUCTORS.get((name, kind))
+
+
+def is_registered_storage(cls: type) -> bool:
+    """Whether *cls* itself was passed to :func:`register_storage`.
+
+    Deliberately an exact-class check: a subclass inherits its parent's
+    ``to_config`` and would serialise under the parent's ``type``, so
+    ``storage_to_config`` refuses it rather than silently round-tripping it
+    back as the parent.
+    """
+    return cls in _STORAGE_CLASSES
 
 
 class SaveError(Exception):
@@ -167,8 +240,17 @@ class KeyManagement(OperationContext):
             if len(key) < 4:
                 raise KeyError(key)
 
-            candidates = sorted(k for k in self.list() if k.startswith(key))
-            return _resolve_prefix(str(key), candidates[:2])
+            return _resolve_prefix(str(key), self._prefix_candidates(str(key)))
+
+    def _prefix_candidates(self, prefix: str) -> "Iterable[Digest]":
+        """Return at most the two lexicographically smallest keys starting with *prefix*.
+
+        Default: a Python-side filter over :meth:`list`. Override for a
+        backend that can push the prefix scan down (e.g. SQL ``LIKE ... LIMIT
+        2``); :meth:`expand` only needs the two smallest candidates to decide
+        between a unique match and an :class:`AmbiguousDigestError`.
+        """
+        return sorted(k for k in self.list() if k.startswith(prefix))[:2]
 
     @overload
     def shrink(self, key: Digest | str, /) -> Digest: ...
@@ -234,6 +316,12 @@ class StorageBackend(KeyManagement):
     Backends implement the low-level ``put``/``get``/``_evict``/``list``
     operations.  Higher-level classes (:class:`ValueMixin`, :class:`CallMixin`)
     add domain-specific logic on top.
+
+    Backends that are constructible from a config dict additionally spell out
+    a ``to_config()`` returning that dict — see :func:`register_storage`.
+    There is deliberately no default implementation here: the config keys of
+    a backend are a hand-maintained contract, not whatever its dataclass
+    fields happen to be.
     """
 
     @abstractmethod

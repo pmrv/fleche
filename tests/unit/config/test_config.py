@@ -4,8 +4,16 @@ import textwrap
 import pytest
 from dataclasses import dataclass
 
-from fleche import storage, cache
-from fleche.config import load_cache_config, load_default_metadata, _live_caches
+from fleche import state, storage, cache
+from fleche.config import (
+    load_cache_config,
+    load_default_metadata,
+    _live_caches,
+    _load_merged_config,
+    _rebase_config,
+    _rebase_relative_path,
+    _rebase_url,
+)
 from fleche.caches import Cache, BaseCache, SizeLimitedCache, ReadOnlyCache, CacheStack
 from fleche.metadata import Runtime
 
@@ -95,13 +103,16 @@ def _reset_live_caches():
     _live_caches.clear()
 
 
-@pytest.fixture
-def restore_fleche_state():
-    """Reload fleche.state after each test to undo any importlib.reload side effects."""
+@pytest.fixture(autouse=True)
+def _reset_fleche_state_defaults():
+    """Drop fleche.state's memoised config defaults around each test.
+
+    The tests here patch ``XDG_CONFIG_HOME``, so a default resolved from an
+    earlier config file must not leak in either direction.
+    """
+    state._DEFAULTS.clear()
     yield
-    import importlib
-    import fleche.state
-    importlib.reload(fleche.state)
+    state._DEFAULTS.clear()
 
 
 def test_load_cache_config_default(monkeypatch, config_file):
@@ -131,9 +142,11 @@ def test_load_cache_config_specific(monkeypatch, config_file):
 
     assert isinstance(cache_obj, Cache)
     assert isinstance(cache_obj.values, storage.ValuePickleFile)
-    assert cache_obj.values.root == Path(".fleche/values").absolute()
+    # Relative `root` resolves against the declaring file's directory
+    # ($XDG_CONFIG_HOME/fleche/cache.toml here), not the CWD (#810).
+    assert cache_obj.values.root == Path(config_file) / "fleche" / ".fleche/values"
     assert isinstance(cache_obj.calls, storage.CallPickleFile)
-    assert cache_obj.calls.root == Path(".fleche/calls").absolute()
+    assert cache_obj.calls.root == Path(config_file) / "fleche" / ".fleche/calls"
 
 
 def test_load_cache_config_no_file(monkeypatch):
@@ -217,42 +230,29 @@ def test_cache_default_activates_default_cache(monkeypatch, config_file):
         assert cache() is default
 
 
-def test_load_default_metadata(restore_fleche_state, monkeypatch, config_file):
+def test_load_default_metadata(monkeypatch, config_file):
     monkeypatch.setenv("XDG_CONFIG_HOME", config_file)
 
-    import importlib
-    import fleche.state
-
-    importlib.reload(fleche.state)
-
-    meta = fleche.state._METADATA.get()
+    meta = state.get_metadata()
     assert len(meta) == 1
     assert isinstance(meta[0], Runtime)
 
 
-def test_load_default_cache(restore_fleche_state, monkeypatch, config_file):
+def test_load_default_cache(monkeypatch, config_file):
     monkeypatch.setenv("XDG_CONFIG_HOME", config_file)
 
-    import importlib
-    import fleche.state
-
-    importlib.reload(fleche.state)
-
-    cache_obj = fleche.state._CACHE.get()
+    cache_obj = state.get_cache()
     assert isinstance(cache_obj, BaseCache)
     assert isinstance(cache_obj, Cache)
     assert isinstance(cache_obj.values, storage.ValueMemory)
     assert isinstance(cache_obj.calls, storage.CallMemory)
 
 
-def test_tags_disallowed(restore_fleche_state, monkeypatch, config_file_with_tags):
+def test_tags_disallowed(monkeypatch, config_file_with_tags):
     monkeypatch.setenv("XDG_CONFIG_HOME", config_file_with_tags)
 
-    import importlib
-    import fleche.state
-
     with pytest.raises(ValueError):
-        importlib.reload(fleche.state)
+        state.get_metadata()
 
 
 def test_load_cache_config_memory_special_case(monkeypatch, config_file):
@@ -850,3 +850,252 @@ def test_walk_root_false_still_merges(home_and_project):
     """)
     # root = false → farther file still merged → 'home_only' resolves (void).
     assert isinstance(load_cache_config().values, storage.ValueVoid)
+
+
+# ---------------------------------------------------------------------------
+# Relative path resolution against the declaring file, not the CWD (#810)
+# ---------------------------------------------------------------------------
+
+
+def test_relative_root_resolves_against_config_dir_not_cwd(monkeypatch, home_and_project):
+    """A relative `root` anchors to the config file's directory, not the CWD."""
+    home, project = home_and_project
+    nested = project / "nested" / "deeper"
+    nested.mkdir(parents=True)
+    monkeypatch.chdir(nested)
+
+    _write_config(project, """
+        [default]
+        cache = "local"
+
+        [local]
+        values.type = "cloudpickle"
+        values.root = "fleche/values"
+        calls.type = "cloudpickle"
+        calls.root = "fleche/calls"
+    """)
+
+    cache_obj = load_cache_config()
+    assert cache_obj.values.root == project / "fleche" / "values"
+    assert cache_obj.calls.root == project / "fleche" / "calls"
+    # In particular, NOT anchored to the CWD it happened to be read from.
+    assert cache_obj.values.root != nested / "fleche" / "values"
+
+
+def test_same_config_shares_cache_across_different_cwds(monkeypatch, home_and_project):
+    """Reproduces the #810 scenario: one config, read from two CWDs, one cache.
+
+    Before the fix, each CWD resolved the relative `root` against itself,
+    silently splitting a single project cache into one private cache per
+    working directory.
+    """
+    home, project = home_and_project
+    _write_config(project, """
+        [default]
+        cache = "local"
+
+        [local]
+        values.type = "cloudpickle"
+        values.root = "fleche/values"
+        calls.type = "cloudpickle"
+        calls.root = "fleche/calls"
+    """)
+
+    monkeypatch.chdir(project)
+    root_from_project = load_cache_config().values.root
+
+    _live_caches.clear()
+    state._DEFAULTS.clear()
+    deeper = project / "sub" / "deeper"
+    deeper.mkdir(parents=True)
+    monkeypatch.chdir(deeper)
+    root_from_deeper = load_cache_config().values.root
+
+    assert root_from_project == root_from_deeper == project / "fleche" / "values"
+
+
+def test_relative_root_in_home_file_anchors_to_home_not_project(monkeypatch, home_and_project):
+    """A farther ($HOME) file's own relative paths anchor to $HOME, not the CWD."""
+    home, project = home_and_project
+    _write_config(home, """
+        [homecache]
+        values.type = "cloudpickle"
+        values.root = "fleche/values"
+        calls.type = "cloudpickle"
+        calls.root = "fleche/calls"
+    """)
+    _write_config(project, """
+        [default]
+        cache = "homecache"
+    """)
+
+    cache_obj = load_cache_config()
+    assert cache_obj.values.root == home / "fleche" / "values"
+
+
+def test_absolute_root_unaffected(monkeypatch, home_and_project, tmp_path):
+    """An absolute `root` is untouched by the rebase."""
+    _, project = home_and_project
+    elsewhere = tmp_path / "elsewhere"
+    _write_config(project, f"""
+        [default]
+        cache = "local"
+
+        [local]
+        values.type = "memory"
+        calls.type = "memory"
+
+        [abs]
+        values.type = "cloudpickle"
+        values.root = "{elsewhere / "values"}"
+        calls.type = "cloudpickle"
+        calls.root = "{elsewhere / "calls"}"
+    """)
+
+    cache_obj = load_cache_config("abs")
+    assert cache_obj.values.root == elsewhere / "values"
+
+
+def test_home_prefixed_root_unaffected(home_and_project):
+    """A `~`-prefixed `root` still expands to the user's home, not the config dir."""
+    _, project = home_and_project
+    _write_config(project, """
+        [default]
+        cache = "tilde"
+
+        [tilde]
+        values.type = "cloudpickle"
+        values.root = "~/.fleche/values"
+        calls.type = "cloudpickle"
+        calls.root = "~/.fleche/calls"
+    """)
+
+    cache_obj = load_cache_config()
+    assert cache_obj.values.root == Path("~/.fleche/values").expanduser()
+
+
+def test_relative_sql_url_bare_path_resolves_against_config_dir(home_and_project):
+    """A bare relative `calls.url` (sql) anchors to the config file's directory."""
+    _, project = home_and_project
+    _write_config(project, """
+        [default]
+        cache = "local"
+
+        [local]
+        values.type = "memory"
+        calls.type = "sql"
+        calls.url = "fleche/calls.db"
+    """)
+
+    cache_obj = load_cache_config()
+    assert cache_obj.calls.url == f"sqlite:///{project / 'fleche' / 'calls.db'}"
+
+
+def test_relative_sql_url_scheme_resolves_against_config_dir(home_and_project):
+    """A `sqlite:///<relative path>` `calls.url` anchors to the config file's directory."""
+    _, project = home_and_project
+    _write_config(project, """
+        [default]
+        cache = "local"
+
+        [local]
+        values.type = "memory"
+        calls.type = "sql"
+        calls.url = "sqlite:///fleche/calls.db"
+    """)
+
+    cache_obj = load_cache_config()
+    assert cache_obj.calls.url == f"sqlite:///{project / 'fleche' / 'calls.db'}"
+
+
+def test_absolute_sql_url_unaffected(home_and_project, tmp_path):
+    """An absolute `sqlite:////...` `calls.url` is untouched by the rebase."""
+    _, project = home_and_project
+    db_path = tmp_path / "elsewhere" / "calls.db"
+    _write_config(project, f"""
+        [default]
+        cache = "local"
+
+        [local]
+        values.type = "memory"
+        calls.type = "sql"
+        calls.url = "sqlite:///{db_path}"
+    """)
+
+    cache_obj = load_cache_config()
+    assert cache_obj.calls.url == f"sqlite:///{db_path}"
+
+
+def test_memory_sql_url_unaffected(home_and_project):
+    """`sqlite:///:memory:` is untouched by the rebase."""
+    _, project = home_and_project
+    _write_config(project, """
+        [default]
+        cache = "local"
+
+        [local]
+        values.type = "memory"
+        calls.type = "sql"
+        calls.url = "sqlite:///:memory:"
+    """)
+
+    cache_obj = load_cache_config()
+    assert cache_obj.calls.url == "sqlite:///:memory:"
+
+
+def test_ssh_workdir_not_rebased(home_and_project):
+    """`workdir` on an `ssh` cache entry names a path on the *remote* host.
+
+    It must not be rewritten as though it were local to the config file —
+    only `root`/`url` are treated as local filesystem paths.
+    """
+    _, project = home_and_project
+    _write_config(project, """
+        [[shared]]
+        values.type = "memory"
+        calls.type = "memory"
+
+        [[shared]]
+        type = "ssh"
+        host = "user@example.com"
+        workdir = "relative/remote/dir"
+    """)
+
+    config = _load_merged_config()
+    ssh_entry = config["shared"][1]
+    assert ssh_entry["workdir"] == "relative/remote/dir"
+
+
+def test_rebase_config_leaves_default_root_boolean_alone():
+    """The unrelated boolean `[default].root = true` marker is not a path."""
+    base = Path("/some/config/dir")
+    config = {"default": {"cache": "x", "root": True}}
+    assert _rebase_config(config, base) == {"default": {"cache": "x", "root": True}}
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        ("fleche/values", "/base/fleche/values"),
+        ("./fleche/values", "/base/fleche/values"),
+        ("/abs/fleche/values", "/abs/fleche/values"),
+        ("~/.fleche/values", "~/.fleche/values"),
+    ],
+)
+def test_rebase_relative_path(value, expected):
+    assert _rebase_relative_path(value, Path("/base")) == expected
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        ("fleche/calls.db", "/base/fleche/calls.db"),
+        ("sqlite:///fleche/calls.db", "sqlite:////base/fleche/calls.db"),
+        ("sqlite:////abs/calls.db", "sqlite:////abs/calls.db"),
+        ("sqlite:///:memory:", "sqlite:///:memory:"),
+        ("sqlite:///~/.fleche/calls.db", "sqlite:///~/.fleche/calls.db"),
+        ("postgresql://user@host/db", "postgresql://user@host/db"),
+    ],
+)
+def test_rebase_url(value, expected):
+    assert _rebase_url(value, Path("/base")) == expected
