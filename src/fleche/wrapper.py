@@ -375,15 +375,17 @@ def fleche(
     on the wrapped function or bundled under a ``.fleche`` :class:`types.SimpleNamespace`
     (e.g. ``f.fleche.call(...)`` is equivalent to ``f.call(...)``):
 
-    - .call(*args, **kwargs): Get the :class:`.Call` object.
-    - .digest(*args, **kwargs): Get the cache key.
-    - .load(*args, **kwargs): Load result from cache.
-    - .contains(*args, **kwargs): Check if result is in cache.
-    - .query(*args, **kwargs): Return matching calls from the active cache.
-    - .rerun(*args, **kwargs): Forces reevaluation recursively.
-    - .bind(*args, **kwargs): Create a :class:`.BoundWrapper` that freezes the current cache/metadata state.
-      Optionally pre-applies *args*/*kwargs* via :func:`functools.partial`.
-    The original function is available via .__wrapped__.
+    - ``.call(*args, **kwargs)``: Get the :class:`~fleche.call.Call` object.
+    - ``.digest(*args, **kwargs)``: Get the cache key.
+    - ``.load(*args, **kwargs)``: Load result from cache.
+    - ``.contains(*args, **kwargs)``: Check if result is in cache.
+    - ``.query(*args, **kwargs)``: Return matching calls from the active cache.
+    - ``.rerun(*args, **kwargs)``: Forces reevaluation recursively.
+    - ``.bind(*args, **kwargs)``: Create a :class:`~fleche.state.BoundWrapper` that freezes
+      the current cache/metadata state.  Optionally pre-applies the given arguments via
+      :func:`functools.partial`.
+
+    The original function is available via ``.__wrapped__``.
 
     .. warning::
 

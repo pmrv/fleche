@@ -220,12 +220,13 @@ class QueryIterator(Iterable[call.LazyCall]):
 
         The DataFrame index will be the lookup key (digest) of each call.
         Columns are:
-            - `name`: the function name
-            - `module`: the module name
-            - 'result`: if `results` argument is `True`
-            - metadata fields are flattened and added as columns directly
 
-        If given argument names collide with any of the above columns, the are prefixed by 'a_'.
+        - ``name``: the function name
+        - ``module``: the module name
+        - ``result``: if the *results* argument is ``True``
+        - metadata fields are flattened and added as columns directly
+
+        If given argument names collide with any of the above columns, they are prefixed by ``a_``.
         Only requested arguments are loaded from cache.
 
         ``timestart`` and ``timestop`` columns (produced by the :class:`~fleche.metadata.Runtime`

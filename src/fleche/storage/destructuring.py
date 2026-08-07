@@ -126,9 +126,9 @@ class DigestedFields(Digested):
     """Common base for record-shaped value markers (dataclasses, attrs).
 
     Subclasses provide :meth:`_field_items` to enumerate ``(name, value)`` pairs from a
-    live instance; :meth:`sunder`, :meth:`mend`, and :meth:`__digest__` are shared.
+    live instance; :meth:`~fleche.storage.destructuring.Digested.sunder`, :meth:`~fleche.storage.destructuring.Digested.mend`, and :meth:`__digest__` are shared.
     Field values may be replaced by :class:`~fleche.digest.Digest` back-references when
-    they are stored independently.  :meth:`mend` reconstructs the original instance by
+    they are stored independently.  :meth:`~fleche.storage.destructuring.Digested.mend` reconstructs the original instance by
     bypassing ``__init__`` / ``__post_init__``, so ``InitVar`` and ``init=False`` fields
     (and attrs slots / frozen instances) are all handled uniformly.
     """
@@ -238,7 +238,7 @@ class HasChildDigests(Protocol):
 class DestructuringMixin(base.ValueStorage):
     """Mixin that recursively destructures collections on save/load.
 
-    Place before a :class:`ValueMixin` in the MRO to add destructuring
+    Place before a :class:`~fleche.storage.base.ValueMixin` in the MRO to add destructuring
     behavior.  Lists, tuples, and dicts are broken apart so each element is
     stored independently; on load the original structure is reassembled.
 
@@ -264,7 +264,7 @@ class DestructuringMixin(base.ValueStorage):
         """Post-order traversal: recurse to leaves, decide inline-vs-store on the way back up.
 
         Returns ``(result, depth)`` where *result* is the plain value when ``depth < remaining_depth``
-        (the element is inlined in its parent's :class:`Digested` wrapper) or a :class:`Digest` when
+        (the element is inlined in its parent's :class:`~fleche.storage.destructuring.Digested` wrapper) or a :class:`~fleche.digest.Digest` when
         the element was written to storage separately.  Every node in the structure is visited exactly
         once (O(n)), unlike a separate depth-counting pass.
         """
@@ -318,8 +318,8 @@ class DestructuringMixin(base.ValueStorage):
         """Direct digest children of a raw stored entry.
 
         A *raw* entry is what ``super().load`` returns — i.e. what was written
-        to the underlying backend before :meth:`mend` rewires sub-digests back
-        into their parent container.  Only :class:`Digested` wrappers carry
+        to the underlying backend before :meth:`~fleche.storage.destructuring.Digested.mend` rewires sub-digests back
+        into their parent container.  Only :class:`~fleche.storage.destructuring.Digested` wrappers carry
         child references; scalars and plain (non-destructured) containers
         return an empty set.
         """
@@ -341,7 +341,7 @@ class DestructuringMixin(base.ValueStorage):
     def child_digests(self, key: digest.Digest | str) -> set[digest.Digest]:
         """Direct digest children of the raw entry stored at *key*.
 
-        Bypasses :meth:`mend`, so destructured sub-references are returned as
+        Bypasses :meth:`~fleche.storage.destructuring.Digested.mend`, so destructured sub-references are returned as
         opaque :class:`~fleche.digest.Digest` keys rather than being followed.
         Intended for reference-graph traversals (GC, debugging) where loading
         the mended value would flatten the structure we need to inspect.
@@ -355,7 +355,7 @@ class DestructuringMixin(base.ValueStorage):
         """Return a counter of how many times each stored key is referenced as a sub-component.
 
         Scans every raw entry and tallies ``Digest`` back-references found inside
-        :class:`DigestedIterable` and :class:`DigestedDict` wrappers.  A count of ``0``
+        :class:`~fleche.storage.destructuring.DigestedIterable` and :class:`~fleche.storage.destructuring.DigestedDict` wrappers.  A count of ``0``
         means the key is not pointed to by any other stored value (i.e. a top-level entry).
         A count greater than ``1`` indicates a sub-value shared between multiple parent containers.
 

@@ -97,7 +97,7 @@ class BagOfHoldingH5FileBackend(FileStorage):
         return observed.pop() if observed else _DEFAULT_PREFIX_LENGTH
 
     def _check_prefix_consistency(self) -> None:
-        """Raise :class:`ValueError` if files already in :attr:`root` were
+        """Raise :class:`ValueError` if files already in :attr:`~fleche.storage.file.FileStorage.root` were
         written with a different prefix length."""
         others = _observed_prefix_lengths(self.root) - {self.prefix_length}
         if others:
@@ -232,7 +232,7 @@ class BagOfHoldingH5FileBackend(FileStorage):
         return self.root / f"{key[: self.prefix_length]}.h5"
 
     def _path(self, key: str) -> Path:
-        """Path to hand to :class:`H5Bag`: the plain per-key file, or the
+        """Path to hand to :class:`~bagofholding.h5.bag.H5Bag`: the plain per-key file, or the
         composite ``file.h5/{key}`` group path in multi-bag mode."""
         if self.prefix_length == 0:
             return super()._path(key)
