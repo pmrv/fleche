@@ -3,13 +3,9 @@ from pathlib import Path
 import subprocess
 
 NOTEBOOKS_DIR = Path(__file__).parents[2] / "notebooks"
-NOTEBOOKS = [
-        "GettingStarted.ipynb",
-        "ExtraMethods.ipynb",
-        "StorageBackends.ipynb",
-        "SecureStorage.ipynb",
-        "CacheStack.ipynb",
-]
+# Discovered rather than listed: a hand-maintained list silently stops covering
+# notebooks added later, and those are exactly the ones that rot.
+NOTEBOOKS = sorted(p.name for p in NOTEBOOKS_DIR.glob("*.ipynb"))
 
 
 @pytest.mark.parametrize("notebook", NOTEBOOKS)

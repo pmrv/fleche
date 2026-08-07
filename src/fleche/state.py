@@ -190,7 +190,7 @@ def project(name):
 class BoundWrapper:
     """A plain callable that freezes cache and metadata state at construction time.
 
-    :class:`.BoundWrapper` is intentionally a minimal wrapper: it captures the active
+    :class:`~fleche.state.BoundWrapper` is intentionally a minimal wrapper: it captures the active
     :class:`.BaseCache` and metadata tuple and restores them around every call to the
     wrapped function, but it does **not** expose the ``fleche`` helper namespace
     (``digest``, ``call``, ``load``, ``contains``, ``query``, ``rerun``).  Those
@@ -209,15 +209,15 @@ class BoundWrapper:
 
         Returns a plain callable that always executes as if called under the context
         in which :meth:`.bind()` was originally invoked.  The returned object is a
-        :class:`.BoundWrapper` — a simple dataclass with a ``__call__`` method — and
+        :class:`~fleche.state.BoundWrapper` — a simple dataclass with a ``__call__`` method — and
         does **not** carry the ``fleche`` helper namespace.  To access helpers such as
         ``digest`` or ``query``, use them on the original decorated function.
 
         Args:
-            func (callable): any callable; plain functions that only call fleche-wrapped ones are explicitly allowed
+            func (:class:`~collections.abc.Callable`): any callable; plain functions that only call fleche-wrapped ones are explicitly allowed
 
         Returns:
-            :class:`.BoundWrapper`: instance with the bound cache and metadata state"""
+            :class:`~fleche.state.BoundWrapper`: instance with the bound cache and metadata state"""
         return cls(func, get_cache(), get_metadata())
 
     def __call__(self, *args, **kwargs):

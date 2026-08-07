@@ -85,7 +85,7 @@ Boundaries to keep in mind
   the digest per class (see :doc:`/dev/custom_digests`).
 * **Class-level construction logic is bypassed on load.**  When ``fleche`` reads a
   destructured attrs / dataclass instance back from value storage, it reconstructs it
-  via :py:func:`object.__new__` plus :py:func:`object.__setattr__`, intentionally
+  via :py:meth:`object.__new__` plus :py:meth:`object.__setattr__`, intentionally
   bypassing ``__init__``, ``__post_init__``, attrs converters, and attrs validators.
   The same instance going *into* the cache may have been constructed through any of
   those; coming back out it will not.  In particular, validators do not re-run on

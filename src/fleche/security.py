@@ -18,6 +18,7 @@ def normalize_secret_key(key: bytes | str | Sequence[bytes | str]) -> list[bytes
     Normalize a secret key value to ``list[bytes]``.
 
     Accepts:
+
     - ``bytes``: wrapped in a list
     - ``str``: interpreted as a hex-encoded key; colon (``:``) separates multiple keys
     - ``list[bytes]``: each element used as-is

@@ -113,7 +113,7 @@ def _read_frame(stream) -> Any:
 
 
 def _strip_cache(lc: LazyCall) -> DigestedCall:
-    """Return the cache-free :class:`DigestedCall` shadow of a :class:`LazyCall`.
+    """Return the cache-free :class:`~fleche.call.DigestedCall` shadow of a :class:`LazyCall`.
 
     The remote-bound ``_cache`` reference inside :class:`LazyCall` cannot
     travel across the wire — the client wraps the returned ``DigestedCall``
@@ -819,7 +819,7 @@ class SshCache(BaseCache):
         a session implicitly fetches the server's info dict, which both
         populates the read-only short-circuit cache and runs the
         fleche/cloudpickle version-skew check via
-        :func:`_warn_on_version_skew`.  Subsequent ops are zero-cost.
+        ``_warn_on_version_skew()``.  Subsequent ops are zero-cost.
         """
         if self._info_cache is None:
             self._cached_info()
@@ -827,7 +827,7 @@ class SshCache(BaseCache):
     def _rpc(self, name: str, *args: Any) -> Any:
         """Handshake, apply the read-only short-circuit, forward, unwrap.
 
-        The client-side mirror of :func:`_dispatch` on the server: every
+        The client-side mirror of ``_dispatch()`` on the server: every
         public method below is now a one-line call into ``_CLIENT_METHODS``
         instead of repeating "handshake → optional ``read_only`` guard →
         ``self._conn.call(...)``".
@@ -962,7 +962,7 @@ class SshCache(BaseCache):
         """Internal accessor: fetch info once, then reuse it.
 
         The first fetch doubles as a version handshake — see
-        :func:`_warn_on_version_skew`.  Any RPC method that
+        ``_warn_on_version_skew()``.  Any RPC method that
         short-circuits on the cached info (currently ``save`` /
         ``evict`` via the ``read_only`` flag) therefore implicitly
         triggers the handshake on its first call.

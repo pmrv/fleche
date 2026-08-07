@@ -52,7 +52,7 @@ class BaseCache(OperationContext):
         """Admit *call* to this cache: seal its lookup key before the body runs.
 
         The first half of the two-phase save protocol.  Caches that own a
-        value storage (:class:`Cache`) override this to stash the argument
+        value storage (:class:`~fleche.caches.Cache`) override this to stash the argument
         values now, so the recorded identity describes the arguments as they
         were at call time, even if the body later mutates them.  This base
         implementation is the digest-only admission for caches that cannot
@@ -70,9 +70,9 @@ class BaseCache(OperationContext):
     def save(self, call: PreparedCall | Call) -> str:
         """File a call record.
 
-        Takes either a live :class:`Call` — values are stored on the spot, the
+        Takes either a live :class:`~fleche.call.Call` — values are stored on the spot, the
         one-shot form — or a :class:`~fleche.call.PreparedCall` whose argument
-        values were already stored by :meth:`prepare` and whose pending result
+        values were already stored by :meth:`~fleche.caches.BaseCache.prepare` and whose pending result
         is stored now, as returned."""
         ...
 
@@ -117,8 +117,8 @@ class BaseCache(OperationContext):
         :meth:`~fleche.query.QueryIterator.transfer`) means the query layer
         only ever calls public cache methods, and each cache encapsulates its
         own locking — :class:`CacheWrapper` and :class:`CacheStack` override
-        :meth:`_operation_context` so wrapper/stack targets lock their *real*
-        inner :class:`Cache` rather than the no-op base context.
+        :meth:`~fleche.storage.base.OperationContext._operation_context` so wrapper/stack targets lock their *real*
+        inner :class:`~fleche.caches.Cache` rather than the no-op base context.
 
         Args:
             c: the call to transfer; fetched from its source cache only on the
@@ -149,14 +149,14 @@ class BaseCache(OperationContext):
         Expand a short digest prefix to its full-length digest.
 
         Args:
-            key (str or :class:`Digest`): the short digest prefix to expand
+            key (str or :class:`~fleche.digest.Digest`): the short digest prefix to expand
 
         Returns:
-            :class:`Digest`: the full-length digest
+            :class:`~fleche.digest.Digest`: the full-length digest
 
         Raises:
             KeyError: if the key is not found
-            :class:`AmbiguousDigestError`: if the prefix matches more than one entry
+            :class:`~fleche.storage.base.AmbiguousDigestError`: if the prefix matches more than one entry
         """
         ...
 
@@ -168,8 +168,8 @@ class BaseCache(OperationContext):
         """
         Find the shortest substring(s) that unambiguously reference each call.
 
-        With a single key, returns one :class:`Digest`.  With multiple keys,
-        returns a tuple of :class:`Digest` in the same order as the inputs;
+        With a single key, returns one :class:`~fleche.digest.Digest`.  With multiple keys,
+        returns a tuple of :class:`~fleche.digest.Digest` in the same order as the inputs;
         the batched form lets sub-storages list their keys once instead of
         per-key, which matters on backends where listing is expensive (e.g.
         SQL, filesystem).
@@ -186,13 +186,13 @@ class BaseCache(OperationContext):
             Do not rely on this function in your programs, it is provided as a convenience for users only!
 
         Args:
-            *keys (str or :class:`Digest`): one or more keys to shorten
+            *keys (str or :class:`~fleche.digest.Digest`): one or more keys to shorten
 
         Returns:
-            :class:`Digest` (single key) or tuple of :class:`Digest` (multiple)
+            :class:`~fleche.digest.Digest` (single key) or tuple of :class:`~fleche.digest.Digest` (multiple)
 
         Raises:
-            :class:`AmbiguousDigestError`: if no shorter key is possible for any input
+            :class:`~fleche.storage.base.AmbiguousDigestError`: if no shorter key is possible for any input
         """
         return _apply_shrink(self._shrink, keys)
 
@@ -202,7 +202,7 @@ class BaseCache(OperationContext):
         ...
 
     @abstractmethod
-    def _query(self, call: call.QueryCall) -> Iterable[LazyCall]: ...
+    def _query(self, call: QueryCall) -> Iterable[LazyCall]: ...
 
     def query(self, template: "call.QueryCall | None" = None, **kwargs) -> query.QueryIterator:
         """Query the cache for matching calls.
@@ -250,12 +250,13 @@ class BaseCache(OperationContext):
 
         The DataFrame index will be the lookup key (digest) of each call.
         Columns are:
-            - `name`: the function name
-            - `module`: the module name
-            - 'result`: if `results` argument is `True`
-            - metadata fields are flattened and added as columns directly
 
-        If given argument names collide with any of the above columns, they are prefixed by 'a_'.
+        - ``name``: the function name
+        - ``module``: the module name
+        - ``result``: if the *results* argument is ``True``
+        - metadata fields are flattened and added as columns directly
+
+        If given argument names collide with any of the above columns, they are prefixed by ``a_``.
         Only requested arguments are loaded from cache.
 
         Args:
@@ -384,10 +385,10 @@ class Cache(PerKeyLockMixin, BaseCache):
                 results[k] = s
         return tuple(results[k] for k in keys)
 
-    def _query(self, call: call.QueryCall) -> Iterable[LazyCall]:
+    def _query(self, call: QueryCall) -> Iterable[LazyCall]:
         """Query for cached calls that match a template and return decoded results.
 
-        This delegates to the underlying :meth:`CallStorage.query` using the provided template ``call``. Any digested
+        This delegates to the underlying :meth:`~fleche.storage.base.CallStorage.query` using the provided template ``call``. Any digested
         argument values and the result are decoded via this cache's value storage before yielding.
 
         Args:
@@ -459,8 +460,8 @@ class Cache(PerKeyLockMixin, BaseCache):
 
         Brute-force mark-and-sweep: walks every call record to build the set
         of directly-referenced value digests, then transitively follows
-        destructured sub-references (via :meth:`DestructuringMixin.child_digests`
-        on storages that satisfy :class:`HasChildDigests`), and evicts every
+        destructured sub-references (via :meth:`~fleche.storage.destructuring.DestructuringMixin.child_digests`
+        on storages that satisfy :class:`~fleche.storage.destructuring.HasChildDigests`), and evicts every
         ``values`` key outside the reachable
         set.  Call records are left untouched.
 
@@ -539,7 +540,7 @@ class CacheWrapper(BaseCache):
     def _shrink(self, *keys: Digest | str) -> "tuple[Digest, ...]":
         return self.cache._shrink(*keys)
 
-    def _query(self, call: call.QueryCall) -> Iterable[LazyCall]:
+    def _query(self, call: QueryCall) -> Iterable[LazyCall]:
         return self.cache.query(call)
 
     @contextlib.contextmanager
@@ -563,7 +564,7 @@ class ReadOnlyMixin:
     multi-cache view (:class:`CachePool`).  Place it **first** in the bases so
     its ``save``/``evict`` win over a forwarding/aggregating implementation.
 
-    It is also the marker :func:`fleche.remote._is_read_only` keys on, so any
+    It is also the marker ``_is_read_only()`` keys on, so any
     cache mixing it in is recognised as read-only by the SSH layer (which then
     short-circuits ``save``/``evict`` without a round-trip).
     """
@@ -599,7 +600,7 @@ class FilteringMixin(CacheWrapper):
             raise KeyError(key)
         return lc
 
-    def _query(self, call: call.QueryCall) -> Iterable[LazyCall]:
+    def _query(self, call: QueryCall) -> Iterable[LazyCall]:
         for c in self.cache.query(call):
             if self.predicate(c):
                 yield c
@@ -633,8 +634,8 @@ class _MultiCache(BaseCache):
     """Shared read fan-out for caches that aggregate several member caches.
 
     Subclasses expose their members via :attr:`_members` and choose their own
-    *write* / :meth:`load` policy.  Everything that only **reads** across the
-    members — :meth:`contains`, :meth:`load_value`, :meth:`expand`,
+    *write* / :meth:`BaseCache.load` policy.  Everything that only **reads** across the
+    members — :meth:`BaseCache.contains`, :meth:`BaseCache.load_value`, :meth:`BaseCache.expand`,
     :meth:`_shrink`, :meth:`_query` — plus the three private traversal helpers
     lives here, so :class:`CacheStack` (an ordered, writable hierarchy) and
     :class:`CachePool` (an unordered, read-only collection) share one
@@ -678,7 +679,7 @@ class _MultiCache(BaseCache):
             out_list.append(_combine_shrink(k, per_key[k]))
         return tuple(out_list)
 
-    def _query(self, call: call.QueryCall) -> Iterable[LazyCall]:
+    def _query(self, call: QueryCall) -> Iterable[LazyCall]:
         """Aggregate query results across the members, avoiding duplicates.
 
         The members are queried in order.  Results are deduplicated by their
@@ -715,7 +716,7 @@ class _MultiCache(BaseCache):
 
         This is the **first-hit-wins** pattern: used when any single cache can
         satisfy the request and earlier members are preferred (e.g.
-        :meth:`load_value`).  The caller supplies the per-cache operation as a
+        :meth:`BaseCache.load_value`).  The caller supplies the per-cache operation as a
         lambda so the key (or other closure state) is always available in the
         traceback without adding an extra helper argument.
 
@@ -727,7 +728,8 @@ class _MultiCache(BaseCache):
                  because it is also used in the ``raise`` at the end.
 
         Raises:
-            exc: If every member raises *exc*.
+            BaseException: whatever *exc* is bound to, if every member
+                raises it.
         """
         for cache in self._members:
             try:
@@ -745,7 +747,7 @@ class _MultiCache(BaseCache):
 
         This is the **collect-and-combine** pattern: used when all members may
         hold relevant data and the caller needs to aggregate results before
-        returning (e.g. :meth:`expand` and :meth:`_shrink`, which pass the
+        returning (e.g. :meth:`BaseCache.expand` and :meth:`_shrink`, which pass the
         collected list to ``_resolve_prefix``/``_combine_shrink``).
 
         Args:
@@ -806,7 +808,7 @@ class CacheStack(PerKeyLockMixin, _MultiCache):
 
     Saving always targets the lowest level (``stack[0]``); loading traverses
     from ``stack[0]`` upward and back-fills any hit into ``stack[0]``.  The
-    back-fill is serialized per key (via :class:`PerKeyLockMixin`) so that
+    back-fill is serialized per key (via :class:`~fleche.storage.thread_safe.PerKeyLockMixin`) so that
     concurrent loads of the same missing key do not all run the base cache's
     non-atomic check-evict-save at once.
 
@@ -872,7 +874,7 @@ class CacheStack(PerKeyLockMixin, _MultiCache):
 
         Serialized per key so that concurrent loads of the same missing key do
         not all run the base cache's non-atomic check-evict-save at once.  All
-        concurrent loaders block on the per-key :meth:`_operation_context` lock;
+        concurrent loaders block on the per-key :meth:`~fleche.storage.base.OperationContext._operation_context` lock;
         the first one past the lock does the transfer, and every later waiter
         finds the key already present via :meth:`~BaseCache.contains` and returns
         without repeating the save.
@@ -902,22 +904,22 @@ class CachePool(ReadOnlyMixin, _MultiCache):
     *unordered, read-only* aggregate: it never writes to any member.  Use it to
     expose several independent caches — a teammate's results directory, a
     shared read-only archive, last month's run — as a single cache you can
-    :meth:`load`, :meth:`contains`, :meth:`query`, :meth:`expand` and
-    :meth:`shrink` against without risking a write to any of them.
+    :meth:`BaseCache.load`, :meth:`BaseCache.contains`, :meth:`BaseCache.query`, :meth:`BaseCache.expand` and
+    :meth:`BaseCache.shrink` against without risking a write to any of them.
 
     All reads fan out across :attr:`caches`:
 
-    - :meth:`load` / :meth:`load_value` — first member to hold the key wins.
-    - :meth:`contains` — true if *any* member holds the key.
-    - :meth:`query` — union across members, deduplicated by lookup key.
-    - :meth:`expand` / :meth:`shrink` — combined across members.
+    - :meth:`BaseCache.load` / :meth:`BaseCache.load_value` — first member to hold the key wins.
+    - :meth:`BaseCache.contains` — true if *any* member holds the key.
+    - :meth:`BaseCache.query` — union across members, deduplicated by lookup key.
+    - :meth:`BaseCache.expand` / :meth:`BaseCache.shrink` — combined across members.
 
     Read-only-ness is inherited from :class:`ReadOnlyMixin` (so ``save`` and
     ``evict`` raise :class:`Rejected`, and the SSH layer recognises the pool as
     read-only); the members are kept exactly as the caller supplied them.
     Unlike :class:`CacheStack`, ``load`` does **not** back-fill a hit anywhere,
     so members are never mutated as a side effect of reading.  The member order
-    only decides which cache's copy is returned on a :meth:`load` collision;
+    only decides which cache's copy is returned on a :meth:`BaseCache.load` collision;
     every member is an equally valid read source.
     """
 
@@ -934,7 +936,7 @@ class CachePool(ReadOnlyMixin, _MultiCache):
 class SizeLimitedMixin(BaseCache):
     """Mixin that enforces a maximum number of cached calls with random eviction.
 
-    Combine this with :class:`Cache` (mixin first in MRO) to get a size-limited
+    Combine this with :class:`~fleche.caches.Cache` (mixin first in MRO) to get a size-limited
     cache::
 
         @dataclass
@@ -942,11 +944,11 @@ class SizeLimitedMixin(BaseCache):
             max_size: int
 
     When a new call is saved and the number of cached calls exceeds ``max_size``,
-    a call record is selected for eviction via :meth:`_pick_eviction_target`.
+    a call record is selected for eviction via :meth:`SizeLimitedMixin._pick_eviction_target`.
     Value storage is intentionally left untouched.
 
     The concrete class must provide a ``max_size`` integer, which is provided
-    automatically when mixed with :class:`Cache`.
+    automatically when mixed with :class:`~fleche.caches.Cache`.
     """
 
     max_size: int
@@ -986,7 +988,7 @@ class SizeLimitedMixin(BaseCache):
                 target = self._pick_eviction_target(list(self._keys))
                 self.evict(target)
 
-    def save(self, call: call.PreparedCall | call.Call) -> str:
+    def save(self, call: PreparedCall | Call) -> str:
         with self._lock:
             key = super().save(call)
             self._keys.add(key)
@@ -1001,16 +1003,16 @@ class SizeLimitedMixin(BaseCache):
 
 @dataclass(frozen=True)
 class SizeLimitedCache(SizeLimitedMixin, Cache):
-    """A :class:`Cache` that enforces a maximum number of cached calls.
+    """A :class:`~fleche.caches.Cache` that enforces a maximum number of cached calls.
 
     When a new call is saved and the number of cached calls exceeds ``max_size``,
-    a call record is selected for eviction via :meth:`_pick_eviction_target`.
+    a call record is selected for eviction via :meth:`SizeLimitedMixin._pick_eviction_target`.
     The default policy evicts uniformly at random; override
-    :meth:`_pick_eviction_target` to change this.
+    :meth:`SizeLimitedMixin._pick_eviction_target` to change this.
 
     Args:
-        values: Value storage (forwarded to :class:`Cache`).
-        _calls: Call storage (forwarded to :class:`Cache`).
+        values: Value storage (forwarded to :class:`~fleche.caches.Cache`).
+        calls: Call storage (forwarded to :class:`~fleche.caches.Cache`).
         max_size: Maximum number of calls to keep.
     """
 

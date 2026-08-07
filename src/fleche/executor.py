@@ -1,7 +1,7 @@
 """Executor wrapper that intercepts ``submit`` for fleche-decorated functions.
 
 Motivation: users passing a :func:`fleche.fleche`-decorated function to
-``executor.submit(...)`` have to remember to call :meth:`.BoundWrapper.bind`
+``executor.submit(...)`` have to remember to call :meth:`~fleche.state.BoundWrapper.bind`
 themselves to carry the active cache/metadata state into the worker.  They also
 pay the submit/serialisation cost even when the result is already cached.  The
 same problem affects plain (non-fleche) callables that merely *call* a
@@ -12,15 +12,15 @@ the active cache/metadata state never reaches the worker process.
 (we cannot subclass, since callers pass us instances of third-party executors)
 so that:
 
-* non-fleche callables are bound via :meth:`.BoundWrapper.bind` and submitted
+* non-fleche callables are bound via :meth:`~fleche.state.BoundWrapper.bind` and submitted
   to the original ``submit`` unchanged otherwise, so that any fleche calls
   nested inside them still see the active cache/metadata state (a callable
-  that is already a :class:`.BoundWrapper` is submitted as-is, since it is
+  that is already a :class:`~fleche.state.BoundWrapper` is submitted as-is, since it is
   already bound),
 * fleche callables whose result is already cached are returned via an
   already-completed :class:`~concurrent.futures.Future` without touching the
   executor, and
-* otherwise the call is bound via :meth:`.BoundWrapper.bind` and submitted to
+* otherwise the call is bound via :meth:`~fleche.state.BoundWrapper.bind` and submitted to
   the original ``submit``.
 
 Executors that declare their own keyword-only parameters on ``submit``
