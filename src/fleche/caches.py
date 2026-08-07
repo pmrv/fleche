@@ -485,18 +485,27 @@ class Cache(PerKeyLockMixin, BaseCache):
         sweep run on the server has nothing to key on while the client's body
         runs.
 
-        Within a process the roots are read *after* the eviction candidates are
-        listed, which leaves one narrow window: a value stored by a concurrent
-        ``prepare`` that has not registered its call yet.  That is the same
-        window the one-shot :meth:`save` has always had between storing the
-        values and filing the record — bounded by a storage write rather than
-        by a function body — and closing it would need a lock shared by every
+        The three reads below are ordered so that a call finishing *during* the
+        sweep cannot fall between them.  Candidates are listed first, so a value
+        stored later in the sweep is not a candidate at all.  Then the in-flight
+        roots, then the records: :meth:`~fleche.call.PreparedCall.commit`
+        deregisters only *after* :meth:`save` has filed the record, so a call
+        that commits mid-sweep is seen by the registry read, the record read, or
+        both — never neither.  Reading the records first instead leaves a real
+        hole, and a threaded test in ``test_gc.py`` reproduces it.
+
+        What remains is the gap between storing a value and registering the call
+        that owns it, and only if it spans those first two reads.  That is the
+        same window the one-shot :meth:`save` has always had between storing the
+        values and filing the record — bounded by a storage write rather than by
+        a function body — and closing it would need a lock shared by every
         writer.
 
         Returns:
             The set of digests that were evicted from value storage.
         """
-        reachable: set[Digest] = set()
+        candidates = list(self.values.list())
+        reachable: set[Digest] = call.in_flight_digests()
         for key in self.calls.list():
             try:
                 dc = self.calls.load(key)
@@ -507,14 +516,6 @@ class Cache(PerKeyLockMixin, BaseCache):
             for v in dc.arguments.values():
                 if isinstance(v, Digest):
                     reachable.add(v)
-
-        # Snapshot the candidates before reading the in-flight roots: a value
-        # stored after this line is not a candidate at all, so the only gap
-        # left is a store that already happened but whose call has not
-        # registered yet.  Listing after the read would widen that to every
-        # call admitted during the walk.
-        candidates = list(self.values.list())
-        reachable |= call.in_flight_digests()
 
         if isinstance(self.values, HasChildDigests):
             frontier = set(reachable)

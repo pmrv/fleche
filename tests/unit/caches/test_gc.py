@@ -327,8 +327,14 @@ def test_in_flight_registry_does_not_leak_dropped_calls(gc_cache):
 def test_gc_is_safe_against_concurrent_prepares(gc_cache):
     """Sweeping while other threads admit calls must not raise or lose values.
 
-    The registry is a plain mapping read by ``gc``; without the lock a
-    concurrent ``prepare`` resizes it mid-iteration.
+    Two things have to hold.  The registry is a plain mapping read by ``gc``,
+    so a concurrent ``prepare`` must not resize it mid-iteration.  And the
+    sweep's three reads — candidates, roots, records — must be ordered so a
+    call that *commits* between two of them is still seen by one: reading the
+    records before the roots leaves a call that finishes in that gap covered
+    by neither, and its arguments are evicted under a record that references
+    them.  Both failures show up here as an argument that came back a bare
+    digest.
     """
     import threading
 
@@ -348,7 +354,7 @@ def test_gc_is_safe_against_concurrent_prepares(gc_cache):
     for t in threads:
         t.start()
     try:
-        for _ in range(50):
+        for _ in range(200):
             gc_cache.gc()
     finally:
         stop.set()
