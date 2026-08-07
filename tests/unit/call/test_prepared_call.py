@@ -136,14 +136,15 @@ def test_key_matches_one_shot_save(cache):
 # ---- wrappers and stacks: storage from the inner cache, policy from the outer ----
 
 
-def test_stack_prepares_on_stack0_and_commits_through_the_stack(cache):
-    """Arguments are stashed where the stack's saves land; the commit still
-    goes through the stack itself (its ``save`` policy, not stack[0]'s)."""
+def test_stack_prepares_and_commits_on_stack0(cache):
+    """Arguments and commit both land on stack[0], where the stack's saves go;
+    the stack's own ``save`` is a pure forward, so prepare binds stack[0]
+    directly."""
     second = Cache(ValueMemory({}), CallMemory({}))
     stack = CacheStack([cache, second])
     call = make_call(x=[1, 2])
     prepared = stack.prepare(call)
-    assert prepared.cache is stack
+    assert prepared.cache is cache
     key = prepared.commit([1, 2, 3])
     assert key == call.to_lookup_key()
     assert cache.load(key).result == [1, 2, 3]
