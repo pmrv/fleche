@@ -339,7 +339,7 @@ class Cache(PerKeyLockMixin, BaseCache):
                     # NOT be re-saved here — reading them after the body ran is
                     # exactly the post-mutation keying prepare exists to
                     # prevent.
-                    digested = call.resolve(self.values.save(call._result))
+                    digested = call.resolve(self.values)
                 else:
                     # Already fully digested: file as-is.
                     digested = call

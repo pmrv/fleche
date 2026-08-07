@@ -30,6 +30,7 @@ from fleche.remote import (
     serve,
 )
 from fleche.storage import CallMemory, ValueMemory
+from fleche.storage.base import SaveError
 
 
 class _PipeConnection(_Connection):
@@ -344,6 +345,36 @@ def test_prepare_commit_round_trip(remote, server_cache):
     lc = remote.load(key)
     assert lc.result == [1, 2, 3]  # result: as returned
     assert lc.arguments["xs"] == [1, 2]  # argument: as passed
+
+
+def test_unstorable_result_rejects_like_local_save():
+    """A result the server's value storage refuses must reject the commit —
+    not degrade to a digest-only reference that files a dangling record."""
+
+    class PickyValues(ValueMemory):
+        __hash__ = object.__hash__
+
+        def save(self, value, key=None):
+            if value == "REFUSE_ME":
+                raise SaveError("refused")
+            return super().save(value, key)
+
+    server = Cache(PickyValues({}), CallMemory({}))
+    sc = _make_remote(server)
+    try:
+        c = Call(name="f", arguments={"x": 1}, module="m", version="1")
+        prepared = sc.prepare(c)
+        with pytest.raises(Rejected):
+            prepared.commit("REFUSE_ME")
+        assert not server.contains(c.to_lookup_key())
+    finally:
+        sc.close()
+
+
+def test_commit_none_result_round_trips(remote, server_cache):
+    c = Call(name="f", arguments={"x": 1}, module="m", version="1")
+    key = remote.prepare(c).commit(None)
+    assert remote.load(key).result is None
 
 
 def test_read_only_prepare_is_local_and_commit_rejects():

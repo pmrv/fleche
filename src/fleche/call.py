@@ -389,16 +389,16 @@ class PreparedCall:
     def to_lookup_key(self) -> Digest:
         return self.digested.to_lookup_key()
 
-    def resolve(self, result: Digest) -> DigestedCall:
-        """Return the final record with the pending result resolved to *result*.
+    def resolve(self, values) -> DigestedCall:
+        """Save the pending result into *values*, returning the final record.
 
-        The shared ending of the two-phase save: the cache stores
-        :attr:`_result` wherever its values live and hands the digest back
-        here; pending metadata is applied at the same time.
+        The shared ending of the two-phase save, mirroring :meth:`Call.stash`:
+        the cache hands in the value storage where its saves land; pending
+        metadata is applied at the same time.
         """
         return replace(
             self.digested,
-            result=result,
+            result=values.save(self._result),
             metadata=self.digested.metadata if self._metadata is None else self._metadata,
         )
 
