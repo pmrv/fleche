@@ -230,7 +230,7 @@ class Call:
         )
 
     def stash(self, values) -> "DigestedCall":
-        """Save arguments and result into *values*, returning a :class:`DigestedCall`.
+        """Save arguments and result into *values*, returning a :class:`~fleche.call.DigestedCall`.
 
         Result save errors propagate to the caller.  Argument save errors fall back
         to a digest-only reference (the value is hashed but not stored).
@@ -239,7 +239,7 @@ class Call:
             values: A :class:`~fleche.storage.ValueStorage` instance to persist values into.
 
         Returns:
-            A :class:`DigestedCall` with all argument values and the result replaced by
+            A :class:`~fleche.call.DigestedCall` with all argument values and the result replaced by
             their :class:`~fleche.digest.Digest` keys.
 
         See Also:
@@ -248,7 +248,7 @@ class Call:
         return self._to_digested(values.save)
 
     def digest(self) -> "DigestedCall":
-        """Digest arguments and result without saving to storage, returning a :class:`DigestedCall`.
+        """Digest arguments and result without saving to storage, returning a :class:`~fleche.call.DigestedCall`.
 
         Equivalent to :meth:`stash` but uses :func:`~fleche.digest.digest` instead of
         ``values.save``, so no data is written anywhere.
@@ -310,7 +310,7 @@ class DigestedCall:
         return digest.digest(replace(c, arguments=arg_pairs, result=None, metadata=None))
 
     def fetch(self, cache) -> "LazyCall":
-        """Wrap this :class:`DigestedCall` in a :class:`LazyCall` backed by *cache*.
+        """Wrap this :class:`~fleche.call.DigestedCall` in a :class:`LazyCall` backed by *cache*.
 
         Args:
             cache: A cache instance (e.g. :class:`~fleche.caches.Cache`) whose value
@@ -496,7 +496,7 @@ class LazyCall:
         )
 
     def detach(self) -> "DigestedCall":
-        """Return the cache-free :class:`DigestedCall` shadow of this :class:`LazyCall`.
+        """Return the cache-free :class:`~fleche.call.DigestedCall` shadow of this :class:`LazyCall`.
 
         The inverse of :meth:`DigestedCall.fetch`: strips the ``_cache``
         reference so the result can cross process boundaries (e.g. over the
@@ -593,12 +593,15 @@ AnyCall = Call | LazyCall
 
 __all__ = [
         "bind",
+        "AnyQueryType",
         "Call",
         "DigestedCall",
         "FunctionProfile",
         "Ignored",
         "LazyCall",
+        "PreparedCall",
         "QueryCall",
+        "StrQueryType",
         "Required",
         "AnyCall"
 ]

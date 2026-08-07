@@ -34,7 +34,7 @@ class Digest(str):
             cache: A cache instance to use. If None, uses the current context's cache.
 
         Returns:
-            The full-length :class:`Digest`.
+            The full-length :class:`~fleche.digest.Digest`.
         """
         if cache is None:
             from .state import cache as get_cache
@@ -48,7 +48,7 @@ class Digest(str):
             cache: A cache instance to use. If None, uses the current context's cache.
 
         Returns:
-            The shortest unambiguous :class:`Digest` prefix.
+            The shortest unambiguous :class:`~fleche.digest.Digest` prefix.
         """
         if cache is None:
             from .state import cache as get_cache

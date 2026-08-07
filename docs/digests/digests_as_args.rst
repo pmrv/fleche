@@ -85,3 +85,4 @@ The `D` Wrapper
 ---------------
 
 .. autofunction:: fleche.D
+   :no-index:

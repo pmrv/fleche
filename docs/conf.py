@@ -17,8 +17,24 @@ extensions = [
 ]
 
 intersphinx_mapping = {
+    'python': ('https://docs.python.org/3/', None),
+    'pandas': ('https://pandas.pydata.org/docs/', None),
     'bagofholding': ('https://bagofholding.readthedocs.io/en/latest/', None),
 }
+
+# `Keys:` blocks document the entries a MetaData subclass stores; teaching
+# napoleon about them renders those blocks like an `Args:` section instead of
+# an unparsed, badly indented block quote.
+napoleon_custom_sections = [("Keys", "params_style")]
+
+# Cross-references autoapi generates from annotations that have nowhere to
+# point: `...` inside `Callable[..., T]` / `tuple[T, ...]` is emitted as a
+# class reference to `Ellipsis`, and `fleche.remote` defines __all__, so its
+# private `_Connection` is never documented.
+nitpick_ignore = [
+    ("py:class", "Ellipsis"),
+    ("py:class", "_Connection"),
+]
 
 nbsphinx_execute = 'never'
 

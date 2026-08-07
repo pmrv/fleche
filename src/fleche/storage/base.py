@@ -121,7 +121,7 @@ def _apply_shrink(
     """Shared empty-check + single/tuple unwrap for a batched ``shrink(*keys)`` overload.
 
     Calls ``shrink_many(*keys)``, which must return a same-length tuple of
-    :class:`Digest`, and unwraps it to a single :class:`Digest` when *keys*
+    :class:`~fleche.digest.Digest`, and unwraps it to a single :class:`~fleche.digest.Digest` when *keys*
     has length one. Shared by :meth:`KeyManagement.shrink` and
     :meth:`~fleche.caches.BaseCache.shrink`, whose batched ``_shrink``
     implementations differ but whose public overload boilerplate does not.
@@ -159,9 +159,9 @@ def _resolve_prefix(
 
 
 class OperationContext(ABC):
-    """Minimal base that exposes the :meth:`_operation_context` hook.
+    """Minimal base that exposes the :meth:`~fleche.storage.base.OperationContext._operation_context` hook.
 
-    Both :class:`KeyManagement` (storage layer) and :class:`~fleche.caches.BaseCache`
+    Both :class:`~fleche.storage.base.KeyManagement` (storage layer) and :class:`~fleche.caches.BaseCache`
     (cache layer) inherit from this class so that the same thread-safety mixins
     (:class:`~fleche.storage.thread_safe.SerializingMixin`,
     :class:`~fleche.storage.thread_safe.PerKeyLockMixin`) can attach to either
@@ -182,7 +182,7 @@ class OperationContext(ABC):
 
         ``intent`` describes the kind of operation being performed.  Mixins
         may use it to choose between exclusive and shared locks.  Currently
-        the only defined value is :attr:`Intent.WRITE` (the default).
+        the only defined value is :attr:`~fleche.storage.base.Intent.WRITE` (the default).
 
         **Composing multiple mixins**: use ``super()`` to chain so that every
         mixin in the MRO gets to wrap the operation::
@@ -203,7 +203,7 @@ class KeyManagement(OperationContext):
     The concrete helpers ``evict``, ``contains``, ``expand``, and ``shrink``
     are implemented here once and inherited by all storage classes.
 
-    Every public operation enters :meth:`_operation_context` around the
+    Every public operation enters :meth:`~fleche.storage.base.OperationContext._operation_context` around the
     compound work it performs, so mixins can inject an operation-scoped
     resource (e.g. a threading lock, a SQLAlchemy session, a file handle)
     without overriding every method individually.
@@ -247,8 +247,8 @@ class KeyManagement(OperationContext):
 
         Default: a Python-side filter over :meth:`list`. Override for a
         backend that can push the prefix scan down (e.g. SQL ``LIKE ... LIMIT
-        2``); :meth:`expand` only needs the two smallest candidates to decide
-        between a unique match and an :class:`AmbiguousDigestError`.
+        2``); :meth:`~fleche.storage.base.KeyManagement.expand` only needs the two smallest candidates to decide
+        between a unique match and an :class:`~fleche.storage.base.AmbiguousDigestError`.
         """
         return sorted(k for k in self.list() if k.startswith(prefix))[:2]
 
@@ -259,8 +259,8 @@ class KeyManagement(OperationContext):
     def shrink(self, *keys: Digest | str) -> "Digest | tuple[Digest, ...]":
         """Find the shortest substring(s) that unambiguously reference each key.
 
-        With a single key, returns one :class:`Digest`.  With multiple keys,
-        returns a tuple of :class:`Digest` in the same order as the inputs;
+        With a single key, returns one :class:`~fleche.digest.Digest`.  With multiple keys,
+        returns a tuple of :class:`~fleche.digest.Digest` in the same order as the inputs;
         the batched form fetches ``list()`` once instead of per-key, which
         matters on backends where listing is expensive (e.g. SQL, filesystem).
         """
@@ -314,7 +314,7 @@ class StorageBackend(KeyManagement):
     """Primitive backend interface for key-value storage.
 
     Backends implement the low-level ``put``/``get``/``_evict``/``list``
-    operations.  Higher-level classes (:class:`ValueMixin`, :class:`CallMixin`)
+    operations.  Higher-level classes (:class:`~fleche.storage.base.ValueMixin`, :class:`CallMixin`)
     add domain-specific logic on top.
 
     Backends that are constructible from a config dict additionally spell out
@@ -350,10 +350,10 @@ class ValueStorage(KeyManagement):
 
 
 class ValueMixin(ValueStorage, StorageBackend):
-    """Bridges :class:`ValueStorage` with :class:`StorageBackend` primitives.
+    """Bridges :class:`~fleche.storage.base.ValueStorage` with :class:`~fleche.storage.base.StorageBackend` primitives.
 
     Implements ``save`` and ``load`` using ``put`` and ``get``.
-    Concrete classes inherit from this and a :class:`StorageBackend`
+    Concrete classes inherit from this and a :class:`~fleche.storage.base.StorageBackend`
     implementation to get a fully functional value storage.
     """
 
@@ -387,7 +387,7 @@ class CallStorage(KeyManagement):
         """Applies a transformation function to all DigestedCall objects in the storage.
 
         Args:
-            func: A function that takes a :class:`DigestedCall` and returns a transformed
+            func: A function that takes a :class:`~fleche.call.DigestedCall` and returns a transformed
                 one.  If ``None``, the identity is used (useful for re-calculating keys).
         """
         for k in list(self.list()):
@@ -406,13 +406,13 @@ class CallStorage(KeyManagement):
 
 
 class CallMixin(CallStorage, StorageBackend):
-    """Bridges :class:`CallStorage` with :class:`StorageBackend` primitives.
+    """Bridges :class:`~fleche.storage.base.CallStorage` with :class:`~fleche.storage.base.StorageBackend` primitives.
 
     Implements ``save``, ``load``, and ``query`` using ``put`` and ``get``,
     deriving the storage key from the call's lookup key.  ``transform`` is
-    inherited from :class:`CallStorage`.
+    inherited from :class:`~fleche.storage.base.CallStorage`.
 
-    Concrete classes inherit from this and a :class:`StorageBackend`
+    Concrete classes inherit from this and a :class:`~fleche.storage.base.StorageBackend`
     implementation to get a fully functional call storage.
     """
 
@@ -434,7 +434,7 @@ class CallMixin(CallStorage, StorageBackend):
         """Find cached calls that 'match' the template.
 
         Returns all calls where the given arguments, results or metadata match exactly the stored ones.  Values may be
-        given either as they are or as :class:`Digest`.
+        given either as they are or as :class:`~fleche.digest.Digest`.
 
         Args:
             template (Call): specification for calls to return; use `None` as wildcard.

@@ -11,8 +11,8 @@ together.
 Security model
 --------------
 
-The wire format is :mod:`cloudpickle` in **both directions**.  That has
-two unavoidable consequences:
+The wire format is ``cloudpickle`` in **both directions**.  That has two
+unavoidable consequences:
 
 - A hostile **server** can run arbitrary code on the **client** by
   returning a crafted payload that the client's ``cloudpickle.loads``
@@ -39,23 +39,21 @@ it if SshCache ever needs to support untrusted multi-tenant use.
 Credentials in ``info()``
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The ``info`` RPC ships
-:func:`~fleche.config.cache_to_config` of the served cache back to the
-client.  The raw config contains credentials —
+The ``info`` RPC ships :func:`~fleche.config.cache_to_config` of the
+served cache back to the client.  The raw config contains credentials —
 :class:`~fleche.storage.pickle_file.PickleFileBackend` writes its HMAC
 signing keys (``secret_key``) as hex strings, and the SQL backend's
 ``url`` may include a database password in the userinfo component.
-:func:`fleche.remote._server_info` therefore walks the config through
-:func:`fleche.remote._redact_config` before putting it on the wire:
-``secret_key`` values are replaced with ``"<redacted>"`` and URL
-passwords are masked to ``***``.  This matters because the client's
-DEBUG-level RPC tracing logs the full response payload — without the
-redactor, signing keys would land in any DEBUG log file by default.
+``_server_info()`` therefore walks the config through
+``_redact_config()`` before putting it on the wire: ``secret_key``
+values are replaced with ``"<redacted>"`` and URL passwords are masked
+to ``***``.  This matters because the client's DEBUG-level RPC tracing
+logs the full response payload — without the redactor, signing keys
+would land in any DEBUG log file by default.
 
 If you add a new storage type that round-trips credentials through
-``cache_to_config``, extend
-:data:`fleche.remote._SENSITIVE_CONFIG_KEYS` to cover the new field
-name.
+``cache_to_config``, extend ``_SENSITIVE_CONFIG_KEYS`` to cover the new
+field name.
 
 Version handshake
 ~~~~~~~~~~~~~~~~~
@@ -63,7 +61,7 @@ Version handshake
 The first cache operation on a fresh :class:`~fleche.remote.SshCache`
 implicitly fetches an :ref:`info <ssh-cache-internals>` dict via
 :meth:`fleche.remote.SshCache._ensure_handshake`, which calls
-:func:`fleche.remote._warn_on_version_skew` on the response.  Mismatched
+``_warn_on_version_skew()`` on the response.  Mismatched
 ``fleche_version`` or ``cloudpickle_version`` between client and server
 logs a ``WARNING`` on the ``fleche.remote`` logger — schema or wire
 format drift is the most common root cause of silently-wrong records
@@ -101,8 +99,7 @@ Process and stream layout
 -------------------------
 
 One :class:`~fleche.remote.SshCache` owns exactly one
-:class:`fleche.remote._SshConnection`, which in turn owns at most one
-``Popen``:
+``_SshConnection``, which in turn owns at most one ``Popen``:
 
 .. code-block:: text
 
@@ -128,39 +125,36 @@ One :class:`~fleche.remote.SshCache` owns exactly one
 Three streams cross the SSH boundary:
 
 * **stdin / stdout** carry length-prefixed cloudpickle RPC frames.  All
-  cache operations multiplex over this single pair; there is no
-  fan-out and no parallel requests.  ``_Connection.call`` takes a
+  cache operations multiplex over this single pair; there is no fan-out
+  and no parallel requests.  ``_Connection.call`` takes a
   :class:`threading.Lock` for the entire write→read round-trip so
   threaded callers serialise naturally.
 * **stderr** is drained by a daemon thread running
-  :func:`fleche.remote._forward_stderr`.  Each line is logged at
-  ``INFO`` on the per-host logger ``fleche.remote.host.<host>`` *and*
-  appended to a 50-line ring buffer on the connection.  When the
-  subprocess dies,
-  :meth:`fleche.remote._SshConnection._diagnose` returns the buffered
-  tail plus the exit code so
-  :class:`~fleche.remote.RemoteConnectionError` carries the actual
-  cause instead of just ``EOFError``.
+  ``_forward_stderr()``.  Each line is logged at ``INFO`` on the per-
+  host logger ``fleche.remote.host.<host>`` *and* appended to a 50-line
+  ring buffer on the connection.  When the subprocess dies,
+  ``_SshConnection._diagnose()`` returns the buffered tail plus the exit
+  code so :class:`~fleche.remote.RemoteConnectionError` carries the
+  actual cause instead of just ``EOFError``.
 
-  The logger name is constructed in
-  :meth:`fleche.remote._SshConnection._open` from the SSH host string;
-  dots become ``_`` and ``@`` becomes ``_at_`` so the host name doesn't
-  fragment the logger hierarchy.  For example, ``user@bigpc.example.com``
-  produces ``fleche.remote.host.user_at_bigpc_example_com``.  Because
-  the name uses ``.`` as the separator, each host's logger is a real
-  child of ``fleche.remote`` and standard logger configuration
-  propagates: setting
-  ``logging.getLogger("fleche.remote").setLevel(...)`` controls every
-  per-host child, while
+  The logger name is constructed in ``_SshConnection._open()`` from the
+  SSH host string; dots become ``_`` and ``@`` becomes ``_at_`` so the
+  host name doesn't fragment the logger hierarchy.  For example,
+  ``user@bigpc.example.com`` produces
+  ``fleche.remote.host.user_at_bigpc_example_com``.  Because the name
+  uses ``.`` as the separator, each host's logger is a real child of
+  ``fleche.remote`` and standard logger configuration propagates:
+  setting ``logging.getLogger("fleche.remote").setLevel(...)`` controls
+  every per-host child, while
   ``logging.getLogger("fleche.remote.host.user_at_bigpc_example_com")``
   lets you raise or silence one host independently.
 
 Wire protocol
 -------------
 
-Every frame is a 4-byte big-endian length prefix (``struct.Struct(">I")``)
-followed by a cloudpickle payload.  See :func:`fleche.remote._write_frame`
-and :func:`fleche.remote._read_frame`.
+Every frame is a 4-byte big-endian length prefix
+(``struct.Struct(">I")``) followed by a cloudpickle payload.  See
+``_write_frame()`` and ``_read_frame()``.
 
 Requests are 3-tuples ``(method: str, args: tuple, kwargs: dict)``;
 responses are 2-tuples either ``("ok", value)`` or ``("err", exception)``.
@@ -176,44 +170,43 @@ formatted traceback so the client at least sees what went wrong.
 Server-side dispatch
 ~~~~~~~~~~~~~~~~~~~~
 
-:func:`fleche.remote._dispatch` is a single dict lookup into
-``_REMOTE_METHODS`` — one entry per :class:`~fleche.caches.BaseCache`
-method, plus ``info`` handled at the :func:`~fleche.remote.serve` level.
-The explicit table is deliberate: it documents the full API surface, gives
-any future method addition a clear place to wire up server-side
-translation, and avoids giving remote callers reflective access to
-arbitrary attributes of the cache.
+``_dispatch()`` is a single dict lookup into ``_REMOTE_METHODS`` — one
+entry per :class:`~fleche.caches.BaseCache` method, plus ``info``
+handled at the :func:`~fleche.remote.serve` level.  The explicit table
+is deliberate: it documents the full API surface, gives any future
+method addition a clear place to wire up server-side translation, and
+avoids giving remote callers reflective access to arbitrary attributes
+of the cache.
 
 Two pieces need server-side translation rather than raw passthrough:
 
 - :meth:`~fleche.caches.BaseCache.load` and
   :meth:`~fleche.caches.BaseCache._query` produce
-  :class:`~fleche.call.LazyCall` instances whose ``_cache`` field
-  points at the *server's* cache.  That pointer cannot travel across
-  the wire (it would reach back into a different process on
-  deserialisation).  :func:`fleche.remote._strip_cache` strips it and
-  returns a plain :class:`~fleche.call.DigestedCall`; the client then
-  calls ``DigestedCall.fetch(self)`` to re-bind it to the local
-  :class:`~fleche.remote.SshCache`.  Subsequent ``.result`` accesses
-  on the lazy call therefore round-trip through ``load_value`` on the
+  :class:`~fleche.call.LazyCall` instances whose ``_cache`` field points
+  at the *server's* cache.  That pointer cannot travel across the wire
+  (it would reach back into a different process on deserialisation).
+  ``_strip_cache()`` strips it and returns a plain
+  :class:`~fleche.call.DigestedCall`; the client then calls
+  ``DigestedCall.fetch(self)`` to re-bind it to the local
+  :class:`~fleche.remote.SshCache`.  Subsequent ``.result`` accesses on
+  the lazy call therefore round-trip through ``load_value`` on the
   client's SshCache and back to the remote — fetching the value only
   when actually used.
 - :meth:`~fleche.caches.BaseCache.query` is a generator on the server
   side.  ``_dispatch`` materialises the whole iterator into a tuple
   before sending it back, because the wire protocol is request /
-  response, not streaming.  Large query results pay the cost up front
-  in one frame.
+  response, not streaming.  Large query results pay the cost up front in
+  one frame.
 
 Client side
 ~~~~~~~~~~~
 
-:meth:`fleche.remote._Connection.call` is the one entry point for every
-RPC.  It acquires the lock, lazily opens the connection if needed,
-writes the request frame, reads exactly one response frame, and
-dispatches on the response tag.  On
-``(BrokenPipeError, EOFError, OSError)`` it calls ``_diagnose()`` to
-collect transport-specific detail, closes the connection, and raises
-:class:`~fleche.remote.RemoteConnectionError`.
+``_Connection.call()`` is the one entry point for every RPC.  It
+acquires the lock, lazily opens the connection if needed, writes the
+request frame, reads exactly one response frame, and dispatches on the
+response tag.  On ``(BrokenPipeError, EOFError, OSError)`` it calls
+``_diagnose()`` to collect transport-specific detail, closes the
+connection, and raises :class:`~fleche.remote.RemoteConnectionError`.
 
 A note on logging: every RPC is logged at ``DEBUG`` on the
 ``fleche.remote`` logger as ``rpc → method args=...`` and ``rpc ←
@@ -256,9 +249,8 @@ via :py:mod:`atexit` (the client's hook is registered on first
 There is no automatic reconnect.  If the SSH subprocess dies — network
 hiccup, server reboot, idle timeout — every subsequent op raises
 :class:`~fleche.remote.RemoteConnectionError` until the caller invokes
-:meth:`~fleche.remote.SshCache.reconnect` explicitly.  The error
-message produced in
-:meth:`fleche.remote._Connection.call` names ``SshCache.reconnect()``
+:meth:`~fleche.remote.SshCache.reconnect` explicitly.  The error message
+produced in ``_Connection.call()`` names ``SshCache.reconnect()``
 directly so the user doesn't have to know about the lifecycle helper
 ahead of time.  This is the single most opinionated decision in the
 module: an auto-reconnect would silently re-trigger interactive 2FA
@@ -302,12 +294,11 @@ directly to ``ssh`` as separate arguments, so SSH ``exec``\\ s it as-is
 Diagnostics: the ``info`` RPC
 -----------------------------
 
-:func:`fleche.remote._server_info` is the introspection back-channel.
-It is the only method dispatched at the :func:`~fleche.remote.serve`
-level (alongside the data plane in :func:`~fleche.remote._dispatch`),
-because it needs access to ``cache_name`` — the ``--cache`` argument
-the server was launched with — which is not passed into
-:func:`~fleche.remote._dispatch`.
+``_server_info()`` is the introspection back-channel.  It is the only
+method dispatched at the :func:`~fleche.remote.serve` level (alongside
+the data plane in ``_dispatch()``), because it needs access to
+``cache_name`` — the ``--cache`` argument the server was launched with —
+which is not passed into ``_dispatch()``.
 
 It returns:
 
@@ -330,7 +321,7 @@ Key                      Meaning
 ``pid``                  The server process's PID.
 ``fleche_version``       The server's ``fleche`` package version string.
                          Compared against the client's version by
-                         :func:`~fleche.remote._warn_on_version_skew`.
+                         ``_warn_on_version_skew()``.
 ``cloudpickle_version``  The server's ``cloudpickle`` version string.
                          A mismatch with the client can cause silent
                          wire-format incompatibilities.
@@ -382,12 +373,11 @@ The module ships two layers of tests, both in ``tests/{unit,integration}/test_re
 - **Unit tests** drive :func:`~fleche.remote.serve` in a background
   daemon thread with two ``os.pipe()`` pairs in place of an SSH
   subprocess.  The same wire-protocol machinery is exercised — frame
-  layout, dispatch, exception propagation, the
-  :class:`~fleche.remote._Connection` lifecycle — without SSH or
-  process spawning.  Tests that need the *transport*'s behaviour
-  (subprocess exit codes, stderr capture) drive a
-  :class:`fleche.remote._Connection` subclass directly with no server
-  on the other side; see ``test_connection_drop_includes_diagnose_output``.
+  layout, dispatch, exception propagation, the ``_Connection`` lifecycle
+  — without SSH or process spawning.  Tests that need the *transport*'s
+  behaviour (subprocess exit codes, stderr capture) drive a
+  ``_Connection`` subclass directly with no server on the other side;
+  see ``test_connection_drop_includes_diagnose_output``.
 
 - **Integration tests** launch ``python -m fleche remote --serve`` as
   a local subprocess (still no SSH involved) so the full
@@ -403,9 +393,9 @@ The path is short and entirely mechanical:
 
 1. Add a ``_RemoteMethod`` entry to ``_REMOTE_METHODS`` in
    :mod:`fleche.remote` (or, if the RPC needs server-only state like
-   ``cache_name``, handle it in :func:`~fleche.remote.serve` itself
-   the way ``info`` does).  Be explicit about translating any
-   cache-bound return value via :func:`~fleche.remote._strip_cache`.
+   ``cache_name``, handle it in :func:`~fleche.remote.serve` itself the
+   way ``info`` does).  Be explicit about translating any cache-bound
+   return value via ``_strip_cache()``.
 2. Add a ``_ClientMethod`` entry to ``_CLIENT_METHODS``, setting
    ``write``, ``unwrap``, and ``reject_message`` as needed.  Then add a
    one-line method body on :class:`~fleche.remote.SshCache` that calls
@@ -414,9 +404,10 @@ The path is short and entirely mechanical:
    callable that calls ``.fetch(self)`` to re-bind them as client-side
    :class:`~fleche.call.LazyCall`\\ s.
 3. Add tests at both layers: a unit test that drives the new method
-   through the in-process pipe, and (when it's worth it) an
-   integration test that exercises it across the subprocess boundary.
+   through the in-process pipe, and (when it's worth it) an integration
+   test that exercises it across the subprocess boundary.
 
 Avoid adding more methods than necessary — every new method is wire
 surface that has to round-trip from any user.  Prefer threading the
 new operation through one of the existing methods where possible.
+

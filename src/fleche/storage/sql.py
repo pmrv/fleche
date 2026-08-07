@@ -486,7 +486,8 @@ class Sql(PerKeyLockMixin, CallStorage):
     def query(self, template: QueryCall) -> Iterable[DigestedCall]:
         """Find cached calls matching a template using SQL-side filtering.
 
-        Semantics match CallStorage.query:
+        Semantics match :meth:`~fleche.storage.base.CallStorage.query`:
+
         - Fields set to None are wildcards.
         - Arguments and result are compared by digest(template_value) == digest(stored_value).
         - Metadata can be filtered by providing template.metadata as a mapping of

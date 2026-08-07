@@ -16,7 +16,7 @@ Choose the mixin based on the access pattern you need:
   time.  Use when the backing store is not thread-safe and per-key parallelism
   is not needed.
 
-* :class:`PerKeyLockMixin` — a striped lock table, one ``RLock`` per key.
+* :class:`~fleche.storage.thread_safe.PerKeyLockMixin` — a striped lock table, one ``RLock`` per key.
   Operations on *different* keys proceed in parallel; operations on the
   *same* key are serialized.  Use when contention is dominated by hot keys
   and the backing store supports concurrent access on disjoint keys.
