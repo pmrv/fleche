@@ -59,6 +59,7 @@ from . import call as _call
 from .caches import BaseCache, Rejected
 from .call import DigestedCall, LazyCall, PreparedCall, QueryCall
 from .digest import Digest
+from .storage.base import SaveError
 
 logger = logging.getLogger("fleche.remote")
 
@@ -147,14 +148,28 @@ def _save_value(cache: BaseCache, value: Any) -> Digest:
     The write-side counterpart of ``load_value``, existing only in the wire
     protocol.  Routed through :meth:`~fleche.caches.BaseCache.prepare` with a
     synthetic, never-committed call, so wrappers and stacks direct the value
-    to the same storage their saves use; the value is kept (content-addressed)
-    while no call record is ever filed.
+    to the same storage their saves use.  The value rides in the *result*
+    position for its strict save semantics: a refused value must reject the
+    commit (as in ``Cache.save``), where the argument position would fall
+    back to a digest-only reference and file a record with a dangling
+    result.  ``None`` — the one result the stash skips — rides as an
+    argument instead; storing ``None`` cannot fail.
     """
-    prepared = cache.prepare(
-        _call.Call(name="fleche.remote:save_value", arguments={"value": value})
-    )
+    if value is None:
+        prepared = cache.prepare(
+            _call.Call(name="fleche.remote:save_value", arguments={"value": None})
+        )
+        prepared.abandon()
+        return prepared.digested.arguments["value"]
+    try:
+        prepared = cache.prepare(
+            _call.Call(name="fleche.remote:save_value", arguments={}, result=value)
+        )
+    except SaveError as e:
+        raise Rejected(e)
     prepared.abandon()
-    return prepared.digested.arguments["value"]
+    assert prepared.digested.result is not None  # value is not None here
+    return prepared.digested.result
 
 
 # Single inventory of every method `SshCache` forwards across the wire; the
@@ -685,6 +700,21 @@ class _ClientMethod:
     reject_message: str | None = None
 
 
+@dataclass(frozen=True)
+class _RemoteValues:
+    """The slice of the value-storage write surface a remote commit needs.
+
+    Lets :meth:`SshCache.save` hand :meth:`~fleche.call.PreparedCall.resolve`
+    a values object, in parity with the local ``Cache.save``; ``save`` is one
+    ``save_value`` round trip.
+    """
+
+    _cache: "SshCache"
+
+    def save(self, value: Any) -> Digest:
+        return self._cache._rpc("save_value", value)
+
+
 def _fetch_lazy_call(sc: "SshCache", dc: DigestedCall) -> LazyCall:
     return dc.fetch(sc)
 
@@ -816,7 +846,7 @@ class SshCache(BaseCache):
             # then file the plain digested record — a PreparedCall itself never
             # goes over the wire.  A failure between the trips leaves the value
             # as a content-addressed orphan for gc, like any abandoned call.
-            digested = call.resolve(self._rpc("save_value", call._result))
+            digested = call.resolve(_RemoteValues(self))
             return self._rpc("save", digested)
         return self._rpc("save", call)
 
