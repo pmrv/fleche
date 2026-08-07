@@ -247,7 +247,9 @@ does not have to catch anything:
 * a path **argument** falls back to a digest-only reference.  The call is still
   keyed correctly (the digest is computed *here*, from your file), so lookups
   hit and miss exactly as they should; only the file's bytes are not retrievable
-  from the remote record.
+  from the remote record.  The degradation is per argument: the path's
+  non-path siblings are stored normally and read back off the record as
+  values.
 * a path **result** is rejected: the call runs, returns your file, and is
   logged as not cached.
 * **loading** a path stored on the remote raises too.  The remote materializes

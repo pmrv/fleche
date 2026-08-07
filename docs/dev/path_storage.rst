@@ -190,7 +190,17 @@ destructuring save does, using
 carry it: a path argument becomes a digest-only reference **whose digest was
 computed locally**, which keeps the seal intact and lookups correct, and a path
 result becomes :class:`~fleche.caches.Rejected`, so the call runs uncached
-rather than wrongly cached.  See :ref:`file-remote-caches` for the user-facing
+rather than wrongly cached.
+
+The degradation is deliberately per *argument*, not per call.  ``prepare`` is
+the one RPC that carries argument values rather than digests, so a call
+carrying a path cannot be shipped whole; it stashes the arguments one at a
+time through :class:`~fleche.remote._RemoteValues` instead, and
+:meth:`~fleche.call.Call.stash`'s existing per-argument ``SaveError`` fallback
+does the rest — only the path arguments are digested-and-not-stored, and their
+siblings are stored and remain loadable off the record.  Falling back to the
+blanket digest-only admission instead would cost every other argument for the
+sake of one path, which is neither what the guard promises nor necessary.  See :ref:`file-remote-caches` for the user-facing
 version.
 
 Making paths genuinely work over SSH is a separate feature, tracked in

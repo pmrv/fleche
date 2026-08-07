@@ -956,12 +956,16 @@ class SshCache(BaseCache):
             # Shipping the live call would hand the server a path *string* to
             # resolve against its own filesystem — exactly what
             # `RemotePathUnsupported` exists to prevent, and this is the one
-            # RPC that carries argument *values* rather than digests.  Fall
-            # back to the local two-phase prepare, where each argument goes
-            # through `save_value` and a path degrades to a digest-only
-            # reference computed *here*, keeping the
-            # `digest(x) == save_value(x)` seal intact so lookups still hit.
-            return super().prepare(call)
+            # RPC that carries argument *values* rather than digests.  Stash
+            # the arguments one at a time instead: `_RemoteValues.save` routes
+            # each through `save_value`, so only the path arguments raise and
+            # `Call.stash` degrades *those* to a digest-only reference computed
+            # here — keeping the `digest(x) == save_value(x)` seal intact so
+            # lookups still hit — while their non-path siblings are stored
+            # normally and stay loadable off the record.  Costs one round trip
+            # per argument rather than one for the call, which is the price of
+            # not degrading the whole call for one path.
+            return PreparedCall(digested=call.stash(_RemoteValues(self)), cache=self)
         return PreparedCall(digested=self._rpc("prepare", call), cache=self)
 
     def evict(self, key: str | Digest) -> None:

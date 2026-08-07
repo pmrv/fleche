@@ -1162,16 +1162,47 @@ def test_prepare_does_not_ship_a_call_carrying_a_path(remote, server_cache, a_fi
     """`prepare` is the one RPC that sends argument *values*, not digests.
 
     Shipping the live call would hand the server a path string to resolve
-    against its own filesystem — the bug the guard exists to stop — so it has
-    to fall back to the local two-phase prepare instead.
+    against its own filesystem — the bug the guard exists to stop — so the
+    arguments are stashed one at a time instead.
     """
     call = Call(name="f", arguments={"p": a_file, "n": 3})
     prepared = remote.prepare(call)
     # Sealed locally: the key is still the one a later lookup computes.
     assert prepared.to_lookup_key() == call.to_lookup_key()
     assert prepared.digested.arguments["p"] == digest(a_file)
-    # Nothing about the path reached the server.
-    assert not server_cache.values.storage
+    # Nothing about the path reached the server — not the record, not the
+    # content bytes it would have been split into.
+    assert digest(a_file) not in server_cache.values.storage
+    assert a_file.read_bytes() not in server_cache.values.storage.values()
+
+
+def test_prepare_degrades_only_the_path_argument_not_its_siblings(
+    remote, server_cache, a_file
+):
+    """One unshippable argument must not take the whole call down with it.
+
+    The fallback used to be a blanket `BaseCache.prepare`, which digests
+    everything and stores nothing: `f(p: Path, payload)` lost `payload` too,
+    and `load(key).arguments["payload"]` came back a bare digest for no
+    reason.  Only the path cannot cross.
+    """
+    payload = {"rows": [1, 2, 3]}
+    call = Call(name="f", arguments={"p": a_file, "payload": payload})
+    prepared = remote.prepare(call)
+
+    # The sibling was stored on the remote and reads back as a value...
+    assert remote.load_value(prepared.digested.arguments["payload"]) == payload
+    # ...while the path is a digest-only reference computed here.
+    assert prepared.digested.arguments["p"] == digest(a_file)
+    assert digest(a_file) not in server_cache.values.storage
+
+    # End to end: the filed record hands back the sibling, not a digest.
+    key = prepared.commit(1)
+    loaded = remote.load(key)
+    assert loaded.arguments["payload"] == payload
+    # The path argument stays a digest, which is the documented degradation:
+    # keyed correctly, content not retrievable from the remote.
+    assert loaded.arguments["p"] == digest(a_file)
 
 
 def test_prepare_still_uses_the_remote_when_no_path_is_involved(remote, server_cache):
