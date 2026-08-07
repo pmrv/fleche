@@ -1,13 +1,15 @@
+import collections
 import gc
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from collections import namedtuple
 
-from fleche.digest import digest, Indigestible
+from fleche.digest import digest, Indigestible, OPAQUE_ITERABLES
 from fleche.storage import ValueMixin, DestructuringMixin
 from fleche.storage.memory import MemoryBackend
 from fleche.storage.destructuring import DigestedMapping
@@ -419,6 +421,64 @@ def test_find_path_stops_where_digest_stops(tmp_path):
     assert find_path(_Opaque(tmp_path)) is None
     with pytest.raises(Indigestible):
         digest(_Opaque(tmp_path))
+
+
+@pytest.mark.parametrize(
+    "wrap",
+    [
+        pytest.param(lambda p: collections.deque([p]), id="deque"),
+        pytest.param(lambda p: [collections.deque([0, p])], id="deque-in-list"),
+        pytest.param(lambda p: collections.OrderedDict(k=p), id="ordereddict"),
+        pytest.param(lambda p: collections.defaultdict(list, k=p), id="defaultdict"),
+        pytest.param(lambda p: collections.Counter({p: 1}), id="counter-key"),
+        pytest.param(lambda p: collections.ChainMap({"k": p}), id="chainmap"),
+        pytest.param(lambda p: array_like(p), id="object-array-elementwise"),
+    ],
+)
+def test_find_path_descends_any_re_iterable_container(tmp_path, wrap):
+    """An allowlist of concrete types is the bug in slower motion.
+
+    ``digest``'s ``Iterable`` arm walks *anything* iterable and reads the file,
+    so a path in a ``deque`` decides the key exactly as much as one in a list.
+    Enumerating ``list``/``tuple``/``set``/``frozenset`` covered the containers
+    that happened to be in mind and let the next one through.
+    """
+    assert find_path(wrap(tmp_path)) is tmp_path
+
+
+def array_like(p):
+    """A re-iterable custom container — the case no allowlist can anticipate."""
+
+    class _Rows:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def __iter__(self):
+            return iter(self._rows)
+
+    return _Rows([0, p])
+
+
+def test_find_path_skips_iterables_digest_never_looks_inside(tmp_path):
+    """The exclusions have to be exactly the ones ``digest`` itself makes.
+
+    A numpy object array is ``Iterable``, but ``digest`` matches it above the
+    ``Iterable`` arm and hashes its buffer — the elements never reach a digest,
+    so a path inside one cannot decide a key and there is nothing to report.
+    Walking it anyway would also mean walking every large numeric array.
+    """
+    arr = np.array([tmp_path, 1], dtype=object)
+    assert find_path(arr) is None
+    assert isinstance(arr, OPAQUE_ITERABLES)
+
+
+def test_find_path_does_not_materialize_a_huge_range():
+    """``range`` holds ints by construction; walking one is pure cost.
+
+    Guarded explicitly because the walk pushes elements onto a list, so a
+    large range would exhaust memory rather than merely be slow.
+    """
+    assert find_path([range(10**9)]) is None
 
 
 def test_find_path_does_not_consume_a_generator(tmp_path):

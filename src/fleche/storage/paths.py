@@ -37,6 +37,12 @@ def find_path(value: Any) -> Path | None:
     own filesystem, which is exactly the ``digest(x) == save_value(x)`` break
     the caller is trying to prevent.  Mirroring destructuring here would let
     ``Bundle(path, 0.5)`` through and reintroduce it.
+
+    Mirroring means mirroring ``digest``'s *containers*, not a list of them:
+    the iterable arm below walks anything iterable, as ``digest`` does, and
+    skips only what ``digest`` itself never looks inside.  An allowlist of
+    concrete types is the same bug in slower motion — it covers ``list`` and
+    ``tuple`` and lets a ``deque`` through.
     """
     seen: set[int] = set()
     stack: list[Any] = [value]
@@ -57,11 +63,28 @@ def find_path(value: Any) -> Path | None:
         elif _attrs.is_attrs_instance(item):
             stack.extend(v for _, v in _attrs.field_items(item))
         elif isinstance(item, Iterable):
-            # Covers list/tuple/set/frozenset and namedtuples — everything the
-            # ``Iterable`` arm of ``_digest_bytes`` walks.  Guarded because an
-            # arbitrary iterable may be a one-shot generator; digesting one
-            # consumes it, and so would we.
-            if not isinstance(item, (list, tuple, set, frozenset)):
+            # ``digest``'s ``Iterable`` arm walks *any* iterable, so this one
+            # has to as well: a path in a ``deque`` decides the key exactly as
+            # much as one in a list, and an allowlist of concrete types silently
+            # stops covering whatever a caller reaches for next.  Three
+            # exclusions, each mirroring something ``digest`` does earlier:
+            #
+            # * :data:`~fleche.digest.OPAQUE_ITERABLES` — matched above the
+            #   ``Iterable`` arm, hashing their own buffer without looking at
+            #   elements, so no path inside one can reach a digest.
+            # * ``range`` — its elements are ``int`` by construction, and
+            #   materializing ``range(10**9)`` onto the stack to learn that
+            #   would be a denial of service.
+            # * one-shot iterators, which are their own ``__iter__``.  Walking
+            #   a generator consumes it; ``digest`` has already done so by the
+            #   time a value could ship, so there is nothing left in one for us
+            #   to find anyway.
+            if isinstance(item, (digest.OPAQUE_ITERABLES, range)):
+                continue
+            try:
+                if iter(item) is item:
+                    continue
+            except TypeError:
                 continue
             stack.extend(item)
     return None

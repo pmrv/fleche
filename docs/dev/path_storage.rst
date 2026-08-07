@@ -182,10 +182,12 @@ itself*.  Three things follow, and each of them is silent:
   it cannot see.
 
 So :class:`~fleche.remote.SshCache` refuses instead, via
-:func:`~fleche.storage.paths.find_path` (which walks a value exactly the way a
-destructuring save does, using
-:func:`~fleche.storage.destructuring.child_slots`) and
-:class:`~fleche.remote.RemotePathUnsupported`.  That exception subclasses
+:func:`~fleche.storage.paths.find_path` and
+:class:`~fleche.remote.RemotePathUnsupported`.  ``find_path`` mirrors
+:func:`~fleche.digest.digest`, **not** destructuring: what makes a path
+dangerous here is that it decides the key, and ``digest`` reads files inside
+namedtuples, sets, and arbitrary iterables that a destructuring save stores
+verbatim.  Mirroring the narrower walk would let ``Bundle(path, 0.5)`` cross.  That exception subclasses
 :class:`~fleche.storage.SaveError` so the existing two-phase-save degradations
 carry it: a path argument becomes a digest-only reference **whose digest was
 computed locally**, which keeps the seal intact and lookups correct, and a path

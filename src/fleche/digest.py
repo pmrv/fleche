@@ -20,6 +20,15 @@ from . import _attrs
 logger = logging.getLogger("fleche.digest")
 
 
+# Types that are ``Iterable`` but are matched by an arm *above* the generic
+# ``Iterable`` arm in :func:`_digest_bytes`: each hashes its own buffer and
+# never looks at the elements, so nothing reachable through one can influence
+# a digest.  Named here so a walker that mirrors ``digest`` — notably
+# :func:`fleche.storage.paths.find_path` — can skip exactly the same types
+# instead of re-deriving the list and drifting from it.
+OPAQUE_ITERABLES = (np.ndarray, pd.DataFrame, pd.Series, pd.Index)
+
+
 class Indigestible(Exception):
     """Exception raised when an object cannot be digested."""
 
