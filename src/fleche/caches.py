@@ -62,7 +62,10 @@ class BaseCache(OperationContext):
 
         Finish the returned :class:`~fleche.call.PreparedCall` with exactly
         one of :meth:`~fleche.call.PreparedCall.commit` or
-        :meth:`~fleche.call.PreparedCall.abandon`.
+        :meth:`~fleche.call.PreparedCall.abandon`.  Until then the stashed
+        values are referenced by no record, and :meth:`Cache.gc` treats them as
+        roots (:func:`~fleche.call.in_flight_digests`) so a concurrent sweep
+        cannot evict the arguments of a running call.
         """
         return PreparedCall(digested=call.digest(), cache=self)
 
@@ -324,6 +327,8 @@ class Cache(PerKeyLockMixin, BaseCache):
         # record cannot end up keyed on post-mutation content.  No cache-level
         # lock: the keys are only known once the value storage has digested
         # each value, and value storages carry their own per-key locking.
+        # Registering the result as a gc root is PreparedCall's own doing, so
+        # it survives the rebinding CacheWrapper.prepare does.
         return PreparedCall(digested=call.stash(self.values), cache=self)
 
     def save(self, call: PreparedCall | Call) -> str:
@@ -465,6 +470,29 @@ class Cache(PerKeyLockMixin, BaseCache):
         ``values`` key outside the reachable
         set.  Call records are left untouched.
 
+        Values belonging to a call that is between
+        :meth:`~fleche.caches.BaseCache.prepare` and
+        :meth:`~fleche.call.PreparedCall.commit` are referenced by no record
+        yet, so they are seeded into the reachable set from
+        :func:`~fleche.call.in_flight_digests` — otherwise a sweep during a
+        long function body would evict the arguments out from under the call,
+        and the eventual commit would file a record with dangling references.
+        That registry is **per-process**: a sweep here cannot see a call in
+        flight in another process, so avoid running ``gc()`` against a cache
+        that other processes are writing to concurrently.  The concrete case
+        is :class:`~fleche.remote.SshCache` — the arguments are stashed by the
+        *server's* ``prepare``, and only the sealed record travels back, so a
+        sweep run on the server has nothing to key on while the client's body
+        runs.
+
+        Within a process the roots are read *after* the eviction candidates are
+        listed, which leaves one narrow window: a value stored by a concurrent
+        ``prepare`` that has not registered its call yet.  That is the same
+        window the one-shot :meth:`save` has always had between storing the
+        values and filing the record — bounded by a storage write rather than
+        by a function body — and closing it would need a lock shared by every
+        writer.
+
         Returns:
             The set of digests that were evicted from value storage.
         """
@@ -480,6 +508,14 @@ class Cache(PerKeyLockMixin, BaseCache):
                 if isinstance(v, Digest):
                     reachable.add(v)
 
+        # Snapshot the candidates before reading the in-flight roots: a value
+        # stored after this line is not a candidate at all, so the only gap
+        # left is a store that already happened but whose call has not
+        # registered yet.  Listing after the read would widen that to every
+        # call admitted during the walk.
+        candidates = list(self.values.list())
+        reachable |= call.in_flight_digests()
+
         if isinstance(self.values, HasChildDigests):
             frontier = set(reachable)
             while frontier:
@@ -493,7 +529,7 @@ class Cache(PerKeyLockMixin, BaseCache):
                 frontier |= new
 
         evicted: set[Digest] = set()
-        for key in list(self.values.list()):
+        for key in candidates:
             if key not in reachable:
                 try:
                     self.values.evict(key)

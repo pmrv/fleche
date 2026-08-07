@@ -234,3 +234,125 @@ def test_reachability_walk_does_not_materialize_paths(path_cache, a_file, monkey
     path_cache.gc()
     path_cache.values.count_reuses()
     assert calls == [], f"walk materialized {len(calls)} temp tree(s)"
+
+
+# ---- Calls in flight: prepared arguments are roots until commit or abandon ----
+
+
+def test_gc_keeps_arguments_of_a_call_in_flight(gc_cache):
+    """A sweep during the function body must not evict the sealed arguments.
+
+    ``prepare`` stores the arguments before the body runs, precisely so the
+    record cannot be keyed on post-mutation content — but for the whole
+    duration of the body no record references them yet.  Without the in-flight
+    roots ``gc`` reclaims them as orphans and the eventual ``commit`` files a
+    record whose arguments are dangling digests.
+    """
+    prepared = gc_cache.prepare(Call(name="f", arguments={"x": "an argument"}))
+
+    assert gc_cache.gc() == set()  # body "runs" here
+
+    key = prepared.commit("a result")
+    assert gc_cache.load(key).arguments["x"] == "an argument"
+
+
+def test_gc_evicts_arguments_of_an_abandoned_call(gc_cache):
+    """Abandoning releases the roots: the arguments are orphans again."""
+    prepared = gc_cache.prepare(Call(name="f", arguments={"x": "an argument"}))
+    arg_key = digest("an argument")
+    assert arg_key in gc_cache.values.list()
+
+    prepared.abandon()
+
+    assert arg_key in gc_cache.gc()
+
+
+def test_gc_evicts_arguments_after_commit_returns(gc_cache):
+    """Committing hands the roots over to the record, and holds nothing else.
+
+    Once the record references them the registry must let go, or a long-lived
+    ``PreparedCall`` object would pin values forever.  Evicting the record and
+    sweeping is the observable check.
+    """
+    prepared = gc_cache.prepare(Call(name="f", arguments={"x": "an argument"}))
+    key = prepared.commit("a result")
+    gc_cache.evict(key)
+
+    assert digest("an argument") in gc_cache.gc()
+
+
+def test_gc_keeps_nested_arguments_of_a_call_in_flight(split_cache):
+    """In-flight roots seed the transitive walk, not just the top-level keys."""
+    prepared = split_cache.prepare(Call(name="f", arguments={"x": [[1, 2], [3, 4]]}))
+
+    assert split_cache.gc() == set()
+
+    key = prepared.commit(None)
+    assert split_cache.load(key).arguments["x"] == [[1, 2], [3, 4]]
+
+
+def test_gc_keeps_arguments_of_a_call_in_flight_through_a_wrapper(gc_cache):
+    """Wrapper rebinding must not drop the registration.
+
+    ``CacheWrapper.prepare`` returns ``replace(inner.prepare(call), cache=self)``
+    — a *new* object — so registering in ``prepare`` alone would leave only the
+    inner one registered, and that one is garbage the moment ``replace``
+    returns.
+    """
+    import gc as _gc
+
+    from fleche.caches import RefreshingCache
+
+    wrapper = RefreshingCache(gc_cache)
+    prepared = wrapper.prepare(Call(name="f", arguments={"x": "an argument"}))
+    _gc.collect()  # drop the inner PreparedCall replace() left behind
+
+    assert gc_cache.gc() == set()
+    assert digest("an argument") in gc_cache.values.list()
+    prepared.abandon()
+
+
+def test_in_flight_registry_does_not_leak_dropped_calls(gc_cache):
+    """The registry is weak: a prepared call nobody finished falls out."""
+    import gc as _gc
+
+    from fleche.call import in_flight_digests
+
+    gc_cache.prepare(Call(name="f", arguments={"x": "an argument"}))
+    _gc.collect()
+
+    assert in_flight_digests() == set()
+
+
+def test_gc_is_safe_against_concurrent_prepares(gc_cache):
+    """Sweeping while other threads admit calls must not raise or lose values.
+
+    The registry is a plain mapping read by ``gc``; without the lock a
+    concurrent ``prepare`` resizes it mid-iteration.
+    """
+    import threading
+
+    stop = threading.Event()
+    errors: list[BaseException] = []
+
+    def preparer(i):
+        try:
+            while not stop.is_set():
+                prepared = gc_cache.prepare(Call(name="f", arguments={"x": f"arg-{i}"}))
+                key = prepared.commit(i)
+                assert gc_cache.load(key).arguments["x"] == f"arg-{i}"
+        except BaseException as e:  # pragma: no cover - only on a real race
+            errors.append(e)
+
+    threads = [threading.Thread(target=preparer, args=(i,)) for i in range(4)]
+    for t in threads:
+        t.start()
+    try:
+        for _ in range(50):
+            gc_cache.gc()
+    finally:
+        stop.set()
+        for t in threads:
+            t.join()
+
+    assert not errors, errors

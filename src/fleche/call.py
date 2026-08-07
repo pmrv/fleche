@@ -1,4 +1,6 @@
 import logging
+import threading
+import weakref
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from typing import Any, Callable, get_type_hints, get_origin, get_args, Annotated
@@ -331,6 +333,38 @@ class DigestedCall:
         )
 
 
+# Prepared calls whose argument values are stored but not yet referenced by any
+# record — the prepare -> commit window.  Held weakly: a prepared call dropped
+# without commit() or abandon() falls out on its own, and the registry never
+# keeps a call (or its cache) alive.  Keyed by ``id`` because ``PreparedCall``
+# is an unhashable dataclass; ``WeakValueDictionary`` only drops a key whose
+# stored reference is still the dead one, so a recycled ``id`` is safe.  The
+# lock guards the snapshot below against a concurrent ``prepare`` resizing the
+# mapping mid-iteration; weakref removals are already deferred while it is
+# being iterated.
+_IN_FLIGHT: "weakref.WeakValueDictionary[int, PreparedCall]" = weakref.WeakValueDictionary()
+_IN_FLIGHT_LOCK = threading.Lock()
+
+
+def in_flight_digests() -> set[Digest]:
+    """Return the value digests of every prepared-but-unfinished call.
+
+    These are stored in value storage but reachable from no record yet, so a
+    reachability sweep (:meth:`fleche.caches.Cache.gc`) must treat them as
+    roots or it evicts the arguments of a call still running.  Registration is
+    per-process: a call in flight in *another* process is not visible here.
+    """
+    with _IN_FLIGHT_LOCK:
+        in_flight = list(_IN_FLIGHT.values())
+    reachable: set[Digest] = set()
+    for prepared in in_flight:
+        digested = prepared.digested
+        if isinstance(digested.result, Digest):
+            reachable.add(digested.result)
+        reachable.update(v for v in digested.arguments.values() if isinstance(v, Digest))
+    return reachable
+
+
 @dataclass
 class PreparedCall:
     """A call admitted to a cache: arguments stored, key sealed, result awaited.
@@ -358,6 +392,14 @@ class PreparedCall:
     _result: Any = field(default=None, init=False, repr=False)
     _metadata: "dict | None" = field(default=None, init=False, repr=False)
 
+    def __post_init__(self) -> None:
+        # Registered here rather than in ``prepare`` so wrapper rebinding —
+        # ``replace(inner.prepare(call), cache=self)`` — registers the new
+        # object too; the inner one is garbage by then and drops out on its
+        # own.
+        with _IN_FLIGHT_LOCK:
+            _IN_FLIGHT[id(self)] = self
+
     def commit(self, result: Any, metadata: dict | None = None) -> Digest:
         """Attach *result* and *metadata* to the record and file it.
 
@@ -384,7 +426,14 @@ class PreparedCall:
         self._result = result
         if metadata is not None:
             self._metadata = metadata
-        return self.cache.save(self)
+        try:
+            return self.cache.save(self)
+        finally:
+            # Either the record now references the arguments, or the save was
+            # rejected and they are genuine orphans.  Either way they no longer
+            # need protecting from a sweep.
+            with _IN_FLIGHT_LOCK:
+                _IN_FLIGHT.pop(id(self), None)
 
     def to_lookup_key(self) -> Digest:
         return self.digested.to_lookup_key()
@@ -406,12 +455,16 @@ class PreparedCall:
         """Release the call without recording it.
 
         Called when the function body raises or its result is not cacheable.
-        The default is a no-op: argument values stored by
+        The default is a no-op beyond bookkeeping: argument values stored by
         :meth:`~fleche.caches.BaseCache.prepare` are content-addressed orphans
-        that a later garbage collection sweep reclaims.  Subclasses may hook
+        that a later garbage collection sweep reclaims — abandoning is what
+        releases them to it, since an unfinished call keeps them reachable
+        (:func:`in_flight_digests`).  Subclasses may hook
         cleanup here.  Idempotent; only :meth:`commit` is barred afterwards.
         """
         self._finished = True
+        with _IN_FLIGHT_LOCK:
+            _IN_FLIGHT.pop(id(self), None)
 
     def __enter__(self) -> "PreparedCall":
         return self
