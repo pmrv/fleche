@@ -410,7 +410,8 @@ class DestructuringMixin(base.ValueStorage):
             case DigestedFields():
                 return {v for v in raw.fields.values() if isinstance(v, digest.Digest)}
             case _:
-                return set()
+                # Not one of ours — a layer below may still claim it.
+                return super()._raw_sub_digests(raw)
 
     def child_digests(self, key: digest.Digest | str) -> set[digest.Digest]:
         """Direct digest children of the raw entry stored at *key*.
@@ -423,7 +424,7 @@ class DestructuringMixin(base.ValueStorage):
         Raises:
             KeyError: if *key* is not present in the underlying backend.
         """
-        return self._raw_sub_digests(super().load(key))
+        return self._raw_sub_digests(self.load_raw(key))
 
     def count_reuses(self) -> Counter[digest.Digest]:
         """Return a counter of how many times each stored key is referenced as a sub-component.
@@ -450,7 +451,7 @@ class DestructuringMixin(base.ValueStorage):
         """
         counts: Counter[digest.Digest] = Counter({key: 0 for key in self.list()})
         for key in list(counts):
-            for sub in self._raw_sub_digests(super().load(key)):
+            for sub in self._raw_sub_digests(self.load_raw(key)):
                 if sub in counts:
                     counts[sub] += 1
         return counts

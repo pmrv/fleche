@@ -255,6 +255,22 @@ class PathValueMixin(base.ValueStorage):
             return path
         return value
 
+    def _raw_sub_digests(self, raw: Any) -> set[digest.Digest]:
+        """Report the content blobs a stored path record points at.
+
+        Without this a reachability walk sees a :class:`FileBlob` /
+        :class:`DirectoryBlob` as a childless leaf, so the ``bytes`` holding
+        the actual file content look unreferenced and ``gc`` reclaims them —
+        destroying every path-valued entry it sweeps past.  The blobs are
+        precisely a *name plus references*, so the references have to be
+        declared here, at the layer that creates them.
+        """
+        if isinstance(raw, FileBlob):
+            return {raw.content}
+        if isinstance(raw, DirectoryBlob):
+            return set(raw.contents.values())
+        return super()._raw_sub_digests(raw)
+
     def _materialize(self, path: Path, blob: DirectoryBlob) -> None:
         path.mkdir()
         for name, child_ref in blob.contents.items():

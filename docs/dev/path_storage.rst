@@ -100,6 +100,34 @@ four separate slots).  Tuning ``remaining_depth`` for a path-heavy workload
 therefore changes how the *non-path* parts are packed and nothing else — the
 content addressing of the paths is not on the table.
 
+Blobs must declare their references
+-----------------------------------
+
+Storing a path by content splits it in two: the ``bytes`` live under their own
+content digest, and the :class:`~fleche.storage.paths.FileBlob` /
+:class:`~fleche.storage.paths.DirectoryBlob` record holds a *reference* to
+them.  That makes the blob a node in the value store's reference graph, and
+anything walking that graph — :meth:`~fleche.caches.Cache.gc`,
+:meth:`~fleche.storage.destructuring.DestructuringMixin.count_reuses` — has to
+be told so.  A blob that reports no children looks like a leaf, its content
+looks unreferenced, and ``gc`` reclaims the bytes out from under it; the entry
+survives as a record pointing at nothing, and the next load raises
+``KeyError``, which the wrapper reports as an ordinary cache miss.  Silent data
+loss, triggered by routine maintenance.
+
+:meth:`PathValueMixin._raw_sub_digests` therefore declares them, and each
+mixin that wraps values in a record of its own does the same for its own
+wrappers, delegating anything it does not recognise down the MRO — so a
+storage's reachable set is the union over its layers rather than whichever
+layer happens to answer first.
+
+The walk reads through :meth:`~fleche.storage.base.ValueStorage.load_raw`
+rather than ``load``, for two reasons.  Correctness: ``load`` mends, and
+mending resolves child references away — a materialized ``Path`` no longer
+knows which blob it came from.  Cost: mending a stored path means copying its
+whole tree into a temp directory, so a graph walk through ``load`` would
+rebuild every stored file on disk purely to ask what it points at.
+
 Deduplication
 -------------
 

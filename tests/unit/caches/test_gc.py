@@ -144,3 +144,93 @@ def test_gc_evicts_deeply_unreachable_structure(split_cache):
     assert orphan_leaf_only in evicted
     # Previously-live keys still present.
     assert reachable_before.issubset(set(split_cache.values.list()))
+
+
+# ---- Path values: blob records reference their content, and gc must see it ----
+
+
+@pytest.fixture
+def path_cache():
+    return Cache(values=ValueMemory({}), calls=CallMemory({}))
+
+
+@pytest.fixture
+def a_file(tmp_path):
+    f = tmp_path / "data.txt"
+    f.write_text("file content")
+    return f
+
+
+@pytest.fixture
+def a_tree(tmp_path):
+    d = tmp_path / "tree"
+    (d / "sub").mkdir(parents=True)
+    (d / "top.txt").write_text("top")
+    (d / "sub" / "leaf.bin").write_bytes(b"leaf")
+    return d
+
+
+@pytest.mark.parametrize("which", ["file", "tree", "both-nested"])
+def test_gc_keeps_the_content_behind_a_stored_path(path_cache, a_file, a_tree, which):
+    """A stored path is a name plus a *reference*; gc must follow the reference.
+
+    The blob records carry the digests of the content ``bytes``.  If the walk
+    cannot see them the content looks unreferenced, gc reclaims it, and the
+    entry is destroyed — the load then raises ``KeyError``, which the wrapper
+    reports as an ordinary cache miss, so the loss is silent.
+    """
+    result = {"file": a_file, "dir": a_tree} if which == "both-nested" else (
+        a_file if which == "file" else a_tree
+    )
+    call = Call(name="f", arguments={"x": 1}, result=result)
+    key = path_cache.save(call)
+
+    assert path_cache.gc() == set()
+
+    loaded = path_cache.load(key).result
+    if which == "file":
+        assert loaded.read_text() == "file content"
+    elif which == "tree":
+        assert (loaded / "top.txt").read_text() == "top"
+        assert (loaded / "sub" / "leaf.bin").read_bytes() == b"leaf"
+    else:
+        assert loaded["file"].read_text() == "file content"
+        assert (loaded["dir"] / "sub" / "leaf.bin").read_bytes() == b"leaf"
+
+
+def test_gc_still_evicts_an_orphaned_path(path_cache, a_file):
+    """The fix must not make path content unconditionally reachable."""
+    orphan = path_cache.values.save(a_file)
+    assert orphan in path_cache.gc()
+
+
+def test_child_digests_reports_a_blob_s_content(path_cache, a_file, a_tree):
+    """The blob layer declares its own references, unmended."""
+    file_key = path_cache.values.save(a_file)
+    assert path_cache.values.child_digests(file_key), "FileBlob reported no children"
+
+    tree_key = path_cache.values.save(a_tree)
+    children = path_cache.values.child_digests(tree_key)
+    assert len(children) == 2, "DirectoryBlob should reference both of its entries"
+
+
+def test_reachability_walk_does_not_materialize_paths(path_cache, a_file, monkeypatch):
+    """Inspecting the graph must not build temp trees for every stored path.
+
+    ``child_digests`` reads through ``load_raw``, so the path layer's
+    materialization is skipped: gc over a large cache would otherwise copy
+    every stored file to disk just to ask what it points at.
+    """
+    from fleche.storage import paths as paths_mod
+
+    path_cache.save(Call(name="f", arguments={"x": 1}, result=a_file))
+
+    calls = []
+    real = paths_mod.TempPath.mkdtemp
+    monkeypatch.setattr(
+        paths_mod.TempPath, "mkdtemp",
+        classmethod(lambda cls: (calls.append(1), real())[1]),
+    )
+    path_cache.gc()
+    path_cache.values.count_reuses()
+    assert calls == [], f"walk materialized {len(calls)} temp tree(s)"
