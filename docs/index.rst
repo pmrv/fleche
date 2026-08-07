@@ -69,6 +69,7 @@ Welcome to the **Fleche** library documentation.
    :maxdepth: 1
    :caption: Notebooks
 
+   notebooks/FiveMinuteTour
    notebooks/GettingStarted
    notebooks/ExtraMethods
    notebooks/StorageBackends
