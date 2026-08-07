@@ -57,8 +57,9 @@ from pyiron_snippets.import_alarm import ImportAlarm
 
 from . import call as _call
 from .caches import BaseCache, Rejected
-from .call import Call, DigestedCall, LazyCall, QueryCall
+from .call import DigestedCall, LazyCall, PreparedCall, QueryCall
 from .digest import Digest
+from .storage.base import SaveError
 
 logger = logging.getLogger("fleche.remote")
 
@@ -141,6 +142,36 @@ def _query_result(cache: BaseCache, args: tuple) -> tuple[DigestedCall, ...]:
     return tuple(_strip_cache(lc) for lc in cache.query(template))
 
 
+def _save_value(cache: BaseCache, value: Any) -> Digest:
+    """Store a bare *value* in the served cache and return its digest.
+
+    The write-side counterpart of ``load_value``, existing only in the wire
+    protocol.  Routed through :meth:`~fleche.caches.BaseCache.prepare` with a
+    synthetic, never-committed call, so wrappers and stacks direct the value
+    to the same storage their saves use.  The value rides in the *result*
+    position for its strict save semantics: a refused value must reject the
+    commit (as in ``Cache.save``), where the argument position would fall
+    back to a digest-only reference and file a record with a dangling
+    result.  ``None`` — the one result the stash skips — rides as an
+    argument instead; storing ``None`` cannot fail.
+    """
+    if value is None:
+        prepared = cache.prepare(
+            _call.Call(name="fleche.remote:save_value", arguments={"value": None})
+        )
+        prepared.abandon()
+        return prepared.digested.arguments["value"]
+    try:
+        prepared = cache.prepare(
+            _call.Call(name="fleche.remote:save_value", arguments={}, result=value)
+        )
+    except SaveError as e:
+        raise Rejected(e)
+    prepared.abandon()
+    assert prepared.digested.result is not None  # value is not None here
+    return prepared.digested.result
+
+
 # Single inventory of every method `SshCache` forwards across the wire; the
 # client-side stubs near `SshCache` call these names via `self._conn.call(...)`.
 # Adding a new RPC-exposed cache method only requires one entry here.
@@ -148,6 +179,11 @@ _REMOTE_METHODS: dict[str, _RemoteMethod] = {
     "save": _RemoteMethod(lambda cache, args: cache.save(*args)),
     "load": _RemoteMethod(lambda cache, args: _strip_cache(cache.load(*args))),
     "load_value": _RemoteMethod(lambda cache, args: cache.load_value(*args)),
+    "save_value": _RemoteMethod(lambda cache, args: _save_value(cache, *args)),
+    # Only the sealed record travels back; the server-side PreparedCall is
+    # dropped (abandon is a no-op) and the client finishes the protocol with
+    # ``save_value`` + ``save`` once the body has run.
+    "prepare": _RemoteMethod(lambda cache, args: cache.prepare(*args).digested),
     "evict": _RemoteMethod(lambda cache, args: cache.evict(*args), void=True),
     "contains": _RemoteMethod(lambda cache, args: cache.contains(*args)),
     "expand": _RemoteMethod(lambda cache, args: cache.expand(*args)),
@@ -664,6 +700,21 @@ class _ClientMethod:
     reject_message: str | None = None
 
 
+@dataclass(frozen=True)
+class _RemoteValues:
+    """The slice of the value-storage write surface a remote commit needs.
+
+    Lets :meth:`SshCache.save` hand :meth:`~fleche.call.PreparedCall.resolve`
+    a values object, in parity with the local ``Cache.save``; ``save`` is one
+    ``save_value`` round trip.
+    """
+
+    _cache: "SshCache"
+
+    def save(self, value: Any) -> Digest:
+        return self._cache._rpc("save_value", value)
+
+
 def _fetch_lazy_call(sc: "SshCache", dc: DigestedCall) -> LazyCall:
     return dc.fetch(sc)
 
@@ -680,6 +731,12 @@ _CLIENT_METHODS: dict[str, _ClientMethod] = {
     "save": _ClientMethod(write=True),
     "load": _ClientMethod(unwrap=_fetch_lazy_call),
     "load_value": _ClientMethod(),
+    # Write-gated so a commit against a read-only remote is rejected locally
+    # before the first trip.
+    "save_value": _ClientMethod(write=True),
+    # Read-only remotes never reach this entry: `SshCache.prepare` short-circuits
+    # to the local digest-only admission before dispatching.
+    "prepare": _ClientMethod(),
     "evict": _ClientMethod(
         write=True, reject_message="Cannot evict from a read-only remote cache"
     ),
@@ -783,7 +840,14 @@ class SshCache(BaseCache):
             raise Rejected(self, *args)
         return spec.unwrap(self, self._conn.call(name, *args))
 
-    def save(self, call: Call) -> str:
+    def save(self, call: PreparedCall | _call.Call) -> str:
+        if isinstance(call, PreparedCall):
+            # Recreate Cache.save's ending in two trips: ship the result value,
+            # then file the plain digested record — a PreparedCall itself never
+            # goes over the wire.  A failure between the trips leaves the value
+            # as a content-addressed orphan for gc, like any abandoned call.
+            digested = call.resolve(_RemoteValues(self))
+            return self._rpc("save", digested)
         return self._rpc("save", call)
 
     def load(self, key: str) -> LazyCall:
@@ -791,6 +855,19 @@ class SshCache(BaseCache):
 
     def load_value(self, key: str) -> Any:
         return self._rpc("load_value", key)
+
+    def prepare(self, call: _call.Call) -> PreparedCall:
+        # One round trip: the whole call goes over so the remote stashes the
+        # argument values before the body runs and seals the record, which
+        # comes back for the client to complete with ``save``.  Values travel
+        # by cloudpickle, so a Path argument ships its path *string*, not its
+        # content — paths over SSH are unsupported.
+        self._ensure_handshake()
+        if self._info_cache and self._info_cache.get("read_only", False):
+            # Digest-only admission, as BaseCache: the body still runs, and the
+            # commit's ``save`` is rejected locally without a round trip.
+            return super().prepare(call)
+        return PreparedCall(digested=self._rpc("prepare", call), cache=self)
 
     def evict(self, key: str | Digest) -> None:
         self._rpc("evict", key)

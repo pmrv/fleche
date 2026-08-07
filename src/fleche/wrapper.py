@@ -235,7 +235,28 @@ def make_wrapper(func, policy, meta, isolate, get_call):
             for m in active_meta:
                 metadata[m.name] |= m.pre(replace(call, metadata={}))
 
-            result: _T = func(*args, **kwargs)
+            # Seal the call's identity (and stash its argument values) before
+            # the body runs, so mutations the body makes to its arguments
+            # cannot leak into the recorded key.  A read-only cache seals
+            # without writing and rejects at commit; the call still runs and
+            # returns uncached.
+            try:
+                prepared = cache.prepare(call)
+            except Rejected as e:
+                logger.warning("Cache rejected prepare: %s", e.args)
+                return func(*args, **kwargs)
+            except Exception:
+                # Not a policy rejection but an actual error (storage fault,
+                # lost connection, ...): still prefer running the call uncached
+                # over failing before the body ever ran.
+                logger.warning("Cache failed to prepare call", exc_info=True)
+                return func(*args, **kwargs)
+
+            try:
+                result: _T = func(*args, **kwargs)
+            except BaseException:
+                prepared.abandon()
+                raise
 
             def _cache(future=None):
                 if future is not None:
@@ -245,7 +266,11 @@ def make_wrapper(func, policy, meta, isolate, get_call):
                     if future is None:
                         call.result = result
                     else:
-                        call.result = future.result()
+                        try:
+                            call.result = future.result()
+                        except BaseException:
+                            prepared.abandon()
+                            raise
                     if call.result is None:
                         if isinstance(cache, RefreshingCache):
                             try:
@@ -257,15 +282,15 @@ def make_wrapper(func, policy, meta, isolate, get_call):
                                 logger.warning("Cache rejected evict: %s", e.args)
                         else:
                             logger.warning("Function returned None, not caching")
+                        prepared.abandon()
                         return None
                     for m in active_meta:
                         metadata[m.name] |= m.post(
                             metadata[m.name], replace(call, metadata={})
                         )
                     try:
-                        call.metadata = metadata
                         logger.debug("Saving result for %s with key %s", call.name, key)
-                        cache.save(call)
+                        prepared.commit(call.result, metadata)
                     except Rejected as e:
                         logger.warning("Cache rejected save: %s", e.args)
                     return call.result
