@@ -267,16 +267,29 @@ def _digest_bytes(value: Any) -> bytes:
             # of path-valued arguments/results depend.  The "FileBlob" /
             # "DirectoryBlob" salts MUST match
             # fleche.storage.paths.{FileBlob,DirectoryBlob}.__digest__.
-            if not value.exists():
-                raise Indigestible("Only existing paths can be digested.")
-            if value.is_file():
-                return _digest_bytes(
-                    ("FileBlob", value.name, _path_content_digest(value))
-                )
-            elif value.is_dir():
-                return _path_content_digest(value).encode()
-            else:
-                raise Indigestible("Can only digest files and folders!")
+            #
+            # Reading can fail for reasons that have nothing to do with the
+            # value being unsuitable — permissions, EIO, a network mount that
+            # went away.  Those degrade to `Indigestible` like every other
+            # case in this arm, so the wrapper runs the call uncached instead
+            # of crashing it before the body ever executes.  A caller who
+            # genuinely needs the read to succeed will hit the same error on
+            # its own terms inside the function.
+            try:
+                if not value.exists():
+                    raise Indigestible("Only existing paths can be digested.")
+                if value.is_file():
+                    return _digest_bytes(
+                        ("FileBlob", value.name, _path_content_digest(value))
+                    )
+                elif value.is_dir():
+                    return _path_content_digest(value).encode()
+                else:
+                    raise Indigestible("Can only digest files and folders!")
+            except OSError as e:
+                # `Indigestible` is not an OSError, so the raises above pass
+                # through untouched.
+                raise Indigestible(f"Could not read {value}: {e}") from None
         case np.ndarray():
             m.update(_digest_bytes(value.dtype.str))
             m.update(_digest_bytes(value.shape))

@@ -169,3 +169,99 @@ def test_special_path_raises_indigestible(tmp_path):
         pytest.skip("FIFOs not supported on this platform")
     with pytest.raises(Indigestible):
         digest(fifo)
+
+
+# ---- Unreadable paths degrade rather than escaping ----
+#
+# A read can fail for reasons unrelated to the value's suitability — permissions,
+# EIO, a network mount that vanished.  Those must degrade to `Indigestible` like
+# every other case in the arm, or the wrapper crashes the call before the body
+# ever runs.  Patched rather than chmod-ed so the tests are meaningful when the
+# suite runs as root, where mode bits are not enforced.
+
+
+def test_unreadable_file_degrades_to_indigestible(tmp_path, monkeypatch):
+    f = tmp_path / "secret.txt"
+    f.write_text("hidden")
+
+    def boom(self, *a, **kw):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(Path, "read_bytes", boom)
+    with pytest.raises(Indigestible, match="Could not read"):
+        digest(f)
+
+
+def test_unreadable_directory_degrades_to_indigestible(tmp_path, monkeypatch):
+    d = tmp_path / "locked"
+    d.mkdir()
+
+    def boom(self, *a, **kw):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(Path, "iterdir", boom)
+    with pytest.raises(Indigestible, match="Could not read"):
+        digest(d)
+
+
+def test_unreadable_child_degrades_the_whole_tree(tmp_path, monkeypatch):
+    """One unreadable file must not make the enclosing directory raise raw."""
+    d = tmp_path / "tree"
+    d.mkdir()
+    (d / "ok.txt").write_text("fine")
+    (d / "bad.bin").write_bytes(b"x")
+
+    real = Path.read_bytes
+
+    def selective(self, *a, **kw):
+        if self.name == "bad.bin":
+            raise OSError(5, "Input/output error")
+        return real(self, *a, **kw)
+
+    monkeypatch.setattr(Path, "read_bytes", selective)
+    with pytest.raises(Indigestible, match="Could not read"):
+        digest(d)
+
+
+def test_wrapped_call_on_an_unreadable_path_runs_uncached(tmp_path, monkeypatch):
+    """The point of degrading: the body still runs, it just isn't cached.
+
+    Before this, an `OSError` escaped `digest()` and killed the call before the
+    body executed — unlike every other undigestable argument, which warns and
+    falls through to an uncached run.
+    """
+    from fleche import fleche, cache
+    from fleche.caches import Cache
+    from fleche.storage import CallMemory, ValueMemory
+
+    f = tmp_path / "secret.txt"
+    f.write_text("hidden")
+    runs = []
+
+    @fleche
+    def consume(p: Path):
+        runs.append(p)
+        return "body ran"
+
+    def boom(self, *a, **kw):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(Path, "read_bytes", boom)
+    c = Cache(ValueMemory({}), CallMemory({}))
+    with cache(c):
+        assert consume(f) == "body ran"
+        assert consume(f) == "body ran"
+
+    assert len(runs) == 2, "an uncachable call must re-execute, not hit"
+    assert not c.calls.storage, "nothing should have been filed"
+
+
+def test_readable_paths_are_unaffected(tmp_path):
+    """The guard must not swallow anything that genuinely works."""
+    f = tmp_path / "a.txt"
+    f.write_text("content")
+    d = tmp_path / "d"
+    d.mkdir()
+    (d / "child.txt").write_text("content")
+    assert digest(f) and digest(d)
+    assert digest(f) != digest(d)

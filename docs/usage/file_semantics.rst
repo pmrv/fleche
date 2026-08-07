@@ -63,16 +63,24 @@ Only *content* changes count as mutation: permissions are not part of
 identity (see :ref:`fidelity-limits`), so a ``chmod`` on a received path is
 harmless.
 
-Nonexistent paths
-~~~~~~~~~~~~~~~~~
+Paths with no readable content
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-A path that does not exist on disk has no content and therefore **no digest**.
-Passing one to a cached function does not raise: fleche logs a warning
-(``"No hash for argument: ..."``) and **runs the function uncached** — every
-call executes, nothing is stored or looked up.  If you meant "an output
-location the function should write to", pass the location as a ``str`` or
-annotate the parameter :class:`~fleche.Ignored` (``dest: Ignored[Path]``) so it
-stays out of the key.
+A path fleche cannot read has no content and therefore **no digest**.  That
+covers one that does not exist, one that is neither a file nor a directory, and
+one whose content the process cannot actually read — no permission, an I/O
+error, a network mount that went away.
+
+None of these raise.  fleche logs a warning (``"No hash for argument: ..."``)
+and **runs the function uncached**: every call executes, nothing is stored or
+looked up.  An unreadable file is a caching problem, not a reason to fail a call
+the function itself might well handle — and if the function does need to read
+it, it will raise on its own terms, inside the body, where the traceback means
+something.
+
+If you meant "an output location the function should write to", pass the
+location as a ``str`` or annotate the parameter :class:`~fleche.Ignored`
+(``dest: Ignored[Path]``) so it stays out of the key.
 
 Cache hits materialize copies
 -----------------------------
