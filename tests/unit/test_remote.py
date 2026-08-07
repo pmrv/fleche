@@ -17,7 +17,7 @@ import fleche.state as _state
 from fleche.call import Call, QueryCall
 from fleche.caches import Cache, Rejected
 from fleche.config import cache_to_config, load_cache_config
-from fleche.digest import Digest
+from fleche.digest import Digest, digest
 from fleche.remote import (
     RemoteConnectionError,
     SshCache,
@@ -30,6 +30,7 @@ from fleche.remote import (
     serve,
 )
 from fleche.storage import CallMemory, ValueMemory
+from fleche.storage.base import SaveError
 
 
 class _PipeConnection(_Connection):
@@ -229,6 +230,8 @@ def test_dispatch_covers_every_registered_method():
         "save",
         "load",
         "load_value",
+        "save_value",
+        "prepare",
         "evict",
         "contains",
         "expand",
@@ -300,6 +303,107 @@ def test_read_only_short_circuits_save_and_evict():
 def test_read_only_false_for_writable_remote(remote):
     """A normal remote cache reports `read_only == False`."""
     assert remote.read_only is False
+
+
+# ---------------------------------------------------------------------------
+# Two-phase save protocol over the wire
+# ---------------------------------------------------------------------------
+
+
+def test_prepare_commit_round_trip(remote, server_cache):
+    """`prepare` stashes the arguments server-side before the body runs;
+    `commit` ships the result value and then the plain digested record —
+    a PreparedCall itself never goes over the wire."""
+    from fleche.call import PreparedCall
+
+    shipped = []
+    original_call = remote._conn.call
+
+    def spy(method, *args, **kwargs):
+        shipped.append((method, args))
+        return original_call(method, *args, **kwargs)
+
+    remote._conn.call = spy  # type: ignore[method-assign]
+
+    xs = [1, 2]
+    c = Call(name="f", arguments={"xs": xs}, module="m", version="1")
+    sealed = c.to_lookup_key()
+    prepared = remote.prepare(c)
+    assert prepared.cache is remote
+    assert prepared.digested.to_lookup_key() == sealed
+    # The argument value is already on the server before any commit.
+    assert server_cache.values.load(digest([1, 2])) == [1, 2]
+    xs.append(3)  # the "function body" mutates the argument
+    key = prepared.commit(xs)
+    assert key == sealed  # NOT c.to_lookup_key(): that drifted with the mutation
+    # The commit took two trips (result value, then the record), and nothing
+    # PreparedCall-shaped ever crossed the wire.
+    assert [m for m, _ in shipped if m in ("save_value", "save")] == ["save_value", "save"]
+    assert not any(
+        isinstance(a, PreparedCall) for _, args in shipped for a in args
+    )
+    lc = remote.load(key)
+    assert lc.result == [1, 2, 3]  # result: as returned
+    assert lc.arguments["xs"] == [1, 2]  # argument: as passed
+
+
+def test_unstorable_result_rejects_like_local_save():
+    """A result the server's value storage refuses must reject the commit —
+    not degrade to a digest-only reference that files a dangling record."""
+
+    class PickyValues(ValueMemory):
+        __hash__ = object.__hash__
+
+        def save(self, value, key=None):
+            if value == "REFUSE_ME":
+                raise SaveError("refused")
+            return super().save(value, key)
+
+    server = Cache(PickyValues({}), CallMemory({}))
+    sc = _make_remote(server)
+    try:
+        c = Call(name="f", arguments={"x": 1}, module="m", version="1")
+        prepared = sc.prepare(c)
+        with pytest.raises(Rejected):
+            prepared.commit("REFUSE_ME")
+        assert not server.contains(c.to_lookup_key())
+    finally:
+        sc.close()
+
+
+def test_commit_none_result_round_trips(remote, server_cache):
+    c = Call(name="f", arguments={"x": 1}, module="m", version="1")
+    key = remote.prepare(c).commit(None)
+    assert remote.load(key).result is None
+
+
+def test_read_only_prepare_is_local_and_commit_rejects():
+    """`prepare` against a read-only remote seals the key locally — no RPC,
+    nothing stashed — and the commit's `save` is rejected without a round trip."""
+    server = Cache(ValueMemory({}), CallMemory({})).readonly()
+    sc = _make_remote(server)
+    try:
+        # Trigger the info fetch once so the read_only flag is cached.
+        assert sc.read_only is True
+
+        rpc_calls = []
+        original_call = sc._conn.call
+
+        def spy(method, *args, **kwargs):
+            rpc_calls.append(method)
+            return original_call(method, *args, **kwargs)
+
+        sc._conn.call = spy  # type: ignore[method-assign]
+
+        c = Call(name="f", arguments={"xs": [1, 2]}, module="m", version="1")
+        prepared = sc.prepare(c)
+        assert prepared.digested.to_lookup_key() == c.to_lookup_key()
+        assert list(server.cache.values.list()) == []  # nothing stashed
+        with pytest.raises(Rejected):
+            prepared.commit(42)
+        assert rpc_calls == [], f"unexpected RPCs: {rpc_calls}"
+    finally:
+        sc.close()
 
 
 def test_reconnect_invalidates_info_cache(remote, server_cache):
