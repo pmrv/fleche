@@ -56,6 +56,7 @@ Welcome to the **Fleche** library documentation.
    :caption: Caches & Storage
 
    storage/configuration
+   storage/destructuring
    storage/cache_stack
    storage/security
 
@@ -70,9 +71,11 @@ Welcome to the **Fleche** library documentation.
    :caption: Development
 
    dev/custom_digests
+   dev/extending_destructurer
+   dev/function_profile
    dev/path_storage
-   dev/developer
    dev/ssh_cache
+   dev/sql_test_backends
 
 .. toctree::
    :maxdepth: 1
@@ -81,6 +84,7 @@ Welcome to the **Fleche** library documentation.
    notebooks/GettingStarted
    notebooks/ExtraMethods
    notebooks/StorageBackends
+   notebooks/Destructuring
    notebooks/SecureStorage
    notebooks/Caches
    notebooks/CacheStack

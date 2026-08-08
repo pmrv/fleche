@@ -74,7 +74,9 @@ pickled with it, never handed down the MRO.  So "a nested path is always stored
 by content" holds only if a path can never be inlined, and that is arranged
 rather than hoped for: a ``Path`` matches no destructurer, so ``_intern_rec``
 leaves its depth at ``float("inf")``, and ``inf < remaining_depth`` is false for
-every setting.
+every setting.  That is the general opaque-value rule
+(:doc:`/storage/destructuring`) doing the work here, not a path-specific
+mechanism.
 
 That is the enforcement mechanism, not a side effect of one.  It also
 propagates, since a parent's depth is ``1 + max(child_depths)``: every container

@@ -163,8 +163,9 @@ destructures *is* the list of places a nested path gets content treatment.
 That list is
 :data:`~fleche.storage.destructuring._DESTRUCTURERS`: ``dict``,
 ``OrderedDict``, ``list``, ``tuple`` (**exact types** — see below),
-``dataclasses`` and ``attrs`` classes.  See :ref:`extending-destructurer` for
-the mechanism and how to add your own container to it.
+``dataclasses`` and ``attrs`` classes.  See :doc:`/storage/destructuring` for
+what destructuring is and how ``remaining_depth`` shapes it, and
+:ref:`extending-destructurer` for how to add your own container to the list.
 
 Within those, paths are found nested to any depth, as values *or* as dict
 keys, and everything above about identity, materialization, and lifetime
@@ -173,9 +174,10 @@ on a hit: lists and tuples keep their element order, and a mended dict keeps
 the insertion order the stored value had.
 
 "Any depth" is not a figure of speech, and no storage setting narrows it.  A
-``Path`` matches no destructurer, so it is always written out as its own stored
-entry rather than inlined into the container above it — and being written out is
-exactly what hands it to the content machinery.  The
+``Path`` matches no destructurer, so it takes the depth-∞ treatment every
+opaque value gets (:doc:`/storage/destructuring`): it is always written out as
+its own stored entry rather than inlined into the container above it — and
+being written out is exactly what hands it to the content machinery.  The
 ``remaining_depth`` knob only decides how eagerly *destructurable* nodes are
 split into separate entries, so it cannot put a path out of reach however it is
 set.
