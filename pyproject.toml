@@ -39,7 +39,7 @@ dependencies = [
 [project.optional-dependencies]
 docs = [
     "sphinx",
-    "sphinx-rtd-theme",
+    "shibuya",
     "sphinx-autoapi",
     "nbsphinx",
     "ipython_pygments_lexers",

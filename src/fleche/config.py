@@ -22,7 +22,8 @@ following **lowercase** identifiers:
     :class:`~fleche.storage.CallPickleFile`).
     Required: ``root`` (path to storage directory).
     Optional: ``compress`` (bool, default ``False``) — gzip-compress files.
-    Optional: ``lock_timeout`` (float, default ``1.0``) — file-lock acquisition timeout (s).
+    Deprecated: ``lock_timeout`` (float) — dropped with a ``FutureWarning``;
+    the pickle family writes atomically and no longer uses file locks.
     Optional: ``secret_key`` (list of hex strings) — HMAC-SHA256 signing keys;
     each element is a hex-encoded byte string (same format as ``FLECHE_SECRET_KEY``).
     If omitted, falls back to the ``FLECHE_SECRET_KEY`` environment variable.
@@ -33,7 +34,7 @@ following **lowercase** identifiers:
     complex Python objects than ``pickle``.
     Required: ``root``.
     Optional: ``compress`` (bool, default ``False``) — gzip-compress files.
-    Optional: ``lock_timeout`` (float, default ``1.0``) — file-lock acquisition timeout (s).
+    Deprecated: ``lock_timeout`` (float) — dropped with a warning, as for ``"pickle"``.
     Optional: ``secret_key`` (list of hex strings) — same as ``"pickle"``.
     Optional (value backend): ``remaining_depth`` (int, default ``1``).
 
@@ -41,7 +42,7 @@ following **lowercase** identifiers:
     Filesystem backend serialised with ``dill``.
     Required: ``root``.
     Optional: ``compress`` (bool, default ``False``) — gzip-compress files.
-    Optional: ``lock_timeout`` (float, default ``1.0``) — file-lock acquisition timeout (s).
+    Deprecated: ``lock_timeout`` (float) — dropped with a warning, as for ``"pickle"``.
     Optional: ``secret_key`` (list of hex strings) — same as ``"pickle"``.
     Optional (value backend): ``remaining_depth`` (int, default ``1``).
 
@@ -237,6 +238,7 @@ whatever ``fleche.toml`` happens to live in a parent directory or ``$HOME``::
 
 import tomllib
 import logging
+import warnings
 from typing import Callable, Literal, cast, overload
 from pathlib import Path
 import os
@@ -442,8 +444,9 @@ def storage_from_config(d: dict[str, Any], type: Literal["call", "value"]) -> st
     * ``{"type": "memory"}``
     * ``{"type": "void"}``
     * ``{"type": "pickle", "root": "<path>"}``
-      — optional: ``compress``, ``lock_timeout``,
-      ``secret_key`` (list of hex strings), ``remaining_depth`` (value only)
+      — optional: ``compress``,
+      ``secret_key`` (list of hex strings), ``remaining_depth`` (value only);
+      ``lock_timeout`` is deprecated and dropped with a ``FutureWarning``
     * ``{"type": "cloudpickle", "root": "<path>"}``
       — same optional keys as ``"pickle"``
     * ``{"type": "dill", "root": "<path>"}``
@@ -458,6 +461,15 @@ def storage_from_config(d: dict[str, Any], type: Literal["call", "value"]) -> st
     """
     d = dict(d)
     backend = d.pop("type")
+    # Configs from fleche < 2.1 may still carry the key; the constructors no
+    # longer accept it since the pickle family stopped file locking.
+    if backend in ("pickle", "dill", "cloudpickle") and "lock_timeout" in d:
+        warnings.warn(
+            f"lock_timeout is deprecated for {backend!r} storage and ignored: "
+            "writes are atomic renames and use no file locks.",
+            FutureWarning,
+        )
+        del d["lock_timeout"]
     ctor = storage.get_storage_constructor(backend, type)
     if ctor is None:
         raise ValueError(f"Unknown storage type {backend!r} for {type} storage!")

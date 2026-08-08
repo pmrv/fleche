@@ -3,7 +3,7 @@ import sys
 sys.path.insert(0, os.path.abspath('../src'))
 
 project = 'Fleche'
-copyright = '2024, Marvin Poul'
+copyright = '2026, Marvin Poul'
 author = 'Marvin Poul'
 
 extensions = [
@@ -12,7 +12,6 @@ extensions = [
     'sphinx.ext.viewcode',
     'sphinx.ext.intersphinx',
     'autoapi.extension',
-    'sphinx_rtd_theme',
     'nbsphinx',
 ]
 
@@ -42,6 +41,8 @@ autoapi_dirs = ['../src']
 autoapi_ignore = ['*fleche/_version.py']
 autoapi_add_toctree_entry = False
 
-html_theme = 'sphinx_rtd_theme'
+html_theme = 'shibuya'
+html_static_path = ['_static']
+html_css_files = ['custom.css']
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
