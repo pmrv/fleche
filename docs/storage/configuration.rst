@@ -361,6 +361,8 @@ repair it with
 which migrates every prefix length it finds to a target length and returns
 the resulting storage.
 
+.. _configuring-destructuring:
+
 Destructuring
 ^^^^^^^^^^^^^
 
@@ -369,7 +371,9 @@ Most value backends (``"memory"``, ``"pickle"``, ``"cloudpickle"``,
 :class:`tuple`, :class:`dict`) by *destructuring* them: each element is stored
 independently under its own cache key, and on load the original structure is
 reassembled.  This avoids redundant storage of shared sub-structures across
-different cached calls.
+different cached calls.  See :doc:`destructuring` for a full discussion with
+figures, including the special cases (opaque objects, namedtuples, empty
+containers).
 
 The optional ``remaining_depth`` key (integer, default ``1``) controls the granularity:
 
