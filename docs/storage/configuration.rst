@@ -243,7 +243,7 @@ Available storage types
      - Filesystem backend, standard ``pickle``
        (:class:`~fleche.storage.ValuePickleFile` / :class:`~fleche.storage.CallPickleFile`)
      - ``root``
-     - ``compress``, ``lock_timeout``,
+     - ``compress``,
        ``secret_key``, ``remaining_depth`` *(value only)*
    * - ``"cloudpickle"``
      - Filesystem backend, ``cloudpickle``; handles lambdas, closures, etc.
@@ -278,10 +278,15 @@ Key descriptions
     (bool, default ``false``) — gzip-compress each stored file.
 
 ``lock_timeout``
-    (float, default ``1.0``) — maximum seconds to wait to acquire a file lock.
-    On reads, if the timeout expires the lock is skipped and the read proceeds
+    (float, default ``1.0``) — maximum seconds to wait to acquire a file lock
+    (``"bagofholding_hdf"`` only; locks guard its shared multi-bag files, so
+    per-key mode ``prefix_length = 0`` writes atomically without locks).  On
+    reads, if the timeout expires the lock is skipped and the read proceeds
     with a ``WARNING`` logged.  On writes, if the timeout expires
-    ``filelock.Timeout`` is raised.
+    ``filelock.Timeout`` is raised.  The pickle-family
+    backends write atomically and use no file locks; configs that still carry
+    the key there load fine, but it is dropped with a ``FutureWarning``
+    (deprecated).
 
 ``secret_key``
     (list of hex strings) — HMAC-SHA256 signing keys for tamper detection;

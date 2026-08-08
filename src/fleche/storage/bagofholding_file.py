@@ -1,6 +1,7 @@
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace, InitVar
 from pathlib import Path
-from typing import Any, Literal, Iterable
+from typing import Any, Generator, Literal, Iterable
 import logging
 import filelock
 
@@ -25,6 +26,38 @@ with ImportAlarm(
 VersionValidator = Literal["exact", "semantic-minor", "semantic-major", "none"]
 
 _DEFAULT_PREFIX_LENGTH = 2
+
+
+@contextmanager
+def _file_read_lock_with_fallback(
+    lock_path: Path, timeout: float, key: str
+) -> Generator[None, None, None]:
+    lock = filelock.FileLock(lock_path, timeout=timeout)
+    tried_anyway = False
+    try:
+        lock.acquire()
+    except filelock.Timeout:
+        logger.warning(
+            "Lock still held for %s after %s seconds, trying to read anyway.",
+            key,
+            timeout,
+        )
+        tried_anyway = True
+    try:
+        yield
+    except Exception as e:
+        if tried_anyway:
+            logger.error(
+                "Failed to read %s after timeout while lock was held: %s",
+                key,
+                e,
+                exc_info=True,
+            )
+            raise KeyError(key) from None
+        raise
+    finally:
+        if not tried_anyway:
+            lock.release()
 
 
 def _validate_prefix_length(prefix_length: Any) -> None:
@@ -65,6 +98,11 @@ class BagOfHoldingH5FileBackend(FileStorage):
     # length from the files already in root (falling back to the default on an
     # empty root), so it is always an int after construction.
     prefix_length: int | None = _DEFAULT_PREFIX_LENGTH
+    # Maximum seconds to wait to acquire a file lock: on reads the lock is
+    # then skipped with a warning logged, on writes filelock.Timeout is
+    # raised.  Lives here rather than on FileStorage because this is the only
+    # backend that still locks.
+    lock_timeout: float = 1.0
     # Init-only: skip the check that `prefix_length` matches the files already in
     # root.  Only allowed together with an explicit `prefix_length`; the storage
     # then blindly operates on files of exactly that length, ignoring all others —
@@ -238,10 +276,28 @@ class BagOfHoldingH5FileBackend(FileStorage):
             return super()._path(key)
         return self._bag_file(key) / key
 
+    # Multi-bag files are shared between keys and mutated in place, so writes
+    # to them cannot be made safe by an atomic rename and cross-process file
+    # locking stays.  Per-key mode has no such sharing: it inherits the
+    # lock-free atomic-rename put/get from FileStorage (H5Bag writes the temp
+    # sibling in full, the rename publishes it) and creates no lock files at
+    # all.  The remaining litter is bounded — one ``{prefix}.h5.lock`` per
+    # bag, removed with the emptied bag by ``_evict``.
     def _lock_path(self, key: str) -> Path:
-        if self.prefix_length == 0:
-            return super()._lock_path(key)
         return Path(f"{self._bag_file(key)}.lock")
+
+    def put(self, value: Any, key: Digest) -> Digest:
+        if self.prefix_length == 0:
+            return super().put(value, key)
+        with filelock.FileLock(self._lock_path(key), timeout=self.lock_timeout):
+            self._to_file(value, self._path(key))
+        return key
+
+    def get(self, key: Digest) -> Any:
+        if self.prefix_length == 0:
+            return super().get(key)
+        with _file_read_lock_with_fallback(self._lock_path(key), self.lock_timeout, str(key)):
+            return self._from_file(self._path(key))
 
     def _contains(self, key: Digest) -> bool:
         if self.prefix_length == 0:

@@ -233,3 +233,20 @@ def test_register_storage_roundtrips_a_third_party_backend(clean_registry):
     reconstructed = storage_from_config(cfg, "value")
     assert isinstance(reconstructed, ValueShouting)
     assert reconstructed.volume == 3
+
+
+def test_pickle_file_lock_timeout_dropped_with_warning(tmp_path):
+    # Configs written by fleche < 2.1 carry lock_timeout; the pickle family
+    # no longer locks, so the key is dropped with a warning instead of
+    # reaching the constructor.
+    cfg = {"type": "pickle", "root": str(tmp_path), "lock_timeout": 2.0}
+    with pytest.warns(FutureWarning, match="lock_timeout is deprecated"):
+        s = storage_from_config(cfg, "value")
+    assert isinstance(s, storage.ValuePickleFile)
+
+
+def test_bagofholding_lock_timeout_still_meaningful(tmp_path):
+    pytest.importorskip("bagofholding")
+    cfg = {"type": "bagofholding_hdf", "root": str(tmp_path), "lock_timeout": 2.0}
+    s = storage_from_config(cfg, "value")
+    assert s.lock_timeout == 2.0

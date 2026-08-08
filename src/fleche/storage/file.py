@@ -1,58 +1,43 @@
-import logging
-import filelock
 from abc import abstractmethod
-from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Any, Generator
+from typing import Iterable, Any, Callable
+from uuid import uuid4
 
 from .base import StorageBackend
 from ..digest import Digest
 
-logger = logging.getLogger("fleche.storage")
 
+def _atomic_write(path: Path, write: Callable[[Path], Any]) -> None:
+    """Have *write* produce a sibling temp file, then rename it over *path*.
 
-@contextmanager
-def _file_read_lock_with_fallback(
-    lock_path: Path, timeout: float, key: str
-) -> Generator[None, None, None]:
-    lock = filelock.FileLock(lock_path, timeout=timeout)
-    tried_anyway = False
+    ``os.replace`` is atomic on POSIX for paths on the same filesystem, so
+    readers observe either the previous complete file or the new complete
+    file, never a partial write.  The temp name is dot-prefixed so ``list()``
+    and the bagofholding layout scan never pick it up, and *write* (rather
+    than e.g. ``mkstemp``) creates the file so the usual umask applies —
+    shared caches stay readable for other users.
+    """
+    tmp = path.parent / f".{path.name}.{uuid4().hex}.tmp"
     try:
-        lock.acquire()
-    except filelock.Timeout:
-        logger.warning(
-            "Lock still held for %s after %s seconds, trying to read anyway.",
-            key,
-            timeout,
-        )
-        tried_anyway = True
-    try:
-        yield
-    except Exception as e:
-        if tried_anyway:
-            logger.error(
-                "Failed to read %s after timeout while lock was held: %s",
-                key,
-                e,
-                exc_info=True,
-            )
-            raise KeyError(key) from None
-        raise
+        write(tmp)
+        tmp.replace(path)
     finally:
-        if not tried_anyway:
-            lock.release()
+        tmp.unlink(missing_ok=True)
 
 
 @dataclass(frozen=True)
 class FileStorage(StorageBackend):
-    """File-based storage backend using pickle.
+    """File-based storage backend, one file per key.
 
-    Stores objects on the filesystem.
+    Stores objects on the filesystem.  Writes go to a temporary file that is
+    atomically renamed into place, so concurrent readers never observe a
+    partially written entry and no cross-process locking is needed —
+    ``_to_file`` must therefore write a complete file at the path it is given,
+    which may be a temporary sibling of the entry's final path.
     """
 
     root: Path
-    lock_timeout: float = 1.0
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "root", Path(self.root).expanduser().absolute().resolve())
@@ -61,10 +46,9 @@ class FileStorage(StorageBackend):
         self.root.mkdir(parents=True, exist_ok=True)
         return self.root / key
 
-    def _lock_path(self, key: str) -> Path:
-        return self._path(f"{key}.lock")
-
     def list(self) -> Iterable[Digest]:
+        # ".lock" files linger in caches written by fleche < 2.1; dot-files
+        # cover in-flight atomic-write temp files (and are good hygiene).
         self.root.mkdir(parents=True, exist_ok=True)
         return (
             Digest(p.name)
@@ -76,16 +60,13 @@ class FileStorage(StorageBackend):
 
     def _evict(self, key: Digest) -> None:
         self._path(key).unlink(missing_ok=True)
-        self._lock_path(key).unlink(missing_ok=True)
 
     def put(self, value: Any, key: Digest) -> Digest:
-        with filelock.FileLock(self._lock_path(key), timeout=self.lock_timeout):
-            self._to_file(value, self._path(key))
+        _atomic_write(self._path(key), lambda tmp: self._to_file(value, tmp))
         return key
 
     def get(self, key: Digest) -> Any:
-        with _file_read_lock_with_fallback(self._lock_path(key), self.lock_timeout, str(key)):
-            return self._from_file(self._path(key))
+        return self._from_file(self._path(key))
 
     @abstractmethod
     def _to_file(self, value: Any, path: Path) -> None: ...

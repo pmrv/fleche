@@ -1,6 +1,3 @@
-import time
-import threading
-import filelock
 from pathlib import Path
 import pytest
 from fleche.storage import ValuePickleFile as PickleFile
@@ -40,75 +37,72 @@ def test_file_storage_list_filtering(tmp_path):
     assert Digest(valid_digest2) in items
 
 
-def test_load_waits_for_lock(tmp_path):
-    storage = PickleFile.with_pickle(tmp_path, lock_timeout=2.0)
+def test_save_creates_no_extra_files(tmp_path):
+    storage = PickleFile.with_pickle(tmp_path)
+    keys = {storage.save(value) for value in (1, "two", 3.0)}
+
+    assert {p.name for p in tmp_path.iterdir()} == {str(k) for k in keys}
+
+
+def test_failed_load_creates_no_files(tmp_path):
+    storage = PickleFile.with_pickle(tmp_path)
+
+    with pytest.raises(KeyError):
+        storage.load("ab" * 32)
+
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_overwrite_leaves_single_file(tmp_path):
+    storage = PickleFile.with_pickle(tmp_path)
     key = digest("test")
-    storage.save("content", key=key)
+    storage.save("first", key=key)
+    storage.save("second", key=key)
 
-    lock_path = tmp_path / f"{key}.lock"
-    holder = filelock.FileLock(lock_path)
-    holder.acquire()
-
-    def release_lock_later():
-        time.sleep(0.2)
-        holder.release()
-
-    threading.Thread(target=release_lock_later).start()
-    start = time.perf_counter()
-    loaded = storage.load(key)
-    assert loaded == "content"
-    assert time.perf_counter() - start >= 0.2
+    assert storage.load(key) == "second"
+    assert [p.name for p in tmp_path.iterdir()] == [str(key)]
 
 
-def test_load_timeouts_and_reads_anyway(tmp_path, caplog):
-    storage = PickleFile.with_pickle(tmp_path, lock_timeout=0.1)
-    key = digest("test")
-    storage.save("content", key=key)
+@dataclass(frozen=True)
+class ExplodingFileStorage(FileStorage):
+    """Writes half the payload, then dies — an interrupted put."""
 
-    lock_path = tmp_path / f"{key}.lock"
-    holder = filelock.FileLock(lock_path)
-    holder.acquire()
-    try:
-        loaded = storage.load(key)
-        assert loaded == "content"
-        assert "trying to read anyway" in caplog.text
-    finally:
-        holder.release()
+    def _to_file(self, value: Any, path: Path) -> None:
+        path.write_bytes(b"partial")
+        raise RuntimeError("interrupted mid-write")
+
+    def _from_file(self, path: Path) -> Any:
+        return path.read_bytes()
 
 
-def test_load_fails_after_timeout_raises_keyerror(tmp_path, caplog):
-    storage = PickleFile.with_pickle(tmp_path, lock_timeout=0.1)
-    key = digest("test")
+def test_interrupted_write_leaves_nothing_behind(tmp_path):
+    storage = ExplodingFileStorage(root=tmp_path)
+    key = Digest("c" * 64)
 
-    lock_path = tmp_path / f"{key}.lock"
-    holder = filelock.FileLock(lock_path)
-    holder.acquire()
-    try:
-        with pytest.raises(KeyError):
-            storage.load(key)
-        assert "Failed to read" in caplog.text
-    finally:
-        holder.release()
+    with pytest.raises(RuntimeError):
+        storage.put(b"payload", key)
+
+    assert not storage.contains(key)
+    assert list(tmp_path.iterdir()) == []
 
 
-def test_save_releases_lock(tmp_path):
+def test_interrupted_rewrite_keeps_old_entry(tmp_path):
+    good = ConcreteFileStorage(root=tmp_path)
+    key = Digest("d" * 64)
+    (tmp_path / str(key)).write_bytes(b"old complete entry")
+
+    bad = ExplodingFileStorage(root=tmp_path)
+    with pytest.raises(RuntimeError):
+        bad.put(b"payload", key)
+
+    assert (tmp_path / str(key)).read_bytes() == b"old complete entry"
+    assert good.contains(key)
+
+
+def test_evict_removes_entry(tmp_path):
     storage = PickleFile.with_pickle(tmp_path)
     key = digest("test")
     storage.save("data", key=key)
-
-    lock_path = tmp_path / f"{key}.lock"
-    verifier = filelock.FileLock(lock_path, timeout=0.1)
-    verifier.acquire()
-    verifier.release()
-
-
-def test_evict_removes_lock(tmp_path):
-    storage = PickleFile.with_pickle(tmp_path)
-    key = digest("test")
-    storage.save("data", key=key)
-
-    lock_path = tmp_path / f"{key}.lock"
-    lock_path.touch()
 
     storage.evict(key)
-    assert not lock_path.exists()
+    assert not (tmp_path / str(key)).exists()

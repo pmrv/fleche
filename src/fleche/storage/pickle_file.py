@@ -4,9 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-import filelock
-
-from .file import FileStorage
+from .file import FileStorage, _atomic_write
 from .base import ValueMixin, CallMixin, register_storage
 from .thread_safe import PerKeyLockMixin
 from .destructuring import DestructuringMixin
@@ -83,21 +81,22 @@ class PickleFileBackend(FileStorage):
             raise KeyError(path, "Value present but failed signature check.")
 
     def _rewrite_all(self, transform: Callable[[bytes], bytes | None]) -> None:
-        """Lock, read, and conditionally rewrite every stored file via *transform*.
+        """Read and conditionally rewrite every stored file via *transform*.
 
         *transform* receives the raw file bytes and returns the new bytes to
-        write, or ``None`` to leave the file unchanged.
+        write, or ``None`` to leave the file unchanged.  Each rewrite is an
+        atomic rename, so concurrent readers see the old or new encoding,
+        never a torn file; both encodings decode to the same value.
         """
         for key in list(self.list()):
             path = self._path(key)
-            with filelock.FileLock(self._lock_path(key), timeout=self.lock_timeout):
-                try:
-                    content = path.read_bytes()
-                except FileNotFoundError:
-                    continue
-                result = transform(content)
-                if result is not None:
-                    path.write_bytes(result)
+            try:
+                content = path.read_bytes()
+            except FileNotFoundError:
+                continue
+            result = transform(content)
+            if result is not None:
+                _atomic_write(path, lambda tmp, data=result: tmp.write_bytes(data))
 
     def compress_all(self) -> None:
         """Rewrite all stored files in gzip-compressed form."""
@@ -125,7 +124,6 @@ class ValuePickleFile(PerKeyLockMixin, DestructuringMixin, ValueMixin, PickleFil
             "type": serializer,
             # `root` is a Path; config dicts must stay TOML/JSON-representable.
             "root": str(self.root),
-            "lock_timeout": self.lock_timeout,
             "compress": self.compress,
             "remaining_depth": self.remaining_depth,
         }
@@ -144,7 +142,6 @@ class CallPickleFile(PerKeyLockMixin, CallMixin, PickleFileBackend):
         config: dict[str, Any] = {
             "type": serializer,
             "root": str(self.root),
-            "lock_timeout": self.lock_timeout,
             "compress": self.compress,
         }
         if self.secret_key:
