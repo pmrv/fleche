@@ -35,18 +35,9 @@ class FileStorage(StorageBackend):
     partially written entry and no cross-process locking is needed —
     ``_to_file`` must therefore write a complete file at the path it is given,
     which may be a temporary sibling of the entry's final path.
-
-    ``lock_timeout`` is unused here: file locking was dropped in favour of
-    atomic renames because the ``filelock`` package never removes its
-    ``{key}.lock`` files on Unix, doubling the inode footprint of a cache
-    (and thereby filesystem quota usage).  The field is retained so configs
-    and call sites passing it keep working, and for subclasses that genuinely
-    need cross-process locking (in-place mutation of shared files, e.g.
-    :class:`~fleche.storage.bagofholding_file.BagOfHoldingH5FileBackend`).
     """
 
     root: Path
-    lock_timeout: float = 1.0
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "root", Path(self.root).expanduser().absolute().resolve())

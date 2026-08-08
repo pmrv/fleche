@@ -120,9 +120,6 @@ class ValuePickleFile(PerKeyLockMixin, DestructuringMixin, ValueMixin, PickleFil
         serializer = self.dumps.__module__.split(".")[0].lstrip("_")
         if serializer not in ("pickle", "dill", "cloudpickle"):
             raise ValueError(f"Unknown PickleFile serializer: {serializer!r}")
-        # `lock_timeout` is deliberately not emitted: the pickle family stopped
-        # locking (writes are atomic renames), the constructor merely still
-        # accepts the key so configs from fleche < 2.1 keep loading.
         config: dict[str, Any] = {
             "type": serializer,
             # `root` is a Path; config dicts must stay TOML/JSON-representable.

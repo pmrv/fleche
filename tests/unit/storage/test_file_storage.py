@@ -106,11 +106,3 @@ def test_evict_removes_entry(tmp_path):
 
     storage.evict(key)
     assert not (tmp_path / str(key)).exists()
-
-
-def test_lock_timeout_still_accepted(tmp_path):
-    # Deprecated and unused, but configs and call sites from fleche < 2.1
-    # pass it; constructing with it must keep working.
-    storage = PickleFile.with_pickle(tmp_path, lock_timeout=2.0)
-    key = storage.save("data")
-    assert storage.load(key) == "data"

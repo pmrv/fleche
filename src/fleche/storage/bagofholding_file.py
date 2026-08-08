@@ -98,6 +98,11 @@ class BagOfHoldingH5FileBackend(FileStorage):
     # length from the files already in root (falling back to the default on an
     # empty root), so it is always an int after construction.
     prefix_length: int | None = _DEFAULT_PREFIX_LENGTH
+    # Maximum seconds to wait to acquire a file lock: on reads the lock is
+    # then skipped with a warning logged, on writes filelock.Timeout is
+    # raised.  Lives here rather than on FileStorage because this is the only
+    # backend that still locks.
+    lock_timeout: float = 1.0
     # Init-only: skip the check that `prefix_length` matches the files already in
     # root.  Only allowed together with an explicit `prefix_length`; the storage
     # then blindly operates on files of exactly that length, ignoring all others —

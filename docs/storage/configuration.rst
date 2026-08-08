@@ -282,8 +282,9 @@ Key descriptions
     (``"bagofholding_hdf"`` only).  On reads, if the timeout expires the lock
     is skipped and the read proceeds with a ``WARNING`` logged.  On writes, if
     the timeout expires ``filelock.Timeout`` is raised.  The pickle-family
-    backends write atomically and use no file locks; they still accept the
-    key for backwards compatibility but ignore it (deprecated).
+    backends write atomically and use no file locks; configs that still carry
+    the key there load fine, but it is dropped with a ``FutureWarning``
+    (deprecated).
 
 ``secret_key``
     (list of hex strings) — HMAC-SHA256 signing keys for tamper detection;
