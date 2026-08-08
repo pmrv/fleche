@@ -1,93 +1,7 @@
-Developer Guide
-===============
-
-This page collects notes that aren't relevant to end users of ``fleche`` but
-are useful when hacking on the library itself.
-
-.. _function-profile:
-
-Per-function metadata: ``FunctionProfile``
-------------------------------------------
-
-All static per-function metadata is consolidated in the frozen dataclass
-:class:`~fleche.call.FunctionProfile` (defined in :mod:`fleche.call`).  The
-class method ``FunctionProfile.of(func)`` performs every introspection step
-in one place:
-
-- ``inspect.signature`` for argument binding and ``Required`` positional-only
-  checks
-- ``pyiron_snippets.versions.VersionInfo`` for ``qualname``, ``module``, and
-  ``version``
-- ``func.__code__`` hashing (``code_digest``)
-- ``get_type_hints(include_extras=True)`` to detect ``Ignored`` /
-  ``Required`` annotations (populates ``ignored`` / ``required`` fields)
-
-The result is stored by ``_profile``, a module-level
-``lru_cache(maxsize=1000)`` keyed on the callable's identity.  Unhashable
-callables (those that cannot serve as an ``lru_cache`` key) fall back to
-``_profile.__wrapped__`` (bypassing the LRU cache) so they are handled
-correctly without special-casing at call sites.
-
-**Adding new per-function metadata** is a two-step operation: add a field to
-``FunctionProfile`` and populate it inside ``FunctionProfile.of``.  Downstream
-code then reads it from the profile instead of calling introspection APIs
-directly.
-
-.. _extending-destructurer:
-
-Extending the destructurer
---------------------------
-
-The ``DestructuringMixin`` type-dispatch table, ``_DESTRUCTURERS``, is a
-module-level list of ``(predicate, sunder_fn)`` pairs.  It ships with four
-built-in entries — lists/tuples, dicts, dataclasses, and attrs instances — and
-can be extended at import time via
-:func:`~fleche.storage.destructuring.register_destructurer`.
-
-.. warning::
-
-   ``_DESTRUCTURERS`` is a global, mutable list shared by every
-   :class:`~fleche.storage.destructuring.DestructuringMixin` instance.
-   ``_intern_rec`` reads it on every call, so a newly registered destructurer
-   applies immediately to all subsequent saves — but entries already stored
-   were split with the old logic.  Loading those entries after registration
-   may produce inconsistent results.  Register all destructurers before any
-   storage instance is first used.
-
-Before reaching for this function, consider whether implementing
-``__digest__`` (or ``add_hook``) on the type in question is sufficient.
-Destructurer registration is only necessary when a container type must have
-its *children* stored as independent, reusable keys rather than being pickled
-as a single opaque blob.
-
-**Contract for** ``sunder_fn``
-
-The function must have the signature ``(intern, value) -> (result, depth)``
-where:
-
-- ``intern`` is :meth:`~fleche.storage.destructuring.DestructuringMixin._intern_rec`
-  — call it on each child value and collect the returned ``(child, depth)``
-  pairs.
-- ``result`` must be either the plain value (when all children are inlined,
-  i.e. no child returned a :class:`~fleche.digest.Digest`) or a new
-  :class:`~fleche.storage.destructuring.Digested` subclass instance wrapping
-  the children.
-- ``depth`` must be ``1 + max(child_depths)`` when children were processed,
-  or ``float("inf")`` when the value cannot be handled.
-
-The ``Digested`` subclass must implement :meth:`~fleche.storage.destructuring.Digested.mend`
-(reconstruction from storage), :meth:`~fleche.storage.destructuring.Digested.underlying`
-(for hashing), and the class-method
-:meth:`~fleche.storage.destructuring.Digested.sunder` (the ``sunder_fn``
-itself, as a classmethod).  Study
-:class:`~fleche.storage.destructuring.DigestedIterable` or
-:class:`~fleche.storage.destructuring.DigestedDict` as the canonical
-reference implementations before writing your own.
-
 .. _testing-non-sqlite-backends:
 
 Testing the SQL backend on non-sqlite dialects
-----------------------------------------------
+==============================================
 
 The ``Sql`` :class:`~fleche.storage.sql.Sql` ``CallStorage`` is implemented on
 top of SQLAlchemy and is portable to any dialect SQLAlchemy supports. By
@@ -125,7 +39,7 @@ teardown — so concurrent tests don't share schema state and there's nothing
 to clean up after a test crash beyond the next ``DROP DATABASE`` attempt.
 
 Running locally
-~~~~~~~~~~~~~~~
+---------------
 
 A typical local cycle against PostgreSQL looks like:
 
@@ -157,7 +71,7 @@ For MariaDB / MySQL the workflow is symmetric:
    pytest tests/regression/test_sql_non_sqlite_backends.py
 
 Continuous integration
-~~~~~~~~~~~~~~~~~~~~~~
+----------------------
 
 The ``sql-backends`` job in ``.github/workflows/tests.yml`` provisions
 ``postgres:16`` and ``mariadb:11`` service containers, exports the
@@ -167,7 +81,7 @@ project's ``[tests]`` extra on purpose — they are only needed by maintainers
 running the cross-dialect suite, not by end users.
 
 Adding a new SQL dialect
-~~~~~~~~~~~~~~~~~~~~~~~~
+------------------------
 
 The fixture machinery in ``tests/fixtures.py`` is small enough to extend
 in-place:
