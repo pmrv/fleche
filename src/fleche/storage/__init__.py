@@ -19,7 +19,13 @@ from .base import (
     get_storage_constructor,
     is_registered_storage,
 )
-from .destructuring import DestructuringMixin, register_destructurer
+from .destructuring import (
+    DestructuringMixin,
+    HasChildDigests,
+    HasScannableDigests,
+    register_destructurer,
+)
+from .scan import ScanUnsupported, scan_h5, scan_pickle
 from .memory import MemoryBackend, ValueMemory, CallMemory
 from .void import VoidBackend, ValueVoid, CallVoid
 from .file import FileStorage
@@ -47,7 +53,12 @@ __all__ = [
     "get_storage_constructor",
     "is_registered_storage",
     "DestructuringMixin",
+    "HasChildDigests",
+    "HasScannableDigests",
     "register_destructurer",
+    "ScanUnsupported",
+    "scan_pickle",
+    "scan_h5",
     "MemoryBackend",
     "ValueMemory",
     "CallMemory",

@@ -62,6 +62,19 @@ class MemoryBackend(StorageBackend):
 class ValueMemory(PerKeyLockMixin, DestructuringMixin, ValueMixin, MemoryBackend):
     __hash__ = object.__hash__
 
+    def scan_child_digests(self, key: Digest | str) -> set[Digest]:
+        """Direct digest children of *key*, read straight off the live object.
+
+        Nothing is serialized in memory, so there is no payload to decode and
+        no class to import — the wrapper is inspected in place.  Unlike
+        :meth:`~fleche.storage.destructuring.DestructuringMixin.child_digests`
+        this reads ``storage`` directly rather than through
+        :meth:`~fleche.storage.memory.MemoryBackend.get`, skipping the
+        defensive deep copy of a payload it only walks and never mutates.
+        """
+        with self._operation_context(key):
+            return self._raw_sub_digests(self.storage[self._normalize_key(key)])
+
     def to_config(self) -> dict[str, Any]:
         # `storage` is the live store — runtime state, not configuration;
         # from_config seeds a fresh one instead.

@@ -1,13 +1,15 @@
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace, InitVar
 from pathlib import Path
-from typing import Any, Literal, Iterable
+from typing import Any, Literal, Iterable, Generator
 import logging
 import filelock
 
-from .file import FileStorage
+from .file import FileStorage, _file_read_lock_with_fallback
 from .base import SaveError, ValueMixin, CallMixin, register_storage
 from .thread_safe import PerKeyLockMixin
 from .destructuring import DestructuringMixin
+from .scan import scan_h5
 from ..digest import Digest, DIGEST_LENGTH
 
 from pyiron_snippets.import_alarm import ImportAlarm
@@ -226,6 +228,38 @@ class BagOfHoldingH5FileBackend(FileStorage):
             logger.error("Corrupt file present in cache at path %s: %s", path, e, exc_info=True)
             raise KeyError(path) from e
 
+    @contextmanager
+    def open_bag(self, key: Digest) -> Generator[Any, None, None]:
+        """Yield the open HDF5 group holding *key*, without loading the bag.
+
+        The bag's own group — the file root in per-key layout, the
+        ``{prefix}.h5/{key}`` group in multi-bag layout — handed over as a
+        live :class:`h5py.Group` under the same read lock :meth:`get` takes.
+        Callers can inspect the stored object's structure (see
+        :mod:`fleche.storage.scan`) without going through
+        :class:`~bagofholding.h5.bag.H5Bag`, which would have to import every
+        class the payload names.
+
+        Raises:
+            KeyError: if *key* is absent, or its file is missing or unreadable.
+        """
+        with _file_read_lock_with_fallback(self._lock_path(key), self.lock_timeout, str(key)):
+            path = self._bag_file(key) if self.prefix_length else self._path(key)
+            try:
+                handle = h5py.File(path, "r")
+            except OSError:  # missing, or corrupt beyond h5py's ability to open
+                raise KeyError(key) from None
+            try:
+                # Opening and addressing are guarded, but the caller's own body is
+                # not: a KeyError it raises must not be mistaken for a cache miss.
+                try:
+                    group = handle[key] if self.prefix_length else handle
+                except KeyError:
+                    raise KeyError(key) from None
+                yield group
+            finally:
+                handle.close()
+
     def _bag_file(self, key: str) -> Path:
         """The HDF5 file backing `key` in multi-bag mode: ``root/{prefix}.h5``."""
         self.root.mkdir(parents=True, exist_ok=True)
@@ -316,6 +350,18 @@ class BagOfHoldingH5FileBackend(FileStorage):
 @register_storage("bagofholding_hdf", kind="value")
 @dataclass(frozen=True)
 class ValueBagOfHoldingH5File(PerKeyLockMixin, DestructuringMixin, ValueMixin, BagOfHoldingH5FileBackend):
+    def scan_child_digests(self, key: Digest | str) -> set[Digest]:
+        """Direct digest children of *key*, read off the HDF5 groups without loading the bag.
+
+        A bag records the object graph as self-describing groups, so the
+        wrapper and its digest children can be read with :mod:`h5py` alone
+        (:func:`~fleche.storage.scan.scan_h5`) — no payload class is imported
+        and no dataset outside the reference structure is touched.
+        """
+        with self._operation_context(key):
+            with self.open_bag(self._normalize_key(key)) as bag:
+                return scan_h5(bag)
+
     def to_config(self) -> dict[str, Any]:
         return {
             "type": "bagofholding_hdf",

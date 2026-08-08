@@ -7,6 +7,7 @@ from numbers import Number
 from typing import Any, Callable, Protocol, runtime_checkable
 
 from . import base
+from .scan import ScanUnsupported
 from .. import _attrs
 from .. import digest
 
@@ -234,6 +235,28 @@ class HasChildDigests(Protocol):
         ...
 
 
+@runtime_checkable
+class HasScannableDigests(Protocol):
+    """Structural protocol for value storages whose reference graph is readable without loading.
+
+    The no-load counterpart of :class:`HasChildDigests`: satisfied by any
+    :class:`~fleche.storage.base.ValueStorage` implementing
+    :meth:`scan_child_digests`.  Note that satisfying the protocol only means
+    the method exists — a storage may still raise
+    :class:`~fleche.storage.scan.ScanUnsupported` from it, so callers that
+    have a loading fallback should catch that too.
+    """
+
+    def scan_child_digests(self, key: digest.Digest) -> set[digest.Digest]:
+        """Return the digests directly referenced by *key*, without deserializing it.
+
+        Raises:
+            KeyError: if *key* is not present in the storage.
+            fleche.storage.scan.ScanUnsupported: if this storage cannot answer without deserializing.
+        """
+        ...
+
+
 @dataclass(frozen=True)
 class DestructuringMixin(base.ValueStorage):
     """Mixin that recursively destructures collections on save/load.
@@ -351,7 +374,33 @@ class DestructuringMixin(base.ValueStorage):
         """
         return self._raw_sub_digests(super().load(key))
 
-    def count_reuses(self) -> Counter[digest.Digest]:
+    def scan_child_digests(self, key: digest.Digest | str) -> set[digest.Digest]:
+        """Direct digest children of *key*, read off the serialized entry without loading it.
+
+        Same answer as :meth:`child_digests`, obtained without deserializing:
+        the entry's serialized form is walked structurally, so no module is
+        imported and no payload object is ever reconstructed.  That makes it
+        the usable variant on a *foreign* store — an archive, someone else's
+        cache, a cache whose producing package is no longer installed — where
+        the payload classes are absent and :meth:`child_digests` would fail on
+        the import.
+
+        Overridden by each concrete value storage that has a serialized form
+        this can be read from (see :mod:`fleche.storage.scan`); the default
+        here refuses rather than silently falling back to a load, because a
+        caller asking for the no-load path is usually asking precisely because
+        loading is not an option.
+
+        Raises:
+            KeyError: if *key* is not present in the underlying backend.
+            fleche.storage.scan.ScanUnsupported: if this storage's serialized form cannot be scanned.
+        """
+        raise ScanUnsupported(
+            f"{type(self).__name__} cannot walk its reference graph without "
+            f"deserializing; use child_digests() instead."
+        )
+
+    def count_reuses(self, load: bool = True) -> Counter[digest.Digest]:
         """Return a counter of how many times each stored key is referenced as a sub-component.
 
         Scans every raw entry and tallies ``Digest`` back-references found inside
@@ -359,9 +408,22 @@ class DestructuringMixin(base.ValueStorage):
         means the key is not pointed to by any other stored value (i.e. a top-level entry).
         A count greater than ``1`` indicates a sub-value shared between multiple parent containers.
 
+        Args:
+            load: when ``True`` (the default) each entry is deserialized and
+                inspected via :meth:`child_digests`.  Pass ``False`` to read the
+                references straight off the serialized entries via
+                :meth:`scan_child_digests` instead — the variant that works on a
+                store whose payload classes are not importable, which is the
+                normal state of an archived cache.
+
         Returns:
             A :class:`~collections.Counter` mapping each :class:`~fleche.digest.Digest` key
-            to the number of times it is referenced by other stored entries.
+            to the number of times it is referenced by other stored entries.  Both
+            modes return the same counts.
+
+        Raises:
+            fleche.storage.scan.ScanUnsupported: with ``load=False`` on a storage whose serialized
+                form cannot be scanned.
 
         Example:
 
@@ -374,9 +436,10 @@ class DestructuringMixin(base.ValueStorage):
             >>> hits[ds.save(shared)]  # [2, 3] is referenced by both outer lists
             2
         """
+        children = self.child_digests if load else self.scan_child_digests
         counts: Counter[digest.Digest] = Counter({key: 0 for key in self.list()})
         for key in list(counts):
-            for sub in self._raw_sub_digests(super().load(key)):
+            for sub in children(key):
                 if sub in counts:
                     counts[sub] += 1
         return counts

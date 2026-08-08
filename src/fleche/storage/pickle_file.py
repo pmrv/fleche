@@ -6,10 +6,12 @@ from typing import Any, Callable
 
 import filelock
 
-from .file import FileStorage
+from .file import FileStorage, _file_read_lock_with_fallback
 from .base import ValueMixin, CallMixin, register_storage
 from .thread_safe import PerKeyLockMixin
 from .destructuring import DestructuringMixin
+from .scan import scan_pickle
+from ..digest import Digest
 from ..security import get_secret_key, normalize_secret_key, SignedBytes, SignatureError
 
 from pyiron_snippets.import_alarm import ImportAlarm
@@ -69,18 +71,34 @@ class PickleFileBackend(FileStorage):
             data = gzip.compress(data)
         path.write_bytes(data)
 
-    def _from_file(self, path: Path) -> Any:
+    def _payload_from_file(self, path: Path) -> bytes:
+        """The serialized payload at *path*: decompressed and signature-checked, not deserialized."""
         try:
             content = path.read_bytes()
             if content[:2] == b"\x1f\x8b":
                 content = gzip.decompress(content)
-            signer = SignedBytes(self.secret_key)
-            data = signer.loads(content)
-            return self.loads(data)
+            return SignedBytes(self.secret_key).loads(content)
         except FileNotFoundError:
             raise KeyError(path) from None
         except SignatureError:
             raise KeyError(path, "Value present but failed signature check.")
+
+    def _from_file(self, path: Path) -> Any:
+        return self.loads(self._payload_from_file(path))
+
+    def payload(self, key: Digest) -> bytes:
+        """Return the raw serialized bytes stored under *key*.
+
+        Everything :meth:`get` does short of handing the bytes to ``loads`` —
+        the same read lock, the same gzip detection, the same signature check.
+        Lets callers inspect an entry (see :mod:`fleche.storage.scan`) without
+        importing the classes its payload names.
+
+        Raises:
+            KeyError: if *key* is absent or fails its signature check.
+        """
+        with _file_read_lock_with_fallback(self._lock_path(key), self.lock_timeout, str(key)):
+            return self._payload_from_file(self._path(key))
 
     def _rewrite_all(self, transform: Callable[[bytes], bytes | None]) -> None:
         """Lock, read, and conditionally rewrite every stored file via *transform*.
@@ -114,6 +132,19 @@ class PickleFileBackend(FileStorage):
 
 @dataclass(frozen=True)
 class ValuePickleFile(PerKeyLockMixin, DestructuringMixin, ValueMixin, PickleFileBackend):
+    def scan_child_digests(self, key: Digest | str) -> set[Digest]:
+        """Direct digest children of *key*, read off the pickle stream without unpickling it.
+
+        The stream is walked opcode by opcode
+        (:func:`~fleche.storage.scan.scan_pickle`), so nothing the payload
+        names is imported and no ``__reduce__`` from the file is ever called —
+        which is what makes this work on a store written by a project that is
+        not installed here.  Applies to ``dill`` and ``cloudpickle`` entries
+        too: both emit standard pickle opcode streams.
+        """
+        with self._operation_context(key):
+            return scan_pickle(self.payload(self._normalize_key(key)))
+
     def to_config(self) -> dict[str, Any]:
         # `dumps`/`loads` are not config data: the `type` name is what selects
         # them again on the way back in, and it comes off the instance rather

@@ -11,7 +11,7 @@ from . import digest as _digest
 from .digest import Digest  # type hint convenience
 from . import storage
 from .storage.base import _apply_shrink, _resolve_prefix, Intent, OperationContext
-from .storage.destructuring import HasChildDigests
+from .storage.destructuring import HasChildDigests, HasScannableDigests
 from .storage.thread_safe import PerKeyLockMixin, _PicklableRLock
 from .call import Call, LazyCall, PreparedCall, QueryCall
 from . import call
@@ -455,7 +455,7 @@ class Cache(PerKeyLockMixin, BaseCache):
                 self.save(loaded)
                 self.evict(key)
 
-    def gc(self) -> set[Digest]:
+    def gc(self, load: bool = True) -> set[Digest]:
         """Evict value entries not reachable from any stored call.
 
         Brute-force mark-and-sweep: walks every call record to build the set
@@ -465,8 +465,25 @@ class Cache(PerKeyLockMixin, BaseCache):
         ``values`` key outside the reachable
         set.  Call records are left untouched.
 
+        Args:
+            load: when ``True`` (the default) the transitive walk deserializes
+                each value to find its sub-references.  Pass ``False`` to read
+                them off the serialized entries instead (via
+                :meth:`~fleche.storage.destructuring.DestructuringMixin.scan_child_digests`
+                on storages that satisfy
+                :class:`~fleche.storage.destructuring.HasScannableDigests`) —
+                what makes ``gc`` runnable against a *foreign* store whose
+                payload classes are not importable here.  Only the value walk
+                is affected; call records hold nothing but digests, strings and
+                JSON metadata, so they load either way.
+
         Returns:
             The set of digests that were evicted from value storage.
+
+        Raises:
+            fleche.storage.scan.ScanUnsupported: with ``load=False`` on a value storage whose
+                serialized form cannot be scanned.  Nothing is evicted — an
+                unreadable reference graph must never be read as "unreachable".
         """
         reachable: set[Digest] = set()
         for key in self.calls.list():
@@ -480,17 +497,24 @@ class Cache(PerKeyLockMixin, BaseCache):
                 if isinstance(v, Digest):
                     reachable.add(v)
 
-        if isinstance(self.values, HasChildDigests):
-            frontier = set(reachable)
-            while frontier:
-                key = frontier.pop()
-                try:
-                    children = self.values.child_digests(key)
-                except KeyError:
-                    continue
-                new = children - reachable
-                reachable |= new
-                frontier |= new
+        # A storage that offers no reference query at all leaves `reachable` as
+        # the direct call references and skips the transitive walk entirely.
+        children_of: "Callable[[Digest], set[Digest]]" = lambda _key: set()
+        if load and isinstance(self.values, HasChildDigests):
+            children_of = self.values.child_digests
+        elif not load and isinstance(self.values, HasScannableDigests):
+            children_of = self.values.scan_child_digests
+
+        frontier = set(reachable)
+        while frontier:
+            key = frontier.pop()
+            try:
+                children = children_of(key)
+            except KeyError:
+                continue
+            new = children - reachable
+            reachable |= new
+            frontier |= new
 
         evicted: set[Digest] = set()
         for key in list(self.values.list()):

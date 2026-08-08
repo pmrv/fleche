@@ -50,3 +50,22 @@ itself, as a classmethod).  Study
 :class:`~fleche.storage.destructuring.DigestedIterable` or
 :class:`~fleche.storage.destructuring.DigestedDict` as the canonical
 reference implementations before writing your own.
+
+.. note::
+
+   The reference-graph helpers only recognise the built-in wrappers.
+   :meth:`~fleche.storage.destructuring.DestructuringMixin._raw_sub_digests`
+   pattern-matches
+   :class:`~fleche.storage.destructuring.DigestedIterable`,
+   :class:`~fleche.storage.destructuring.DigestedDict`, and
+   :class:`~fleche.storage.destructuring.DigestedFields`, and the no-load
+   scanners (see :ref:`destructuring-no-load`) match the same four classes by
+   name.  A wrapper subclassing :class:`~fleche.storage.destructuring.Digested`
+   directly is invisible to both, and one subclassing a built-in wrapper is
+   seen by the loading path but not by the scanners.  Entries stored through
+   such a wrapper therefore read as childless to
+   :meth:`~fleche.storage.destructuring.DestructuringMixin.count_reuses` and to
+   :meth:`~fleche.caches.Cache.gc` — which for ``gc`` means their children look
+   collectable.  If your destructurer only needs to reach a new container
+   *type*, have its ``sunder_fn`` return one of the built-in wrappers rather
+   than a new class, and both paths keep following the references.

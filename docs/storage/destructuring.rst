@@ -110,6 +110,43 @@ the digests an entry references directly (the arrows in the figures), and
 how often each entry is referenced by others — useful for spotting shared
 structure and for GC-style audits.
 
+.. _destructuring-no-load:
+
+Auditing a store you cannot load
+--------------------------------
+
+Both helpers above deserialize each entry to find its references, so both need
+every class the payloads mention to be importable.  That is exactly what an
+*archived* cache cannot offer: the project that wrote it may be a version
+behind, uninstalled, or somebody else's altogether, and
+``count_reuses()`` then fails on the import rather than on anything to do with
+the cache.
+
+Pass ``load=False`` to read the references straight off the serialized entries
+instead::
+
+    >>> values.count_reuses(load=False)          # doctest: +SKIP
+    Counter({'ed76af7c…': 2, '2f6b57d5…': 0, 'b179c9b7…': 0})
+
+The counts are identical either way — only the route differs.  The no-load
+route walks the pickle opcode stream, or the bagofholding HDF5 groups, without
+importing a single name from the payload and without calling any ``__reduce__``
+the file asks for; a
+:meth:`~fleche.storage.destructuring.DestructuringMixin.scan_child_digests`
+per-entry variant is available for the same reason.
+:meth:`~fleche.caches.Cache.gc` takes the same flag, which is what makes a
+sweep over a foreign store possible — call records hold only digests, strings,
+and JSON metadata, so it is only the value walk that ever needed the payload
+classes.
+
+Support is per backend: ``ValueMemory`` (nothing is serialized to begin with),
+``ValuePickleFile`` in all three serializer flavours, and
+``ValueBagOfHoldingH5File`` in both prefix layouts.  A value storage that
+cannot offer the scan raises
+:class:`~fleche.storage.scan.ScanUnsupported` rather than quietly falling back
+to a load — with ``gc(load=False)``, refusing is the safe answer, since a
+reference graph that cannot be read must never be mistaken for an empty one.
+
 Trying it out
 -------------
 
