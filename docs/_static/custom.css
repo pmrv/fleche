@@ -1,0 +1,156 @@
+/*
+ * Fleche docs theme customization for the shibuya theme.
+ *
+ * Two parts:
+ *   1. A layout fix that keeps the "on this page" rail visible on narrow
+ *      (vertical-monitor) viewports, where shibuya normally hides it behind
+ *      a drawer below 1280px.
+ *   2. A solarized skin (https://ethanschoonover.com/solarized/) with the
+ *      green accent, applied through shibuya's CSS custom properties.
+ *      The destructuring figures share this palette — see
+ *      docs/figures/gen_diagrams.py.
+ */
+
+/* ---- Narrow-viewport rail fix ------------------------------------------ */
+
+/* Undo the off-canvas drawer styling and hide its chrome. */
+@media (min-width: 720px) and (max-width: 1279.98px) {
+  .sy-rside {
+    position: static;
+    transform: none;
+    box-shadow: none;
+    background: transparent;
+    padding-top: 0;
+    padding-bottom: 0;
+    transition: none;
+    z-index: auto;
+  }
+  .sy-rside .sy-rside-inner {
+    position: sticky;
+    top: var(--sy-s-offset-top, 4rem);
+    padding-left: 0;
+  }
+  .rside-close, .rside-overlay, button[aria-controls="rside"] { display: none; }
+}
+
+/* Room for the full-width rail next to the left sidebar. */
+@media (min-width: 1080px) and (max-width: 1279.98px) {
+  .sy-rside { width: 16rem; }
+  .sy-main { width: calc(100% - 34rem); max-width: none; }
+}
+
+/* Slimmer rail when space is tight; left sidebar still visible >= 768px. */
+@media (min-width: 768px) and (max-width: 1079.98px) {
+  .sy-rside { width: 12rem; }
+  .sy-rside .sy-rside-inner { padding-left: 0; padding-right: 0.5rem; }
+  .sy-main { width: calc(100% - 30rem); max-width: none; }
+}
+
+/* 720p portrait: left sidebar is already a drawer, keep just the rail. */
+@media (min-width: 720px) and (max-width: 767.98px) {
+  .sy-rside { width: 12rem; }
+  .sy-rside .sy-rside-inner { padding-left: 0; padding-right: 0.5rem; }
+  .sy-main { width: calc(100% - 13rem); max-width: none; }
+}
+
+/* ---- Solarized skin, green accent -------------------------------------- */
+
+/* Larger type everywhere (16px -> 18px base). */
+html { font-size: 112.5%; }
+
+/* Scoped under html.light/html.dark (not :root): shibuya's own html.light
+   block re-declares the background with higher specificity than :root. */
+html.light {
+  --sy-c-background: #fdf6e3;          /* base3 */
+  --sy-c-surface: #eee8d5;             /* base2 */
+  --sy-c-border: #dcd4bc;
+  --sy-c-divider: #e7dfc9;
+  --sy-c-text: #657b83;                /* base00 */
+  --sy-c-light: #93a1a1;               /* base1 */
+  --sy-c-bold: #586e75;                /* base01 */
+  --sy-c-heading: #586e75;
+  --sy-c-foot-background: #eee8d5;
+  --sy-c-background-dropback: #fdf6e3cc;
+
+  --accent-3: #e4e0b8;
+  --accent-9: #859900;                 /* solarized green */
+  --accent-10: #76870a;
+  --accent-a2: rgba(133, 153, 0, .07);
+  --accent-a3: rgba(133, 153, 0, .16);
+  --accent-a4: rgba(133, 153, 0, .24);
+  --accent-a8: rgba(133, 153, 0, .55);
+  --accent-a9: rgba(133, 153, 0, .75);
+  --accent-a10: rgba(133, 153, 0, .85);
+  --accent-a11: #64730a;               /* dark enough for text on base3 */
+  --accent-contrast: #fdf6e3;
+
+  --yue-c-code-text: #586e75;          /* base01 on base2 chip */
+  --yue-c-code-background: #eee8d5;
+  --yue-c-table-border: #dcd4bc;
+  --yue-c-th-background: #eee8d5;      /* was near-white radix surface */
+  --yue-c-th-border: #dcd4bc;
+  --yue-c-td-border: #e7dfc9;
+  --yue-c-row-background: #f6efdc;
+  --yue-c-hr: #dcd4bc;
+  --code-block-background: #eee8d5;
+}
+
+html.dark {
+  --sy-c-background: #002b36;          /* base03 */
+  --sy-c-surface: #073642;             /* base02 */
+  --sy-c-border: #12454f;
+  --sy-c-divider: #0a3b47;
+  --sy-c-text: #839496;                /* base0 */
+  --sy-c-light: #657b83;
+  --sy-c-bold: #93a1a1;                /* base1 */
+  --sy-c-heading: #93a1a1;
+  --sy-c-foot-background: #00212b;
+  --sy-c-foot-divider: #0a3b47;
+  --sy-c-background-dropback: #002b36cc;
+
+  --accent-a2: rgba(133, 153, 0, .12);
+  --accent-a3: rgba(133, 153, 0, .22);
+  --accent-a11: #9eb327;
+  --accent-contrast: #002b36;
+
+  --yue-c-code-text: #93a1a1;
+  --yue-c-code-background: #073642;
+  --yue-c-th-background: #073642;
+  --code-block-background: #073642;
+}
+
+/* ---- Solarized admonitions --------------------------------------------- */
+/* Per-type: -1 body tint, -2 title tint, -3 border, -4 title text. */
+
+html.light, html.dark {
+  --note-1: rgba(38, 139, 210, .08);      --note-2: rgba(38, 139, 210, .18);
+  --note-3: #268bd2;                      --note-4: #268bd2;
+  --hint-1: rgba(42, 161, 152, .08);      --hint-2: rgba(42, 161, 152, .18);
+  --hint-3: #2aa198;                      --hint-4: #2aa198;
+  --tip-1: rgba(133, 153, 0, .08);        --tip-2: rgba(133, 153, 0, .18);
+  --tip-3: #859900;                       --tip-4: #859900;
+  --seealso-1: rgba(108, 113, 196, .08);  --seealso-2: rgba(108, 113, 196, .18);
+  --seealso-3: #6c71c4;                   --seealso-4: #6c71c4;
+  --important-1: rgba(211, 54, 130, .08); --important-2: rgba(211, 54, 130, .18);
+  --important-3: #d33682;                 --important-4: #d33682;
+  --todo-1: rgba(211, 54, 130, .08);      --todo-2: rgba(211, 54, 130, .18);
+  --todo-3: #d33682;                      --todo-4: #d33682;
+  --attention-1: rgba(181, 137, 0, .09);  --attention-2: rgba(181, 137, 0, .2);
+  --attention-3: #b58900;                 --attention-4: #b58900;
+  --warning-1: rgba(181, 137, 0, .09);    --warning-2: rgba(181, 137, 0, .2);
+  --warning-3: #b58900;                   --warning-4: #b58900;
+  --caution-1: rgba(203, 75, 22, .08);    --caution-2: rgba(203, 75, 22, .18);
+  --caution-3: #cb4b16;                   --caution-4: #cb4b16;
+  --danger-1: rgba(220, 50, 47, .08);     --danger-2: rgba(220, 50, 47, .18);
+  --danger-3: #dc322f;                    --danger-4: #dc322f;
+  --error-1: rgba(220, 50, 47, .08);      --error-2: rgba(220, 50, 47, .18);
+  --error-3: #dc322f;                     --error-4: #dc322f;
+}
+
+/* Darker title text for contrast on the light background. */
+html.light .admonition {
+  --note-4: #1e6ca3; --hint-4: #1f7d76; --tip-4: #647400;
+  --seealso-4: #555a9e; --important-4: #a82a68; --todo-4: #a82a68;
+  --attention-4: #8a6900; --warning-4: #8a6900; --caution-4: #a03a10;
+  --danger-4: #b02724; --error-4: #b02724;
+}
