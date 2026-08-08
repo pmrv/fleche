@@ -1,6 +1,7 @@
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace, InitVar
 from pathlib import Path
-from typing import Any, Literal, Iterable
+from typing import Any, Generator, Literal, Iterable
 import logging
 import filelock
 
@@ -25,6 +26,38 @@ with ImportAlarm(
 VersionValidator = Literal["exact", "semantic-minor", "semantic-major", "none"]
 
 _DEFAULT_PREFIX_LENGTH = 2
+
+
+@contextmanager
+def _file_read_lock_with_fallback(
+    lock_path: Path, timeout: float, key: str
+) -> Generator[None, None, None]:
+    lock = filelock.FileLock(lock_path, timeout=timeout)
+    tried_anyway = False
+    try:
+        lock.acquire()
+    except filelock.Timeout:
+        logger.warning(
+            "Lock still held for %s after %s seconds, trying to read anyway.",
+            key,
+            timeout,
+        )
+        tried_anyway = True
+    try:
+        yield
+    except Exception as e:
+        if tried_anyway:
+            logger.error(
+                "Failed to read %s after timeout while lock was held: %s",
+                key,
+                e,
+                exc_info=True,
+            )
+            raise KeyError(key) from None
+        raise
+    finally:
+        if not tried_anyway:
+            lock.release()
 
 
 def _validate_prefix_length(prefix_length: Any) -> None:
@@ -238,10 +271,25 @@ class BagOfHoldingH5FileBackend(FileStorage):
             return super()._path(key)
         return self._bag_file(key) / key
 
+    # Unlike the lock-free FileStorage base, this backend keeps cross-process
+    # file locking: HDF5 files are mutated in place (a torn read of one is an
+    # OSError, and multi-bag files are shared between keys), so writes cannot
+    # be made safe by an atomic rename.  The litter this leaves is bounded in
+    # multi-bag mode — one ``{prefix}.h5.lock`` per bag, removed with the bag
+    # by ``_evict`` — but per-key with per-key data files in per-key mode.
     def _lock_path(self, key: str) -> Path:
         if self.prefix_length == 0:
-            return super()._lock_path(key)
+            return self._path(f"{key}.lock")
         return Path(f"{self._bag_file(key)}.lock")
+
+    def put(self, value: Any, key: Digest) -> Digest:
+        with filelock.FileLock(self._lock_path(key), timeout=self.lock_timeout):
+            self._to_file(value, self._path(key))
+        return key
+
+    def get(self, key: Digest) -> Any:
+        with _file_read_lock_with_fallback(self._lock_path(key), self.lock_timeout, str(key)):
+            return self._from_file(self._path(key))
 
     def _contains(self, key: Digest) -> bool:
         if self.prefix_length == 0:

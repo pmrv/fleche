@@ -22,7 +22,8 @@ following **lowercase** identifiers:
     :class:`~fleche.storage.CallPickleFile`).
     Required: ``root`` (path to storage directory).
     Optional: ``compress`` (bool, default ``False``) — gzip-compress files.
-    Optional: ``lock_timeout`` (float, default ``1.0``) — file-lock acquisition timeout (s).
+    Deprecated: ``lock_timeout`` (float) — accepted but ignored; the pickle
+    family writes atomically and no longer uses file locks.
     Optional: ``secret_key`` (list of hex strings) — HMAC-SHA256 signing keys;
     each element is a hex-encoded byte string (same format as ``FLECHE_SECRET_KEY``).
     If omitted, falls back to the ``FLECHE_SECRET_KEY`` environment variable.
@@ -33,7 +34,7 @@ following **lowercase** identifiers:
     complex Python objects than ``pickle``.
     Required: ``root``.
     Optional: ``compress`` (bool, default ``False``) — gzip-compress files.
-    Optional: ``lock_timeout`` (float, default ``1.0``) — file-lock acquisition timeout (s).
+    Deprecated: ``lock_timeout`` (float) — accepted but ignored, as for ``"pickle"``.
     Optional: ``secret_key`` (list of hex strings) — same as ``"pickle"``.
     Optional (value backend): ``remaining_depth`` (int, default ``1``).
 
@@ -41,7 +42,7 @@ following **lowercase** identifiers:
     Filesystem backend serialised with ``dill``.
     Required: ``root``.
     Optional: ``compress`` (bool, default ``False``) — gzip-compress files.
-    Optional: ``lock_timeout`` (float, default ``1.0``) — file-lock acquisition timeout (s).
+    Deprecated: ``lock_timeout`` (float) — accepted but ignored, as for ``"pickle"``.
     Optional: ``secret_key`` (list of hex strings) — same as ``"pickle"``.
     Optional (value backend): ``remaining_depth`` (int, default ``1``).
 
@@ -442,8 +443,9 @@ def storage_from_config(d: dict[str, Any], type: Literal["call", "value"]) -> st
     * ``{"type": "memory"}``
     * ``{"type": "void"}``
     * ``{"type": "pickle", "root": "<path>"}``
-      — optional: ``compress``, ``lock_timeout``,
-      ``secret_key`` (list of hex strings), ``remaining_depth`` (value only)
+      — optional: ``compress``,
+      ``secret_key`` (list of hex strings), ``remaining_depth`` (value only);
+      ``lock_timeout`` is accepted but ignored (deprecated)
     * ``{"type": "cloudpickle", "root": "<path>"}``
       — same optional keys as ``"pickle"``
     * ``{"type": "dill", "root": "<path>"}``

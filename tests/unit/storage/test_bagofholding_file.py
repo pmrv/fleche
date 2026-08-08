@@ -580,3 +580,52 @@ def test_multi_bag_rebag(tmp_path):
 
     assert s.get(key1) == "first"
     assert s.get(key2) == "second"
+
+
+def test_load_timeouts_and_reads_anyway(tmp_path, caplog):
+    pytest.importorskip("bagofholding")
+    import filelock
+
+    s = BagOfHoldingH5FileBackend(tmp_path, lock_timeout=0.1)
+    key = Digest("ab" + "1" * 62)
+    s.put("content", key)
+
+    holder = filelock.FileLock(s._lock_path(key))
+    holder.acquire()
+    try:
+        with caplog.at_level(logging.WARNING, logger="fleche.storage.bagofholding_file"):
+            assert s.get(key) == "content"
+        assert "trying to read anyway" in caplog.text
+    finally:
+        holder.release()
+
+
+def test_load_fails_after_timeout_raises_keyerror(tmp_path, caplog):
+    pytest.importorskip("bagofholding")
+    import filelock
+
+    s = BagOfHoldingH5FileBackend(tmp_path, lock_timeout=0.1)
+    key = Digest("ab" + "1" * 62)
+
+    holder = filelock.FileLock(s._lock_path(key))
+    holder.acquire()
+    try:
+        with caplog.at_level(logging.WARNING, logger="fleche.storage.bagofholding_file"):
+            with pytest.raises(KeyError):
+                s.get(key)
+        assert "Failed to read" in caplog.text
+    finally:
+        holder.release()
+
+
+def test_save_releases_lock(tmp_path):
+    pytest.importorskip("bagofholding")
+    import filelock
+
+    s = BagOfHoldingH5FileBackend(tmp_path)
+    key = Digest("ab" + "1" * 62)
+    s.put("data", key)
+
+    verifier = filelock.FileLock(s._lock_path(key), timeout=0.1)
+    verifier.acquire()
+    verifier.release()
