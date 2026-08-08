@@ -629,3 +629,16 @@ def test_save_releases_lock(tmp_path):
     verifier = filelock.FileLock(s._lock_path(key), timeout=0.1)
     verifier.acquire()
     verifier.release()
+
+
+def test_per_key_evict_removes_lock(tmp_path):
+    pytest.importorskip("bagofholding")
+
+    s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=0)
+    key = Digest("ab" + "1" * 62)
+    s.put("data", key)
+    assert s._lock_path(key).exists()
+
+    s.evict(key)
+    assert not s._lock_path(key).exists()
+    assert not (tmp_path / str(key)).exists()

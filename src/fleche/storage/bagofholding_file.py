@@ -305,7 +305,11 @@ class BagOfHoldingH5FileBackend(FileStorage):
 
     def _evict(self, key: Digest) -> None:
         if self.prefix_length == 0:
-            return super()._evict(key)
+            super()._evict(key)
+            # The lock-free FileStorage base no longer knows about lock files;
+            # this backend still locks, so it drops the lock with the entry.
+            self._lock_path(key).unlink(missing_ok=True)
+            return
         file_path = self._bag_file(key)
         lock_path = self._lock_path(key)
         with filelock.FileLock(lock_path, timeout=self.lock_timeout):

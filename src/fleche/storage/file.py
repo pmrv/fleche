@@ -69,9 +69,6 @@ class FileStorage(StorageBackend):
 
     def _evict(self, key: Digest) -> None:
         self._path(key).unlink(missing_ok=True)
-        # fleche < 2.1 left a lock file next to every entry; clean it up with
-        # the entry so old caches shrink back over time.
-        self._path(f"{key}.lock").unlink(missing_ok=True)
 
     def put(self, value: Any, key: Digest) -> Digest:
         _atomic_write(self._path(key), lambda tmp: self._to_file(value, tmp))

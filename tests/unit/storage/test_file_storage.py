@@ -99,31 +99,13 @@ def test_interrupted_rewrite_keeps_old_entry(tmp_path):
     assert good.contains(key)
 
 
-def test_evict_removes_legacy_lock(tmp_path):
+def test_evict_removes_entry(tmp_path):
     storage = PickleFile.with_pickle(tmp_path)
     key = digest("test")
     storage.save("data", key=key)
 
-    lock_path = tmp_path / f"{key}.lock"
-    lock_path.touch()
-
     storage.evict(key)
-    assert not lock_path.exists()
     assert not (tmp_path / str(key)).exists()
-
-
-def test_clean_locks(tmp_path):
-    storage = PickleFile.with_pickle(tmp_path)
-    key = digest("data")
-    storage.save("data", key=key)
-    (tmp_path / f"{key}.lock").touch()
-    (tmp_path / f"{'e' * 64}.lock").touch()
-
-    assert storage.clean_locks() == 2
-
-    assert [p.name for p in tmp_path.iterdir()] == [str(key)]
-    assert storage.load(key) == "data"
-    assert storage.clean_locks() == 0
 
 
 def test_lock_timeout_still_accepted(tmp_path):

@@ -98,25 +98,6 @@ class PickleFileBackend(FileStorage):
             if result is not None:
                 _atomic_write(path, lambda tmp, data=result: tmp.write_bytes(data))
 
-    def clean_locks(self) -> int:
-        """Remove ``{key}.lock`` files left behind by fleche < 2.1.
-
-        Older versions coordinated writes through the ``filelock`` package,
-        which never deletes its lock files on Unix — an inode per key, which
-        adds up against filesystem quotas.  Current versions write atomically
-        and no longer create or read them, so the files are dead weight.  Only
-        run this while no process on an older fleche is actively using the
-        cache directory; their locking breaks when lock files vanish mid-use.
-
-        Returns:
-            int: number of lock files removed.
-        """
-        removed = 0
-        for p in self.root.glob("*.lock"):
-            p.unlink(missing_ok=True)
-            removed += 1
-        return removed
-
     def compress_all(self) -> None:
         """Rewrite all stored files in gzip-compressed form."""
         self._rewrite_all(
