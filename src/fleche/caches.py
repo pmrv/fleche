@@ -499,7 +499,11 @@ class Cache(PerKeyLockMixin, BaseCache):
         same window the one-shot :meth:`save` has always had between storing the
         values and filing the record — bounded by a storage write rather than by
         a function body — and closing it would need a lock shared by every
-        writer.
+        writer.  It is real rather than theoretical: forcing that gap open makes
+        the eviction reproducible, which
+        ``test_gc_may_evict_a_value_stored_but_not_yet_registered`` pins.  So a
+        sweep concurrent with writers is best-effort, and a sweep on an idle
+        cache is exact.
 
         Returns:
             The set of digests that were evicted from value storage.
