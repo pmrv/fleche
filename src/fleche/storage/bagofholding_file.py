@@ -276,23 +276,26 @@ class BagOfHoldingH5FileBackend(FileStorage):
             return super()._path(key)
         return self._bag_file(key) / key
 
-    # Unlike the lock-free FileStorage base, this backend keeps cross-process
-    # file locking: HDF5 files are mutated in place (a torn read of one is an
-    # OSError, and multi-bag files are shared between keys), so writes cannot
-    # be made safe by an atomic rename.  The litter this leaves is bounded in
-    # multi-bag mode — one ``{prefix}.h5.lock`` per bag, removed with the bag
-    # by ``_evict`` — but per-key with per-key data files in per-key mode.
+    # Multi-bag files are shared between keys and mutated in place, so writes
+    # to them cannot be made safe by an atomic rename and cross-process file
+    # locking stays.  Per-key mode has no such sharing: it inherits the
+    # lock-free atomic-rename put/get from FileStorage (H5Bag writes the temp
+    # sibling in full, the rename publishes it) and creates no lock files at
+    # all.  The remaining litter is bounded — one ``{prefix}.h5.lock`` per
+    # bag, removed with the emptied bag by ``_evict``.
     def _lock_path(self, key: str) -> Path:
-        if self.prefix_length == 0:
-            return self._path(f"{key}.lock")
         return Path(f"{self._bag_file(key)}.lock")
 
     def put(self, value: Any, key: Digest) -> Digest:
+        if self.prefix_length == 0:
+            return super().put(value, key)
         with filelock.FileLock(self._lock_path(key), timeout=self.lock_timeout):
             self._to_file(value, self._path(key))
         return key
 
     def get(self, key: Digest) -> Any:
+        if self.prefix_length == 0:
+            return super().get(key)
         with _file_read_lock_with_fallback(self._lock_path(key), self.lock_timeout, str(key)):
             return self._from_file(self._path(key))
 
@@ -310,11 +313,7 @@ class BagOfHoldingH5FileBackend(FileStorage):
 
     def _evict(self, key: Digest) -> None:
         if self.prefix_length == 0:
-            super()._evict(key)
-            # The lock-free FileStorage base no longer knows about lock files;
-            # this backend still locks, so it drops the lock with the entry.
-            self._lock_path(key).unlink(missing_ok=True)
-            return
+            return super()._evict(key)
         file_path = self._bag_file(key)
         lock_path = self._lock_path(key)
         with filelock.FileLock(lock_path, timeout=self.lock_timeout):

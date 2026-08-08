@@ -138,7 +138,8 @@ Fleche's pickle-family file storage writes each entry to a temporary file that
 is atomically renamed into place, so multiple workers can safely write to the
 same directory — readers never observe a partially written entry, and no lock
 files accumulate.  (The HDF5-backed ``bagofholding_hdf`` backend mutates its
-files in place instead and coordinates through lock files.)
+shared multi-bag files in place and coordinates those through lock files;
+its per-key mode writes atomically like the pickle family.)
 
 .. note::
 

@@ -631,14 +631,16 @@ def test_save_releases_lock(tmp_path):
     verifier.release()
 
 
-def test_per_key_evict_removes_lock(tmp_path):
+def test_per_key_mode_creates_no_lock_files(tmp_path):
     pytest.importorskip("bagofholding")
 
+    # Per-key mode has no shared files, so it inherits the lock-free
+    # atomic-rename put/get and must not litter lock (or temp) files.
     s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=0)
     key = Digest("ab" + "1" * 62)
     s.put("data", key)
-    assert s._lock_path(key).exists()
+    assert s.get(key) == "data"
+    assert [p.name for p in tmp_path.iterdir()] == [str(key)]
 
     s.evict(key)
-    assert not s._lock_path(key).exists()
-    assert not (tmp_path / str(key)).exists()
+    assert list(tmp_path.iterdir()) == []

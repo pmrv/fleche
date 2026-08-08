@@ -279,9 +279,11 @@ Key descriptions
 
 ``lock_timeout``
     (float, default ``1.0``) — maximum seconds to wait to acquire a file lock
-    (``"bagofholding_hdf"`` only).  On reads, if the timeout expires the lock
-    is skipped and the read proceeds with a ``WARNING`` logged.  On writes, if
-    the timeout expires ``filelock.Timeout`` is raised.  The pickle-family
+    (``"bagofholding_hdf"`` only; locks guard its shared multi-bag files, so
+    per-key mode ``prefix_length = 0`` writes atomically without locks).  On
+    reads, if the timeout expires the lock is skipped and the read proceeds
+    with a ``WARNING`` logged.  On writes, if the timeout expires
+    ``filelock.Timeout`` is raised.  The pickle-family
     backends write atomically and use no file locks; configs that still carry
     the key there load fine, but it is dropped with a ``FutureWarning``
     (deprecated).
