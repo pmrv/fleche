@@ -17,16 +17,17 @@ page you want.
          layers down to the backend implementations.
    :width: 100%
 
-Arrows point from base class to subclass.  Everything above is abstract or a
-mixin; the concrete classes are assembled from them in the table further
-down.
+Arrows point from base class to subclass — the opposite of UML's
+generalization arrow, which is why they are drawn as plain heads rather than
+hollow triangles.  Everything in the figure is abstract or a mixin; the
+concrete classes are assembled from them in the table further down.
 
 The abstract skeleton
 ---------------------
 
 :class:`~fleche.storage.base.OperationContext`
-    The root, and the only thing the cache layer shares with the storage
-    layer.  It defines one hook,
+    The root, and the point where the storage and cache layers meet.  It
+    defines one hook,
     :meth:`~fleche.storage.base.OperationContext._operation_context`, a
     context manager entered around every operation on a key; the base
     implementation does nothing.  :class:`~fleche.caches.BaseCache` inherits
@@ -92,7 +93,8 @@ load every key, keep the ones the template matches.
 Cross-cutting mixins
 --------------------
 
-Three mixins are orthogonal to both axes and can be layered onto anything.
+Three mixins cut across the layers above.  The two locking ones are
+orthogonal to both axes and compose with anything; the third is value-only.
 
 :class:`~fleche.storage.destructuring.DestructuringMixin`
     A :class:`~fleche.storage.base.ValueStorage` subclass that overrides
@@ -104,10 +106,16 @@ Three mixins are orthogonal to both axes and can be layered onto anything.
 
 :class:`~fleche.storage.thread_safe.PerKeyLockMixin`
     An :class:`~fleche.storage.base.OperationContext` subclass that overrides
-    ``_operation_context`` to take a per-key :class:`~threading.RLock` from a
-    striped table.  Operations on different keys run in parallel; operations
-    on the same key serialize.  Instances must be hashable, since the lock
-    table is a :class:`~weakref.WeakKeyDictionary` keyed on the storage.
+    ``_operation_context`` to take one :class:`~threading.RLock` per distinct
+    key, from a table held weakly so locks for keys nobody is touching are
+    collected.  Operations on different keys run in parallel; operations on
+    the same key serialize.  Instances must be hashable, since the lock table
+    is a :class:`~weakref.WeakKeyDictionary` keyed on the storage.
+
+    Note what it does *not* do: it overrides no ``save``/``load``, only
+    ``_operation_context``.  So it locks wherever some *other* class in the
+    MRO enters that context — see the walkthrough below, where that turns out
+    to be once per stored entry rather than once per call.
 
 :class:`~fleche.storage.thread_safe.SerializingMixin`
     The same idea with a single lock for the whole storage.  Use it when the
@@ -168,7 +176,9 @@ The concrete classes
 --------------------
 
 Each concrete storage is a mixin stack over a backend, and — with one
-exception — contains nothing but a ``to_config``.
+exception — its body is little more than a ``to_config``.  (The two memory
+classes also restate ``__hash__ = object.__hash__``, for the reason in the
+:class:`~fleche.storage.memory.MemoryBackend` row above.)
 
 .. list-table::
    :header-rows: 1
@@ -208,24 +218,48 @@ linearize like this, and a single ``save()`` walks straight down the chain:
 
 .. image:: ../figures/storage_mro.svg
    :alt: The method resolution order of ValuePickleFile, ten classes deep,
-         each annotated with what it contributes to a save() call.
+         each annotated with what it contributes to a save() call.  Arrows
+         are the lookup order, not the order in which code runs.
    :width: 62%
    :align: center
 
-Reading it as one call, ``storage.save([1, [2, 3]])``:
+The column is the lookup order, not the call order — a method only runs if
+the class defines it.  Following ``storage.save([1, [2, 3]])`` through:
 
-#. :class:`~fleche.storage.thread_safe.PerKeyLockMixin` wraps the operation in
-   this key's ``RLock`` (reentrant, so the nested ``expand`` inside a later
-   ``load`` cannot deadlock against it).
-#. :class:`~fleche.storage.destructuring.DestructuringMixin` walks the
-   collection, stores ``[2, 3]`` through ``super().save()``, and replaces it
-   with its digest in the parent entry.
-#. :class:`~fleche.storage.base.ValueMixin` — the ``super()`` those recursive
-   calls land on — hashes each entry if no key was supplied and calls
-   ``self.put()``.
-#. ``put`` resolves to :class:`~fleche.storage.file.FileStorage`, which asks
-   :class:`~fleche.storage.pickle_file.PickleFileBackend` to serialize into a
-   temp file and then renames it over the real path.
+#. Neither :class:`~fleche.storage.pickle_file.ValuePickleFile` nor
+   :class:`~fleche.storage.thread_safe.PerKeyLockMixin` defines ``save``, so
+   the call lands on
+   :class:`~fleche.storage.destructuring.DestructuringMixin` at position 2.
+   It walks the collection and stores ``[2, 3]`` through ``super().save()``,
+   keeping its digest in the parent entry.
+#. Each of those recursive calls resolves to
+   :class:`~fleche.storage.base.ValueMixin` at position 3, which hashes the
+   entry if no key was supplied and *then* enters
+   ``self._operation_context(key)``.
+#. That is where position 1 finally gets its say:
+   :class:`~fleche.storage.thread_safe.PerKeyLockMixin` takes the ``RLock``
+   for that entry's key (reentrant, so a nested ``expand`` cannot deadlock
+   against it) and chains on to the no-op at position 9.
+#. Still inside the lock, ``self.put()`` resolves past
+   :class:`~fleche.storage.pickle_file.PickleFileBackend` to
+   :class:`~fleche.storage.file.FileStorage` at position 6, which writes a
+   temp sibling via ``_to_file`` — pickle, HMAC-sign, optionally gzip — and
+   renames it over the real path.
+
+The ordering in step 2 is worth dwelling on, because the diagram makes it
+look otherwise: the lock is entered *inside*
+:class:`~fleche.storage.base.ValueMixin`, per entry, not around the call as a
+whole.  A destructured save therefore takes and releases one lock per entry —
+children first, then the parent — and is **not** atomic as a unit.  Two
+threads can interleave halfway through the same tree.  What makes that
+harmless is content addressing: an entry's key is the digest of its bytes, so
+two threads racing on one key are writing identical content, and
+:class:`~fleche.storage.file.FileStorage`'s atomic rename means a reader gets
+one complete version or the other.
+
+The same applies to :class:`~fleche.storage.thread_safe.SerializingMixin`,
+which is per-storage rather than per-key but is entered from exactly the same
+place.
 
 Note where :class:`~fleche.storage.base.ValueStorage` sits: *between*
 :class:`~fleche.storage.base.ValueMixin` and the backend, not above both.
@@ -247,9 +281,12 @@ exposes no ``put``/``get`` at all.  Three things drive that:
   (``calls``, ``arguments``, ``metadata``), so there is no single opaque
   payload for ``put`` to take.
 * **Queries belong in the database.**
-  :meth:`~fleche.storage.sql.Sql.query` compiles name, module, version, and
-  argument filters into SQL instead of scanning every key the way
-  :meth:`~fleche.storage.base.CallMixin.query` does.
+  :meth:`~fleche.storage.sql.Sql.query` compiles name, module, version,
+  code-digest, result, and argument filters into SQL instead of scanning
+  every key the way :meth:`~fleche.storage.base.CallMixin.query` does.
+  Metadata filters join down too, but only when every filter value is a
+  simple scalar; anything else falls back to a post-load check, which runs on
+  every yielded row regardless.
 * **Sessions are the operation context.**  ``Sql`` overrides
   ``_operation_context`` to open a thread-local session and chain to
   ``super()``, which is where its

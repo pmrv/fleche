@@ -21,9 +21,9 @@
 <g id="node2" class="node">
 <title>n1</title>
 <path fill="#f7e2d8" stroke="#cb4b16" stroke-width="1.4" d="M12,-594.9C12,-594.9 319.2,-594.9 319.2,-594.9 325.2,-594.9 331.2,-600.9 331.2,-606.9 331.2,-606.9 331.2,-634.2 331.2,-634.2 331.2,-640.2 325.2,-646.2 319.2,-646.2 319.2,-646.2 12,-646.2 12,-646.2 6,-646.2 0,-640.2 0,-634.2 0,-634.2 0,-606.9 0,-606.9 0,-600.9 6,-594.9 12,-594.9"/>
-<text xml:space="preserve" text-anchor="middle" x="165.33" y="-629.02" font-family="Helvetica,Arial,sans-serif" font-size="10.50" fill="#073642">1 PerKeyLockMixin</text>
-<polyline fill="none" stroke="#cb4b16" stroke-width="1.4" points="0,-620.55 330.67,-620.55"/>
-<text xml:space="preserve" text-anchor="start" x="12.96" y="-603.37" font-family="Helvetica,Arial,sans-serif" font-size="10.50" fill="#073642">takes this key&#39;s RLock, then delegates on</text>
+<text xml:space="preserve" text-anchor="middle" x="165.21" y="-629.02" font-family="Helvetica,Arial,sans-serif" font-size="10.50" fill="#073642">1 PerKeyLockMixin</text>
+<polyline fill="none" stroke="#cb4b16" stroke-width="1.4" points="0,-620.55 330.42,-620.55"/>
+<text xml:space="preserve" text-anchor="start" x="12.96" y="-603.37" font-family="Helvetica,Arial,sans-serif" font-size="10.50" fill="#073642">no save() of its own — supplies the RLock that 3 enters</text>
 </g>
 <!-- n0&#45;&gt;n1 -->
 <g id="edge1" class="edge">
@@ -49,9 +49,9 @@
 <g id="node4" class="node">
 <title>n3</title>
 <path fill="#f5ecd0" stroke="#b58900" stroke-width="1.4" d="M12,-446.3C12,-446.3 319.2,-446.3 319.2,-446.3 325.2,-446.3 331.2,-452.3 331.2,-458.3 331.2,-458.3 331.2,-485.6 331.2,-485.6 331.2,-491.6 325.2,-497.6 319.2,-497.6 319.2,-497.6 12,-497.6 12,-497.6 6,-497.6 0,-491.6 0,-485.6 0,-485.6 0,-458.3 0,-458.3 0,-452.3 6,-446.3 12,-446.3"/>
-<text xml:space="preserve" text-anchor="middle" x="165.58" y="-480.43" font-family="Helvetica,Arial,sans-serif" font-size="10.50" fill="#073642">3 ValueMixin</text>
+<text xml:space="preserve" text-anchor="middle" x="165.59" y="-480.43" font-family="Helvetica,Arial,sans-serif" font-size="10.50" fill="#073642">3 ValueMixin</text>
 <polyline fill="none" stroke="#b58900" stroke-width="1.4" points="0,-471.95 331.17,-471.95"/>
-<text xml:space="preserve" text-anchor="start" x="12.96" y="-454.78" font-family="Helvetica,Arial,sans-serif" font-size="10.50" fill="#073642">key = digest(value) if none given; calls self.put()</text>
+<text xml:space="preserve" text-anchor="start" x="12.96" y="-454.78" font-family="Helvetica,Arial,sans-serif" font-size="10.50" fill="#073642">key = digest(value) if none given; locks, then self.put()</text>
 </g>
 <!-- n2&#45;&gt;n3 -->
 <g id="edge3" class="edge">
@@ -77,9 +77,9 @@
 <g id="node6" class="node">
 <title>n5</title>
 <path fill="#eee8d5" stroke="#657b83" stroke-width="1.4" d="M12,-297.7C12,-297.7 319.2,-297.7 319.2,-297.7 325.2,-297.7 331.2,-303.7 331.2,-309.7 331.2,-309.7 331.2,-337 331.2,-337 331.2,-343 325.2,-349 319.2,-349 319.2,-349 12,-349 12,-349 6,-349 0,-343 0,-337 0,-337 0,-309.7 0,-309.7 0,-303.7 6,-297.7 12,-297.7"/>
-<text xml:space="preserve" text-anchor="middle" x="165.21" y="-331.82" font-family="Helvetica,Arial,sans-serif" font-size="10.50" fill="#073642">5 PickleFileBackend</text>
-<polyline fill="none" stroke="#657b83" stroke-width="1.4" points="0,-323.35 330.42,-323.35"/>
-<text xml:space="preserve" text-anchor="start" x="12.96" y="-306.18" font-family="Helvetica,Arial,sans-serif" font-size="10.50" fill="#073642">_to_file(): HMAC&#45;sign, optionally gzip, pickle</text>
+<text xml:space="preserve" text-anchor="middle" x="165.33" y="-331.82" font-family="Helvetica,Arial,sans-serif" font-size="10.50" fill="#073642">5 PickleFileBackend</text>
+<polyline fill="none" stroke="#657b83" stroke-width="1.4" points="0,-323.35 330.67,-323.35"/>
+<text xml:space="preserve" text-anchor="start" x="12.96" y="-306.18" font-family="Helvetica,Arial,sans-serif" font-size="10.50" fill="#073642">_to_file(): pickle, HMAC&#45;sign, optionally gzip</text>
 </g>
 <!-- n4&#45;&gt;n5 -->
 <g id="edge5" class="edge">

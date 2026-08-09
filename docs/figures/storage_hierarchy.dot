@@ -8,8 +8,12 @@
  *   dot -Tsvg docs/figures/storage_hierarchy.dot -o docs/figures/storage_hierarchy.svg
  *
  * Palette is solarized light, matching the docs skin in docs/_static/custom.css
- * and the destructuring figures in gen_diagrams.py.  All arrows are inheritance
- * (hollow head, pointing from base to subclass).
+ * and the destructuring figures in gen_diagrams.py.
+ *
+ * All arrows are inheritance, drawn base -> subclass so the picture reads
+ * top-down.  That is the opposite of UML generalization, which points at the
+ * superclass, so the arrowhead is deliberately a plain vee rather than UML's
+ * hollow triangle.
  */
 digraph StorageHierarchy {
     graph [
@@ -33,8 +37,8 @@ digraph StorageHierarchy {
     ]
     edge [
         color="#657b83"
-        arrowhead=onormal
-        arrowsize=0.9
+        arrowhead=vee
+        arrowsize=0.8
         penwidth=1.1
     ]
 

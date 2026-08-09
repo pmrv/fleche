@@ -40,15 +40,15 @@ digraph StorageMRO {
 
     n0 [label="{0\ ValuePickleFile|the class you instantiate — adds only to_config()\l}"
         fillcolor="#e9edcf" color="#859900"]
-    n1 [label="{1\ PerKeyLockMixin|takes this key's RLock, then delegates on\l}"
+    n1 [label="{1\ PerKeyLockMixin|no save() of its own — supplies the RLock that 3 enters\l}"
         fillcolor="#f7e2d8" color="#cb4b16"]
     n2 [label="{2\ DestructuringMixin|splits the value; stores each part with super().save()\l}"
         fillcolor="#f7e2d8" color="#cb4b16"]
-    n3 [label="{3\ ValueMixin|key = digest(value) if none given; calls self.put()\l}"
+    n3 [label="{3\ ValueMixin|key = digest(value) if none given; locks, then self.put()\l}"
         fillcolor="#f5ecd0" color="#b58900"]
     n4 [label="{4\ ValueStorage|abstract save/load — the contract, no code\l}"
         fillcolor="#dff0ee" color="#2aa198"]
-    n5 [label="{5\ PickleFileBackend|_to_file(): HMAC-sign, optionally gzip, pickle\l}"
+    n5 [label="{5\ PickleFileBackend|_to_file(): pickle, HMAC-sign, optionally gzip\l}"
         fillcolor="#eee8d5" color="#657b83"]
     n6 [label="{6\ FileStorage|put(): write a temp sibling, rename it into place\l}"
         fillcolor="#eee8d5" color="#657b83"]
