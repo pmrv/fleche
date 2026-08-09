@@ -272,6 +272,41 @@ The same applies to :class:`~fleche.storage.thread_safe.SerializingMixin`,
 which is per-storage rather than per-key but is entered from exactly the same
 place.
 
+The same two operations as sequences
+------------------------------------
+
+The MRO figure is a static picture; this is the dynamic one.  Both panels are
+transcribed from an instrumented storage, so the lock scopes drawn are the
+ones the code actually takes.
+
+.. image:: ../figures/storage_sequence.svg
+   :alt: Sequence diagrams of a destructured save and load.  The save panel
+         shows two disjoint lock scopes, one per stored entry, child before
+         parent.  The load panel shows the parent's lock released before the
+         child is fetched.
+   :width: 100%
+
+Three things are easier to see here than in prose.
+
+**The lock bars do not overlap.**  Each covers one entry and nothing else, in
+both directions.  That is the non-atomicity from the previous section, drawn.
+
+**Save and load are not mirror images.**  On the way in,
+:meth:`~fleche.storage.destructuring.DestructuringMixin.save` stores children
+with ``super().save()``, which skips straight past itself to
+:class:`~fleche.storage.base.ValueMixin` — the child never re-enters the
+destructuring layer, because it has already been taken apart.  On the way out,
+``mend`` calls the *public* ``storage.load``, so each child **does** re-enter
+:class:`~fleche.storage.destructuring.DestructuringMixin` and is mended in
+turn.  That asymmetry is what makes arbitrarily deep nesting reassemble
+correctly without the save path having to know how deep it went.
+
+**Mending happens outside the lock.**  The parent's entry is fetched and its
+lock released before the first child is looked up.  So a
+:meth:`~fleche.storage.base.ValueMixin.load` of a nested value is a series of
+independent reads, not one guarded snapshot — an entry evicted mid-mend
+surfaces as a :class:`KeyError` from the child load, not as a torn value.
+
 Note where :class:`~fleche.storage.base.ValueStorage` sits: *between*
 :class:`~fleche.storage.base.ValueMixin` and the backend, not above both.
 That is C3 linearization doing its job — the domain contract is satisfied
@@ -374,13 +409,18 @@ config files should be able to name additionally needs a ``to_config`` and a
 Regenerating the figures
 ------------------------
 
-Both diagrams on this page are Graphviz sources checked in next to their
-output:
+The two class diagrams are Graphviz sources checked in next to their output;
+the sequence diagram is emitted by a script, like the destructuring figures:
 
 .. code-block:: bash
 
    dot -Tsvg docs/figures/storage_hierarchy.dot -o docs/figures/storage_hierarchy.svg
    dot -Tsvg docs/figures/storage_mro.dot -o docs/figures/storage_mro.svg
+   python docs/figures/gen_sequence.py
 
-They use the same solarized-light palette as ``docs/_static/custom.css`` and
-the destructuring figures, so a retheme means touching all three.
+The SVGs are checked in rather than rendered at build time, because
+``.readthedocs.yaml`` installs no ``apt_packages`` and so cannot be relied on
+to have ``dot``.  All of them use the same solarized-light palette as
+``docs/_static/custom.css``, so a retheme means touching
+``gen_diagrams.py``, ``gen_sequence.py``, both ``.dot`` files and the CSS
+together.
