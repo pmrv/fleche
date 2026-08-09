@@ -205,10 +205,11 @@ classes also restate ``__hash__ = object.__hash__``, for the reason in the
    * - :class:`~fleche.storage.sql.Sql`
      - ``PerKeyLockMixin, CallStorage``
 
-Two patterns fall out of that table.  Every value storage stacks
+Two patterns fall out of that table.  Every value storage that actually
+stores anything stacks
 :class:`~fleche.storage.destructuring.DestructuringMixin`, so destructuring is
-the default rather than an opt-in.  And the two ``Void`` classes take no lock:
-there is no state to protect.
+the default rather than an opt-in.  And the two ``Void`` classes take neither
+that nor a lock: there is no state to split and none to protect.
 
 What the MRO actually does
 --------------------------
@@ -252,10 +253,20 @@ look otherwise: the lock is entered *inside*
 whole.  A destructured save therefore takes and releases one lock per entry —
 children first, then the parent — and is **not** atomic as a unit.  Two
 threads can interleave halfway through the same tree.  What makes that
-harmless is content addressing: an entry's key is the digest of its bytes, so
-two threads racing on one key are writing identical content, and
-:class:`~fleche.storage.file.FileStorage`'s atomic rename means a reader gets
-one complete version or the other.
+harmless is content addressing: an entry's key is
+:func:`~fleche.digest.digest` of the *value*, so two threads racing on one
+key are storing equal values.  The bytes need not be identical — pickle is
+not canonical — but they decode to the same thing, so whichever write lands
+last is still correct.
+
+That argument leans on each backend making a single write indivisible, which
+they do by different means:
+:class:`~fleche.storage.file.FileStorage` renames a complete temp file into
+place, :class:`~fleche.storage.memory.MemoryBackend` does one dict
+assignment, and
+:class:`~fleche.storage.bagofholding_file.BagOfHoldingH5FileBackend` in
+multi-bag mode falls back to a cross-process ``filelock``, precisely because
+it mutates a file shared with other keys and cannot rename its way out.
 
 The same applies to :class:`~fleche.storage.thread_safe.SerializingMixin`,
 which is per-storage rather than per-key but is entered from exactly the same
@@ -340,10 +351,24 @@ New combinations follow the table above — mixins first, backend last::
     ):
         __hash__ = object.__hash__
 
-Order is not cosmetic: the mixins work by overriding ``save``/``load`` or
-``_operation_context`` and delegating with ``super()``, so a mixin placed
-*after* the backend never runs.  A new class that config files should be able
-to name additionally needs a ``to_config`` and a
+Order is not cosmetic, but the rule is narrower than "mixins first".  A mixin
+takes effect only if it precedes every *other* class in the MRO that defines
+the method it overrides:
+
+* :class:`~fleche.storage.destructuring.DestructuringMixin` overrides
+  ``save``/``load``, and so does
+  :class:`~fleche.storage.base.ValueMixin`.  Put it *after* the bridge mixin
+  and it is shadowed — ``ValueMixin.save`` runs, calls ``self.put()``
+  directly, and the value is stored whole with no error to tell you.
+* The locking mixins override ``_operation_context``, which nothing else in
+  a normal stack defines except the no-op on
+  :class:`~fleche.storage.base.OperationContext` itself.  They therefore
+  still run from further back in the base list — even after the backend.
+  Listing them first is convention and readability, not a requirement.
+
+The safe habit is the one the shipped classes follow: locking, then
+destructuring, then the bridge mixin, then the backend.  A new class that
+config files should be able to name additionally needs a ``to_config`` and a
 :func:`~fleche.storage.base.register_storage` call.
 
 Regenerating the figures
