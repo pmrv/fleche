@@ -73,6 +73,7 @@ Welcome to the **Fleche** library documentation.
    dev/function_profile
    dev/ssh_cache
    dev/sql_test_backends
+   dev/storage_hierarchy
 
 .. toctree::
    :maxdepth: 1

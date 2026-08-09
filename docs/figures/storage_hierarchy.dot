@@ -1,0 +1,145 @@
+/*
+ * The abstract skeleton of fleche's storage subsystem: everything a concrete
+ * storage class is assembled from.  The concrete classes themselves are the
+ * table on docs/dev/storage_hierarchy.rst; one of them is exploded into its
+ * bases in storage_mro.dot.
+ *
+ * Render with:
+ *   dot -Tsvg docs/figures/storage_hierarchy.dot -o docs/figures/storage_hierarchy.svg
+ *
+ * Palette is solarized light, matching the docs skin in docs/_static/custom.css
+ * and the destructuring figures in gen_diagrams.py.  All arrows are inheritance
+ * (hollow head, pointing from base to subclass).
+ */
+digraph StorageHierarchy {
+    graph [
+        rankdir=TB
+        splines=spline
+        nodesep=0.40
+        ranksep=0.70
+        fontname="Helvetica,Arial,sans-serif"
+        fontsize=12
+        bgcolor="#fdf6e3"
+        fontcolor="#586e75"
+    ]
+    node [
+        shape=record
+        fontname="Helvetica,Arial,sans-serif"
+        fontsize=10.5
+        fontcolor="#073642"
+        style="filled,rounded"
+        penwidth=1.4
+        margin="0.16,0.10"
+    ]
+    edge [
+        color="#657b83"
+        arrowhead=onormal
+        arrowsize=0.9
+        penwidth=1.1
+    ]
+
+    /* ── Root ───────────────────────────────────────────────── */
+    OperationContext [
+        label="{«ABC»\nOperationContext|_operation_context(key, intent)\l}"
+        fillcolor="#e6e5f2" color="#6c71c4"
+    ]
+
+    /* ── Rank 1: key management, and the two locking mixins ─── */
+    KeyManagement [
+        label="{«ABC»\nKeyManagement|list()\l_evict(key)\l_contains(key)\l|evict(key)\lcontains(key)\lexpand(key)\lshrink(*keys)\l}"
+        fillcolor="#e6e5f2" color="#6c71c4"
+    ]
+    PerKeyLockMixin [
+        label="{PerKeyLockMixin|one RLock per key\l}"
+        fillcolor="#f7e2d8" color="#cb4b16"
+    ]
+    SerializingMixin [
+        label="{SerializingMixin|one RLock per storage\l}"
+        fillcolor="#f7e2d8" color="#cb4b16"
+    ]
+
+    /* ── Rank 2: the primitive contract and the two domains ─── */
+    ValueStorage [
+        label="{«ABC»\nValueStorage|save(value, key=None) → Digest\lload(key) → Any\l}"
+        fillcolor="#dff0ee" color="#2aa198"
+    ]
+    StorageBackend [
+        label="{«ABC»\nStorageBackend|put(value, key)\lget(key)\l}"
+        fillcolor="#e6e5f2" color="#6c71c4"
+    ]
+    CallStorage [
+        label="{«ABC»\nCallStorage|save(call) → Digest\lload(key) → DigestedCall\lquery(template)\l|transform(func)\l}"
+        fillcolor="#dff0ee" color="#2aa198"
+    ]
+
+    /* ── Rank 3: bridges and backends ───────────────────────── */
+    DestructuringMixin [
+        label="{DestructuringMixin|save(): splits collections\lload(): mends them back\lremaining_depth: int = 1\l}"
+        fillcolor="#f7e2d8" color="#cb4b16"
+    ]
+    ValueMixin [
+        label="{ValueMixin|save/load via put/get\lkey defaults to digest(value)\l}"
+        fillcolor="#f5ecd0" color="#b58900"
+    ]
+    CallMixin [
+        label="{CallMixin|save/load via put/get\lkey = call.to_lookup_key()\l}"
+        fillcolor="#f5ecd0" color="#b58900"
+    ]
+
+    MemoryBackend [
+        label="{MemoryBackend|storage: dict\ldeep-copies on put/get\l}"
+        fillcolor="#eee8d5" color="#657b83"
+    ]
+    VoidBackend [
+        label="{VoidBackend|discards writes\lget() always raises KeyError\l}"
+        fillcolor="#eee8d5" color="#657b83"
+    ]
+    FileStorage [
+        label="{«abstract»\nFileStorage|root: Path\l_to_file / _from_file\lput() renames atomically\l}"
+        fillcolor="#e9e2cc" color="#657b83"
+        style="filled,rounded,dashed"
+    ]
+
+    /* ── Rank 4: the two file backends ──────────────────────── */
+    PickleFileBackend [
+        label="{PickleFileBackend|pickle / cloudpickle / dill\lHMAC-signed, optional gzip\l}"
+        fillcolor="#eee8d5" color="#657b83"
+    ]
+    BagOfHoldingH5FileBackend [
+        label="{BagOfHoldingH5FileBackend|HDF5 via bagofholding\lprefix_length multiplexing\l}"
+        fillcolor="#eee8d5" color="#657b83"
+    ]
+
+    /* ── Inheritance ────────────────────────────────────────── */
+    OperationContext -> KeyManagement
+    OperationContext -> PerKeyLockMixin
+    OperationContext -> SerializingMixin
+
+    KeyManagement -> ValueStorage
+    KeyManagement -> StorageBackend
+    KeyManagement -> CallStorage
+
+    ValueStorage   -> DestructuringMixin
+    ValueStorage   -> ValueMixin
+    StorageBackend -> ValueMixin
+    StorageBackend -> CallMixin
+    CallStorage    -> CallMixin
+
+    StorageBackend -> MemoryBackend
+    StorageBackend -> VoidBackend
+    StorageBackend -> FileStorage
+
+    FileStorage -> PickleFileBackend
+    FileStorage -> BagOfHoldingH5FileBackend
+
+    /* ── Layout: keep each band on one rank ─────────────────── */
+    { rank=same; PerKeyLockMixin; KeyManagement; SerializingMixin }
+    { rank=same; ValueStorage; StorageBackend; CallStorage }
+    {
+        rank=same
+        DestructuringMixin; ValueMixin
+        MemoryBackend; VoidBackend; FileStorage
+        CallMixin
+    }
+    { rank=same; PickleFileBackend; BagOfHoldingH5FileBackend }
+}
