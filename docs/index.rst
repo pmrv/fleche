@@ -23,12 +23,14 @@ Welcome to the **Fleche** library documentation.
 .. toctree::
    :maxdepth: 2
    :caption: Getting Started
+   :hidden:
 
    installation
 
 .. toctree::
    :maxdepth: 2
    :caption: Using Fleche
+   :hidden:
 
    usage/tldr
    usage/purity
@@ -46,6 +48,7 @@ Welcome to the **Fleche** library documentation.
 .. toctree::
    :maxdepth: 2
    :caption: Digests
+   :hidden:
 
    digests/digests_as_args
    digests/digest_equivalence
@@ -54,6 +57,7 @@ Welcome to the **Fleche** library documentation.
 .. toctree::
    :maxdepth: 2
    :caption: Caches & Storage
+   :hidden:
 
    storage/configuration
    storage/destructuring
@@ -63,12 +67,14 @@ Welcome to the **Fleche** library documentation.
 .. toctree::
    :maxdepth: 2
    :caption: Advanced
+   :hidden:
 
    parallel_execution
 
 .. toctree::
    :maxdepth: 2
    :caption: Development
+   :hidden:
 
    dev/custom_digests
    dev/extending_destructurer
@@ -80,6 +86,7 @@ Welcome to the **Fleche** library documentation.
 .. toctree::
    :maxdepth: 1
    :caption: Notebooks
+   :hidden:
 
    notebooks/GettingStarted
    notebooks/ExtraMethods
@@ -96,6 +103,7 @@ Welcome to the **Fleche** library documentation.
 .. toctree::
    :maxdepth: 2
    :caption: API Reference
+   :hidden:
 
    autoapi/fleche/index
 
