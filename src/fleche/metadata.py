@@ -7,6 +7,7 @@ import socket
 import subprocess
 import sys
 import time
+import types
 from typing import Any, ClassVar, TypeAlias
 
 from .call import Call
@@ -17,7 +18,8 @@ except ImportError:
     _fleche_version = "unknown"
 
 try:
-    import resource
+    import resource as _resource_module
+    resource: types.ModuleType | None = _resource_module
 except ImportError:  # pragma: no cover - resource is POSIX-only, no Windows CI
     resource = None
 
@@ -215,7 +217,11 @@ class Git(MetaData):
 
 def _rusage_totals() -> tuple[Any, Any]:
     """``(RUSAGE_SELF, RUSAGE_CHILDREN)`` snapshots, fetched together so a
-    ``pre``/``post`` pair sees a consistent self+children split."""
+    ``pre``/``post`` pair sees a consistent self+children split.
+
+    Callers must only reach this after their own ``resource is None`` guard.
+    """
+    assert resource is not None
     return resource.getrusage(resource.RUSAGE_SELF), resource.getrusage(resource.RUSAGE_CHILDREN)
 
 
