@@ -3,18 +3,15 @@ import os
 import platform
 import socket
 import subprocess
+import sys
 import time
 
 import pytest
 
-import sys
-
 import fleche as fleche_pkg
 from fleche import fleche, cache, tags, project, meta
 from fleche.caches import Cache
-from fleche.metadata import (
-    CONFIGURABLE, Environment, Git, MetaData, Resources, Runtime, Tags, Call, configurable,
-)
+from fleche.metadata import CONFIGURABLE, Environment, Git, MetaData, Runtime, Tags, Call, configurable
 from fleche.storage import ValueMemory, CallMemory
 
 
@@ -285,8 +282,8 @@ def test_git_metadata_when_subprocess_fails(failure, monkeypatch, cache_it: Cach
     }
 
 
-def test_resources_metadata_basic(cache_it: Cache):
-    @fleche(meta=(Resources(),))
+def test_runtime_metadata_includes_cpu_time(cache_it: Cache):
+    @fleche
     def busy_wait():
         x = 0
         for _ in range(2_000_000):
@@ -298,15 +295,14 @@ def test_resources_metadata_basic(cache_it: Cache):
         key = busy_wait.fleche.digest()
         call = cache().calls.load(key)
 
-    res = call.metadata["resources"]
-    assert res["peak_rss"] > 0
-    assert res["user_cpu"] >= 0.0
-    assert res["sys_cpu"] >= 0.0
+    runtime = call.metadata["runtime"]
+    assert runtime["cputime"] >= 0.0
+    assert runtime["systime"] >= 0.0
 
 
-def test_resources_metadata_counts_subprocess_cpu(cache_it: Cache):
+def test_runtime_metadata_counts_subprocess_cpu_time(cache_it: Cache):
     """CPU spent in a spawned subprocess is counted via RUSAGE_CHILDREN."""
-    @fleche(meta=(Resources(),))
+    @fleche
     def spin_in_subprocess():
         result = subprocess.run(
             [sys.executable, "-c", "x = 0\nfor _ in range(3_000_000): x += 1"],
@@ -319,14 +315,16 @@ def test_resources_metadata_counts_subprocess_cpu(cache_it: Cache):
         key = spin_in_subprocess.fleche.digest()
         call = cache().calls.load(key)
 
-    assert call.metadata["resources"]["user_cpu"] > 0.0
+    assert call.metadata["runtime"]["cputime"] > 0.0
 
 
-def test_resources_metadata_without_resource_module(monkeypatch, cache_it: Cache):
-    """Degrades to all-``None`` (rather than raising) where ``resource`` is unavailable."""
+def test_runtime_metadata_cpu_time_without_resource_module(monkeypatch, cache_it: Cache):
+    """``cputime``/``systime`` degrade to ``None`` (rather than raising) where the
+    ``resource`` module is unavailable; ``timestart``/``timestop``/``walltime`` are
+    unaffected since they don't depend on it."""
     monkeypatch.setattr("fleche.metadata.resource", None)
 
-    @fleche(meta=(Resources(),))
+    @fleche
     def my_function(a: int, b: int) -> int:
         return a + b
 
@@ -335,7 +333,10 @@ def test_resources_metadata_without_resource_module(monkeypatch, cache_it: Cache
         key = my_function.fleche.digest(1, 2)
         call = cache().calls.load(key)
 
-    assert call.metadata["resources"] == {"peak_rss": None, "user_cpu": None, "sys_cpu": None}
+    runtime = call.metadata["runtime"]
+    assert runtime["cputime"] is None
+    assert runtime["systime"] is None
+    assert isinstance(runtime["walltime"], float)
 
 
 def test_metadata_default_methods():
@@ -357,16 +358,13 @@ def test_metadata_default_methods():
 
 
 def test_configurable_registry_contains_builtins():
-    assert CONFIGURABLE == {
-        "Runtime": Runtime, "Environment": Environment, "Git": Git, "Resources": Resources,
-    }
+    assert CONFIGURABLE == {"Runtime": Runtime, "Environment": Environment, "Git": Git}
 
 
 def test_configurable_sets_name():
     assert Runtime().name == "runtime"
     assert Environment().name == "environment"
     assert Git().name == "git"
-    assert Resources().name == "resources"
 
 
 def test_configurable_decorator_registers_and_names():
@@ -388,7 +386,16 @@ def test_tags_not_in_configurable():
 @pytest.mark.parametrize(
     "cls, expected_keys",
     [
-        (Runtime, {"timestart": float, "timestop": float, "walltime": float}),
+        (
+            Runtime,
+            {
+                "timestart": float,
+                "timestop": float,
+                "walltime": float,
+                "cputime": float,
+                "systime": float,
+            },
+        ),
         (
             Environment,
             {
@@ -400,9 +407,8 @@ def test_tags_not_in_configurable():
             },
         ),
         (Git, {"root": str, "commit": str, "branch": str, "dirty": bool}),
-        (Resources, {"peak_rss": int, "user_cpu": float, "sys_cpu": float}),
     ],
-    ids=["runtime", "environment", "git", "resources"],
+    ids=["runtime", "environment", "git"],
 )
 def test_builtin_metadata_keys_schema(cls, expected_keys):
     """Zero-arg built-ins publish a fixed schema via the ``keys`` property.
@@ -417,9 +423,7 @@ def test_builtin_metadata_keys_schema(cls, expected_keys):
     assert cls().keys == expected_keys
 
 
-@pytest.mark.parametrize(
-    "cls", [Runtime, Environment, Git, Resources], ids=["runtime", "environment", "git", "resources"],
-)
+@pytest.mark.parametrize("cls", [Runtime, Environment, Git], ids=["runtime", "environment", "git"])
 def test_builtin_metadata_pre_post_keys_match_schema(cls):
     """The keys ``pre``/``post`` actually emit must match the declared ``_keys`` schema.
 
