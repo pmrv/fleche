@@ -7,10 +7,14 @@ import time
 
 import pytest
 
+import sys
+
 import fleche as fleche_pkg
 from fleche import fleche, cache, tags, project, meta
 from fleche.caches import Cache
-from fleche.metadata import CONFIGURABLE, Environment, Git, MetaData, Runtime, Tags, Call, configurable
+from fleche.metadata import (
+    CONFIGURABLE, Environment, Git, MetaData, Resources, Runtime, Tags, Call, configurable,
+)
 from fleche.storage import ValueMemory, CallMemory
 
 
@@ -281,6 +285,59 @@ def test_git_metadata_when_subprocess_fails(failure, monkeypatch, cache_it: Cach
     }
 
 
+def test_resources_metadata_basic(cache_it: Cache):
+    @fleche(meta=(Resources(),))
+    def busy_wait():
+        x = 0
+        for _ in range(2_000_000):
+            x += 1
+        return x
+
+    with cache(cache_it):
+        busy_wait()
+        key = busy_wait.fleche.digest()
+        call = cache().calls.load(key)
+
+    res = call.metadata["resources"]
+    assert res["peak_rss"] > 0
+    assert res["user_cpu"] >= 0.0
+    assert res["sys_cpu"] >= 0.0
+
+
+def test_resources_metadata_counts_subprocess_cpu(cache_it: Cache):
+    """CPU spent in a spawned subprocess is counted via RUSAGE_CHILDREN."""
+    @fleche(meta=(Resources(),))
+    def spin_in_subprocess():
+        result = subprocess.run(
+            [sys.executable, "-c", "x = 0\nfor _ in range(3_000_000): x += 1"],
+            check=True,
+        )
+        return result.returncode
+
+    with cache(cache_it):
+        spin_in_subprocess()
+        key = spin_in_subprocess.fleche.digest()
+        call = cache().calls.load(key)
+
+    assert call.metadata["resources"]["user_cpu"] > 0.0
+
+
+def test_resources_metadata_without_resource_module(monkeypatch, cache_it: Cache):
+    """Degrades to all-``None`` (rather than raising) where ``resource`` is unavailable."""
+    monkeypatch.setattr("fleche.metadata.resource", None)
+
+    @fleche(meta=(Resources(),))
+    def my_function(a: int, b: int) -> int:
+        return a + b
+
+    with cache(cache_it):
+        my_function(1, 2)
+        key = my_function.fleche.digest(1, 2)
+        call = cache().calls.load(key)
+
+    assert call.metadata["resources"] == {"peak_rss": None, "user_cpu": None, "sys_cpu": None}
+
+
 def test_metadata_default_methods():
     """MetaData should define pre/post method defaults that return empty dictionaries."""
     class MyMetaData(MetaData):
@@ -300,13 +357,16 @@ def test_metadata_default_methods():
 
 
 def test_configurable_registry_contains_builtins():
-    assert CONFIGURABLE == {"Runtime": Runtime, "Environment": Environment, "Git": Git}
+    assert CONFIGURABLE == {
+        "Runtime": Runtime, "Environment": Environment, "Git": Git, "Resources": Resources,
+    }
 
 
 def test_configurable_sets_name():
     assert Runtime().name == "runtime"
     assert Environment().name == "environment"
     assert Git().name == "git"
+    assert Resources().name == "resources"
 
 
 def test_configurable_decorator_registers_and_names():
@@ -340,8 +400,9 @@ def test_tags_not_in_configurable():
             },
         ),
         (Git, {"root": str, "commit": str, "branch": str, "dirty": bool}),
+        (Resources, {"peak_rss": int, "user_cpu": float, "sys_cpu": float}),
     ],
-    ids=["runtime", "environment", "git"],
+    ids=["runtime", "environment", "git", "resources"],
 )
 def test_builtin_metadata_keys_schema(cls, expected_keys):
     """Zero-arg built-ins publish a fixed schema via the ``keys`` property.
@@ -356,7 +417,9 @@ def test_builtin_metadata_keys_schema(cls, expected_keys):
     assert cls().keys == expected_keys
 
 
-@pytest.mark.parametrize("cls", [Runtime, Environment, Git], ids=["runtime", "environment", "git"])
+@pytest.mark.parametrize(
+    "cls", [Runtime, Environment, Git, Resources], ids=["runtime", "environment", "git", "resources"],
+)
 def test_builtin_metadata_pre_post_keys_match_schema(cls):
     """The keys ``pre``/``post`` actually emit must match the declared ``_keys`` schema.
 

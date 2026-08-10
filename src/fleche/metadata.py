@@ -5,6 +5,7 @@ import os
 import platform
 import socket
 import subprocess
+import sys
 import time
 from typing import Any, ClassVar, TypeAlias
 
@@ -14,6 +15,11 @@ try:
     from ._version import __version__ as _fleche_version
 except ImportError:
     _fleche_version = "unknown"
+
+try:
+    import resource
+except ImportError:  # pragma: no cover - resource is POSIX-only, no Windows CI
+    resource = None
 
 # Values produced by MetaData.pre/post must be JSON-serializable.
 # This alias documents the expected shape and helps static type checkers.
@@ -204,6 +210,81 @@ class Git(MetaData):
             'commit': _git('rev-parse', 'HEAD'),
             'branch': _git('rev-parse', '--abbrev-ref', 'HEAD'),
             'dirty': bool(status) if status is not None else None,
+        }
+
+
+def _rusage_totals() -> tuple[Any, Any]:
+    """``(RUSAGE_SELF, RUSAGE_CHILDREN)`` snapshots, fetched together so a
+    ``pre``/``post`` pair sees a consistent self+children split."""
+    return resource.getrusage(resource.RUSAGE_SELF), resource.getrusage(resource.RUSAGE_CHILDREN)
+
+
+def _cpu_seconds(ru_self: Any, ru_children: Any) -> tuple[float, float]:
+    """``(user, sys)`` CPU seconds, self + children combined."""
+    return ru_self.ru_utime + ru_children.ru_utime, ru_self.ru_stime + ru_children.ru_stime
+
+
+def _maxrss_bytes(ru_self: Any, ru_children: Any) -> int:
+    """Peak RSS across self + children, normalized to bytes.
+
+    ``ru_maxrss`` is reported in KiB on Linux but bytes on macOS/BSD.
+    """
+    peak = max(ru_self.ru_maxrss, ru_children.ru_maxrss)
+    return peak if sys.platform == "darwin" else peak * 1024
+
+
+@configurable
+class Resources(MetaData):
+    """Metadata type for capturing resource consumption during a call.
+
+    Keys:
+        peak_rss (int | None): Peak resident-set size in bytes, across the
+            process and any children it spawned, sampled via
+            ``resource.getrusage`` at call end.  ``None`` where the POSIX
+            ``resource`` module is unavailable (Windows).
+        user_cpu (float | None): User-mode CPU seconds consumed during the
+            call (self + child processes).  ``None`` where unavailable.
+        sys_cpu (float | None): Kernel-mode CPU seconds consumed during the
+            call (self + child processes).  ``None`` where unavailable.
+
+    Notes:
+        - POSIX-only (backed by the stdlib ``resource`` module); all keys are
+          ``None`` on platforms without it (Windows) rather than raising.
+        - ``peak_rss`` reflects ``ru_maxrss``, which is a monotonically
+          non-decreasing high-water mark over the *whole process lifetime*,
+          not a peak scoped to this call — it overstates a call's own
+          footprint when the process peaked earlier, and cannot see memory
+          released since.  A tighter per-call bound would need a background
+          sampler thread; out of scope here.
+        - CPU seconds sum ``RUSAGE_SELF`` and ``RUSAGE_CHILDREN``, so a call
+          that shells out to a subprocess (e.g. ``git``, ``mpirun``) has that
+          cost accounted for.
+        - ``resource.getrusage`` is process-wide, so this is only meaningful
+          for sequential call sites: overlapping ``@fleche``-wrapped calls
+          (executor workers, threads, async) will see each other's CPU time
+          and RSS bleed into their own deltas.
+    """
+    _keys: ClassVar[dict[str, type]] = {
+        'peak_rss': int,
+        'user_cpu': float,
+        'sys_cpu': float,
+    }
+
+    def pre(self, call: Call) -> dict[str, Any]:
+        if resource is None:
+            return {}
+        user, sys_ = _cpu_seconds(*_rusage_totals())
+        return {'user_cpu': user, 'sys_cpu': sys_}
+
+    def post(self, pre: dict[str, Any], call: Call) -> dict[str, Any]:
+        if resource is None:
+            return {'peak_rss': None, 'user_cpu': None, 'sys_cpu': None}
+        ru_self, ru_children = _rusage_totals()
+        user, sys_ = _cpu_seconds(ru_self, ru_children)
+        return {
+            'peak_rss': _maxrss_bytes(ru_self, ru_children),
+            'user_cpu': user - pre.get('user_cpu', user),
+            'sys_cpu': sys_ - pre.get('sys_cpu', sys_),
         }
 
 

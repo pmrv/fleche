@@ -162,7 +162,7 @@ Decorator kwargs on `@fleche(...)`:
 - `hash_version=` / `hash_module=` — pin the digest scheme / module
   identity explicitly.
 - `meta=[...]` — metadata classes to record (`Runtime`, `Environment`,
-  `Git`, or a `Tags(...)` instance) — see `docs/usage/`.
+  `Git`, `Resources`, or a `Tags(...)` instance) — see `docs/usage/`.
 - `isolate=True` — runs each call in a unique tempdir (not thread-safe;
   uses `os.chdir`).
 - Per-argument: `Ignored[T]` / `Required[T]` type annotations do the same
