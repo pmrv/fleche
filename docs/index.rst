@@ -68,6 +68,7 @@ Welcome to the **Fleche** library documentation.
    :caption: Development
    :hidden:
 
+   dev/call_lifecycle
    dev/custom_digests
    dev/extending_destructurer
    dev/function_profile

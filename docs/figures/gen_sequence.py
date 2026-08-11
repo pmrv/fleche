@@ -2,6 +2,7 @@
 
 Outputs:
   storage_sequence.svg  -- a destructured save() and load() through the MRO
+  cache_sequence.svg    -- the two-phase save protocol behind a decorated call
 
 Run as a script (``python gen_sequence.py``) this writes the SVGs next to
 itself.  The depicted call sequences are transcribed from real traces: the
@@ -27,6 +28,10 @@ import os
 OUT = os.path.dirname(os.path.abspath(__file__))
 
 # palette (solarized light, matching docs/_static/custom.css)
+BLUE = "#268bd2"
+TEAL = "#2aa198"
+GREEN = "#859900"
+VIOLET = "#6c71c4"
 ORANGE = "#cb4b16"
 ORANGE_PALE = "#f7e2d8"
 INK = "#073642"       # base02
@@ -295,9 +300,66 @@ STORAGE_LOAD = Panel(
     ],
 )
 
+# --------------------------------------------------------- cache sequence
+
+_CACHE_LIFELINES = [
+    ("USER", "caller", MUTED),
+    ("W", "@fleche wrapper", MID_INK),
+    ("C", "Cache", GREEN),
+    ("V", "values\nValueStorage", TEAL),
+    ("K", "calls\nCallStorage", BLUE),
+    ("F", "your function", VIOLET),
+]
+
+CACHE_MISS = Panel(
+    "cache miss",
+    "the two-phase save protocol",
+    _CACHE_LIFELINES,
+    [
+        ("call", "USER", "W", "f(x)"),
+        ("self", "W", "key = call.to_lookup_key()"),
+        ("call", "W", "C", "load(key)"),
+        ("ret", "C", "W", "KeyError -- miss"),
+        ("note", "phase 1 - seal the identity, and stash the arguments, BEFORE the body runs"),
+        ("call", "W", "C", "prepare(call)"),
+        ("call", "C", "V", "save(x) for each arg"),
+        ("ret", "C", "W", "PreparedCall"),
+        ("call", "W", "F", "f(x)"),
+        ("ret", "F", "W", "result"),
+        ("note", "the body may mutate x here - the sealed key already predates it"),
+        ("note", "phase 2 - the arguments are NOT re-saved; only the result is"),
+        ("call", "W", "C", "commit(result) -> cache.save"),
+        ("call", "C", "V", "resolve(): save(result)"),
+        ("call", "C", "K", "save(DigestedCall)"),
+        ("ret", "C", "W", "key"),
+        ("ret", "W", "USER", "result"),
+        ("note", "on an exception in the body the wrapper calls abandon() instead"),
+    ],
+)
+
+CACHE_HIT = Panel(
+    "cache hit",
+    "no preparation, no function call",
+    _CACHE_LIFELINES,
+    [
+        ("call", "USER", "W", "f(x)"),
+        ("self", "W", "key = call.to_lookup_key()"),
+        ("call", "W", "C", "load(key)"),
+        ("call", "C", "K", "load(key)"),
+        ("ret", "C", "W", "LazyCall (holds the cache)"),
+        ("call", "W", "C", "lazy.result"),
+        ("call", "C", "V", "load_value(result digest)"),
+        ("ret", "C", "W", "result"),
+        ("ret", "W", "USER", "result"),
+        ("note", "the LazyCall resolves argument and result digests on attribute access"),
+    ],
+)
+
+
 if __name__ == "__main__":
     for name, panels, col_w in (
         ("storage_sequence", [STORAGE_SAVE, STORAGE_LOAD], 208),
+        ("cache_sequence", [CACHE_MISS, CACHE_HIT], 186),
     ):
         path = os.path.join(OUT, f"{name}.svg")
         with open(path, "w") as fh:
