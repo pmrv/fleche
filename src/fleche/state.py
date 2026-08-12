@@ -1,7 +1,7 @@
 from contextlib import AbstractContextManager, contextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
-from typing import overload, Any, Callable, Iterator
+from typing import overload, Any, Callable, Iterator, TypeVar
 
 from . import caches, config, metadata
 
@@ -13,6 +13,22 @@ _CACHE: ContextVar[caches.BaseCache] = ContextVar("fleche.CACHE")
 #: config by clearing this dict.
 _DEFAULTS: dict[str, Any] = {}
 
+_T = TypeVar("_T")
+
+
+def _lazy_default(var: ContextVar[_T], key: str, loader: Callable[[], _T]) -> _T:
+    """Return ``var``'s active value, falling back to a memoised ``loader()`` result.
+
+    The fallback is resolved on first use and cached in :data:`_DEFAULTS` under
+    ``key``; clearing that entry (or the whole dict) forces re-resolution.
+    """
+    try:
+        return var.get()
+    except LookupError:
+        if key not in _DEFAULTS:
+            _DEFAULTS[key] = loader()
+        return _DEFAULTS[key]
+
 
 def get_cache() -> caches.BaseCache:
     """Return the active cache, falling back to the configured default.
@@ -20,12 +36,7 @@ def get_cache() -> caches.BaseCache:
     The default is resolved from the configuration files on first use and memoised
     in :data:`_DEFAULTS`.
     """
-    try:
-        return _CACHE.get()
-    except LookupError:
-        if "cache" not in _DEFAULTS:
-            _DEFAULTS["cache"] = config.load_cache_config()
-        return _DEFAULTS["cache"]
+    return _lazy_default(_CACHE, "cache", config.load_cache_config)
 
 
 class _StickyContext:
@@ -136,12 +147,7 @@ def get_metadata() -> tuple[metadata.MetaData, ...]:
     The default is resolved from the configuration files on first use and memoised
     in :data:`_DEFAULTS`.
     """
-    try:
-        return _METADATA.get()
-    except LookupError:
-        if "metadata" not in _DEFAULTS:
-            _DEFAULTS["metadata"] = config.load_default_metadata()
-        return _DEFAULTS["metadata"]
+    return _lazy_default(_METADATA, "metadata", config.load_default_metadata)
 
 
 def meta(
