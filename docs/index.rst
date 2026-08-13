@@ -76,12 +76,14 @@ Welcome to the **Fleche** library documentation.
    :caption: Development
    :hidden:
 
+   dev/call_lifecycle
    dev/custom_digests
    dev/extending_destructurer
    dev/function_profile
    dev/path_storage
    dev/ssh_cache
    dev/sql_test_backends
+   dev/storage_hierarchy
 
 .. toctree::
    :maxdepth: 1

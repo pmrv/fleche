@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 from unittest.mock import MagicMock, patch
 from fleche.digest import (
@@ -180,6 +182,41 @@ def test_get_hooks():
     assert hooks[1] is hook1
     # EP hooks follow after
     assert hooks[2] is hook3
+
+
+def test_multiple_entry_points_logs_single_correct_override(caplog):
+    """The duplicate-hook log should fire exactly once and name the actual
+    winning/losing entry points, not scan through unrelated hooks."""
+    mock_ep1 = MagicMock()
+    mock_ep1.name = "ep1"
+    mock_ep1.value = "pkg.ep1:hook"
+    mock_ep1.load.return_value = Hook(CustomType, custom_digest)
+
+    def another_digest(obj):
+        return "another"
+
+    mock_ep2 = MagicMock()
+    mock_ep2.name = "ep2"
+    mock_ep2.value = "pkg.ep2:hook"
+    mock_ep2.load.return_value = Hook(CustomType, another_digest)
+
+    with patch("importlib.metadata.entry_points") as mock_entry_points:
+        mock_entry_points.return_value = [mock_ep1, mock_ep2]
+
+        with caplog.at_level(logging.INFO, logger="fleche.digest"):
+            load_entry_points()
+
+    override_records = [
+        r for r in caplog.records if "ignoring entry point" in r.getMessage()
+    ]
+    assert len(override_records) == 1
+    assert override_records[0].getMessage() == (
+        f"pkg.ep1:hook already provides a digest for {CustomType!r}; "
+        "ignoring entry point pkg.ep2:hook"
+    )
+
+    # the losing hook must not have been registered
+    assert [h.digest for h in _EP_HOOKS] == [custom_digest]
 
 
 def test_add_hook_lifo_priority():

@@ -1,0 +1,63 @@
+/*
+ * One concrete storage class exploded into its method resolution order:
+ * ValuePickleFile(PerKeyLockMixin, DestructuringMixin, ValueMixin, PickleFileBackend).
+ *
+ * Render with:
+ *   dot -Tsvg docs/figures/storage_mro.dot -o docs/figures/storage_mro.svg
+ *
+ * Node colours match docs/figures/storage_hierarchy.dot: violet = core
+ * abstraction, teal = domain interface, yellow = bridge mixin, orange =
+ * cross-cutting mixin, sand = backend implementation, green = the concrete
+ * class itself.  Palette is solarized light, as in docs/_static/custom.css.
+ */
+digraph StorageMRO {
+    graph [
+        rankdir=TB
+        splines=spline
+        nodesep=0.30
+        ranksep=0.30
+        fontname="Helvetica,Arial,sans-serif"
+        fontsize=12
+        bgcolor="#fdf6e3"
+        fontcolor="#586e75"
+    ]
+    node [
+        shape=record
+        fontname="Helvetica,Arial,sans-serif"
+        fontsize=10.5
+        fontcolor="#073642"
+        style="filled,rounded"
+        penwidth=1.4
+        margin="0.18,0.10"
+        width=4.6
+    ]
+    edge [
+        color="#657b83"
+        arrowhead=vee
+        arrowsize=0.8
+        penwidth=1.1
+    ]
+
+    n0 [label="{0\ ValuePickleFile|the class you instantiate — adds only to_config()\l}"
+        fillcolor="#e9edcf" color="#859900"]
+    n1 [label="{1\ PerKeyLockMixin|no save() of its own — supplies the RLock that 3 enters\l}"
+        fillcolor="#f7e2d8" color="#cb4b16"]
+    n2 [label="{2\ DestructuringMixin|splits the value; stores each part with super().save()\l}"
+        fillcolor="#f7e2d8" color="#cb4b16"]
+    n3 [label="{3\ ValueMixin|key = digest(value) if none given; locks, then self.put()\l}"
+        fillcolor="#f5ecd0" color="#b58900"]
+    n4 [label="{4\ ValueStorage|abstract save/load — the contract, no code\l}"
+        fillcolor="#dff0ee" color="#2aa198"]
+    n5 [label="{5\ PickleFileBackend|_to_file(): pickle, HMAC-sign, optionally gzip\l}"
+        fillcolor="#eee8d5" color="#657b83"]
+    n6 [label="{6\ FileStorage|put(): write a temp sibling, rename it into place\l}"
+        fillcolor="#eee8d5" color="#657b83"]
+    n7 [label="{7\ StorageBackend|abstract put/get — the primitive contract\l}"
+        fillcolor="#e6e5f2" color="#6c71c4"]
+    n8 [label="{8\ KeyManagement|evict / contains / expand / shrink\l}"
+        fillcolor="#e6e5f2" color="#6c71c4"]
+    n9 [label="{9\ OperationContext|_operation_context(): the no-op the mixins wrap\l}"
+        fillcolor="#e6e5f2" color="#6c71c4"]
+
+    n0 -> n1 -> n2 -> n3 -> n4 -> n5 -> n6 -> n7 -> n8 -> n9
+}
