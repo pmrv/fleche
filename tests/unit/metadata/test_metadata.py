@@ -3,6 +3,7 @@ import os
 import platform
 import socket
 import subprocess
+import sys
 import time
 
 import pytest
@@ -281,6 +282,63 @@ def test_git_metadata_when_subprocess_fails(failure, monkeypatch, cache_it: Cach
     }
 
 
+def test_runtime_metadata_includes_cpu_time(cache_it: Cache):
+    @fleche
+    def busy_wait():
+        x = 0
+        for _ in range(2_000_000):
+            x += 1
+        return x
+
+    with cache(cache_it):
+        busy_wait()
+        key = busy_wait.fleche.digest()
+        call = cache().calls.load(key)
+
+    runtime = call.metadata["runtime"]
+    assert runtime["cputime"] >= 0.0
+    assert runtime["systime"] >= 0.0
+
+
+def test_runtime_metadata_counts_subprocess_cpu_time(cache_it: Cache):
+    """CPU spent in a spawned subprocess is counted via RUSAGE_CHILDREN."""
+    @fleche
+    def spin_in_subprocess():
+        result = subprocess.run(
+            [sys.executable, "-c", "x = 0\nfor _ in range(3_000_000): x += 1"],
+            check=True,
+        )
+        return result.returncode
+
+    with cache(cache_it):
+        spin_in_subprocess()
+        key = spin_in_subprocess.fleche.digest()
+        call = cache().calls.load(key)
+
+    assert call.metadata["runtime"]["cputime"] > 0.0
+
+
+def test_runtime_metadata_cpu_time_without_resource_module(monkeypatch, cache_it: Cache):
+    """``cputime``/``systime`` are omitted where the ``resource`` module is
+    unavailable; ``timestart``/``timestop``/``walltime`` are unaffected since
+    they don't depend on it."""
+    monkeypatch.setattr("fleche.metadata.resource", None)
+
+    @fleche
+    def my_function(a: int, b: int) -> int:
+        return a + b
+
+    with cache(cache_it):
+        my_function(1, 2)
+        key = my_function.fleche.digest(1, 2)
+        call = cache().calls.load(key)
+
+    runtime = call.metadata["runtime"]
+    assert "cputime" not in runtime
+    assert "systime" not in runtime
+    assert isinstance(runtime["walltime"], float)
+
+
 def test_metadata_default_methods():
     """MetaData should define pre/post method defaults that return empty dictionaries."""
     class MyMetaData(MetaData):
@@ -328,7 +386,16 @@ def test_tags_not_in_configurable():
 @pytest.mark.parametrize(
     "cls, expected_keys",
     [
-        (Runtime, {"timestart": float, "timestop": float, "walltime": float}),
+        (
+            Runtime,
+            {
+                "timestart": float,
+                "timestop": float,
+                "walltime": float,
+                "cputime": float,
+                "systime": float,
+            },
+        ),
         (
             Environment,
             {

@@ -81,6 +81,7 @@ Welcome to the **Fleche** library documentation.
    :caption: Notebooks
    :hidden:
 
+   notebooks/FiveMinuteTour
    notebooks/GettingStarted
    notebooks/ExtraMethods
    notebooks/StorageBackends

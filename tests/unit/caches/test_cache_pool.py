@@ -33,15 +33,14 @@ def test_cache_pool_is_recognised_as_read_only():
     assert _is_read_only(pool)
 
 
-def test_cache_pool_save_rejected():
-    pool = CachePool((Mock(), Mock()))
-    call = Call(name="test", arguments={"x": 1}, result="result")
-    with pytest.raises(Rejected):
-        pool.save(call)
-
-
-def test_cache_pool_save_does_not_touch_members():
-    """A rejected save must never reach a member cache."""
+def test_cache_pool_save_rejected_without_touching_members():
+    """A pool's ``save`` must raise :class:`Rejected` **before** reaching any
+    member cache — the read-only guarantee has to bind writes as well, and
+    the rejection has to happen at the pool layer so no member sees the
+    ``save`` at all.  The two invariants are inseparable (a silent pass-through
+    would violate both at once); the sibling ``evict`` test pins the analogous
+    pair for eviction with the same one-test shape.
+    """
     m1, m2 = Mock(), Mock()
     pool = CachePool((m1, m2))
     with pytest.raises(Rejected):

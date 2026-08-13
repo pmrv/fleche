@@ -1,4 +1,6 @@
 __pycache__/
+tags
+build/
 .claude/worktrees
 *.egg-info/
 .ipynb_checkpoints/*

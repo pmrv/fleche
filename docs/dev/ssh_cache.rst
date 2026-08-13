@@ -355,12 +355,13 @@ flag from the server info dict before issuing the RPC.  If the flag is
 ``True`` they raise :class:`~fleche.caches.Rejected` locally with no
 round-trip.
 
-The flag is populated lazily — the first time ``read_only`` (or
-``info()``) is consulted, an ``info`` RPC fires and the result is
-cached on the :class:`~fleche.remote.SshCache` instance.  Subsequent
-saves consult the cache directly.  Cost is therefore at most one
-extra round-trip per session, and zero in the common case where the
-first cache op is itself a write.
+The flag is populated as a side effect of the version handshake.
+Every cache operation calls ``_ensure_handshake()`` first (see
+*Version handshake* above), which fires the ``info`` RPC on the very
+first call — whether that first call is a read or a write.  By the
+time any ``save`` or ``evict`` reaches the read_only check, the flag
+is therefore already cached.  Subsequent operations consult the cached
+value directly with no extra round-trip.
 
 :meth:`~fleche.remote.SshCache.reconnect` invalidates the cached info
 so the next read re-fetches against the new subprocess.

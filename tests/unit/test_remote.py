@@ -618,6 +618,37 @@ def test_redact_config_walks_stack_with_nested_sql_url():
     assert redacted[1]["calls"] == {"type": "memory"}
 
 
+def test_is_read_only_of_cache_stack_follows_write_target():
+    """A ``CacheStack`` is read-only iff its write layer (``stack[0]``) is.
+
+    :func:`~fleche.remote._is_read_only` is what the SSH client keys on to
+    short-circuit ``save``/``evict`` without paying a wire round-trip only to
+    receive :class:`~fleche.caches.Rejected`.  For a stack that flag must
+    match ``CacheStack.save``'s actual write target — ``stack[0]`` — regardless
+    of what the higher (read-through) layers permit; the read-only-ness of any
+    ``stack[i>0]`` never blocks a save, and a writable ``stack[0]`` fronted by
+    read-only higher layers must not be treated as read-only.  The base branch
+    (a plain :class:`~fleche.caches.Cache` → ``False``) is already exercised
+    by the ``remote`` fixture's ``info()`` handshake and the ``CachePool``
+    branch by ``test_cache_pool.test_cache_pool_is_recognised_as_read_only``;
+    this fills in the remaining ``CacheStack`` branch.
+    """
+    from fleche.caches import Cache, CacheStack, ReadOnlyCache
+    from fleche.remote import _is_read_only
+    from fleche.storage import CallMemory, ValueMemory
+
+    def _mem() -> Cache:
+        return Cache(ValueMemory({}), CallMemory({}))
+
+    # Writable at the write layer, read-only above → not read-only.
+    writable_first = CacheStack((_mem(), ReadOnlyCache(_mem())))
+    assert _is_read_only(writable_first) is False
+
+    # Read-only at the write layer → read-only (higher layers don't matter).
+    ro_first = CacheStack((ReadOnlyCache(_mem()), _mem()))
+    assert _is_read_only(ro_first) is True
+
+
 def test_info_exposes_versions(remote):
     """info() includes `fleche_version` and `cloudpickle_version`."""
     info = remote.info()
