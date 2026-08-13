@@ -319,9 +319,10 @@ def test_runtime_metadata_counts_subprocess_cpu_time(cache_it: Cache):
 
 
 def test_runtime_metadata_cpu_time_without_resource_module(monkeypatch, cache_it: Cache):
-    """``cputime``/``systime`` degrade to ``None`` (rather than raising) where the
-    ``resource`` module is unavailable; ``timestart``/``timestop``/``walltime`` are
-    unaffected since they don't depend on it."""
+    """``cputime``/``systime`` are omitted entirely (rather than set to ``None``
+    or raising) where the ``resource`` module is unavailable;
+    ``timestart``/``timestop``/``walltime`` are unaffected since they don't
+    depend on it."""
     monkeypatch.setattr("fleche.metadata.resource", None)
 
     @fleche
@@ -334,8 +335,8 @@ def test_runtime_metadata_cpu_time_without_resource_module(monkeypatch, cache_it
         call = cache().calls.load(key)
 
     runtime = call.metadata["runtime"]
-    assert runtime["cputime"] is None
-    assert runtime["systime"] is None
+    assert "cputime" not in runtime
+    assert "systime" not in runtime
     assert isinstance(runtime["walltime"], float)
 
 

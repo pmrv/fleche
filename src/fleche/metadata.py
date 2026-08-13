@@ -122,11 +122,12 @@ class Runtime(MetaData):
         timestart (float): The timestamp when the execution started.
         timestop (float): The timestamp when the execution stopped.
         walltime (float): The total wall-clock execution time in seconds.
-        cputime (float | None): User-mode CPU seconds consumed during the
-            call (self + child processes).  ``None`` where the POSIX
-            ``resource`` module is unavailable (Windows).
-        systime (float | None): Kernel-mode CPU seconds consumed during the
-            call (self + child processes).  ``None`` where unavailable.
+        cputime (float): User-mode CPU seconds consumed during the call
+            (self + child processes).  Omitted entirely (not present as
+            ``None``) where the POSIX ``resource`` module is unavailable
+            (Windows).
+        systime (float): Kernel-mode CPU seconds consumed during the call
+            (self + child processes).  Omitted where unavailable.
 
     Notes:
         - Values are JSON-serializable.
@@ -160,17 +161,15 @@ class Runtime(MetaData):
 
     def post(self, pre: dict[str, Any], call: Call) -> dict[str, Any]:
         """
-        Records the stop time, wall time, and CPU-time deltas (``None`` where
-        the ``resource`` module is unavailable) after function execution.
+        Records the stop time, wall time, and CPU-time deltas after function
+        execution.  ``cputime``/``systime`` are omitted entirely (not set to
+        ``None``) where the ``resource`` module is unavailable.
         """
         post: dict[str, Any] = {
             'timestop': (t := time.time()),
             'walltime': t - pre['timestart'],
         }
-        if resource is None:
-            post['cputime'] = None
-            post['systime'] = None
-        else:
+        if resource is not None:
             user, sys_ = _cpu_seconds(*_rusage_totals())
             post['cputime'] = user - pre.get('cputime', user)
             post['systime'] = sys_ - pre.get('systime', sys_)
