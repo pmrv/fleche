@@ -86,7 +86,7 @@ def get_hooks():
 
 def add_hook(hook: Hook | tuple[Type[T], Callable[[T], str]]):
     if isinstance(hook, tuple):
-        hook = Hook(*hook)  # ty: ignore
+        hook = Hook(*hook)
         _HOOKS.append(hook)
     elif isinstance(hook, Hook):
         _HOOKS.append(hook)
