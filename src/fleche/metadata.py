@@ -6,6 +6,7 @@ import platform
 import socket
 import subprocess
 import time
+import types
 from typing import Any, ClassVar, TypeAlias
 
 from .call import Call
@@ -14,6 +15,12 @@ try:
     from ._version import __version__ as _fleche_version
 except ImportError:
     _fleche_version = "unknown"
+
+try:
+    import resource as _resource_module
+    resource: types.ModuleType | None = _resource_module
+except ImportError:  # pragma: no cover - resource is POSIX-only, no Windows CI
+    resource = None
 
 # Values produced by MetaData.pre/post must be JSON-serializable.
 # This alias documents the expected shape and helps static type checkers.
@@ -92,6 +99,21 @@ def configurable(cls: type["MetaData"]) -> type["MetaData"]:
     return cls
 
 
+def _rusage_totals() -> tuple[Any, Any]:
+    """``(RUSAGE_SELF, RUSAGE_CHILDREN)`` snapshots, fetched together so a
+    ``pre``/``post`` pair sees a consistent self+children split.
+
+    Callers must only reach this after their own ``resource is None`` guard.
+    """
+    assert resource is not None
+    return resource.getrusage(resource.RUSAGE_SELF), resource.getrusage(resource.RUSAGE_CHILDREN)
+
+
+def _cpu_seconds(ru_self: Any, ru_children: Any) -> tuple[float, float]:
+    """``(user, sys)`` CPU seconds, self + children combined."""
+    return ru_self.ru_utime + ru_children.ru_utime, ru_self.ru_stime + ru_children.ru_stime
+
+
 @configurable
 class Runtime(MetaData):
     """Metadata type for capturing runtime information.
@@ -99,31 +121,58 @@ class Runtime(MetaData):
     Keys:
         timestart (float): The timestamp when the execution started.
         timestop (float): The timestamp when the execution stopped.
-        walltime (float): The total execution time in seconds.
+        walltime (float): The total wall-clock execution time in seconds.
+        cputime (float): User-mode CPU seconds consumed during the call
+            (self + child processes).  Omitted where the POSIX ``resource``
+            module is unavailable (Windows).
+        systime (float): Kernel-mode CPU seconds consumed during the call
+            (self + child processes).  Omitted where unavailable.
 
     Notes:
-        Values are JSON-serializable.
+        - Values are JSON-serializable.
+        - ``cputime``/``systime`` sum ``RUSAGE_SELF`` and ``RUSAGE_CHILDREN``,
+          so a call that shells out to a subprocess (e.g. ``git``, ``mpirun``)
+          has that cost accounted for.
+        - ``resource.getrusage`` is process-wide, so ``cputime``/``systime``
+          are only meaningful for sequential call sites: overlapping
+          ``@fleche``-wrapped calls (executor workers, threads, async) will
+          see each other's CPU time bleed into their own deltas.
     """
     _keys: ClassVar[dict[str, type]] = {
         'timestart': float,
         'timestop': float,
         'walltime': float,
+        'cputime': float,
+        'systime': float,
     }
 
     def pre(self, call: Call) -> dict[str, Any]:
         """
-        Records the start time before function execution.
+        Records the start time, and the CPU-time baseline where available,
+        before function execution.
         """
-        return {'timestart': time.time()}
+        pre: dict[str, Any] = {'timestart': time.time()}
+        if resource is not None:
+            user, sys_ = _cpu_seconds(*_rusage_totals())
+            pre['cputime'] = user
+            pre['systime'] = sys_
+        return pre
 
     def post(self, pre: dict[str, Any], call: Call) -> dict[str, Any]:
         """
-        Records the stop time and calculates the wall time after function execution.
+        Records the stop time, wall time, and CPU-time deltas after function
+        execution.  ``cputime``/``systime`` are omitted where the ``resource``
+        module is unavailable.
         """
-        return {
+        post: dict[str, Any] = {
             'timestop': (t := time.time()),
             'walltime': t - pre['timestart'],
         }
+        if resource is not None:
+            user, sys_ = _cpu_seconds(*_rusage_totals())
+            post['cputime'] = user - pre.get('cputime', user)
+            post['systime'] = sys_ - pre.get('systime', sys_)
+        return post
 
 
 @configurable
