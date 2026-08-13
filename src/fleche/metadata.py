@@ -123,9 +123,8 @@ class Runtime(MetaData):
         timestop (float): The timestamp when the execution stopped.
         walltime (float): The total wall-clock execution time in seconds.
         cputime (float): User-mode CPU seconds consumed during the call
-            (self + child processes).  Omitted entirely (not present as
-            ``None``) where the POSIX ``resource`` module is unavailable
-            (Windows).
+            (self + child processes).  Omitted where the POSIX ``resource``
+            module is unavailable (Windows).
         systime (float): Kernel-mode CPU seconds consumed during the call
             (self + child processes).  Omitted where unavailable.
 
@@ -162,8 +161,8 @@ class Runtime(MetaData):
     def post(self, pre: dict[str, Any], call: Call) -> dict[str, Any]:
         """
         Records the stop time, wall time, and CPU-time deltas after function
-        execution.  ``cputime``/``systime`` are omitted entirely (not set to
-        ``None``) where the ``resource`` module is unavailable.
+        execution.  ``cputime``/``systime`` are omitted where the ``resource``
+        module is unavailable.
         """
         post: dict[str, Any] = {
             'timestop': (t := time.time()),
