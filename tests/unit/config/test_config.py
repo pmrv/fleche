@@ -4,6 +4,8 @@ import textwrap
 import pytest
 from dataclasses import dataclass
 
+from contextvars import ContextVar
+
 from fleche import state, storage, cache
 from fleche.config import (
     load_cache_config,
@@ -246,6 +248,28 @@ def test_load_default_cache(monkeypatch, config_file):
     assert isinstance(cache_obj, Cache)
     assert isinstance(cache_obj.values, storage.ValueMemory)
     assert isinstance(cache_obj.calls, storage.CallMemory)
+
+
+def test_lazy_default_returns_set_var_without_loading():
+    var: ContextVar[int] = ContextVar("test_var")
+    token = var.set(42)
+    try:
+        assert state._lazy_default(var, "unused_key", lambda: 1 / 0) == 42
+    finally:
+        var.reset(token)
+
+
+def test_lazy_default_memoises_loader_result():
+    var: ContextVar[int] = ContextVar("test_var")
+    calls = []
+
+    def loader():
+        calls.append(None)
+        return len(calls)
+
+    assert state._lazy_default(var, "counting_key", loader) == 1
+    assert state._lazy_default(var, "counting_key", loader) == 1
+    assert len(calls) == 1
 
 
 def test_tags_disallowed(monkeypatch, config_file_with_tags):
