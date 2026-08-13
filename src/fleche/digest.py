@@ -119,15 +119,12 @@ def load_entry_points():
                             ep.value,
                         )
                     else:
-                        for h in _EP_HOOKS:
-                            if (h.type is not hook.type) and (
-                                h.digest is not hook.digest
-                            ):
-                                logger.info(
-                                    "Digest from %s overrides later entry point %s!",
-                                    source,
-                                    ep.value,
-                                )
+                        logger.info(
+                            "%s already provides a digest for %s; ignoring entry point %s",
+                            source,
+                            hook.type,
+                            ep.value,
+                        )
                     continue
 
                 _EP_HOOKS.append(hook)
