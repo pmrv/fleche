@@ -69,6 +69,12 @@ with ImportAlarm(
     # wrapper before handing it to a launcher must not join an MPI universe —
     # ``mpiexec`` children spawned from an already-initialised parent hang.
     # The real import happens inside the wrapper, on the ranks.
+    #
+    # mpi4py is deliberately absent from the `tests`/`ty` extras — building it
+    # needs a full MPI toolchain, which every CI job would otherwise have to
+    # install just to type-check a module none of them import.  `unresolved-import`
+    # is therefore switched off for this file in `pyproject.toml`; the ImportAlarm
+    # is the runtime guard for it actually being missing.
     import mpi4py  # noqa: F401
 
 

@@ -36,6 +36,16 @@ dependencies = [
     'filelock >= 3.4',
 ]
 
+# `fleche.mpi` imports mpi4py, which is not in the `tests`/`ty` extras: building
+# it requires a full MPI toolchain, and no CI job should have to install one to
+# type-check a module it never imports.  Scoped to the one file so a genuine bad
+# import anywhere else is still caught.
+[[tool.ty.overrides]]
+include = ["src/fleche/mpi.py"]
+
+[tool.ty.overrides.rules]
+unresolved-import = "ignore"
+
 [project.optional-dependencies]
 docs = [
     "sphinx",
