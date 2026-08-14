@@ -62,6 +62,7 @@ Welcome to the **Fleche** library documentation.
    :hidden:
 
    parallel_execution
+   mpi_execution
 
 .. toctree::
    :maxdepth: 2

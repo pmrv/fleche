@@ -204,6 +204,14 @@ processes, the same rules as ``ProcessPoolExecutor`` apply:
    ...                    for i in range(4)]
    ...         results = [f.result() for f in futures]
 
+.. warning::
+
+   This holds only while each task runs the callable **once**.  Asking
+   executorlib for MPI-parallel tasks (``resource_dict={"cores": N}``) runs it
+   once per *rank*, and every rank then makes its own cache-hit decision — a
+   hit skips the function body, so ranks that disagree deadlock in the
+   collectives.  See :doc:`mpi_execution` for the recipe.
+
 Future Pass-Through — Caching Async-style Results
 --------------------------------------------------
 
@@ -412,6 +420,10 @@ Quick Reference
      - Yes
      - No (separate process)
      - File/SQL storage + :func:`~fleche.wrap_executor` (or ``BoundWrapper``)
+   * - executorlib MPI task (``cores > 1``)
+     - With care
+     - No (one process per rank)
+     - :func:`fleche.mpi.collective` — see :doc:`mpi_execution`
    * - Function returns ``Future`` directly
      - Yes
      - Yes (same thread/context)
