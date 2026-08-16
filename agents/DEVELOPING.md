@@ -343,6 +343,8 @@ Cheat sheet of what's been considered. Issue numbers are the entry points — fe
 
 - Garbage collector for value store (#6) — not for initial release.
 
+- MPI-rank-parallel call caching in core (PR #870, closed unmerged 2026-08-14) — a `fleche.mpi.collective()` helper was built, tested (OpenMPI/mpi4py/executorlib, 2 and 3 ranks), and rejected from core; an addon package (`fleche-mpi` or similar) is the preferred home. The close-out comment on #870 is the reference for whoever builds it. Findings that stand regardless: lookup keys carry no rank, so all N ranks contend for one record — warm runs flip the conventional `[result, None]` return shape (every rank loads rank 0's record), and divergent per-rank hit/miss decisions make some ranks skip the collectives in the body (silently wrong under the eager-buffer threshold, indefinite hang past it). The no-new-code pattern that works today is decorating the *submission site* (not the MPI kernel) so fleche runs exactly once in the serial parent. Branch `claude/fleche-mpi-executor-caching-zxjazw` retains the helper, 13 subprocess-isolated integration tests (worth lifting verbatim), and `docs/mpi_execution.rst`. Two candidate core follow-ups named in the close-out, no issues filed yet: document `wrap_executor`'s cold/warm return-shape asymmetry in `docs/parallel_execution.rst`, and warn there that MPI-parallel tasks run the callable once per rank.
+
 - Optional skip-saving of input arguments (#170), corruption-tolerant loads (#93), method-state restoration (#99), metadata-into-value-storage (#82) — parked for milestone 2.0.
 
 - Refactors flagged `backburner`: `_digest` dispatch registry (#333), `DigestedCall`/`LazyCall` consolidation (#404).
