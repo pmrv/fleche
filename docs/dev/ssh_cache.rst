@@ -59,7 +59,7 @@ Version handshake
 ~~~~~~~~~~~~~~~~~
 
 The first cache operation on a fresh :class:`~fleche.remote.SshCache`
-implicitly fetches an :ref:`info <ssh-cache-internals>` dict via
+implicitly fetches an :ref:`info <ssh-cache-info>` dict via
 :meth:`fleche.remote.SshCache._ensure_handshake`, which calls
 ``_warn_on_version_skew()`` on the response.  Mismatched
 ``fleche_version`` or ``cloudpickle_version`` between client and server
@@ -106,10 +106,10 @@ One :class:`~fleche.remote.SshCache` owns exactly one
    client                                       remote
    ──────                                       ──────
 
-   SshCache.<op>(...)            <op> ∈ save / load / load_value /
-       │    ▲                            contains / expand / shrink /
-   call│    │return                      query / evict / info
-       ▼    │
+   SshCache.<op>(...)            <op> ∈ save / save_value / prepare /
+       │    ▲                            load / load_value / contains /
+   call│    │return                      expand / shrink / query /
+       ▼    │                            evict / info
    ┌──────────────────────┐                ┌─────────────────────┐
    │_SshConnection        │──(stdin) req──>│ python -m           │
    │                      │                │   fleche remote     │
@@ -197,6 +197,43 @@ Two pieces need server-side translation rather than raw passthrough:
   before sending it back, because the wire protocol is request /
   response, not streaming.  Large query results pay the cost up front in
   one frame.
+
+Two-phase save over the wire
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The two-phase save protocol (see :doc:`call_lifecycle`) needs special
+handling here, because a :class:`~fleche.call.PreparedCall` carries a
+``cache`` pointer and so must never cross the wire — the same constraint
+that forces ``_strip_cache()`` on the read path.
+
+:meth:`~fleche.remote.SshCache.prepare` is **one** round trip.  The whole
+:class:`~fleche.call.Call` ships out, the server runs ``cache.prepare(call)``
+to stash the argument values and seal the record, and only the sealed
+:class:`~fleche.call.DigestedCall` comes back.  The server drops its own
+``PreparedCall`` (``abandon`` is a no-op), and the client wraps the reply in
+a fresh ``PreparedCall`` bound to itself.  Against a read-only remote,
+``prepare`` short-circuits to the base digest-only admission *before*
+dispatching, so no trip is spent on a save the commit will reject anyway.
+
+:meth:`~fleche.remote.SshCache.save` on a ``PreparedCall`` is then **two**
+round trips, recreating ``Cache.save``'s ending:
+
+1. ``save_value`` stores the pending result and returns its digest.  This RPC
+   exists only in the wire protocol — it is the write-side counterpart of
+   ``load_value``.  Server-side, ``_save_value()`` routes through
+   ``cache.prepare(...)`` with a synthetic, never-committed call so that
+   wrappers and stacks direct the value to the same storage their real saves
+   use.  The value rides in the *result* position for its strict save
+   semantics; ``None`` — the one result a stash skips — rides as an argument
+   instead, since storing ``None`` cannot fail.
+2. ``save`` files the sealed record.
+
+A failure between the two trips leaves the value as a content-addressed
+orphan for ``gc``, exactly like any locally abandoned call.
+
+Because values travel by cloudpickle, a :class:`~pathlib.Path` argument
+ships its path *string*, not the file's content — paths over
+:class:`~fleche.remote.SshCache` are unsupported today.
 
 Client side
 ~~~~~~~~~~~
@@ -290,6 +327,8 @@ calls.
 Without ``workdir`` or ``setup_commands``, the server argv is passed
 directly to ``ssh`` as separate arguments, so SSH ``exec``\\ s it as-is
 — no remote shell is involved at all.
+
+.. _ssh-cache-info:
 
 Diagnostics: the ``info`` RPC
 -----------------------------

@@ -1,7 +1,7 @@
 Customizing Digests
 ===================
 
-``fleche`` uses digests to identify objects and determine if a cached result can be reused. By default, it supports many built-in Python types, numpy arrays, and dataclasses. For other types, or to customize how a digest is calculated, you can use one of the following methods.
+``fleche`` uses digests to identify objects and determine if a cached result can be reused. By default, it supports many built-in Python types, numpy arrays, dataclasses, and ``attrs``-decorated classes. For other types, or to customize how a digest is calculated, you can use one of the following methods.
 
 The ``__digest__`` Method
 -------------------------

@@ -19,10 +19,12 @@ Variable                       Example value
 ``FLECHE_TEST_MYSQL_URL``      ``mysql+pymysql://fleche:fleche@localhost:3306/mysql``
 ============================== ====================================================
 
-The URL must point at a server (the database part of the URL is the
-*administrative* database used to mint per-test databases — typically
-``postgres`` for PostgreSQL, ``mysql`` for MySQL/MariaDB). The connecting role
-needs ``CREATE DATABASE`` privilege.
+The URL must point at a server. Per-test databases are minted from an
+*administrative* connection derived from it: PostgreSQL needs to be connected
+to some database to run ``CREATE DATABASE``, so ``_admin_url`` rewrites the
+database part to the conventional ``postgres``; MySQL/MariaDB needs no
+selected database, so the database part is dropped entirely (whatever the URL
+names is ignored). The connecting role needs ``CREATE DATABASE`` privilege.
 
 When set, the test session:
 

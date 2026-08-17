@@ -40,13 +40,31 @@ where:
   :class:`~fleche.storage.destructuring.Digested` subclass instance wrapping
   the children.
 - ``depth`` must be ``1 + max(child_depths)`` when children were processed,
-  or ``float("inf")`` when the value cannot be handled.
+  ``0`` when the value has no children to split, or ``float("inf")`` when the
+  value cannot be handled.
 
-The ``Digested`` subclass must implement :meth:`~fleche.storage.destructuring.Digested.mend`
-(reconstruction from storage), :meth:`~fleche.storage.destructuring.Digested.underlying`
-(for hashing), and the class-method
-:meth:`~fleche.storage.destructuring.Digested.sunder` (the ``sunder_fn``
-itself, as a classmethod).  Study
+The usual way to satisfy that contract is *not* to write ``sunder_fn`` by
+hand.  :meth:`~fleche.storage.destructuring.Digested.sunder` is already a
+concrete template method on the ABC: it enumerates child slots, interns each
+one, computes the depth, and picks the inline-vs-store branch for you.  Pass
+``YourDigested.sunder`` as the ``sunder_fn`` and implement the four abstract
+methods it dispatches to:
+
+- :meth:`~fleche.storage.destructuring.Digested._slots` — return the
+  ``(label, child)`` pairs to recurse into, or ``None`` to opt out (which is
+  what yields the ``float("inf")`` depth).
+- :meth:`~fleche.storage.destructuring.Digested._rebuild_plain` — rebuild the
+  value when no child became a :class:`~fleche.digest.Digest` reference.
+- :meth:`~fleche.storage.destructuring.Digested._rebuild_digest` — build the
+  wrapper instance when at least one child did.
+- :meth:`~fleche.storage.destructuring.Digested.mend` — reconstruct the
+  original value from storage.
+
+:meth:`~fleche.storage.destructuring.Digested.underlying` (for hashing) is
+abstract as well and must be implemented either way.  Overriding ``sunder``
+directly is possible but rarely worth it: the three ``_``-prefixed methods
+stay abstract, so you would still need to define them to make the class
+instantiable.  Study
 :class:`~fleche.storage.destructuring.DigestedIterable` or
 :class:`~fleche.storage.destructuring.DigestedDict` as the canonical
-reference implementations before writing your own.
+reference implementations — neither overrides ``sunder``.
