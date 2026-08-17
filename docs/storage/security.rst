@@ -27,8 +27,13 @@ The value must be a colon-separated list of hex-encoded byte strings (``[0-9a-fA
     values.type = "cloudpickle"
     values.root = "~/.fleche/values"
     values.secret_key = ["<hex-encoded-key>"]
+    calls.type = "cloudpickle"
+    calls.root = "~/.fleche/calls"
 
-The ``secret_key`` value is a list of hex-encoded strings using the same format as ``FLECHE_SECRET_KEY``.
+The ``secret_key`` value is a list of hex-encoded strings using the same
+format as ``FLECHE_SECRET_KEY``. It is set per storage backend (here only on
+``values``); see :doc:`configuration` for the full ``[mycache]`` section
+shape, including the required ``calls`` backend.
 
 .. warning::
     Storing secrets in config files risks accidentally committing them to version control.
