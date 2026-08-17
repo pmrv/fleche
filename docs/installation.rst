@@ -89,8 +89,8 @@ that register themselves via :doc:`entry points <digests/entry_points>` —
 installing them alongside ``fleche`` is all that is needed:
 
 * ``fleche-ase`` (`PyPI <https://pypi.org/project/fleche-ase/>`__) — digest
-  hooks for the Atomic Simulation Environment: ``ase.Atoms``,
-  ``VibrationsData`` and ``Calculator`` objects.
+  hooks for the Atomic Simulation Environment. See :doc:`digests/entry_points`
+  for exactly which types it covers.
 
 .. code-block:: bash
 
@@ -110,7 +110,7 @@ If you are developing the project in an editable checkout, use:
 
 .. code-block:: bash
 
-   pip install -e .[docs]
+   pip install -e ".[docs]"
 
 Building the docs locally
 -------------------------
