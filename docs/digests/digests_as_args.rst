@@ -1,7 +1,7 @@
 Digests as Arguments
 ====================
 
-`fleche` supports passing `Digest` objects as arguments to functions. When a `Digest` is passed as a top-level argument (either positional or keyword), `fleche` automatically looks up the corresponding value in the **value storage** and passes the resolved value to the decorated function.
+``fleche`` supports passing ``Digest`` objects as arguments to functions. When a ``Digest`` is passed as an immediate argument (either positional or keyword), ``fleche`` automatically looks up the corresponding value in the **value storage** and passes the resolved value to the decorated function.
 
 This allows for efficient chaining of cached functions where intermediate results can be referenced by their value digest rather than held in memory.
 
@@ -37,10 +37,10 @@ Note the distinction between a **call lookup key** (returned by ``func.digest(*a
 Behavior
 --------
 
-- **Automatic Expansion**: Only immediate `Digest` arguments are expanded.
-- **Non-recursive**: If you pass a list of digests like `[D(a), D(b)]`, the list will be passed as-is to the function, and the digests inside it will NOT be expanded.
-- **Missing Digests**: If a `Digest` is passed but its value cannot be found in the current cache, a `KeyError` will be raised.
-- **Short Digests**: If the underlying storage supports short-hand digest expansion, you can pass a short digest (at least 4 characters) to `D()`, and it will be expanded to the full value.
+- **Automatic Expansion**: Only immediate ``Digest`` arguments are expanded.
+- **Non-recursive**: If you pass a list of digests like ``[D(a), D(b)]``, the list will be passed as-is to the function, and the digests inside it will **not** be expanded.
+- **Missing Digests**: If a ``Digest`` is passed but its value cannot be found in the current cache, a ``KeyError`` will be raised.
+- **Short Digests**: If the underlying storage supports short-hand digest expansion, you can pass a short digest (at least 4 characters) to ``D()``, and it will be expanded to the full value.
 
 Looking Up a Value Directly
 ----------------------------
@@ -81,8 +81,8 @@ If you instead have the *original arguments* of a decorated call rather than its
 result, prefer ``func.load(*args, **kwargs)`` (see :doc:`/usage/helpers`) — it
 re-derives the lookup key from the arguments and needs no digest at all.
 
-The `D` Wrapper
----------------
+The ``D`` Wrapper
+------------------
 
 .. autofunction:: fleche.D
    :no-index:
