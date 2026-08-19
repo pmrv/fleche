@@ -151,13 +151,18 @@ def test_contains_miss(remote):
     assert remote.contains("0" * 64) is False
 
 
-def test_load_value(remote):
-    c = Call(name="f", arguments={"x": 7}, result="hello")
-    remote.save(c)
-    # The result digest is content-addressed; load_value pulls bytes back.
-    # We don't know the digest a priori — use query() to discover it.
-    [lc] = list(remote.query(name="f"))
-    assert lc.result == "hello"
+def test_load_value(remote, server_cache):
+    """``load_value`` fetches one stored value by its content digest.
+
+    Driven directly rather than through ``query()`` + ``LazyCall.result``:
+    that route reaches ``load_value`` only incidentally, and
+    ``test_query_lazy_load_value_round_trips`` below already owns it as a
+    contract.  Saving straight into the server's value storage gives us the
+    digest without a second RPC, so this test covers the ``load_value``
+    entry of the client/server method inventories and nothing else.
+    """
+    key = server_cache.values.save("hello")
+    assert remote.load_value(key) == "hello"
 
 
 def test_evict(remote, server_cache):
