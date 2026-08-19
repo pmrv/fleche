@@ -7,6 +7,7 @@ only the transport is swapped.
 
 import io
 import os
+import subprocess
 import sys
 import threading
 import types
@@ -25,6 +26,7 @@ from fleche.remote import (
     _dispatch,
     _read_frame,
     _run_server,
+    _SshConnection,
     _REMOTE_METHODS,
     _write_frame,
     serve,
@@ -995,6 +997,88 @@ def test_sshconnection_surfaces_remote_exit_code_and_stderr_tail():
     # _close() drops the proc and the stderr thread.
     assert conn._proc is None
     assert conn._stderr_thread is None
+
+
+class _HungProc:
+    """``Popen`` double for a remote that never exits on its own.
+
+    Every ``wait()`` times out, so ``_close()`` has to walk its full
+    escalation ladder instead of returning after the first wait.
+    """
+
+    def __init__(self, stdin=None):
+        self.stdin = io.BytesIO() if stdin is None else stdin
+        self.events: list[str] = []
+
+    def wait(self, timeout=None):
+        self.events.append(f"wait({timeout})")
+        raise subprocess.TimeoutExpired(cmd="ssh", timeout=timeout)
+
+    def terminate(self):
+        self.events.append("terminate")
+
+    def kill(self):
+        self.events.append("kill")
+
+
+def _hung_connection(proc):
+    conn = _SshConnection(
+        host="local.host",
+        python=sys.executable,
+        cache_name=None,
+        ssh_options=(),
+        setup_commands=(),
+    )
+    conn._proc = proc
+    return conn
+
+
+def test_close_escalates_to_terminate_then_kill_when_remote_ignores_shutdown():
+    """A remote that ignores EOF *and* SIGTERM is still reaped by ``_close``.
+
+    Closing the client's end of stdin is the polite shutdown signal: the
+    server's ``_read_frame`` sees EOF and its ``serve()`` loop returns.  A
+    wedged remote (a hung ``module load``, an SSH session whose child
+    ignores SIGTERM) never gets there, so ``_close`` must not simply block
+    on ``wait()`` — otherwise ``SshCache.close()`` and the ``atexit`` hook
+    registered in ``_ensure_open`` would hang the interpreter at shutdown
+    and leak the subprocess.  The promise is a bounded, escalating ladder:
+    wait briefly, ``terminate()``, wait again, ``kill()`` — and drop the
+    handle either way.
+
+    Both waits are driven to ``TimeoutExpired`` with a ``Popen`` double
+    rather than a real wedged child: the timeouts are hard-coded 5s and 2s,
+    which a real subprocess would spend for every run of the suite.
+    """
+    proc = _HungProc()
+    conn = _hung_connection(proc)
+
+    conn._close()
+
+    assert proc.events == ["wait(5)", "terminate", "wait(2)", "kill"]
+    assert conn._proc is None
+
+
+def test_close_reaps_remote_even_when_stdin_close_fails():
+    """A broken stdin pipe does not abort the rest of the teardown.
+
+    When the remote has already died, closing the pipe raises — most often
+    ``BrokenPipeError``.  That is precisely the case where reaping matters,
+    so the stdin close is best-effort: ``_close`` swallows it and still
+    runs the wait/terminate/kill ladder to completion.
+    """
+
+    class _BrokenStdin:
+        def close(self):
+            raise BrokenPipeError("remote already gone")
+
+    proc = _HungProc(stdin=_BrokenStdin())
+    conn = _hung_connection(proc)
+
+    conn._close()
+
+    assert proc.events == ["wait(5)", "terminate", "wait(2)", "kill"]
+    assert conn._proc is None
 
 
 def test_cache_stack_with_ssh_layer():
