@@ -4,9 +4,14 @@ Covers:
 1. Cache state and metadata are preserved when running under a different cache.
 2. State is preserved after pickling/unpickling the bound wrapper.
 3. Nested functions work: fleche-in-fleche and fleche-in-plain-function.
+5. By-value pickling (via cloudpickle) for a wrapped function that is not
+   importable by reference (issue #840).
 """
 import pickle
-from unittest.mock import MagicMock
+import sys
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 import fleche.state as fleche_state
 from fleche import fleche
@@ -340,3 +345,57 @@ def test_bind_helper_accessible_via_fleche_namespace():
         return x
 
     assert my_func.bind is my_func.fleche.bind
+
+
+# ---------------------------------------------------------------------------
+# 5. By-value pickling for functions not importable by reference (#840)
+# ---------------------------------------------------------------------------
+#
+# stdlib pickle can only reference a function by (module, qualname); that
+# fails for a function that isn't reachable that way, e.g. one defined
+# locally inside another function (the same shape as __main__- or
+# notebook-defined functions, which a spawn/forkserver ProcessPoolExecutor
+# worker cannot import either). Previously this made BoundWrapper.__reduce__
+# (the plain dataclass default) raise instead of falling back to cloudpickle.
+
+
+def test_bound_wrapper_pickles_local_function_by_value():
+    """A BoundWrapper around a non-importable function survives plain pickle.
+
+    ``pickle.dumps``/``pickle.loads`` here stand in for what
+    ``ProcessPoolExecutor`` does under 'spawn'/'forkserver' — it always uses
+    stdlib pickle, with no hook to swap in cloudpickle itself.
+    """
+    pytest.importorskip("cloudpickle")
+
+    def local_only(x):
+        return x + 1
+
+    bound = fleche_state.BoundWrapper.bind(local_only)
+
+    restored = pickle.loads(pickle.dumps(bound))
+
+    assert isinstance(restored, fleche_state.BoundWrapper)
+    assert restored(41) == 42
+
+
+def test_bound_wrapper_pickle_raises_clear_error_without_cloudpickle():
+    """Without cloudpickle, a non-importable func gives a clear error, not a crash."""
+    def local_only(x):
+        return x
+
+    bound = fleche_state.BoundWrapper.bind(local_only)
+
+    with patch.dict(sys.modules, {"cloudpickle": None}):
+        with pytest.raises(TypeError, match="cloudpickle"):
+            pickle.dumps(bound)
+
+
+def test_bound_wrapper_module_level_func_pickles_without_cloudpickle():
+    """A module-level (importable-by-reference) func never needs cloudpickle."""
+    bound = fleche_state.BoundWrapper.bind(_pickle_func)
+
+    with patch.dict(sys.modules, {"cloudpickle": None}):
+        restored = pickle.loads(pickle.dumps(bound))
+
+    assert restored(9) == 10
