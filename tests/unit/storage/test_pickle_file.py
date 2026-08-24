@@ -1,6 +1,59 @@
+import pickle
+
 import pytest
-from fleche.storage.pickle_file import ValuePickleFile as PickleFile, CallPickleFile
+from fleche.storage.pickle_file import (
+    ValuePickleFile as PickleFile,
+    CallPickleFile,
+    register_serializer,
+)
 from fleche.digest import Digest
+
+
+# --- serializer registry tests ---
+
+
+def test_with_serializer_pickle_matches_with_pickle(tmp_path):
+    storage = PickleFile.with_serializer("pickle", root=tmp_path)
+    assert storage.serializer == "pickle"
+    assert storage.dumps is pickle.dumps
+    assert storage.loads is pickle.loads
+
+
+def test_with_pickle_sets_serializer_field(tmp_path):
+    storage = PickleFile.with_pickle(root=tmp_path)
+    assert storage.serializer == "pickle"
+
+
+def test_unknown_serializer_raises(tmp_path):
+    with pytest.raises(ValueError, match="Unknown PickleFile serializer 'bogus'"):
+        PickleFile.with_serializer("bogus", root=tmp_path)
+
+
+def test_register_serializer_enables_with_serializer(tmp_path):
+    calls = []
+
+    def loader():
+        calls.append(1)
+        return pickle.dumps, pickle.loads
+
+    register_serializer("my-test-serializer", loader)
+    try:
+        storage = PickleFile.with_serializer("my-test-serializer", root=tmp_path)
+        assert storage.serializer == "my-test-serializer"
+        assert calls == [1]  # loader only runs once the serializer is actually selected
+
+        value = {"a": 1}
+        key = storage.save(value)
+        assert storage.load(key) == value
+    finally:
+        from fleche.storage.pickle_file import _SERIALIZERS
+
+        del _SERIALIZERS["my-test-serializer"]
+
+
+def test_to_config_type_reflects_serializer_field(tmp_path):
+    storage = PickleFile.with_pickle(root=tmp_path)
+    assert storage.to_config()["type"] == "pickle"
 
 
 def test_load_file_not_found(tmp_path):

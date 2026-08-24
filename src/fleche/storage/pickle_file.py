@@ -27,6 +27,39 @@ with ImportAlarm(
     import dill
 
 
+_SERIALIZERS: "dict[str, Callable[[], tuple[Callable, Callable]]]" = {}
+"""Registered (dumps, loads) providers, keyed by the name used in ``to_config``/``with_serializer``."""
+
+
+def register_serializer(name: str, loader: "Callable[[], tuple[Callable, Callable]]") -> None:
+    """Register a ``(dumps, loads)`` pair for :meth:`PickleFileBackend.with_serializer`.
+
+    *loader* is a zero-argument callable returning the pair; it runs only when
+    *name* is actually selected, so an optional serializer's import (and any
+    ``ImportAlarm`` gating it) never fires for callers who never ask for it.
+    """
+    _SERIALIZERS[name] = loader
+
+
+def _pickle_loader() -> "tuple[Callable, Callable]":
+    return pickle.dumps, pickle.loads
+
+
+@cloudpickle_alarm
+def _cloudpickle_loader() -> "tuple[Callable, Callable]":
+    return cloudpickle.dumps, cloudpickle.loads
+
+
+@dill_alarm
+def _dill_loader() -> "tuple[Callable, Callable]":
+    return dill.dumps, dill.loads
+
+
+register_serializer("pickle", _pickle_loader)
+register_serializer("cloudpickle", _cloudpickle_loader)
+register_serializer("dill", _dill_loader)
+
+
 @dataclass(frozen=True, kw_only=True)
 class PickleFileBackend(FileStorage):
     """
@@ -34,31 +67,50 @@ class PickleFileBackend(FileStorage):
     """
 
     secret_key: tuple[bytes, ...] = field(default_factory=tuple)
-    dumps: Callable = field(repr=False)
-    loads: Callable = field(repr=False)
+    serializer: str = "pickle"
     compress: bool = False
+    # Derived from `serializer` in `__post_init__` via the `_SERIALIZERS` registry;
+    # `init=False` keeps them off the constructor signature.
+    dumps: Callable = field(init=False, repr=False)
+    loads: Callable = field(init=False, repr=False)
 
     def __post_init__(self):
         super().__post_init__()
         raw = get_secret_key() if not self.secret_key else normalize_secret_key(self.secret_key)
         object.__setattr__(self, "secret_key", tuple(raw))
+        try:
+            loader = _SERIALIZERS[self.serializer]
+        except KeyError:
+            raise ValueError(
+                f"Unknown PickleFile serializer {self.serializer!r}; "
+                f"registered serializers: {sorted(_SERIALIZERS)}"
+            ) from None
+        dumps, loads = loader()
+        object.__setattr__(self, "dumps", dumps)
+        object.__setattr__(self, "loads", loads)
+
+    @classmethod
+    def with_serializer(cls, serializer: str, *args, **kwargs):
+        """Construct a PickleFileBackend using a registered serializer by name.
+
+        See :func:`register_serializer` for adding new ones.
+        """
+        return cls(*args, serializer=serializer, **kwargs)
 
     @classmethod
     def with_pickle(cls, *args, **kwargs):
         """Construct a PickleFileBackend using the standard pickle module."""
-        return cls(*args, dumps=pickle.dumps, loads=pickle.loads, **kwargs)
+        return cls.with_serializer("pickle", *args, **kwargs)
 
     @classmethod
-    @cloudpickle_alarm
     def with_cloudpickle(cls, *args, **kwargs):
         """Construct a PickleFileBackend using the cloudpickle module."""
-        return cls(*args, dumps=cloudpickle.dumps, loads=cloudpickle.loads, **kwargs)
+        return cls.with_serializer("cloudpickle", *args, **kwargs)
 
     @classmethod
-    @dill_alarm
     def with_dill(cls, *args, **kwargs):
         """Construct a PickleFileBackend using the dill module."""
-        return cls(*args, dumps=dill.dumps, loads=dill.loads, **kwargs)
+        return cls.with_serializer("dill", *args, **kwargs)
 
     def _to_file(self, value: Any, path: Path) -> None:
         signer = SignedBytes(self.secret_key)
@@ -114,14 +166,8 @@ class PickleFileBackend(FileStorage):
 @dataclass(frozen=True)
 class ValuePickleFile(PerKeyLockMixin, DestructuringMixin, ValueMixin, PickleFileBackend):
     def to_config(self) -> dict[str, Any]:
-        # `dumps`/`loads` are not config data: the `type` name is what selects
-        # them again on the way back in, and it comes off the instance rather
-        # than the class because one class serves three names.
-        serializer = self.dumps.__module__.split(".")[0].lstrip("_")
-        if serializer not in ("pickle", "dill", "cloudpickle"):
-            raise ValueError(f"Unknown PickleFile serializer: {serializer!r}")
         config: dict[str, Any] = {
-            "type": serializer,
+            "type": self.serializer,
             # `root` is a Path; config dicts must stay TOML/JSON-representable.
             "root": str(self.root),
             "compress": self.compress,
@@ -136,11 +182,8 @@ class ValuePickleFile(PerKeyLockMixin, DestructuringMixin, ValueMixin, PickleFil
 @dataclass(frozen=True)
 class CallPickleFile(PerKeyLockMixin, CallMixin, PickleFileBackend):
     def to_config(self) -> dict[str, Any]:
-        serializer = self.dumps.__module__.split(".")[0].lstrip("_")
-        if serializer not in ("pickle", "dill", "cloudpickle"):
-            raise ValueError(f"Unknown PickleFile serializer: {serializer!r}")
         config: dict[str, Any] = {
-            "type": serializer,
+            "type": self.serializer,
             "root": str(self.root),
             "compress": self.compress,
         }
