@@ -51,25 +51,25 @@ conda install -c conda-forge fleche
 
 ```bash
 # For SQL storage
-pip install fleche[sqlalchemy]
+pip install "fleche[sqlalchemy]"
 
 # For alternate serialization formats
-pip install fleche[cloudpickle,dill]
+pip install "fleche[cloudpickle,dill]"
 
 # For Bagofholding storage
-pip install fleche[bagofholding]
+pip install "fleche[bagofholding]"
 
 # For SshCache (sharing caches across machines over SSH) — requires cloudpickle
-pip install fleche[ssh]
+pip install "fleche[ssh]"
 
 # For running cached calls through executorlib executors
-pip install fleche[executorlib]
+pip install "fleche[executorlib]"
 
 # For documentation
-pip install fleche[docs]
+pip install "fleche[docs]"
 
 # For development and testing
-pip install fleche[tests]
+pip install "fleche[tests]"
 ```
 
 See the [Optional dependencies](https://fleche.readthedocs.io/en/latest/installation.html#optional-dependencies)
@@ -144,12 +144,11 @@ def my_function(x):
 ### File Storage
 - Stores cache in filesystem using pickle (or cloudpickle/dill)
 - Persistent across runs
-- XDG Base Directory Specification compliant when configured
 
 ### SQL Storage
 - Requires `sqlalchemy`
 - **Call storage only** — stores call records (function name, arguments, metadata) in a SQL database; a separate value backend (file or memory) is still required for results
-- SQLite is the primary tested backend; any SQLAlchemy-supported database should work
+- SQLite, PostgreSQL, and MySQL/MariaDB are exercised in CI; any other SQLAlchemy-supported database should work
 - Enables efficient server-side filtering when querying cached calls
 
 ### SSH (remote) Cache
@@ -158,7 +157,8 @@ def my_function(x):
 - Stack with a local cache to read-through to a shared remote one — see `fleche.remote.SshCache`
 
 ### Custom Backends
-Implement the `Storage` interface to create custom backends.
+Subclass `ValueStorage`/`CallStorage` (via `StorageBackend` plus `ValueMixin`/
+`CallMixin`, see `fleche.storage`) to create custom backends.
 
 ## Advanced Features
 
