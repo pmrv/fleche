@@ -265,8 +265,8 @@ Available storage types
    * - ``"sql"``
      - SQL via SQLAlchemy (:class:`~fleche.storage.Sql`).
        *Call storage only.*
-     - ``url``
-     - ``echo``
+     - —
+     - ``url``, ``echo``
 
 Key descriptions
 ^^^^^^^^^^^^^^^^
@@ -294,8 +294,9 @@ Key descriptions
     ``FLECHE_SECRET_KEY`` environment variable.
 
 ``url``
-    SQLAlchemy connection URL, e.g. ``"sqlite:///~/.cache/fleche/calls.db"``.
-    Leading ``~`` is expanded to the home directory in ``sqlite:///`` URLs.
+    (str, default ``"sqlite:///:memory:"``) — SQLAlchemy connection URL, e.g.
+    ``"sqlite:///~/.cache/fleche/calls.db"``. Leading ``~`` is expanded to the
+    home directory in ``sqlite:///`` URLs.
 
 ``echo``
     (bool, default ``false``) — log all SQL statements to stderr (useful for
@@ -342,14 +343,16 @@ prefix bucket grows.
    calls.url = "sqlite:///~/.cache/fleche/calls.db"
 
 Since digests are SHA256 hex strings, the default ``prefix_length = 2``
-spreads keys across up to 256 files (``"00.h5"`` .. ``"ff.h5"``); smaller
-values group more keys per file (fewer files, more contention per file),
-larger values group fewer. Digests are already uniformly distributed, so
-bucket sizes stay roughly even without any extra bookkeeping. Set it to
-``0`` for the one-file-per-key layout, or to ``None`` (only possible when
-constructing the backend from Python — TOML cannot express ``None``) to
-infer the length from the files already in ``root``, falling back to the
-default on an empty root.
+spreads keys across up to 256 files (``"00.h5"`` .. ``"ff.h5"``); among
+grouping lengths of 1 and up, a smaller value groups more keys per file
+(fewer files, more contention per file) and a larger value groups fewer.
+``0`` is not the smallest grouping length but a special case that disables
+multi-bagging entirely, reverting to one file per key — the opposite
+extreme from grouping. Digests are already uniformly distributed, so bucket
+sizes stay roughly even without any extra bookkeeping. Set it to ``None``
+(only possible when constructing the backend from Python — TOML cannot
+express ``None``) to infer the length from the files already in ``root``,
+falling back to the default on an empty root.
 
 ``prefix_length`` is checked against the files already present in ``root``
 when the storage is constructed: opening an existing cache directory with a
@@ -380,20 +383,12 @@ different cached calls.  See :doc:`destructuring` for a full discussion with
 figures, including the special cases (opaque objects, namedtuples, empty
 containers).
 
-The optional ``remaining_depth`` key (integer, default ``1``) controls the granularity:
-
-* ``remaining_depth = 0`` — maximum splitting: every element at every nesting level is
-  stored as a separate entry.
-* ``remaining_depth = N`` (positive) — elements whose structural depth is less than *N*
-  are stored inline within their parent entry rather than as separate entries.
-  Depth is measured from the deepest scalar leaf: scalars (:class:`int`, :class:`str`,
-  etc.) have depth 0; a container has depth ``1 + max(children depths)``.
-  With ``remaining_depth = 1`` (the default), scalars (depth 0) are inlined into
-  their parent container, so a flat list or dict of only scalars becomes a single
-  cache entry.  Nested sub-collections (depth ≥ 1) are still stored as separate
-  entries.
-
-Higher values mean fewer, larger storage entries and less structural sharing between calls.
+The optional ``remaining_depth`` key (integer, default ``1``) controls the
+granularity — see :doc:`destructuring` for the full depth rule, with figures.
+In short: ``0`` splits every element into its own entry; the default ``1``
+inlines scalars into their parent so a flat list or dict of scalars becomes a
+single entry; higher values inline progressively deeper sub-collections too,
+trading storage entries and structural sharing for fewer, larger entries.
 
 Example:
 
