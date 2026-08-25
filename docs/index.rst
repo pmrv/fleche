@@ -33,9 +33,17 @@ Welcome to the **Fleche** library documentation.
    :hidden:
 
    usage/tldr
+   usage/purity
    usage/helpers
+   usage/file_semantics
    usage/lazy_call
    usage/query
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Recipes
+
+   recipes/files_and_paths
 
 .. toctree::
    :maxdepth: 2
@@ -72,6 +80,7 @@ Welcome to the **Fleche** library documentation.
    dev/custom_digests
    dev/extending_destructurer
    dev/function_profile
+   dev/path_storage
    dev/ssh_cache
    dev/sql_test_backends
    dev/storage_hierarchy
@@ -91,6 +100,8 @@ Welcome to the **Fleche** library documentation.
    notebooks/CacheStack
    notebooks/TransferWorkflow
    notebooks/ConcurrentExecution
+   notebooks/Files
+   notebooks/PathsInContainers
 
 .. toctree::
    :maxdepth: 2

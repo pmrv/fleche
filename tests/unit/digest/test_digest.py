@@ -1,6 +1,8 @@
 import cmath
 import datetime
 import struct
+import subprocess
+import sys
 import collections
 import collections.abc
 import types as types_module
@@ -945,3 +947,65 @@ def test_non_builtin_type_raises_indigestible(t):
     """Non-builtin type objects (user-defined classes, dataclass classes) raise Indigestible."""
     with pytest.raises(Indigestible):
         digest(t)
+
+
+# ---------------------------------------------------------------------------
+# subprocess.CompletedProcess
+# ---------------------------------------------------------------------------
+
+
+def _cp(args=("echo", "hi"), returncode=0, stdout=b"hi\n", stderr=b""):
+    return subprocess.CompletedProcess(
+        args=list(args), returncode=returncode, stdout=stdout, stderr=stderr
+    )
+
+
+def test_completedprocess_hashes_by_its_fields():
+    """Wrapping shell tools is a first-class use case; `run()`'s result must hash."""
+    assert digest(_cp()) == digest(_cp())
+
+
+@pytest.mark.parametrize(
+    "changed",
+    [
+        pytest.param({"args": ("echo", "bye")}, id="args"),
+        pytest.param({"returncode": 1}, id="returncode"),
+        pytest.param({"stdout": b"other\n"}, id="stdout"),
+        pytest.param({"stderr": b"boom\n"}, id="stderr"),
+    ],
+)
+def test_completedprocess_distinguishes_each_field(changed):
+    assert digest(_cp()) != digest(_cp(**changed))
+
+
+def test_completedprocess_is_not_digest_equal_to_its_field_tuple():
+    """The type name salts the hash, as for every other arm."""
+    cp = _cp()
+    assert digest(cp) != digest((cp.args, cp.returncode, cp.stdout, cp.stderr))
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        pytest.param({"stdout": "hi\n", "stderr": ""}, id="text-mode-str"),
+        pytest.param({"stdout": None, "stderr": None}, id="streams-not-captured"),
+    ],
+)
+def test_completedprocess_handles_uncaptured_and_text_streams(kwargs):
+    """`capture_output=False` leaves None; `text=True` leaves str."""
+    assert digest(_cp(**kwargs)) == digest(_cp(**kwargs))
+
+
+def test_completedprocess_from_a_real_run():
+    a = subprocess.run([sys.executable, "-c", "print('x')"], capture_output=True)
+    b = subprocess.run([sys.executable, "-c", "print('x')"], capture_output=True)
+    c = subprocess.run([sys.executable, "-c", "print('y')"], capture_output=True)
+    assert digest(a) == digest(b)
+    assert digest(a) != digest(c)
+
+
+def test_completedprocess_nested_in_a_result():
+    """The notebook's shape: a function returning (path-ish, CompletedProcess)."""
+    cp = _cp()
+    assert digest(("workdir", cp)) == digest(("workdir", _cp()))
+    assert digest({"ret": cp}) != digest({"ret": _cp(returncode=2)})

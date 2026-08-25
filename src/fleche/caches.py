@@ -62,7 +62,10 @@ class BaseCache(OperationContext):
 
         Finish the returned :class:`~fleche.call.PreparedCall` with exactly
         one of :meth:`~fleche.call.PreparedCall.commit` or
-        :meth:`~fleche.call.PreparedCall.abandon`.
+        :meth:`~fleche.call.PreparedCall.abandon`.  Until then the stashed
+        values are referenced by no record, and :meth:`Cache.gc` treats them as
+        roots (:func:`~fleche.call.in_flight_digests`) so a concurrent sweep
+        cannot evict the arguments of a running call.
         """
         return PreparedCall(digested=call.digest(), cache=self)
 
@@ -324,6 +327,8 @@ class Cache(PerKeyLockMixin, BaseCache):
         # record cannot end up keyed on post-mutation content.  No cache-level
         # lock: the keys are only known once the value storage has digested
         # each value, and value storages carry their own per-key locking.
+        # Registering the result as a gc root is PreparedCall's own doing, so
+        # it survives the rebinding CacheWrapper.prepare does.
         return PreparedCall(digested=call.stash(self.values), cache=self)
 
     def save(self, call: PreparedCall | Call) -> str:
@@ -465,10 +470,46 @@ class Cache(PerKeyLockMixin, BaseCache):
         ``values`` key outside the reachable
         set.  Call records are left untouched.
 
+        Values belonging to a call that is between
+        :meth:`~fleche.caches.BaseCache.prepare` and
+        :meth:`~fleche.call.PreparedCall.commit` are referenced by no record
+        yet, so they are seeded into the reachable set from
+        :func:`~fleche.call.in_flight_digests` — otherwise a sweep during a
+        long function body would evict the arguments out from under the call,
+        and the eventual commit would file a record with dangling references.
+        That registry is **per-process**: a sweep here cannot see a call in
+        flight in another process, so avoid running ``gc()`` against a cache
+        that other processes are writing to concurrently.  The concrete case
+        is :class:`~fleche.remote.SshCache` — the arguments are stashed by the
+        *server's* ``prepare``, and only the sealed record travels back, so a
+        sweep run on the server has nothing to key on while the client's body
+        runs.
+
+        The three reads below are ordered so that a call finishing *during* the
+        sweep cannot fall between them.  Candidates are listed first, so a value
+        stored later in the sweep is not a candidate at all.  Then the in-flight
+        roots, then the records: :meth:`~fleche.call.PreparedCall.commit`
+        deregisters only *after* :meth:`save` has filed the record, so a call
+        that commits mid-sweep is seen by the registry read, the record read, or
+        both — never neither.  Reading the records first instead leaves a real
+        hole, and a threaded test in ``test_gc.py`` reproduces it.
+
+        What remains is the gap between storing a value and registering the call
+        that owns it, and only if it spans those first two reads.  That is the
+        same window the one-shot :meth:`save` has always had between storing the
+        values and filing the record — bounded by a storage write rather than by
+        a function body — and closing it would need a lock shared by every
+        writer.  It is real rather than theoretical: forcing that gap open makes
+        the eviction reproducible, which
+        ``test_gc_may_evict_a_value_stored_but_not_yet_registered`` pins.  So a
+        sweep concurrent with writers is best-effort, and a sweep on an idle
+        cache is exact.
+
         Returns:
             The set of digests that were evicted from value storage.
         """
-        reachable: set[Digest] = set()
+        candidates = list(self.values.list())
+        reachable: set[Digest] = call.in_flight_digests()
         for key in self.calls.list():
             try:
                 dc = self.calls.load(key)
@@ -493,7 +534,7 @@ class Cache(PerKeyLockMixin, BaseCache):
                 frontier |= new
 
         evicted: set[Digest] = set()
-        for key in list(self.values.list()):
+        for key in candidates:
             if key not in reachable:
                 try:
                     self.values.evict(key)

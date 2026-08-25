@@ -6,15 +6,19 @@ in production is exercised in full, including module loading, config file
 parsing on the server side, and the ``Popen`` handshake on the client side.
 """
 
+import logging
 import os
 import subprocess
 import sys
 import textwrap
+from pathlib import Path
 
 import pytest
 
+from fleche import cache, fleche
 from fleche.call import Call
-from fleche.remote import SshCache, _Connection
+from fleche.digest import digest
+from fleche.remote import RemotePathUnsupported, SshCache, _Connection
 
 
 class _LocalSubprocessConnection(_Connection):
@@ -165,3 +169,67 @@ def test_subprocess_named_cache(tmp_path):
     finally:
         sc_main.close()
         sc_alt.close()
+
+
+# ---------------------------------------------------------------------------
+# Paths stop at the SSH boundary
+# ---------------------------------------------------------------------------
+
+
+def test_relative_path_would_resolve_against_the_servers_own_cwd(
+    tmp_path, monkeypatch
+):
+    """The divergence the path guard exists for, reproduced in one process.
+
+    Client and server run in different working directories, so the same
+    relative name denotes a *different file* on each side — the single-machine
+    stand-in for "the remote is another filesystem".  Only the path string
+    crosses the wire, so without the guard the server would digest and store
+    its own file under a key the client can never reproduce, and a later load
+    would hand back the wrong bytes.
+    """
+    remote_root = tmp_path / "remote"
+    remote_root.mkdir()
+    client_root = tmp_path / "client"
+    client_root.mkdir()
+    (client_root / "data.txt").write_text("client bytes")
+    (remote_root / "data.txt").write_text("SERVER BYTES - a different file entirely")
+    # The two sides genuinely disagree about what "data.txt" contains.
+    assert digest(client_root / "data.txt") != digest(remote_root / "data.txt")
+
+    monkeypatch.chdir(client_root)
+    sc = _build_remote(remote_root)
+    try:
+        with pytest.raises(RemotePathUnsupported):
+            sc.save_value(Path("data.txt"))
+    finally:
+        sc.close()
+
+
+def test_path_returning_function_runs_uncached_against_a_remote(tmp_path, caplog):
+    """A rejected result must not break the call — it just isn't cached.
+
+    ``Rejected`` is the cache's "I won't keep this" signal, which the
+    decorator logs and swallows, so the user still gets their file back.
+    """
+    remote_root = tmp_path / "remote"
+    remote_root.mkdir()
+    sc = _build_remote(remote_root)
+    runs = []
+
+    @fleche
+    def produce(name):
+        runs.append(name)
+        f = tmp_path / f"{name}.txt"
+        f.write_text(name)
+        return f
+
+    try:
+        with cache(sc), caplog.at_level(logging.WARNING):
+            assert produce("out").read_text() == "out"
+            assert produce("out").read_text() == "out"
+    finally:
+        sc.close()
+
+    assert runs == ["out", "out"]  # never cached, never wrong
+    assert any("rejected save" in r.message.lower() for r in caplog.records)

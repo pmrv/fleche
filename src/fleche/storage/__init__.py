@@ -19,7 +19,8 @@ from .base import (
     get_storage_constructor,
     is_registered_storage,
 )
-from .destructuring import DestructuringMixin, register_destructurer
+from .destructuring import DestructuringMixin, child_slots, register_destructurer
+from .paths import PathValueMixin, TempPath, FileBlob, DirectoryBlob, find_path
 from .memory import MemoryBackend, ValueMemory, CallMemory
 from .void import VoidBackend, ValueVoid, CallVoid
 from .file import FileStorage
@@ -47,7 +48,13 @@ __all__ = [
     "get_storage_constructor",
     "is_registered_storage",
     "DestructuringMixin",
+    "child_slots",
     "register_destructurer",
+    "PathValueMixin",
+    "TempPath",
+    "FileBlob",
+    "DirectoryBlob",
+    "find_path",
     "MemoryBackend",
     "ValueMemory",
     "CallMemory",

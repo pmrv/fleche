@@ -102,7 +102,9 @@ Functions Returning ``None``
 Functions that return ``None`` are **never cached**.  When a decorated function
 returns ``None``, ``fleche`` logs a ``WARNING`` and skips the save step
 entirely.  Subsequent calls will execute the function again rather than
-returning a cached value.
+returning a cached value — including any side effects they have, which for a
+cached function would otherwise happen on the cold call only (see
+:doc:`purity`).
 
 This applies to all code paths, with one difference for ``.rerun()``:
 

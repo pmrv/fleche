@@ -9,6 +9,7 @@ from .file import FileStorage
 from .base import SaveError, ValueMixin, CallMixin, register_storage
 from .thread_safe import PerKeyLockMixin
 from .destructuring import DestructuringMixin
+from .paths import PathValueMixin
 from ..digest import Digest, DIGEST_LENGTH
 
 from pyiron_snippets.import_alarm import ImportAlarm
@@ -371,7 +372,7 @@ class BagOfHoldingH5FileBackend(FileStorage):
 
 @register_storage("bagofholding_hdf", kind="value")
 @dataclass(frozen=True)
-class ValueBagOfHoldingH5File(PerKeyLockMixin, DestructuringMixin, ValueMixin, BagOfHoldingH5FileBackend):
+class ValueBagOfHoldingH5File(PerKeyLockMixin, DestructuringMixin, PathValueMixin, ValueMixin, BagOfHoldingH5FileBackend):
     def to_config(self) -> dict[str, Any]:
         return {
             "type": "bagofholding_hdf",

@@ -8,6 +8,7 @@ from .file import FileStorage, _atomic_write
 from .base import ValueMixin, CallMixin, register_storage
 from .thread_safe import PerKeyLockMixin
 from .destructuring import DestructuringMixin
+from .paths import PathValueMixin
 from ..security import get_secret_key, normalize_secret_key, SignedBytes, SignatureError
 
 from pyiron_snippets.import_alarm import ImportAlarm
@@ -164,7 +165,7 @@ class PickleFileBackend(FileStorage):
 
 
 @dataclass(frozen=True)
-class ValuePickleFile(PerKeyLockMixin, DestructuringMixin, ValueMixin, PickleFileBackend):
+class ValuePickleFile(PerKeyLockMixin, DestructuringMixin, PathValueMixin, ValueMixin, PickleFileBackend):
     def to_config(self) -> dict[str, Any]:
         config: dict[str, Any] = {
             "type": self.serializer,

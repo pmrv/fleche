@@ -1,10 +1,10 @@
 import pytest
-from collections import namedtuple
+from collections import namedtuple, Counter, defaultdict, OrderedDict
 from dataclasses import dataclass
 from hypothesis import given, settings, HealthCheck, strategies as st
 from fleche.storage import ValueMixin, DestructuringMixin
 from fleche.storage.memory import MemoryBackend
-from fleche.storage.destructuring import DigestedIterable, DigestedDict, Digested
+from fleche.storage.destructuring import DigestedIterable, DigestedMapping, Digested
 from fleche.digest import digest, Digest
 
 from tests.strategies import st_base_values, st_nested_values, st_key_values, namedtuples
@@ -87,19 +87,19 @@ def test_digest_transparency_iterable_mixed(container, items):
 
 @given(st.dictionaries(st_key_values, st_base_values, min_size=1, max_size=6))
 def test_digest_transparency_dict_all_digests(d):
-    """DigestedDict whose keys and values are all Digests hashes like the original dict."""
-    dd = DigestedDict({digest(k): digest(v) for k, v in d.items()})
+    """DigestedMapping whose keys and values are all Digests hashes like the original dict."""
+    dd = DigestedMapping({digest(k): digest(v) for k, v in d.items()})
     assert digest(dd) == digest(d)
 
 
 @given(st.dictionaries(st_key_values, st_base_values, min_size=2, max_size=6))
 def test_digest_transparency_dict_mixed(d):
-    """DigestedDict with mixed plain and Digest entries still hashes like the original."""
+    """DigestedMapping with mixed plain and Digest entries still hashes like the original."""
     items = list(d.items())
     # inline first key-value pair, digest the rest
     mixed = {items[0][0]: items[0][1]}
     mixed.update({digest(k): digest(v) for k, v in items[1:]})
-    dd = DigestedDict(mixed)
+    dd = DigestedMapping(mixed)
     assert digest(dd) == digest(d)
 
 
@@ -122,11 +122,11 @@ def test_digested_iterable_mend_roundtrip(container, ds, items):
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 @given(st.dictionaries(st.text(), st_base_values, min_size=1, max_size=6))
 def test_digested_dict_mend_roundtrip(ds, d):
-    """DigestedDict stored by ds can be re-assembled via mend."""
+    """DigestedMapping stored by ds can be re-assembled via mend."""
     key = ds.save(d)
     # Access the raw stored value directly from the backend dict (bypasses mend)
     raw = ds.storage[key]
-    assert isinstance(raw, DigestedDict)
+    assert isinstance(raw, DigestedMapping)
     assert raw.mend(ds) == d
 
 
@@ -257,7 +257,7 @@ def test_plain_container_stored_when_all_inline(container):
 
 
 def test_plain_dict_stored_when_all_inline():
-    """When all dict entries are inlined, the dict is stored without a DigestedDict wrapper."""
+    """When all dict entries are inlined, the dict is stored without a DigestedMapping wrapper."""
     ds = make_ds(remaining_depth=10)
     data = {"a": 1, "b": [2, 3]}
     key = ds.save(data)
@@ -452,3 +452,144 @@ def test_count_reuses_nonnegative(value):
     ds.save(value)
     hits = ds.count_reuses()
     assert all(v >= 0 for v in hits.values())
+
+
+# ---- Mapping subclass destructuring ----
+# DigestedMapping is generic over Mapping, mirroring how DigestedIterable is
+# generic over list/tuple: ``sunder`` and ``mend`` reconstruct via
+# ``type(value)(...)``.  Only the exact types on the _DESTRUCTURERS allowlist
+# (dict, OrderedDict) are destructured; subclasses may repurpose that
+# constructor (defaultdict, Counter) and are stored verbatim as opaque values.
+
+
+def test_ordereddict_roundtrip(ds):
+    """OrderedDict round-trips with its type and order preserved."""
+    od = OrderedDict([("b", 1), ("a", 2), ("c", 3)])
+    key = ds.save(od)
+    loaded = ds.load(key)
+    assert loaded == od
+    assert type(loaded) is OrderedDict
+    assert list(loaded) == ["b", "a", "c"]
+
+
+def test_ordereddict_is_destructured(ds):
+    """OrderedDict is wrapped in a DigestedMapping whose items preserve the mapping type."""
+    od = OrderedDict([("a", 1), ("b", [2, 3])])
+    key = ds.save(od)
+    raw = ds.storage[key]
+    assert isinstance(raw, DigestedMapping)
+    assert type(raw.items) is OrderedDict
+
+
+def test_ordereddict_digest_transparency():
+    """DigestedMapping wrapping an OrderedDict hashes like the original OrderedDict."""
+    od = OrderedDict([("a", 1), ("b", 2)])
+    dd = DigestedMapping(OrderedDict((digest(k), digest(v)) for k, v in od.items()))
+    assert digest(dd) == digest(od)
+
+
+def test_ordereddict_digest_distinct_from_dict():
+    """OrderedDict and dict with the same entries hash differently — verify we preserve that."""
+    od = OrderedDict([("a", 1), ("b", 2)])
+    d = {"a": 1, "b": 2}
+    assert digest(od) != digest(d)
+    ds_local = make_ds()
+    assert ds_local.save(od) != ds_local.save(d)
+
+
+def test_empty_ordereddict_roundtrip(ds):
+    """An empty OrderedDict is stored verbatim and round-trips as OrderedDict."""
+    od = OrderedDict()
+    key = ds.save(od)
+    raw = ds.storage[key]
+    assert not isinstance(raw, Digested)
+    loaded = ds.load(key)
+    assert loaded == od
+    assert type(loaded) is OrderedDict
+
+
+def test_ordereddict_mend_preserves_type(ds):
+    """The raw DigestedMapping's mend reconstructs an OrderedDict, not a plain dict."""
+    od = OrderedDict([("a", 1), ("b", 2)])
+    key = ds.save(od)
+    raw = ds.storage[key]
+    assert isinstance(raw, DigestedMapping)
+    mended = raw.mend(ds)
+    assert type(mended) is OrderedDict
+    assert mended == od
+
+
+def test_ordereddict_nested_in_dict_roundtrip(ds):
+    """An OrderedDict nested in a regular dict is preserved through destructuring."""
+    data = {"inner": OrderedDict([("x", 1), ("y", 2)]), "other": 42}
+    key = ds.save(data)
+    loaded = ds.load(key)
+    assert loaded == data
+    assert type(loaded["inner"]) is OrderedDict
+    assert list(loaded["inner"]) == ["x", "y"]
+
+
+def test_dict_nested_in_ordereddict_roundtrip(ds):
+    """A plain dict value inside an OrderedDict round-trips with both types preserved."""
+    data = OrderedDict([("a", {"x": 1, "y": 2}), ("b", 3)])
+    key = ds.save(data)
+    loaded = ds.load(key)
+    assert loaded == data
+    assert type(loaded) is OrderedDict
+    assert type(loaded["a"]) is dict
+
+
+# ---- Off-allowlist container types are opaque ----
+
+
+def test_defaultdict_is_opaque(ds):
+    """defaultdict is off the allowlist: its constructor wants a factory, not pairs."""
+    dd = defaultdict(list, {"a": [1], "b": [2, 3]})
+    key = ds.save(dd)
+    assert not isinstance(ds.storage[key], Digested)
+    loaded = ds.load(key)
+    assert type(loaded) is defaultdict
+    assert loaded == dd
+
+
+def test_counter_is_opaque(ds):
+    """Counter is off the allowlist: its constructor would count the pairs."""
+    cnt = Counter({"a": 5, "b": 6})
+    key = ds.save(cnt)
+    assert not isinstance(ds.storage[key], Digested)
+    loaded = ds.load(key)
+    assert type(loaded) is Counter
+    assert loaded == cnt
+
+
+def test_dict_subclass_is_opaque(ds):
+    """Even a well-behaved dict subclass is opaque until opted in explicitly."""
+
+    class MyDict(dict):
+        pass
+
+    md = MyDict({"a": 1, "b": [2, 3]})
+    key = ds.save(md)
+    assert not isinstance(ds.storage[key], Digested)
+    loaded = ds.load(key)
+    assert type(loaded) is MyDict
+    assert loaded == md
+
+
+def test_list_subclass_is_opaque(ds):
+    """List subclasses are opaque too — same exact-type rule as mappings."""
+
+    class MyList(list):
+        pass
+
+    ml = MyList([1, [2, 3]])
+    key = ds.save(ml)
+    assert not isinstance(ds.storage[key], Digested)
+    loaded = ds.load(key)
+    assert type(loaded) is MyList
+    assert loaded == ml
+
+
+# DirectoryBlob is now an opaque type owned by PathValueMixin (see
+# tests/unit/storage/test_paths.py for its end-to-end coverage).  DestructuringMixin
+# leaves it alone — no match arm catches it — so it has no presence here.

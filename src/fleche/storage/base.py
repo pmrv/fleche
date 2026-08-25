@@ -348,6 +348,33 @@ class ValueStorage(KeyManagement):
     @abstractmethod
     def load(self, key: Digest | str) -> Any: ...
 
+    def load_raw(self, key: Digest | str) -> Any:
+        """The entry exactly as stored, with no mending applied.
+
+        ``load`` runs the whole mending chain — destructured children are
+        rewired back in, a stored path is materialized into a temp tree.  That
+        is right for callers who want the *value*, and wrong for callers who
+        want the *record*: mending resolves child references away, so a
+        reference-graph walk (``gc``, ``count_reuses``) that reads through
+        ``load`` cannot see them and concludes the children are unreachable.
+
+        Mending layers override ``load`` only, so this default is already raw
+        for storages that do none; :class:`ValueMixin` overrides it with the
+        bare backend read.
+        """
+        return self.load(key)
+
+    def _raw_sub_digests(self, raw: Any) -> set[Digest]:
+        """Digests directly referenced by a raw stored entry.
+
+        The terminating case of a cooperative chain: every mixin that wraps
+        values in a record of its own reports that record's child references
+        here and delegates the rest upward, so a storage's reachable set is
+        the union over its layers.  An entry no layer claims references
+        nothing.
+        """
+        return set()
+
 
 class ValueMixin(ValueStorage, StorageBackend):
     """Bridges :class:`~fleche.storage.base.ValueStorage` with :class:`~fleche.storage.base.StorageBackend` primitives.
@@ -365,6 +392,9 @@ class ValueMixin(ValueStorage, StorageBackend):
             return self.put(value, key)
 
     def load(self, key: Digest | str) -> Any:
+        return self.load_raw(key)
+
+    def load_raw(self, key: Digest | str) -> Any:
         with self._operation_context(key):
             key = self._normalize_key(key)
             logger.debug("Loading value with key %s", key)
