@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("fleche.query")
 
+_MISSING_TIMESTOP = object()
+
 
 def _resolve_key(key: "str | Callable[[call.LazyCall], Any]") -> "Callable[[call.LazyCall], Any]":
     """Normalise a key argument to a callable.
@@ -147,21 +149,34 @@ class QueryIterator(Iterable[call.LazyCall]):
         return {k: QueryIterator(lambda v=v: v, cache=self.cache) for k, v in groups.items()}
 
     def _timestop_extremum(self, *, reverse: bool) -> call.LazyCall:
-        sentinel = float("-inf") if reverse else float("inf")
-        result = (builtins.max if reverse else builtins.min)(
-            self,
-            key=lambda c: c.metadata.get("runtime", {}).get("timestop", sentinel),
-            default=None,
-        )
-        if result is None:
+        calls = list(self)
+        if not calls:
             raise IndexError("QueryIterator is empty")
-        return result
+
+        def timestop(c: call.LazyCall) -> Any:
+            return c.metadata.get("runtime", {}).get("timestop", _MISSING_TIMESTOP)
+
+        if all(timestop(c) is _MISSING_TIMESTOP for c in calls):
+            raise ValueError(
+                f"Cannot determine the {'latest' if reverse else 'oldest'} call: "
+                f"none of the {len(calls)} matching call(s) carry Runtime "
+                "metadata (timestop). Decorate with meta=['Runtime'] (the "
+                "default) or filter to calls that were."
+            )
+
+        sentinel = float("-inf") if reverse else float("inf")
+        return (builtins.max if reverse else builtins.min)(
+            calls,
+            key=lambda c: c.metadata.get("runtime", {}).get("timestop", sentinel),
+        )
 
     def latest(self) -> call.LazyCall:
         """Return the call with the most recent timestop (requires Runtime metadata).
 
         Raises:
-            IndexError: if there are no matching calls
+            IndexError: if there are no matching calls.
+            ValueError: if there are matching calls but none carry Runtime
+                metadata, so no order can be established.
         """
         return self._timestop_extremum(reverse=True)
 
@@ -169,7 +184,9 @@ class QueryIterator(Iterable[call.LazyCall]):
         """Return the call with the oldest timestop (requires Runtime metadata).
 
         Raises:
-            IndexError: if there are no matching calls
+            IndexError: if there are no matching calls.
+            ValueError: if there are matching calls but none carry Runtime
+                metadata, so no order can be established.
         """
         return self._timestop_extremum(reverse=False)
 

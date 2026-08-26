@@ -613,6 +613,44 @@ def test_oldest_raises_on_empty():
         QueryIterator(lambda: []).oldest()
 
 
+def test_latest_raises_when_no_call_has_runtime_metadata(test_cache):
+    """Without Runtime metadata there is no order to establish -- raise, don't
+    silently return an arbitrary match."""
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    test_cache.save(Call(name="f", arguments={"x": 2}, result=20))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    with pytest.raises(ValueError, match="Runtime"):
+        test_cache.query(tpl).latest()
+
+
+def test_oldest_raises_when_no_call_has_runtime_metadata(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    test_cache.save(Call(name="f", arguments={"x": 2}, result=20))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    with pytest.raises(ValueError, match="Runtime"):
+        test_cache.query(tpl).oldest()
+
+
+def test_latest_ignores_calls_missing_runtime_metadata(test_cache):
+    """A mix of dated and undated calls still finds the true latest among the
+    dated ones, rather than tripping the all-missing error path."""
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10, metadata={"runtime": {"timestop": 100.0}}))
+    test_cache.save(Call(name="f", arguments={"x": 2}, result=20))  # no metadata at all
+    test_cache.save(Call(name="f", arguments={"x": 3}, result=30, metadata={"runtime": {"timestop": 200.0}}))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    result = test_cache.query(tpl).latest()
+    assert result.arguments["x"] == 3
+
+
+def test_oldest_ignores_calls_missing_runtime_metadata(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10, metadata={"runtime": {"timestop": 100.0}}))
+    test_cache.save(Call(name="f", arguments={"x": 2}, result=20))  # no metadata at all
+    test_cache.save(Call(name="f", arguments={"x": 3}, result=30, metadata={"runtime": {"timestop": 200.0}}))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    result = test_cache.query(tpl).oldest()
+    assert result.arguments["x"] == 1
+
+
 # ---------------------------------------------------------------------------
 # .evict()
 # ---------------------------------------------------------------------------
