@@ -150,9 +150,10 @@ each backend achieves this.
 
    Even with ``fork`` as the start method, a function defined in a REPL or
    notebook cell (rather than an importable module) can still fail to
-   pickle — and the standard library switched away from ``fork`` as the
-   default start method on some platforms, which re-imports ``__main__`` in
-   each worker and hits the same restriction. Prefer a module-level function
+   pickle. This is more likely to bite on macOS, where the standard library
+   has defaulted to ``spawn`` instead of ``fork`` since Python 3.8 (`bpo-33725
+   <https://bugs.python.org/issue33725>`_) — ``spawn`` workers re-import
+   ``__main__`` and hit the same restriction. Prefer a module-level function
    for anything submitted to a process pool.
 
 BoundWrapper — Freezing State for Workers
@@ -273,7 +274,8 @@ automatically:
    executor whose own ``submit`` normally returns a different Future
    subtype. Code that relies on executor-specific Future behaviour (e.g.
    ``distributed.as_completed``) may see a different type on hits than on
-   misses.
+   misses — tracked in `issue #895
+   <https://github.com/pmrv/fleche/issues/895>`_.
 
 .. code-block:: pycon
 
