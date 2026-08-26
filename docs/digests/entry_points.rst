@@ -7,9 +7,11 @@ Entry Points
 :mod:`importlib.metadata` plugin mechanism): any installed package can
 register digest hooks for its types in the ``fleche`` entry point group under
 the name ``digest``.  Installing such a package is all it takes — no imports,
-no calls to :func:`~fleche.digest.add_hook`.  The first time
+no calls to :func:`~fleche.digest.add_hook`.  Each time
 :func:`~fleche.digest.digest` encounters a value it does not know how to
-handle, it loads all registered entry points and retries.
+handle, it (re-)loads all registered entry points and retries — there is no
+"already loaded" cache, so a type that stays unsupported after the retry
+pays this reload cost on every call, not just the first.
 
 Use entry points whenever digest support for a type should "just work" after
 a ``pip install``:
@@ -59,7 +61,8 @@ How Hooks Are Loaded
 
 Entry points are loaded *lazily*: to avoid import overhead, nothing happens
 until :func:`~fleche.digest.digest` raises
-:class:`~fleche.digest.Indigestible` for a value.  At that point ``fleche``:
+:class:`~fleche.digest.Indigestible` for a value.  At that point, and every
+subsequent time the same thing happens, ``fleche``:
 
 1. loads all entry points registered under the group ``fleche`` with the
    name ``digest``, and
@@ -77,6 +80,9 @@ Precedence rules:
   encountered wins.
 * An entry point that fails to load is logged as an ``ERROR`` (with
   traceback) and skipped — it never breaks digestion of other values.
+* Hooks — manual or entry-point — take priority over a type's own
+  ``__digest__`` method (see :doc:`digest_equivalence`): if a hook is
+  registered for a type, its ``__digest__`` is never consulted.
 
 Registering Your Own Entry Point
 --------------------------------
@@ -124,4 +130,4 @@ which returns the object at the given path directly — it does **not** call it.
    ... ]
 
 For guidance on writing the digest functions themselves (which fields to
-include, avoiding collisions), see :doc:`../dev/custom_digests`.
+include, avoiding collisions), see :doc:`/dev/custom_digests`.

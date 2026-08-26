@@ -20,6 +20,10 @@ exception: their digest is computed via Python's numeric hash protocol
 The type name is therefore **not** carried into the final digest for numbers, which is
 precisely why ``digest(1) == digest(1.0) == digest(1+0j)``.
 
+``bool`` is the one numeric subclass excluded from this equivalence: it keeps
+its own type-name salt, so ``digest(True) != digest(1)`` even though
+``isinstance(True, int)``.
+
 For all other types the type-name salt is applied normally, so
 ``digest((1, 2)) != digest([1, 2])`` because "tuple" and "list" diverge before
 the elements are processed.
@@ -61,7 +65,7 @@ argument (or returned one).
 
     >>> assert before == after
 
-Why we make them equivalent
+Why We Make Them Equivalent
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 * **Persistence is the point.**  ``fleche`` is a *persistent* cache.  Migrating from
@@ -75,7 +79,7 @@ Why we make them equivalent
   for the same reason: when two objects of different concrete types denote the same
   value, the digest collapses them.
 
-Boundaries to keep in mind
+Boundaries to Keep in Mind
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 * **Equivalence is by class name, not module path.**  Two declarations with the same
@@ -97,7 +101,7 @@ Boundaries to keep in mind
   iterate differently.  The digest tells you when ``fleche`` will reuse a cached
   result; it does not tell you the two instances are observationally identical.
 
-Opting out per type
+Opting Out per Type
 ~~~~~~~~~~~~~~~~~~~
 
 If a particular class needs stricter scoping than "same name + same fields", give it
