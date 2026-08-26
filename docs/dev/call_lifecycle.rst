@@ -72,8 +72,9 @@ safe form needs no ``try``:
 idempotent — argument values already written in phase 1 are
 content-addressed orphans, which a later garbage-collection sweep reclaims,
 so there is nothing to roll back.  Only
-:meth:`~fleche.call.PreparedCall.commit` is barred afterwards; calling either
-twice raises :class:`RuntimeError`.
+:meth:`~fleche.call.PreparedCall.commit` is barred afterwards: committing a
+call that was already committed or abandoned raises :class:`RuntimeError`,
+while ``abandon`` never raises no matter how often it is called.
 
 :mod:`fleche.wrapper` does not use the ``with`` form, because the commit may
 happen in a future's done-callback rather than on the calling thread, but it
