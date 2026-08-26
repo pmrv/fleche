@@ -147,29 +147,49 @@ class QueryIterator(Iterable[call.LazyCall]):
         return {k: QueryIterator(lambda v=v: v, cache=self.cache) for k, v in groups.items()}
 
     def _timestop_extremum(self, *, reverse: bool) -> call.LazyCall:
-        sentinel = float("-inf") if reverse else float("inf")
-        result = (builtins.max if reverse else builtins.min)(
-            self,
-            key=lambda c: c.metadata.get("runtime", {}).get("timestop", sentinel),
-            default=None,
-        )
-        if result is None:
+        best: call.LazyCall | None = None
+        best_timestop: float | None = None
+        saw_any = False
+        for c in self:
+            saw_any = True
+            timestop = c.metadata.get("runtime", {}).get("timestop")
+            if timestop is None:
+                continue
+            if best_timestop is None or (timestop >= best_timestop if reverse else timestop <= best_timestop):
+                best = c
+                best_timestop = timestop
+        if not saw_any:
             raise IndexError("QueryIterator is empty")
-        return result
+        if best is None:
+            raise ValueError(
+                "no matching call carries Runtime timestop metadata; "
+                f".{'latest' if reverse else 'oldest'}() cannot determine an order"
+            )
+        return best
 
     def latest(self) -> call.LazyCall:
         """Return the call with the most recent timestop (requires Runtime metadata).
 
+        Calls without Runtime metadata are ignored when at least one matching
+        call has a ``timestop``.
+
         Raises:
             IndexError: if there are no matching calls
+            ValueError: if there are matching calls but none carry Runtime
+                timestop metadata
         """
         return self._timestop_extremum(reverse=True)
 
     def oldest(self) -> call.LazyCall:
         """Return the call with the oldest timestop (requires Runtime metadata).
 
+        Calls without Runtime metadata are ignored when at least one matching
+        call has a ``timestop``.
+
         Raises:
             IndexError: if there are no matching calls
+            ValueError: if there are matching calls but none carry Runtime
+                timestop metadata
         """
         return self._timestop_extremum(reverse=False)
 

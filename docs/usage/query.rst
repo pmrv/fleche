@@ -127,13 +127,18 @@ Temporal helpers
 ~~~~~~~~~~~~~~~~
 
 Both require :class:`~fleche.metadata.Runtime` metadata (the default).
+Matching calls without a ``timestop`` are ignored as long as at least one
+matching call has one.
 
 ``.latest() -> LazyCall``
     Call with the most recent ``timestop``.  Raises :exc:`IndexError` if
-    empty.
+    empty, or :exc:`ValueError` if there are matching calls but none carry
+    Runtime ``timestop`` metadata.
 
 ``.oldest() -> LazyCall``
-    Call with the oldest ``timestop``.  Raises :exc:`IndexError` if empty.
+    Call with the oldest ``timestop``.  Raises :exc:`IndexError` if empty,
+    or :exc:`ValueError` if there are matching calls but none carry Runtime
+    ``timestop`` metadata.
 
 Grouping
 ~~~~~~~~

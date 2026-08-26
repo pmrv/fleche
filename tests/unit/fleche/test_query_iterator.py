@@ -613,6 +613,38 @@ def test_oldest_raises_on_empty():
         QueryIterator(lambda: []).oldest()
 
 
+def test_latest_ignores_calls_without_runtime_metadata(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    test_cache.save(Call(name="f", arguments={"x": 2}, result=20, metadata={"runtime": {"timestop": 100.0}}))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    result = test_cache.query(tpl).latest()
+    assert result.arguments == {"x": 2}
+
+
+def test_oldest_ignores_calls_without_runtime_metadata(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    test_cache.save(Call(name="f", arguments={"x": 2}, result=20, metadata={"runtime": {"timestop": 100.0}}))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    result = test_cache.query(tpl).oldest()
+    assert result.arguments == {"x": 2}
+
+
+def test_latest_raises_value_error_when_no_call_has_runtime_metadata(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    test_cache.save(Call(name="f", arguments={"x": 2}, result=20))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    with pytest.raises(ValueError):
+        test_cache.query(tpl).latest()
+
+
+def test_oldest_raises_value_error_when_no_call_has_runtime_metadata(test_cache):
+    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
+    test_cache.save(Call(name="f", arguments={"x": 2}, result=20))
+    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
+    with pytest.raises(ValueError):
+        test_cache.query(tpl).oldest()
+
+
 # ---------------------------------------------------------------------------
 # .evict()
 # ---------------------------------------------------------------------------
