@@ -14,8 +14,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("fleche.query")
 
-_MISSING_TIMESTOP = object()
-
 
 def _resolve_key(key: "str | Callable[[call.LazyCall], Any]") -> "Callable[[call.LazyCall], Any]":
     """Normalise a key argument to a callable.
@@ -149,26 +147,25 @@ class QueryIterator(Iterable[call.LazyCall]):
         return {k: QueryIterator(lambda v=v: v, cache=self.cache) for k, v in groups.items()}
 
     def _timestop_extremum(self, *, reverse: bool) -> call.LazyCall:
-        calls = list(self)
-        if not calls:
+        sentinel = float("-inf") if reverse else float("inf")
+        key = lambda c: c.metadata.get("runtime", {}).get("timestop", sentinel)
+        result = (builtins.max if reverse else builtins.min)(self, key=key, default=None)
+        if result is None:
             raise IndexError("QueryIterator is empty")
-
-        def timestop(c: call.LazyCall) -> Any:
-            return c.metadata.get("runtime", {}).get("timestop", _MISSING_TIMESTOP)
-
-        if all(timestop(c) is _MISSING_TIMESTOP for c in calls):
+        if key(result) == sentinel:
+            # The winning key is only the sentinel if every candidate hit it --
+            # a real timestop can tie a sentinel only in the pathological case
+            # of a call actually recording +-inf, which never happens in
+            # practice. So this means none of the matching calls carry
+            # Runtime metadata at all, and the "winner" is an arbitrary pick
+            # rather than a true extremum.
             raise ValueError(
                 f"Cannot determine the {'latest' if reverse else 'oldest'} call: "
-                f"none of the {len(calls)} matching call(s) carry Runtime "
-                "metadata (timestop). Decorate with meta=['Runtime'] (the "
-                "default) or filter to calls that were."
+                "none of the matching calls carry Runtime metadata (timestop). "
+                "Decorate with meta=['Runtime'] (the default) or filter to "
+                "calls that were."
             )
-
-        sentinel = float("-inf") if reverse else float("inf")
-        return (builtins.max if reverse else builtins.min)(
-            calls,
-            key=lambda c: c.metadata.get("runtime", {}).get("timestop", sentinel),
-        )
+        return result
 
     def latest(self) -> call.LazyCall:
         """Return the call with the most recent timestop (requires Runtime metadata).
