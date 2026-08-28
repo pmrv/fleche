@@ -50,10 +50,15 @@ Returns a :class:`~fleche.query.QueryIterator` over matching cached calls from t
 
       # function signature: def fetch(user_id, metadata):
       fetch.query(123, "v1")           # positional — works
-      fetch.query(user_id=123, metadata="v1")  # shadowed — 'metadata' is
-                                               # interpreted as the filter dict
+      fetch.query(user_id=123, metadata="v1")  # shadowed — 'metadata' is passed
+                                               # as the filter value and raises
+                                               # AttributeError (a str has no
+                                               # .items()), since .query()'s
+                                               # metadata= expects a dict
 
-   ``fleche`` logs a ``WARNING`` when this situation is detected.
+   ``fleche`` logs a ``WARNING`` whenever the decorated function has a
+   parameter named ``metadata`` — on every call, positional or not. It is
+   informational, not an indicator that a particular call failed.
 
 See :doc:`query` for a detailed guide on querying cached calls.
 
@@ -65,7 +70,7 @@ Forces the function to re-execute, even if its result is already present in the 
 ``.bind(*args, **kwargs)``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Returns a :class:`~fleche.state.BoundWrapper` that captures the currently active cache and metadata at the moment of the call. The bound wrapper is a plain callable — it does not carry the ``fleche`` helper namespace.
+Returns a :class:`~fleche.state.BoundWrapper` that captures the active cache and metadata at the moment ``.bind()`` is invoked. The bound wrapper is a plain callable — it does not carry the ``fleche`` helper namespace.
 
 Optionally pre-applies ``*args`` and ``**kwargs`` via :func:`functools.partial`. This is useful when work needs to be submitted to a process pool where the cache context must travel with the callable.
 

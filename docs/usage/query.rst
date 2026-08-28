@@ -7,6 +7,10 @@ Fleche lets you retrieve previously cached calls that "match" a template using t
 
 - From a function wrapper (recommended): ``myfunc.query(*args, metadata={...}, **kwargs)``
 - From the active cache directly via a QueryCall template: ``cache().query(QueryCall(...))``
+- From the active cache with keyword arguments instead of building a
+  ``QueryCall`` by hand: ``cache().query(name="add")`` (accepts the same
+  keywords as ``QueryCall``; passing both a template and keywords raises
+  ``TypeError``)
 
 When querying, any field in the template set to ``None`` acts as a wildcard. For arguments and result, values are compared using digest semantics (i.e., digest(template_value) == digest(stored_value)).
 
@@ -126,14 +130,20 @@ Filtering and ordering
 Temporal helpers
 ~~~~~~~~~~~~~~~~
 
-Both require :class:`~fleche.metadata.Runtime` metadata (the default).
+Both need :class:`~fleche.metadata.Runtime` metadata (the default) to
+produce a meaningful order. A call missing it is simply excluded from the
+comparison — as long as at least one matching call has ``timestop``, the
+result is a true extremum among those that do.
 
 ``.latest() -> LazyCall``
     Call with the most recent ``timestop``.  Raises :exc:`IndexError` if
-    empty.
+    there are no matching calls at all, or :exc:`ValueError` if there are
+    matching calls but none of them carry ``timestop``.
 
 ``.oldest() -> LazyCall``
-    Call with the oldest ``timestop``.  Raises :exc:`IndexError` if empty.
+    Call with the oldest ``timestop``.  Raises :exc:`IndexError` if there
+    are no matching calls at all, or :exc:`ValueError` if there are
+    matching calls but none of them carry ``timestop``.
 
 Grouping
 ~~~~~~~~
