@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.22.0](https://github.com/pmrv/fleche/compare/0.21.2...0.22.0) (2026-08-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* **storage:** ValuePickleFile/CallPickleFile (and other FileStorage subclasses that don't lock) no longer accept lock_timeout in their constructors; only config dicts retain backwards compatibility.
+* **caches:** calls of argument-mutating functions are recorded under the pre-call argument state; caches populated under the old keying re-execute once and re-record correctly.
+
+### Features
+
+* **caches:** seal call identity before the function body runs ([#793](https://github.com/pmrv/fleche/issues/793)) ([8d7dc91](https://github.com/pmrv/fleche/commit/8d7dc91a8e35fda6de6531e394b0f8c921846a4e))
+* **metadata:** add cputime/systime to Runtime metadata ([#851](https://github.com/pmrv/fleche/issues/851)) ([51d487f](https://github.com/pmrv/fleche/commit/51d487faac840f6bbce2eee9dde4e87f762dd006))
+* **storage:** atomic renames instead of file locks in pickle-family backends ([f9475e2](https://github.com/pmrv/fleche/commit/f9475e20d9a1965ed05c592f69cee98c5790844b))
+* **storage:** atomic renames instead of file locks in pickle-family backends ([#843](https://github.com/pmrv/fleche/issues/843)) ([efde8ac](https://github.com/pmrv/fleche/commit/efde8ac13dfc986e01b63920c5803bbcb6ec8685))
+
+
+### Bug Fixes
+
+* **digest:** correct duplicate entry-point-hook log in load_entry_points ([#864](https://github.com/pmrv/fleche/issues/864)) ([cc07be9](https://github.com/pmrv/fleche/commit/cc07be95f5361bca3f9a52883e687921c389eb40))
+* **notebooks:** pin a fork context for the process-pool examples ([6e40105](https://github.com/pmrv/fleche/commit/6e401058f3ced5912f16d9420049be16e6776464))
+
+
+### Miscellaneous Chores
+
+* release 2.0.0 ([43b33b1](https://github.com/pmrv/fleche/commit/43b33b1b54cc0e2d8dd305a70ae7c815c80046ac))
+
+
+### Code Refactoring
+
+* **storage:** drop lock_timeout from the lock-free file backends ([3db9f75](https://github.com/pmrv/fleche/commit/3db9f75309964b2cbfbdb3cb8e47ddb3d46ae345))
+
 ## [0.21.2](https://github.com/pmrv/fleche/compare/0.21.1...0.21.2) (2026-08-06)
 
 
