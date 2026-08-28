@@ -53,10 +53,8 @@ automatically, serving cache hits from a pre-completed
 
 Alternatively, use :class:`~fleche.BoundWrapper` when you need explicit
 control over which callable is submitted — for example, to share a single
-bound callable across multiple pools or helper modules.
-``BoundWrapper.bind(func)`` captures the active cache **and metadata** at
-bind time and restores both on every call — including inside worker threads
-— so all tasks write to the same store with the same metadata context:
+bound callable across multiple pools or helper modules (see
+`BoundWrapper — Freezing State for Workers`_ below for the full picture):
 
 .. code-block:: pycon
 
@@ -134,12 +132,10 @@ needed:
    ...
    ...     assert file_cache.contains(heavy_computation.digest(3))
 
-Fleche's pickle-family file storage writes each entry to a temporary file that
-is atomically renamed into place, so multiple workers can safely write to the
-same directory — readers never observe a partially written entry, and no lock
-files accumulate.  (The HDF5-backed ``bagofholding_hdf`` backend mutates its
-shared multi-bag files in place and coordinates those through lock files;
-its per-key mode writes atomically like the pickle family.)
+Fleche's pickle-family and per-key ``bagofholding_hdf`` storage write each
+entry atomically, so multiple workers can safely share a directory with no
+lock files accumulating; see :doc:`dev/storage_hierarchy` for exactly how
+each backend achieves this.
 
 .. note::
 
@@ -152,15 +148,21 @@ its per-key mode writes atomically like the pickle family.)
    or `parsl <https://parsl-project.org/>`_ — do not have this restriction and
    can submit locally-defined functions directly.
 
+   Even with ``fork`` as the start method, a function defined in a REPL or
+   notebook cell (rather than an importable module) can still fail to
+   pickle. This is more likely to bite on macOS, where the standard library
+   has defaulted to ``spawn`` instead of ``fork`` since Python 3.8 (`bpo-33725
+   <https://bugs.python.org/issue33725>`_) — ``spawn`` workers re-import
+   ``__main__`` and hit the same restriction. Prefer a module-level function
+   for anything submitted to a process pool.
+
 BoundWrapper — Freezing State for Workers
 -----------------------------------------
 
-:class:`fleche.BoundWrapper` captures the current cache and metadata into
-a picklable callable, so workers automatically use the correct state without
-manual setup.
-
-This also works for **plain functions that call fleche-decorated functions
-internally**: the bound state propagates to all nested fleche calls.
+Beyond decorated functions, :class:`fleche.BoundWrapper` also works on
+**plain functions that call fleche-decorated functions internally**: the
+bound cache and metadata propagate to all nested fleche calls, so a worker
+running the plain function needs no setup of its own.
 
 .. code-block:: pycon
 
@@ -264,6 +266,16 @@ automatically:
   :class:`~fleche.BoundWrapper`, which is then submitted to the executor with
   no positional arguments.  The worker invokes ``bound()`` which calls
   ``partial(wrapper, *args)()`` with the captured cache and metadata context.
+
+.. note::
+
+   On a cache hit, ``wrap_executor`` always returns a plain
+   :class:`concurrent.futures.Future`, even when wrapping a third-party
+   executor whose own ``submit`` normally returns a different Future
+   subtype. Code that relies on executor-specific Future behaviour (e.g.
+   ``distributed.as_completed``) may see a different type on hits than on
+   misses — tracked in `issue #895
+   <https://github.com/pmrv/fleche/issues/895>`_.
 
 .. code-block:: pycon
 
@@ -423,7 +435,7 @@ Known Limitations
 Cache Stampede (Thundering Herd)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Fleche does **not** protect against cache stampedes.  When multiple workers
+Fleche does **not** protect against cache stampedes in general.  When multiple workers
 (threads or processes) call the same fleche-decorated function with identical
 arguments at the same time and the result is not yet cached, all of them will
 experience a cache miss simultaneously.  Each worker then independently
