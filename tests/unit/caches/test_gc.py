@@ -144,3 +144,91 @@ def test_gc_evicts_deeply_unreachable_structure(split_cache):
     assert orphan_leaf_only in evicted
     # Previously-live keys still present.
     assert reachable_before.issubset(set(split_cache.values.list()))
+
+
+# ---- Tests below exercise GC's tolerance of entries vanishing mid-sweep ----
+#
+# `gc()` is a three-pass mark-and-sweep over live storage: it lists call keys
+# and loads each, walks `child_digests` over the marked frontier, then evicts
+# every unmarked value key.  Each pass re-reads storage after the listing that
+# drove it, so any entry can disappear in between — another process running
+# `gc()`/`evict()` concurrently, or a call record left pointing at a value that
+# is already gone.  All three passes answer that with `except KeyError:
+# continue`: a vanished entry is skipped, never a crash mid-sweep that would
+# leave value storage half-collected.
+
+
+def test_gc_skips_call_reference_missing_from_value_storage(split_cache):
+    """A call pointing at an absent value must not abort the sweep.
+
+    The marking pass seeds its frontier from the digests named by call
+    records, then asks value storage for each one's children.  A call record
+    that outlived its value — evicted directly, or lost to a partial restore —
+    makes that ``child_digests`` lookup raise ``KeyError``.  GC must treat the
+    dangling reference as a leaf and keep sweeping, so genuine orphans are
+    still collected.
+    """
+    call = Call(name="f", arguments={"x": 1}, result=2)
+    key = split_cache.save(call)
+    dangling = split_cache.calls.load(key).result
+    split_cache.values.evict(dangling)
+    orphan = split_cache.values.save("nobody references me")
+
+    evicted = split_cache.gc()
+
+    assert evicted == {orphan}
+    assert dangling not in split_cache.values.list()
+
+
+def test_gc_skips_call_records_evicted_after_listing():
+    """A call key listed but gone by the time GC loads it is skipped.
+
+    ``calls.list()`` is a snapshot; a concurrent ``Cache.evict`` can drop a
+    record before the marking pass reaches it.  The vanished record
+    contributes no reachable digests and must not propagate its ``KeyError``
+    out of ``gc()``.
+    """
+
+    class VanishingCallMemory(CallMemory):
+        """Call storage whose listed keys are all gone on ``load``."""
+
+        __hash__ = object.__hash__
+
+        def load(self, key):
+            raise KeyError(key)
+
+    cache = Cache(values=ValueMemory({}), calls=VanishingCallMemory({}))
+    cache.save(Call(name="f", arguments={"x": 1}, result=2))
+    assert list(cache.calls.list()), "precondition: the record is still listed"
+    values_before = set(cache.values.list())
+
+    evicted = cache.gc()
+
+    # The unreadable record marks nothing, so every value is swept as orphaned.
+    assert evicted == values_before
+    assert set(cache.values.list()) == set()
+
+
+def test_gc_omits_values_evicted_concurrently_from_its_result():
+    """A value that disappears before GC evicts it is not reported as evicted.
+
+    The returned set is GC's record of what it actually removed; a key that a
+    concurrent sweep already took raises ``KeyError`` on ``evict`` and must be
+    left out rather than double-counted.
+    """
+
+    class AlreadyGoneValueMemory(ValueMemory):
+        """Value storage that reports every eviction as a lost race."""
+
+        __hash__ = object.__hash__
+
+        def evict(self, key):
+            raise KeyError(key)
+
+    cache = Cache(values=AlreadyGoneValueMemory({}), calls=CallMemory({}))
+    orphan = cache.values.save("nobody references me")
+
+    evicted = cache.gc()
+
+    assert evicted == set()
+    assert orphan in cache.values.list()

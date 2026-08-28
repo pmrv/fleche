@@ -68,8 +68,7 @@ class _SupportedData:
 BUILTIN_TYPES = (int, str, float, bool, bytes, list, dict, tuple, set, type, object)
 
 # One representative value per digestible category, all mutually distinct.  Used
-# both as the digestibility smoke test and as the basis for the distinctness
-# product test below.
+# by the digestibility, stability and distinctness contracts below.
 SUPPORTED_VALUES = [
     "hello",
     123,
@@ -91,20 +90,33 @@ def test_supported_types():
         digest(value)
 
 
-@pytest.mark.parametrize("j", range(len(SUPPORTED_VALUES)))
-@pytest.mark.parametrize("i", range(len(SUPPORTED_VALUES)))
-def test_supported_values_digest_distinctly(i, j):
-    """Distinct supported values digest distinctly; the same value digests stably.
+def test_supported_values_digest_stably():
+    """Digesting the same value twice yields the same digest."""
+    unstable = [repr(value) for value in SUPPORTED_VALUES if digest(value) != digest(value)]
+    assert not unstable, f"digest is not deterministic for: {unstable}"
+
+
+def test_supported_values_digest_distinctly():
+    """No two of the supported values share a digest.
 
     Built-in type objects (issue #469) are folded into SUPPORTED_VALUES, so their
-    digestibility, stability, and pairwise distinctness — including type-vs-instance
-    — are all covered here rather than in a bespoke builtins-only test.
+    distinctness from one another and from instances — the type-vs-instance case —
+    is covered here rather than in a bespoke builtins-only test.
+
+    Uniqueness over the whole list is exactly the pairwise contract: every pair of
+    distinct values digests differently iff no two digests collide.  Asserting it
+    on the set rather than on all ``len(SUPPORTED_VALUES) ** 2`` ordered pairs
+    names the colliding values on failure instead of a pair of indices, and keeps
+    the suite from being dominated by a product parametrisation that covers no
+    code path the focused per-type tests in this file do not already reach.
     """
-    a, b = SUPPORTED_VALUES[i], SUPPORTED_VALUES[j]
-    if i == j:
-        assert digest(a) == digest(b)
-    else:
-        assert digest(a) != digest(b)
+    digests = [digest(value) for value in SUPPORTED_VALUES]
+    collisions = {
+        d: [repr(v) for v, dv in zip(SUPPORTED_VALUES, digests) if dv == d]
+        for d in digests
+        if digests.count(d) > 1
+    }
+    assert not collisions, f"supported values sharing a digest: {collisions}"
 
 
 @given(st.integers(), st.integers())
@@ -930,7 +942,8 @@ def test_module_digest_function_content_independence():
 # --- Tests for the Indigestible boundary of type objects — issue #469 ---
 #
 # Digestibility, stability, and distinctness of built-in type objects are covered
-# by ``test_supported_values_digest_distinctly`` (BUILTIN_TYPES are folded into
+# by ``test_supported_types`` / ``test_supported_values_digest_stably`` /
+# ``test_supported_values_digest_distinctly`` (BUILTIN_TYPES are folded into
 # SUPPORTED_VALUES).  Only the negative boundary needs a dedicated test: anything
 # outside the ``builtins`` module — including dataclass *classes* — must raise.
 
