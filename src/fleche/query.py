@@ -148,20 +148,32 @@ class QueryIterator(Iterable[call.LazyCall]):
 
     def _timestop_extremum(self, *, reverse: bool) -> call.LazyCall:
         sentinel = float("-inf") if reverse else float("inf")
-        result = (builtins.max if reverse else builtins.min)(
-            self,
-            key=lambda c: c.metadata.get("runtime", {}).get("timestop", sentinel),
-            default=None,
-        )
+        key = lambda c: c.metadata.get("runtime", {}).get("timestop", sentinel)
+        result = (builtins.max if reverse else builtins.min)(self, key=key, default=None)
         if result is None:
             raise IndexError("QueryIterator is empty")
+        if key(result) == sentinel:
+            # The winning key is only the sentinel if every candidate hit it --
+            # a real timestop can tie a sentinel only in the pathological case
+            # of a call actually recording +-inf, which never happens in
+            # practice. So this means none of the matching calls carry
+            # Runtime metadata at all, and the "winner" is an arbitrary pick
+            # rather than a true extremum.
+            raise ValueError(
+                f"Cannot determine the {'latest' if reverse else 'oldest'} call: "
+                "none of the matching calls carry Runtime metadata (timestop). "
+                "Decorate with meta=['Runtime'] (the default) or filter to "
+                "calls that were."
+            )
         return result
 
     def latest(self) -> call.LazyCall:
         """Return the call with the most recent timestop (requires Runtime metadata).
 
         Raises:
-            IndexError: if there are no matching calls
+            IndexError: if there are no matching calls.
+            ValueError: if there are matching calls but none carry Runtime
+                metadata, so no order can be established.
         """
         return self._timestop_extremum(reverse=True)
 
@@ -169,7 +181,9 @@ class QueryIterator(Iterable[call.LazyCall]):
         """Return the call with the oldest timestop (requires Runtime metadata).
 
         Raises:
-            IndexError: if there are no matching calls
+            IndexError: if there are no matching calls.
+            ValueError: if there are matching calls but none carry Runtime
+                metadata, so no order can be established.
         """
         return self._timestop_extremum(reverse=False)
 
