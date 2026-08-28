@@ -131,17 +131,19 @@ Temporal helpers
 ~~~~~~~~~~~~~~~~
 
 Both need :class:`~fleche.metadata.Runtime` metadata (the default) to
-produce a meaningful order. If it's missing, ``timestop`` is treated as
-absent for every call and the result is an arbitrary match rather than a
-true extremum — no error is raised.
+produce a meaningful order. A call missing it is simply excluded from the
+comparison — as long as at least one matching call has ``timestop``, the
+result is a true extremum among those that do.
 
 ``.latest() -> LazyCall``
-    Call with the most recent ``timestop``.  Raises :exc:`IndexError` only
-    if there are no matching calls at all.
+    Call with the most recent ``timestop``.  Raises :exc:`IndexError` if
+    there are no matching calls at all, or :exc:`ValueError` if there are
+    matching calls but none of them carry ``timestop``.
 
 ``.oldest() -> LazyCall``
-    Call with the oldest ``timestop``.  Raises :exc:`IndexError` only if
-    there are no matching calls at all.
+    Call with the oldest ``timestop``.  Raises :exc:`IndexError` if there
+    are no matching calls at all, or :exc:`ValueError` if there are
+    matching calls but none of them carry ``timestop``.
 
 Grouping
 ~~~~~~~~
