@@ -198,12 +198,14 @@ value directly from either shape — see `docs/digests/digests_as_args.rst`
 
 ```python
 expensive.query().filter(...).table()   # pandas DataFrame of matching calls
-expensive.query().latest()               # most recent call by timestamp
+expensive.query().latest()               # most recent call by Runtime timestamp
 ```
 
 `QueryIterator` is chainable (`take`/`skip`/`filter`/`unique`/`sorted`);
 terminal methods (`only`/`any`/`count`/`table`/`groupby`/`transfer`/`evict`)
-consume it. Full API: `docs/usage/query.rst`.
+consume it. `latest()`/`oldest()` order by `Runtime` metadata and raise
+`ValueError` when no matching call carries it (and `IndexError` when
+nothing matches at all). Full API: `docs/usage/query.rst`.
 
 ## Security
 
