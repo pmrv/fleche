@@ -12,7 +12,7 @@ from .. import _attrs
 from .. import digest
 
 
-class Digested(ABC):
+class Digested(base.ChildItems, ABC):
     @abstractmethod
     def underlying(self):
         """Return plain underlying value, ie. list/dict/etc of nested values or their partial digests"""
@@ -79,6 +79,9 @@ class DigestedIterable(Digested):
     def underlying(self):
         return self.items
 
+    def child_items(self) -> list[tuple[None, Any]]:
+        return [(None, v) for v in self.items]
+
     def mend(self, storage: 'DestructuringMixin') -> list | tuple:
         return type(self.items)(map(lambda v: self.get(storage, v), self.items))
 
@@ -101,6 +104,12 @@ class DigestedDict(Digested):
 
     def underlying(self):
         return self.items
+
+    def child_items(self) -> list[tuple[None, Any]]:
+        # Keys are children too: a key big enough to be written out separately
+        # comes back as a Digest, and a sweep that only walked values would
+        # reclaim it.  Flat, like the ``_slots`` a save reads — ``mend`` re-pairs.
+        return [(None, k) for k in self.items] + [(None, v) for v in self.items.values()]
 
     def mend(self, storage: 'DestructuringMixin') -> dict:
         return {self.get(storage, k): self.get(storage, v)
@@ -148,6 +157,11 @@ class DigestedFields(Digested):
         m.update(self.cls.__name__.encode())
         m.update(digest.digest(self.fields).encode())
         return digest.Digest(m.hexdigest())
+
+    def child_items(self) -> list[tuple[str, Any]]:
+        # The wrapper stores the ``{name: value}`` field dict rather than an
+        # instance, so ``_field_items`` cannot read it back — the dict is the slots.
+        return list(self.fields.items())
 
     def mend(self, storage: 'DestructuringMixin'):
         obj = object.__new__(self.cls)
@@ -211,6 +225,9 @@ class DigestedArray(Digested):
 
     def underlying(self):
         return self.items
+
+    def child_items(self) -> list[tuple[None, Any]]:
+        return [(None, v) for v in self.items.reshape(-1)]
 
     def mend(self, storage: 'DestructuringMixin'):
         return self._filled(self.items, (self.get(storage, v) for v in self.items.reshape(-1)))
@@ -415,32 +432,6 @@ class DestructuringMixin(base.ValueStorage):
             case _:
                 return value
 
-    def _raw_sub_digests(self, raw: Any) -> set[digest.Digest]:
-        """Direct digest children of a raw stored entry.
-
-        A *raw* entry is what ``super().load`` returns — i.e. what was written
-        to the underlying backend before :meth:`~fleche.storage.destructuring.Digested.mend` rewires sub-digests back
-        into their parent container.  Only :class:`~fleche.storage.destructuring.Digested` wrappers carry
-        child references; scalars and plain (non-destructured) containers
-        return an empty set.
-        """
-        match raw:
-            case DigestedIterable():
-                return {i for i in raw.items if isinstance(i, digest.Digest)}
-            case DigestedDict():
-                return {
-                    x
-                    for pair in raw.items.items()
-                    for x in pair
-                    if isinstance(x, digest.Digest)
-                }
-            case DigestedFields():
-                return {v for v in raw.fields.values() if isinstance(v, digest.Digest)}
-            case DigestedArray():
-                return {v for v in raw.items.reshape(-1) if isinstance(v, digest.Digest)}
-            case _:
-                return set()
-
     def child_digests(self, key: digest.Digest | str) -> set[digest.Digest]:
         """Direct digest children of the raw entry stored at *key*.
 
@@ -457,8 +448,9 @@ class DestructuringMixin(base.ValueStorage):
     def count_reuses(self) -> Counter[digest.Digest]:
         """Return a counter of how many times each stored key is referenced as a sub-component.
 
-        Scans every raw entry and tallies ``Digest`` back-references found inside
-        :class:`~fleche.storage.destructuring.DigestedIterable` and :class:`~fleche.storage.destructuring.DigestedDict` wrappers.  A count of ``0``
+        Scans every raw entry and tallies the ``Digest`` back-references each
+        record declares through :class:`~fleche.storage.base.ChildItems` — every
+        wrapper type, built in or registered, on equal footing.  A count of ``0``
         means the key is not pointed to by any other stored value (i.e. a top-level entry).
         A count greater than ``1`` indicates a sub-value shared between multiple parent containers.
 

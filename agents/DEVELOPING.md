@@ -251,6 +251,8 @@ Values and calls are stored separately so call records are queryable without des
   `dtype=object` numpy arrays destructure element-wise as `DigestedArray`;
   anything else no destructurer claims is opaque (depth ∞).
   `register_destructurer` appends to `_DESTRUCTURERS`, first match wins.
+  `Digested` inherits `storage.base.ChildItems`: every record that holds other stored entries declares them once through the abstract `child_items()`, and the record-level `child_digests()` derives from it.
+  `ValueStorage._raw_sub_digests` is one generic reader over that interface instead of a per-mixin `match`, so a wrapper registered via `register_destructurer` takes part in `gc`/`count_reuses` (#883, #905).
 - `thread_safe.py` — `SerializingMixin` and `PerKeyLockMixin` (striped locks keyed by the instance, so instances must be **hashable**) subclass `OperationContext` directly, so they attach at either layer.
   `_PicklableLock`/`_PicklableRLock` pickle without state — in-process only.
 

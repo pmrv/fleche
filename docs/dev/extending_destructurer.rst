@@ -58,10 +58,11 @@ classmethod hooks it dispatches to:
 - :meth:`~fleche.storage.destructuring.Digested._rebuild_digest` — build the
   wrapper instance when at least one child did.
 
-:meth:`~fleche.storage.destructuring.Digested.mend` and
-:meth:`~fleche.storage.destructuring.Digested.underlying` (for hashing) are
-also abstract and must be implemented, but neither is part of ``sunder``'s
-own dispatch. ``mend`` is the *inverse* hook: it is invoked separately, by
+:meth:`~fleche.storage.destructuring.Digested.mend`,
+:meth:`~fleche.storage.destructuring.Digested.underlying` (for hashing) and
+:meth:`~fleche.storage.base.ChildItems.child_items` (see `Contract for
+child_items`_ below) are also abstract and must be implemented, but none of
+them is part of ``sunder``'s own dispatch. ``mend`` is the *inverse* hook: it is invoked separately, by
 :meth:`~fleche.storage.destructuring.DestructuringMixin.load` on the
 **read** path, a completely different call site from ``sunder`` (the
 **write**/intern path) — ``sunder`` never calls ``mend``.
@@ -117,3 +118,22 @@ Study whichever of the two canonical shapes matches your type — collection
 ``DigestedDataclass``/``DigestedAttrs``) — before writing a ``Digested``
 subclass from scratch: picking the shape that matches is usually far less
 code than implementing all three ``_``-prefixed hooks yourself.
+
+Contract for ``child_items``
+----------------------------
+
+``Digested`` inherits :class:`~fleche.storage.base.ChildItems`, the interface
+every record holding other stored entries implements.  Return one
+``(label, child)`` pair per slot the wrapper holds, where *child* is either an
+inlined plain value or the :class:`~fleche.digest.Digest` of a separately
+stored one; the *label* is free-form (``DigestedFields`` uses field names,
+``DigestedIterable`` uses ``None``) and only has to mean something to your own
+``mend``.
+
+This is not optional bookkeeping.  It is the only thing that tells
+:meth:`~fleche.caches.Cache.gc` your wrapper's children are still reachable: a
+wrapper that omits a slot reports it as an orphan, and the next sweep evicts a
+value your entry still points at — a ``KeyError`` on the following load, which
+the wrapper reports as an ordinary cache miss.  Return **every** slot, keys of
+a mapping included, whether or not it currently holds a ``Digest``.
+``DigestedFields`` subclasses get it for free from their ``_field_items``.

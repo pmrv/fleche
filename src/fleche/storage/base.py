@@ -362,6 +362,46 @@ class StorageBackend(KeyManagement):
                 return False
 
 
+class ChildItems(ABC):
+    """A stored record that holds other stored entries in child slots.
+
+    A mending layer wraps a value in a record of its own (the
+    :class:`~fleche.storage.destructuring.Digested` wrappers a destructuring
+    save writes), which makes each such record a *node* in the value store's
+    reference graph rather than a leaf.  Its children then get asked about from
+    more than one place: the load side walks them to put the value back
+    together, and the reference walks behind :meth:`~fleche.caches.Cache.gc`
+    and :meth:`~fleche.storage.destructuring.DestructuringMixin.count_reuses`
+    walk them to find the record's outgoing edges.
+
+    Answering that question once per *reader* lets ``gc`` destroy data: a
+    record that describes its children to the loader but not to the sweep
+    looks like a leaf, so its children look unreferenced and get reclaimed out
+    from under it.  A record declares its children **here, once**, and every
+    reader goes through this interface, so a new record type, including one
+    from another package, joins the reference graph by implementing
+    :meth:`child_items`, and cannot join it halfway.
+    """
+
+    @abstractmethod
+    def child_items(self) -> "Iterable[tuple[Any, Any]]":
+        """``(label, child)`` for every child slot this record holds.
+
+        *label* is whatever names the slot to its owner — a field name, or
+        ``None`` for the positional slots of a list or a mapping — and *child* is what sits in it: an inlined plain
+        value, or a :class:`~fleche.digest.Digest` naming a separate entry.
+        """
+
+    def child_digests(self) -> "set[Digest]":
+        """The digests among :meth:`child_items` — this record's outgoing edges.
+
+        The record-level counterpart of
+        :meth:`~fleche.storage.destructuring.DestructuringMixin.child_digests`,
+        which answers the same question for a stored *key*.
+        """
+        return {child for _, child in self.child_items() if isinstance(child, Digest)}
+
+
 class ValueStorage(KeyManagement):
     """Abstract domain interface for value storage."""
 
@@ -370,6 +410,18 @@ class ValueStorage(KeyManagement):
 
     @abstractmethod
     def load(self, key: Digest | str) -> Any: ...
+
+    def _raw_sub_digests(self, raw: Any) -> set[Digest]:
+        """Digests directly referenced by a raw stored entry.
+
+        One implementation for every layer: a record that carries references
+        declares them itself, via :class:`ChildItems`, so this never has to
+        know which mixin wrote it — no mixin gets to describe its own records
+        to the loader and forget the sweep.  An entry that is not such a
+        record references nothing.  Still overridable, for a storage whose
+        records are of a type it cannot make implement the interface.
+        """
+        return raw.child_digests() if isinstance(raw, ChildItems) else set()
 
 
 class ValueMixin(ValueStorage, StorageBackend):
