@@ -1,12 +1,16 @@
 """Tests for Cache.gc() — brute-force reachability-based value eviction."""
 
+from dataclasses import dataclass
+
 import pytest
 
 from fleche import call
 from fleche.call import Call, PreparedCall
 from fleche.caches import Cache
 from fleche.digest import digest
+from fleche.storage import destructuring
 from fleche.storage.base import ValueMixin
+from fleche.storage.destructuring import Digested
 from fleche.storage.memory import CallMemory, MemoryBackend, ValueMemory
 
 
@@ -235,6 +239,101 @@ def test_reachability_walk_does_not_materialize_paths(path_cache, a_file, monkey
     path_cache.gc()
     path_cache.values.count_reuses()
     assert calls == [], f"walk materialized {len(calls)} temp tree(s)"
+
+
+# ---- A record type outside the built-ins joins the graph by declaring itself ----
+
+
+class Pair:
+    """A two-slot container fleche ships no destructurer for.
+
+    Deliberately not a dataclass: the built-in dataclass entry in
+    ``_DESTRUCTURERS`` is matched before any registered one, so a dataclass
+    here would exercise ``DigestedDataclass`` instead of the custom wrapper.
+    """
+
+    def __init__(self, first, second):
+        self.first = first
+        self.second = second
+
+    def __eq__(self, other):
+        return isinstance(other, Pair) and (self.first, self.second) == (
+            other.first,
+            other.second,
+        )
+
+    __hash__ = None
+
+    def __digest__(self):
+        return digest(("Pair", self.first, self.second))
+
+
+@dataclass
+class DigestedPair(Digested):
+    """A third-party wrapper: everything a ``register_destructurer`` user writes."""
+
+    pair: Pair
+
+    def underlying(self):
+        # Same shape Pair.__digest__ hashes, so the wrapper is digest-equal to
+        # the value it stands in for (Digests are transparent to ``digest``).
+        return ("Pair", self.pair.first, self.pair.second)
+
+    def child_items(self):
+        return [("first", self.pair.first), ("second", self.pair.second)]
+
+    def mend(self, storage):
+        return Pair(*(self.get(storage, c) for _, c in self.child_items()))
+
+    @classmethod
+    def _slots(cls, value):
+        return [("first", value.first), ("second", value.second)]
+
+    @classmethod
+    def _rebuild_plain(cls, value, labels, children):
+        return Pair(*children)
+
+    @classmethod
+    def _rebuild_digest(cls, value, labels, children):
+        return cls(Pair(*children))
+
+
+@pytest.fixture
+def pair_destructurer():
+    """Register ``Pair`` for the test, then take it back out of the global table."""
+    sunder = DigestedPair.sunder
+    destructuring.register_destructurer(lambda v: type(v) is Pair, sunder)
+    try:
+        yield
+    finally:
+        destructuring._DESTRUCTURERS[:] = [
+            entry for entry in destructuring._DESTRUCTURERS if entry[1] is not sunder
+        ]
+
+
+def test_gc_follows_a_custom_destructurer_s_wrapper(pair_destructurer):
+    """A registered wrapper is reachable through the interface it implements.
+
+    The sweep used to match the three built-in wrapper types by name, so a
+    wrapper registered from outside reported *no* children whatever it held:
+    ``gc`` reclaimed its sub-values as orphans and the next load of the entry
+    raised ``KeyError`` — the same silent loss the path blobs hit, one layer
+    over.  Reading the record's own declaration instead, there is nothing left
+    for a new record type to forget to tell the sweep.
+    """
+    cache = Cache(values=ValueMemory({}), calls=CallMemory({}))
+    value = Pair([1, 2], [3, 4])
+
+    key = cache.save(Call(name="f", arguments={"x": 1}, result=value))
+
+    result_key = cache.values.save(value)
+    assert isinstance(cache.values.load_raw(result_key), DigestedPair), (
+        "the custom destructurer did not run — the test proves nothing"
+    )
+    assert len(cache.values.child_digests(result_key)) == 2
+
+    assert cache.gc() == set()
+    assert cache.load(key).result == value
 
 
 # ---- Calls in flight: prepared arguments are roots until commit or abandon ----

@@ -339,6 +339,49 @@ class StorageBackend(KeyManagement):
                 return False
 
 
+class ChildItems(ABC):
+    """A stored record that holds other stored entries in child slots.
+
+    Both mending layers wrap a value in a record of their own — the
+    :class:`~fleche.storage.destructuring.Digested` wrappers a destructuring
+    save writes, the :class:`~fleche.storage.paths.FileBlob` /
+    :class:`~fleche.storage.paths.DirectoryBlob` a path save writes — which
+    makes each such record a *node* in the value store's reference graph
+    rather than a leaf.  Its children then get asked about from more than one
+    place: the load side walks them to put the value back together, and the
+    reference walks behind :meth:`~fleche.caches.Cache.gc` and
+    :meth:`~fleche.storage.destructuring.DestructuringMixin.count_reuses` walk
+    them to find the record's outgoing edges.
+
+    Answering that question once per *reader* is what let ``gc`` destroy stored
+    paths: the blobs described their children to the loader and to nobody
+    else, so the sweep saw leaves, judged the content bytes unreferenced, and
+    reclaimed them out from under the records still pointing at them.  A
+    record declares its children **here, once**, and every reader goes through
+    this interface — so a new record type joins the reference graph by
+    implementing :meth:`child_items`, and cannot join it halfway.
+    """
+
+    @abstractmethod
+    def child_items(self) -> "Iterable[tuple[Any, Any]]":
+        """``(label, child)`` for every child slot this record holds.
+
+        *label* is whatever names the slot to its owner — a field name, a
+        directory entry's basename, ``None`` for the positional slots of a
+        list or a mapping — and *child* is what sits in it: an inlined plain
+        value, or a :class:`~fleche.digest.Digest` naming a separate entry.
+        """
+
+    def child_digests(self) -> "set[Digest]":
+        """The digests among :meth:`child_items` — this record's outgoing edges.
+
+        The record-level counterpart of
+        :meth:`~fleche.storage.destructuring.DestructuringMixin.child_digests`,
+        which answers the same question for a stored *key*.
+        """
+        return {child for _, child in self.child_items() if isinstance(child, Digest)}
+
+
 class ValueStorage(KeyManagement):
     """Abstract domain interface for value storage."""
 
@@ -367,13 +410,14 @@ class ValueStorage(KeyManagement):
     def _raw_sub_digests(self, raw: Any) -> set[Digest]:
         """Digests directly referenced by a raw stored entry.
 
-        The terminating case of a cooperative chain: every mixin that wraps
-        values in a record of its own reports that record's child references
-        here and delegates the rest upward, so a storage's reachable set is
-        the union over its layers.  An entry no layer claims references
-        nothing.
+        One implementation for every layer: a record that carries references
+        declares them itself, via :class:`ChildItems`, so this never has to
+        know which mixin wrote it — no mixin gets to describe its own records
+        to the loader and forget the sweep.  An entry that is not such a
+        record references nothing.  Still overridable, for a storage whose
+        records are of a type it cannot make implement the interface.
         """
-        return set()
+        return raw.child_digests() if isinstance(raw, ChildItems) else set()
 
 
 class ValueMixin(ValueStorage, StorageBackend):

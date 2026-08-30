@@ -117,11 +117,20 @@ survives as a record pointing at nothing, and the next load raises
 ``KeyError``, which the wrapper reports as an ordinary cache miss.  Silent data
 loss, triggered by routine maintenance.
 
-:meth:`PathValueMixin._raw_sub_digests` therefore declares them, and each
-mixin that wraps values in a record of its own does the same for its own
-wrappers, delegating anything it does not recognise down the MRO — so a
-storage's reachable set is the union over its layers rather than whichever
-layer happens to answer first.
+:class:`~fleche.storage.paths.FileBlob` and
+:class:`~fleche.storage.paths.DirectoryBlob` therefore declare them, by
+implementing :class:`~fleche.storage.base.ChildItems` — the interface every
+record that holds other stored entries implements, whichever layer wrote it.
+One declaration per record type, read by every walker: the loader materializes
+a tree by walking :meth:`~fleche.storage.base.ChildItems.child_items`, and the
+sweep finds the record's outgoing edges by walking the same list.
+
+Declaring them *per reader* instead is what caused the bug in the first place.
+The blobs told the loader what they held and told the sweep nothing, and
+nothing about the code made the omission visible — the missing half is silence,
+not an error.  A record type that implements the interface cannot describe
+itself to one reader and not the other, because there is only the one
+description.
 
 The walk reads through :meth:`~fleche.storage.base.ValueStorage.load_raw`
 rather than ``load``, for two reasons.  Correctness: ``load`` mends, and
