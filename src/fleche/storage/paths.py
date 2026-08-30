@@ -154,7 +154,7 @@ class TempPath(type(Path())):  # ty: ignore[unsupported-base]
             return cls._adopt_live_root(super()._from_parts(args))
 
 
-class FileBlob:
+class FileBlob(base.ChildItems):
     """A stored file: a basename paired with a reference to its content.
 
     A file is identified by *(name, content)*.  The content ``bytes`` are stored
@@ -184,6 +184,10 @@ class FileBlob:
 
     __hash__ = None  # mutable; not intended as a dict key
 
+    def child_items(self) -> list[tuple[str, Any]]:
+        """One slot: the content blob, labelled with the basename it belongs to."""
+        return [(self.name, self.content)]
+
     def __digest__(self):
         return digest.digest(("FileBlob", self.name, self.content))
 
@@ -191,7 +195,7 @@ class FileBlob:
         return f"FileBlob({self.name!r}, {self.content!r})"
 
 
-class DirectoryBlob:
+class DirectoryBlob(base.ChildItems):
     """A stored directory: ``{name: content_ref}``, keyed by its tree alone.
 
     A directory's *root* name is **not** part of its identity — directories hash
@@ -215,6 +219,10 @@ class DirectoryBlob:
         return isinstance(other, DirectoryBlob) and self.contents == other.contents
 
     __hash__ = None  # mutable; not intended as a dict key
+
+    def child_items(self) -> list[tuple[str, Any]]:
+        """One slot per directory entry, labelled with its basename."""
+        return list(self.contents.items())
 
     def __digest__(self):
         # Digest a (type_name, payload) tuple — the codebase idiom for custom
@@ -268,8 +276,9 @@ class PathValueMixin(base.ValueStorage):
         value = super().load(key)
         if isinstance(value, FileBlob):
             # Materialize at <tempdir>/<name> so the basename round-trips.
-            target = TempPath.mkdtemp() / value.name
-            target.write_bytes(super().load(value.content))
+            ((name, content),) = value.child_items()
+            target = TempPath.mkdtemp() / name
+            target.write_bytes(super().load(content))
             return target
         if isinstance(value, DirectoryBlob):
             # No stored root name — materialize under the digest (mangled root).
@@ -278,25 +287,9 @@ class PathValueMixin(base.ValueStorage):
             return path
         return value
 
-    def _raw_sub_digests(self, raw: Any) -> set[digest.Digest]:
-        """Report the content blobs a stored path record points at.
-
-        Without this a reachability walk sees a :class:`FileBlob` /
-        :class:`DirectoryBlob` as a childless leaf, so the ``bytes`` holding
-        the actual file content look unreferenced and ``gc`` reclaims them —
-        destroying every path-valued entry it sweeps past.  The blobs are
-        precisely a *name plus references*, so the references have to be
-        declared here, at the layer that creates them.
-        """
-        if isinstance(raw, FileBlob):
-            return {raw.content}
-        if isinstance(raw, DirectoryBlob):
-            return set(raw.contents.values())
-        return super()._raw_sub_digests(raw)
-
     def _materialize(self, path: Path, blob: DirectoryBlob) -> None:
         path.mkdir()
-        for name, child_ref in blob.contents.items():
+        for name, child_ref in blob.child_items():
             child = super().load(child_ref)
             if isinstance(child, DirectoryBlob):
                 self._materialize(path / name, child)
