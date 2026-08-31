@@ -44,6 +44,17 @@ Returns a :class:`~fleche.query.QueryIterator` over matching cached calls from t
 
 .. warning::
 
+   Unlike ``.call()``/``.digest()``, ``.query()`` does **not** null out
+   ``version``/``module``/``code_digest`` when ``hash_version``/``hash_module``/
+   ``hash_code`` is ``False`` — it always filters on the function's real
+   values for those fields. If you disable one of those flags, a query for a
+   call cached under that decorator can silently return zero results even
+   though the call is stored. Avoid combining ``hash_version=False`` /
+   ``hash_module=False`` / ``hash_code=False`` with ``.query()`` until this is
+   fixed.
+
+.. warning::
+
    If the decorated function has a parameter named ``metadata``, that parameter
    is shadowed by ``.query()``'s own ``metadata=`` keyword and **cannot** be
    passed as a keyword argument.  Pass it positionally instead::
@@ -142,24 +153,9 @@ Per-Function Static Caching
 
 To keep the cache-hit hot path fast, ``@fleche`` computes a
 :class:`~fleche.call.FunctionProfile` the first time it sees a given function
-and caches it for the lifetime of the process.  A profile captures all static
-per-function metadata in one frozen dataclass:
-
-- ``inspect.signature(func)`` — used for argument binding
-- the digest of ``func.__code__`` (included in cache keys only when ``hash_code=True``; the default is ``False``)
-- ``(qualname, module, version)`` extracted via
-  ``VersionInfo`` — ``module`` and ``version``
-  are included in cache keys by default (``hash_module=True``,
-  ``hash_version=True``); set either flag to ``False`` to exclude the
-  corresponding field from the key
-- the sets of :class:`~fleche.call.Ignored`- and
-  :class:`~fleche.call.Required`-annotated argument names
-
-All fields are stored in a single frozen :class:`~fleche.call.FunctionProfile`
-dataclass, backed by one ``_profile`` LRU cache (max 1000 entries) keyed on
-the callable's identity.  Subsequent calls re-use the cached profile instead
-of re-introspecting on every invocation.  The cache is process-scoped and has
-no effect on the persistent fleche backends.
+and re-uses it for the lifetime of the process instead of re-introspecting on
+every call. This cache is process-scoped and has no effect on the persistent
+fleche backends. See :doc:`/dev/function_profile` for the internals.
 
 .. warning::
 
