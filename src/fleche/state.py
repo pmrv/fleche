@@ -1,3 +1,4 @@
+import pickle
 from contextlib import AbstractContextManager, contextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
@@ -209,6 +210,33 @@ class BoundWrapper:
     cache: caches.BaseCache
     meta: tuple[metadata.MetaData, ...]
 
+    def __reduce__(self):
+        # `func` is pickled into a standalone bytes payload up front, rather than
+        # left for the outer pickler to serialise, so the choice of serialiser
+        # does not depend on what is pickling the BoundWrapper. stdlib pickle can
+        # only reference a function by (module, qualname); that fails for a
+        # function that isn't importable that way (defined in __main__, a
+        # notebook, or as a closure). stdlib ProcessPoolExecutor hardcodes
+        # pickle and gives no hook to swap serialisers, so falling back to
+        # cloudpickle only inside this payload — never for the BoundWrapper
+        # itself — is what lets a by-value func survive a stdlib-pickle carrier.
+        try:
+            payload = pickle.dumps(self.func)
+            by_value = False
+        except Exception as e:
+            try:
+                import cloudpickle
+            except ImportError:
+                raise TypeError(
+                    f"{self.func!r} is not importable by reference (e.g. it is "
+                    "defined in __main__, a notebook, or a closure) and "
+                    "'cloudpickle' is not installed to serialise it by value. "
+                    "Install it with `pip install fleche[cloudpickle]`."
+                ) from e
+            payload = cloudpickle.dumps(self.func)
+            by_value = True
+        return (_unpickle_bound_wrapper, (by_value, payload, self.cache, self.meta))
+
     @classmethod
     def bind(cls, func):
         """Bind cache and metadata state.
@@ -229,3 +257,13 @@ class BoundWrapper:
     def __call__(self, *args, **kwargs):
         with _hard_set([(_CACHE, self.cache), (_METADATA, self.meta)]):
             return self.func(*args, **kwargs)
+
+
+def _unpickle_bound_wrapper(by_value, payload, cache, meta):
+    """Reconstruct a :class:`BoundWrapper` from :meth:`BoundWrapper.__reduce__`'s payload."""
+    if by_value:
+        import cloudpickle
+        func = cloudpickle.loads(payload)
+    else:
+        func = pickle.loads(payload)
+    return BoundWrapper(func, cache, meta)
