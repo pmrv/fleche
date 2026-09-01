@@ -144,31 +144,37 @@ def _digest_mapping(m, contents: Mapping) -> bytes:
     return m.hexdigest().encode()
 
 
-# Salt + placeholders for the closure digest.  Kept as module-level constants so
-# the wire format is greppable and cannot drift between the two call sites.
-_CLOSURE_SALT = b"__closure__"
+# Salt + section markers + placeholders for the captured-state digest.  Kept as
+# module-level constants so the wire format is greppable and cannot drift
+# between the two call sites.
+_CAPTURED_SALT = b"__fleche_captured__"
+_FREEVARS_SECTION = "__closure__"
+_DEFAULTS_SECTION = "__defaults__"
+_KWDEFAULTS_SECTION = "__kwdefaults__"
 _EMPTY_CELL = "__fleche_empty_cell__"
-_RECURSIVE_CLOSURE = "__fleche_recursive_closure__"
+_RECURSIVE_FUNCTION = "__fleche_recursive_function__"
 
-# Free variables are digested *by value*, so a closure that captures itself —
-# the ordinary shape of a recursive inner function — or two closures that
-# capture each other would recurse forever.  Remember which functions are
-# currently having their closure walked (per thread, since digests are computed
-# concurrently) and fold a fixed marker in on a re-entrant sighting; the shape
-# of the cycle is already pinned by the code digests along the way.
+# Captured state is digested *by value*, so a function that refers to itself —
+# the ordinary shape of a recursive inner function, and reachable through a
+# default too — or two functions that refer to each other would recurse forever.
+# Remember which functions are currently being walked (per thread, since digests
+# are computed concurrently) and fold a fixed marker in on a re-entrant
+# sighting; the shape of the cycle is already pinned by the code digests along
+# the way.
 _walking = threading.local()
 
 
 def _digest_function_bytes(func) -> bytes:
-    """Digest a callable by its code object *and* the variables it captured.
+    """Digest a callable by its code object *and* the values bound alongside it.
 
-    Two closures handed out by the same factory share one code object, so a
-    code-only digest cannot tell ``make(1)`` from ``make(2)`` — the captured
-    cells are the only thing that differs.
+    Two functions out of the same factory share one code object, so a code-only
+    digest cannot tell ``make(1)`` from ``make(2)``: what differs is the state
+    captured next to the code — the closure cells, and the argument defaults,
+    which are evaluated once at definition time and are just as much a part of
+    what the function computes (``lambda x, n=1: x + n``).
 
-    Functions that capture nothing keep the historical wire format
-    (``digest(func) == digest(func.__code__)``), so only closures see their
-    digest change.
+    Functions with no closure and no defaults keep the historical wire format
+    (``digest(func) == digest(func.__code__)``), so nothing else changes digest.
     """
     # ``__digest__`` is checked per instance here, unlike everywhere else: all
     # functions share one type, so a class-level lookup could never distinguish
@@ -178,9 +184,14 @@ def _digest_function_bytes(func) -> bytes:
     if own is not None:
         return own().encode()
 
+    # getattr rather than attribute access: the only thing call._code_digest
+    # checks for is __code__, and an exotic callable carrying that alone must
+    # still digest rather than raise AttributeError.
     code = func.__code__
-    closure = func.__closure__
-    if not closure:
+    closure = getattr(func, "__closure__", None)
+    defaults = getattr(func, "__defaults__", None)
+    kwdefaults = getattr(func, "__kwdefaults__", None)
+    if not closure and not defaults and not kwdefaults:
         return _digest_bytes(code)
 
     active = getattr(_walking, "functions", None)
@@ -188,36 +199,52 @@ def _digest_function_bytes(func) -> bytes:
         active = _walking.functions = set()
     ident = id(func)
     if ident in active:
-        return _digest_bytes(_RECURSIVE_CLOSURE)
+        return _digest_bytes(_RECURSIVE_FUNCTION)
 
     active.add(ident)
     try:
         m = hashlib.sha256()
-        m.update(_CLOSURE_SALT)
+        m.update(_CAPTURED_SALT)
         m.update(_digest_bytes(code))
-        # __closure__ is ordered to match co_freevars; pairing them keeps the
-        # digest tied to the *names* the values are bound to, not just position.
-        for name, cell in zip(code.co_freevars, closure):
-            m.update(_digest_bytes(name))
-            try:
-                contents = cell.cell_contents
-            except ValueError:
-                # An empty cell — the free variable is not bound yet.  It has no
-                # value to digest, but its absence is still part of the closure.
-                m.update(_digest_bytes(_EMPTY_CELL))
-                continue
+        if closure:
+            m.update(_digest_bytes(_FREEVARS_SECTION))
+            # __closure__ is ordered to match co_freevars; pairing them keeps
+            # the digest tied to the *names* the values are bound to, not just
+            # position.
+            for name, cell in zip(code.co_freevars, closure):
+                m.update(_digest_bytes(name))
+                try:
+                    contents = cell.cell_contents
+                except ValueError:
+                    # An empty cell — the free variable is not bound yet.  It
+                    # has no value to digest, but its absence is still part of
+                    # the closure.
+                    m.update(_digest_bytes(_EMPTY_CELL))
+                    continue
 
-            if name == "__class__" and isinstance(contents, type):
-                # The compiler inserts a ``__class__`` cell into every method
-                # that mentions ``super()`` or ``__class__``.  It is not
-                # captured state — it is always the class the method was
-                # defined in — and user-defined classes are Indigestible as
-                # values, so digesting it would refuse every method that calls
-                # super().  Identify the class by name instead, the way the
-                # built-in ``type`` arm does.
-                m.update(_digest_bytes(f"{contents.__module__}.{contents.__qualname__}"))
-            else:
-                m.update(_digest_bytes(contents))
+                if name == "__class__" and isinstance(contents, type):
+                    # The compiler inserts a ``__class__`` cell into every
+                    # method that mentions ``super()`` or ``__class__``.  It is
+                    # not captured state — it is always the class the method was
+                    # defined in — and user-defined classes are Indigestible as
+                    # values, so digesting it would refuse every method that
+                    # calls super().  Identify the class by name instead, the
+                    # way the built-in ``type`` arm does.
+                    m.update(_digest_bytes(f"{contents.__module__}.{contents.__qualname__}"))
+                else:
+                    m.update(_digest_bytes(contents))
+        if defaults:
+            # Digested as the plain tuple it is: which parameters they belong to
+            # is already pinned by co_varnames inside the code digest, and
+            # pairing them up by hand would need index arithmetic that a
+            # hand-set __defaults__ longer than co_argcount could silently skew.
+            m.update(_digest_bytes(_DEFAULTS_SECTION))
+            m.update(_digest_bytes(defaults))
+        if kwdefaults:
+            # Keyword-only defaults are already a name -> value mapping, so they
+            # go through the ordinary Mapping path (sorted by key digest).
+            m.update(_digest_bytes(_KWDEFAULTS_SECTION))
+            _digest_mapping(m, kwdefaults)
         return m.hexdigest().encode()
     finally:
         active.discard(ident)
@@ -232,14 +259,15 @@ def digest(value: Any) -> Digest:
 
 
 def digest_function(func) -> Digest:
-    """Digest any ``__code__``-carrying callable by its code and captured variables.
+    """Digest any ``__code__``-carrying callable by its code, captures and defaults.
 
     Same result as :func:`digest` for a plain function; unlike it, this also
     works for callables that are not :class:`types.FunctionType` (bound methods,
     say) instead of raising :exc:`Indigestible` on the type itself.
 
     Raises:
-        Indigestible: if one of the captured values cannot be digested.
+        Indigestible: if a captured value or an argument default cannot be
+            digested.
     """
     try:
         return Digest(_digest_function_bytes(func).decode())

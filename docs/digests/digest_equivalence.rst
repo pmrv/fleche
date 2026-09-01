@@ -126,9 +126,10 @@ precedence over both built-in cases.
 Functions and Closures
 ----------------------
 
-A function digests by its **code object plus the variables it captured** from
-enclosing scopes.  Two functions compiled from the same source that capture
-nothing digest identically — the digest is about the code, not about where the
+A function digests by its **code object plus the state bound alongside it** —
+the variables it captured from enclosing scopes and its argument defaults.  Two
+functions compiled from the same source that capture nothing and default nothing
+digest identically — the digest is about the code, not about where the
 function lives or what it is called:
 
 .. code-block:: pycon
@@ -156,6 +157,31 @@ captured cells are the only thing that tells them apart:
     >>> assert digest(adder(1)) != digest(adder(2))
     >>> assert digest(adder(1)) == digest(adder(1))
 
+Argument defaults count for the same reason.  They are evaluated once at
+definition time and live on the function object, not in the code, so two
+definitions that differ only in a default share a code object:
+
+.. code-block:: pycon
+
+    >>> assert digest(lambda x, n=1: x + n) != digest(lambda x, n=2: x + n)
+
+That covers the ``k=n`` idiom for avoiding late binding, which captures the
+enclosing value in a default rather than in a cell:
+
+.. code-block:: pycon
+
+    >>> def scaler(n):
+    ...     def scale(x, k=n):
+    ...         return x * k
+    ...     return scale
+
+    >>> assert digest(scaler(2)) != digest(scaler(3))
+
+Keyword-only defaults (``__kwdefaults__``) are folded in the same way.  For a
+decorated function, defaults also reach the cache key by a second route
+regardless of ``hash_code``: :meth:`~fleche.call.Call.from_call` applies them
+when binding, so an unsupplied argument is recorded at its default value.
+
 Reaching the cache key requires ``hash_code=True``: the decorator leaves
 ``code_digest`` out of the key by default, and two closures out of one factory
 agree on qualified name and module, so without that flag they still share an
@@ -169,16 +195,14 @@ Boundaries for Function Digests
   rebound — globals are looked up at call time and are not part of the function
   object.  Use ``version=`` to invalidate when a global your function depends on
   changes.
-* **Default arguments are not folded in.**  ``lambda x, n=1: x + n`` and
-  ``lambda x, n=2: x + n`` still digest identically, so the ``n=n`` idiom for
-  avoiding late binding is *not* covered by the closure digest.  Capture through
-  an enclosing scope instead when the difference has to reach the cache key.
-* **Captures are read at digest time.**  Mutating (or rebinding) a captured
-  variable changes the digest of the closure.  That is the point — but it means
-  a closure over mutable state has no single digest.
-* **A capture that cannot be digested is refused, not skipped.**  Digesting a
-  closure over an object ``fleche`` does not know how to hash raises
-  :exc:`~fleche.digest.Indigestible`, just like passing that object as an
+* **Captures and defaults are read at digest time.**  Mutating (or rebinding) a
+  captured variable changes the digest of the closure, and so does mutating a
+  mutable default — the accumulating ``def f(x, acc=[])`` idiom keeps state
+  between calls, and the digest follows it.  That is the point, but it means a
+  function over mutable state has no single digest.
+* **A capture or default that cannot be digested is refused, not skipped.**
+  Digesting a function that holds an object ``fleche`` does not know how to hash
+  raises :exc:`~fleche.digest.Indigestible`, just like passing that object as an
   argument would.  The decorator itself degrades instead of failing: it warns
   and falls back to a code-only ``code_digest``, which brings the collision
   between closures from one factory back with it.
@@ -188,10 +212,10 @@ Boundaries for Function Digests
   are :exc:`~fleche.digest.Indigestible` as values, so that cell is folded in as
   ``module.QualName`` instead — otherwise every method calling ``super()`` would
   be refused.
-* **Cyclic captures collapse to a placeholder.**  A recursive inner function
-  captures itself; so can two closures capture each other.  The cycle is cut
-  with a fixed marker, so two closures that differ *only* somewhere inside the
-  cycle collide.
+* **Cycles collapse to a placeholder.**  A recursive inner function captures
+  itself; so can two closures capture each other, and a function can be reached
+  from its own defaults.  The cycle is cut with a fixed marker, so two functions
+  that differ *only* somewhere inside the cycle collide.
 * **Decorated functions digest as what they wrap.**  ``digest(fleche()(f)) ==
   digest(f)`` — the decoration is transparent, so a cached function does not
   care whether it is handed the raw or the cached callable.

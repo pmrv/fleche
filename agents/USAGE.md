@@ -158,11 +158,13 @@ Decorator kwargs on `@fleche(...)`:
 - `ignore=[...]` / `require=[...]` — argument names to exclude from the
   key, or to force present (a call missing a `require`d kwarg runs
   uncached, with a warning).
-- `hash_code=True` — folds `func.__code__`, plus the variables the function
-  captured from enclosing scopes, into the key (invalidates on any code
-  edit).  **Closures need this**: two closures out of one factory agree on
-  qualified name and module, so without it `make(2)` and `make(3)` share a
-  cache entry.
+- `hash_code=True` — folds `func.__code__`, plus the state bound alongside it
+  (captured free variables and argument defaults), into the key (invalidates
+  on any code edit).  **Closures need this**: two closures out of one factory
+  agree on qualified name and module, so without it `make(2)` and `make(3)`
+  share a cache entry.  Defaults reach the key either way — `Call.from_call`
+  applies them when binding, so an unsupplied argument is recorded at its
+  default value.
 - `hash_version=` / `hash_module=` — pin the digest scheme / module
   identity explicitly.
 - `meta=[...]` — metadata classes to record (`Runtime`, `Environment`,

@@ -537,15 +537,91 @@ def test_closures_capturing_equal_values_have_the_same_digest():
 
 
 def test_closure_free_function_digests_as_its_code_object():
-    """Functions capturing nothing keep the historical wire format.
+    """Functions with neither captures nor defaults keep the historical wire format.
 
-    Only closures change digest, so no cache built out of ordinary functions is
-    invalidated by folding captured variables in.
+    Everything else is untouched by folding captured state in, so no cache built
+    out of ordinary functions is invalidated.
     """
     def plain(x):
         return x + 1
 
     assert digest(plain) == digest(plain.__code__)
+
+
+def test_functions_with_different_defaults_have_different_digests():
+    """Argument defaults are part of what the function computes.
+
+    They are evaluated once at definition time and share the code object, so a
+    code-only digest gave ``lambda x, n=1`` and ``lambda x, n=2`` one cache key.
+    """
+    assert digest(lambda x, n=1: x + n) != digest(lambda x, n=2: x + n)
+
+
+def test_functions_with_equal_defaults_have_the_same_digest():
+    """Still content-based: equal defaults, equal digest."""
+    assert digest(lambda x, n=1: x + n) == digest(lambda x, n=1: x + n)
+
+
+def test_keyword_only_defaults_participate_in_the_digest():
+    """``__kwdefaults__`` is a separate slot from ``__defaults__`` and counts too."""
+    def one(x, *, n=1):
+        return x + n
+
+    def two(x, *, n=2):
+        return x + n
+
+    assert digest(one) != digest(two)
+
+
+def test_late_bound_default_idiom_discriminates():
+    """``k=n`` captures the enclosing value in a default rather than a cell.
+
+    The idiom exists precisely to avoid late binding, so the two functions it
+    produces differ in behaviour while sharing a code object *and* an empty
+    closure.
+    """
+    def make(n):
+        def scale(x, k=n):
+            return x * k
+        return scale
+
+    assert digest(make(2)) != digest(make(3))
+
+
+def test_mutated_default_changes_digest():
+    """Defaults are read at digest time, so a mutable default moves the digest.
+
+    The mutable-default idiom keeps state between calls; that state is part of
+    what the next call computes, so the digest follows it.
+    """
+    def accumulate(x, acc=[]):
+        acc.append(x)
+        return acc
+
+    before = digest(accumulate)
+    accumulate(1)
+    assert digest(accumulate) != before
+
+
+def test_self_referential_default_can_be_digested():
+    """A function reachable from its own defaults must not recurse forever."""
+    def f(x):
+        return x
+
+    f.__defaults__ = (f,)
+    assert isinstance(digest(f), Digest)
+
+
+def test_default_that_cannot_be_digested_raises():
+    """Defaults follow the same contract as captures: refused, not ignored."""
+    class Opaque:
+        pass
+
+    def f(x, o=Opaque()):
+        return o
+
+    with pytest.raises(Indigestible):
+        digest(f)
 
 
 def test_closure_over_mutated_capture_changes_digest():
