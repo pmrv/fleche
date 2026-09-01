@@ -146,7 +146,10 @@ and caches it for the lifetime of the process.  A profile captures all static
 per-function metadata in one frozen dataclass:
 
 - ``inspect.signature(func)`` — used for argument binding
-- the digest of ``func.__code__`` (included in cache keys only when ``hash_code=True``; the default is ``False``)
+- the digest of ``func.__code__`` together with the variables the function
+  captured from enclosing scopes (included in cache keys only when
+  ``hash_code=True``; the default is ``False``, so closures out of one factory
+  share a key until you set it)
 - ``(qualname, module, version)`` extracted via
   ``VersionInfo`` — ``module`` and ``version``
   are included in cache keys by default (``hash_module=True``,

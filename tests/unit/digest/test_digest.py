@@ -512,6 +512,167 @@ def test_local_function_digests_same_as_module_level():
     assert digest(local_add_one) == digest(_module_level_add_one)
 
 
+# --- Tests for closures: captured free variables participate in the digest ---
+
+
+def _adder(n):
+    """Factory whose products share a code object and differ only in what they capture."""
+    def add(x):
+        return x + n
+    return add
+
+
+def test_closures_capturing_different_values_have_different_digests():
+    """Two closures out of the same factory are told apart by what they captured.
+
+    They share a code object, so a code-only digest gave them the same cache key
+    while ``_adder(1)(0) != _adder(2)(0)``.
+    """
+    assert digest(_adder(1)) != digest(_adder(2))
+
+
+def test_closures_capturing_equal_values_have_the_same_digest():
+    """The digest stays content-based: equal captures, equal digest."""
+    assert digest(_adder(1)) == digest(_adder(1))
+
+
+def test_closure_free_function_digests_as_its_code_object():
+    """Functions capturing nothing keep the historical wire format.
+
+    Only closures change digest, so no cache built out of ordinary functions is
+    invalidated by folding captured variables in.
+    """
+    def plain(x):
+        return x + 1
+
+    assert digest(plain) == digest(plain.__code__)
+
+
+def test_closure_over_mutated_capture_changes_digest():
+    """Rebinding a captured variable changes the digest of the closure."""
+    n = 1
+
+    def capture():
+        return n
+
+    before = digest(capture)
+    n = 2
+    assert digest(capture) != before
+
+
+def test_self_recursive_closure_can_be_digested():
+    """A recursive inner function captures *itself*; digesting must terminate."""
+    def make(k):
+        def countdown(n):
+            return countdown(n - 1) + k if n else 0
+        return countdown
+
+    assert isinstance(digest(make(1)), Digest)
+    # the cycle is broken by a placeholder, but the other capture still discriminates
+    assert digest(make(1)) != digest(make(2))
+
+
+def test_mutually_recursive_closures_can_be_digested():
+    """Two closures capturing each other must not recurse forever either."""
+    def make(k):
+        def even(n):
+            return odd(n)
+
+        def odd(n):
+            return even(n) + k
+        return even
+
+    assert isinstance(digest(make(1)), Digest)
+    assert digest(make(1)) != digest(make(2))
+
+
+def test_closure_with_unbound_free_variable_can_be_digested():
+    """An empty cell (free variable never bound) has no value but is still digestible."""
+    def outer():
+        def inner():
+            return never_assigned
+        return inner
+        never_assigned = 1  # unreachable, but it is what makes the name a cell
+
+    inner = outer()
+    with pytest.raises(ValueError):
+        inner.__closure__[0].cell_contents
+
+    assert isinstance(digest(inner), Digest)
+
+
+def test_closure_over_indigestible_value_raises():
+    """Captures follow the usual contract: what cannot be hashed is refused, not ignored."""
+    class Opaque:
+        pass
+
+    def make(o):
+        def f():
+            return o
+        return f
+
+    with pytest.raises(Indigestible):
+        digest(make(Opaque()))
+
+
+def test_method_using_super_can_be_digested():
+    """The compiler-inserted ``__class__`` cell must not make methods indigestible.
+
+    Any method mentioning ``super()`` captures its class in a cell, and a
+    user-defined class is :exc:`Indigestible` as a *value* — so digesting the
+    cell would refuse every such method.  It is identified by name instead.
+    """
+    class Base:
+        def go(self):
+            return 1
+
+    class A(Base):
+        def go(self):
+            return super().go() + 1
+
+    class B(Base):
+        def go(self):
+            return super().go() + 1
+
+    a, b = A.__dict__["go"], B.__dict__["go"]
+    assert a.__code__.co_freevars == ("__class__",)
+    # identical bodies, but the classes they were defined in differ
+    assert digest(a) != digest(b)
+
+
+def test_function_digest_attribute_overrides_closure_digest():
+    """``__digest__`` is honoured per instance for functions.
+
+    Every function shares one type, so the class-level protocol could never
+    reach them; the attribute is how a closure declares its own identity.
+    """
+    def make(o):
+        def f():
+            return o
+        return f
+
+    f = make(object())
+    f.__digest__ = lambda: digest("stable identity")
+    assert digest(f) == digest("stable identity")
+
+
+def test_decorated_function_digests_as_the_function_it_wraps():
+    """Decoration is transparent to the digest, and two wrappers stay distinct.
+
+    Every fleche wrapper shares one code object, so without an identity of its
+    own each would digest the same as every other.
+    """
+    def plain(x):
+        return x + 1
+
+    def other(x):
+        return x + 2
+
+    wrapped = fleche()(plain)
+    assert digest(wrapped) == digest(plain)
+    assert digest(wrapped) != digest(fleche()(other))
+
+
 # --- Tests for digesting Python descriptors (staticmethod, classmethod, property) ---
 
 

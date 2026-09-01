@@ -24,7 +24,8 @@ def expensive(x, y):
 ```
 
 - The decorator digests the function's identity (qualified name, module,
-  `version`, and optionally `func.__code__` when `hash_code=True`) together
+  `version`, and optionally `func.__code__` plus its captured variables when
+  `hash_code=True`) together
   with its arguments (SHA256, content-based — not `id()`/pickle-identity
   based) into a lookup key, and returns the stored result on a hit.
 - Helpers attached to the wrapped function: `.call`, `.digest`, `.load`,
@@ -157,8 +158,11 @@ Decorator kwargs on `@fleche(...)`:
 - `ignore=[...]` / `require=[...]` — argument names to exclude from the
   key, or to force present (a call missing a `require`d kwarg runs
   uncached, with a warning).
-- `hash_code=True` — folds `func.__code__` into the key (invalidates on
-  any code edit).
+- `hash_code=True` — folds `func.__code__`, plus the variables the function
+  captured from enclosing scopes, into the key (invalidates on any code
+  edit).  **Closures need this**: two closures out of one factory agree on
+  qualified name and module, so without it `make(2)` and `make(3)` share a
+  cache entry.
 - `hash_version=` / `hash_module=` — pin the digest scheme / module
   identity explicitly.
 - `meta=[...]` — metadata classes to record (`Runtime`, `Environment`,

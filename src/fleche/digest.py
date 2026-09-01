@@ -6,6 +6,7 @@ import dataclasses
 import numbers
 from numbers import Number
 import struct
+import threading
 import types
 import importlib.metadata
 from collections.abc import Iterable, Mapping
@@ -143,12 +144,108 @@ def _digest_mapping(m, contents: Mapping) -> bytes:
     return m.hexdigest().encode()
 
 
+# Salt + placeholders for the closure digest.  Kept as module-level constants so
+# the wire format is greppable and cannot drift between the two call sites.
+_CLOSURE_SALT = b"__closure__"
+_EMPTY_CELL = "__fleche_empty_cell__"
+_RECURSIVE_CLOSURE = "__fleche_recursive_closure__"
+
+# Free variables are digested *by value*, so a closure that captures itself —
+# the ordinary shape of a recursive inner function — or two closures that
+# capture each other would recurse forever.  Remember which functions are
+# currently having their closure walked (per thread, since digests are computed
+# concurrently) and fold a fixed marker in on a re-entrant sighting; the shape
+# of the cycle is already pinned by the code digests along the way.
+_walking = threading.local()
+
+
+def _digest_function_bytes(func) -> bytes:
+    """Digest a callable by its code object *and* the variables it captured.
+
+    Two closures handed out by the same factory share one code object, so a
+    code-only digest cannot tell ``make(1)`` from ``make(2)`` — the captured
+    cells are the only thing that differs.
+
+    Functions that capture nothing keep the historical wire format
+    (``digest(func) == digest(func.__code__)``), so only closures see their
+    digest change.
+    """
+    # ``__digest__`` is checked per instance here, unlike everywhere else: all
+    # functions share one type, so a class-level lookup could never distinguish
+    # them.  It is how a closure over something indigestible (or fleche's own
+    # wrapper) declares its own identity.
+    own = getattr(func, "__digest__", None)
+    if own is not None:
+        return own().encode()
+
+    code = func.__code__
+    closure = func.__closure__
+    if not closure:
+        return _digest_bytes(code)
+
+    active = getattr(_walking, "functions", None)
+    if active is None:
+        active = _walking.functions = set()
+    ident = id(func)
+    if ident in active:
+        return _digest_bytes(_RECURSIVE_CLOSURE)
+
+    active.add(ident)
+    try:
+        m = hashlib.sha256()
+        m.update(_CLOSURE_SALT)
+        m.update(_digest_bytes(code))
+        # __closure__ is ordered to match co_freevars; pairing them keeps the
+        # digest tied to the *names* the values are bound to, not just position.
+        for name, cell in zip(code.co_freevars, closure):
+            m.update(_digest_bytes(name))
+            try:
+                contents = cell.cell_contents
+            except ValueError:
+                # An empty cell — the free variable is not bound yet.  It has no
+                # value to digest, but its absence is still part of the closure.
+                m.update(_digest_bytes(_EMPTY_CELL))
+                continue
+
+            if name == "__class__" and isinstance(contents, type):
+                # The compiler inserts a ``__class__`` cell into every method
+                # that mentions ``super()`` or ``__class__``.  It is not
+                # captured state — it is always the class the method was
+                # defined in — and user-defined classes are Indigestible as
+                # values, so digesting it would refuse every method that calls
+                # super().  Identify the class by name instead, the way the
+                # built-in ``type`` arm does.
+                m.update(_digest_bytes(f"{contents.__module__}.{contents.__qualname__}"))
+            else:
+                m.update(_digest_bytes(contents))
+        return m.hexdigest().encode()
+    finally:
+        active.discard(ident)
+
+
 def digest(value: Any) -> Digest:
     try:
         return Digest(_digest_bytes(value).decode())
     except Indigestible:
         load_entry_points()
     return Digest(_digest_bytes(value).decode())
+
+
+def digest_function(func) -> Digest:
+    """Digest any ``__code__``-carrying callable by its code and captured variables.
+
+    Same result as :func:`digest` for a plain function; unlike it, this also
+    works for callables that are not :class:`types.FunctionType` (bound methods,
+    say) instead of raising :exc:`Indigestible` on the type itself.
+
+    Raises:
+        Indigestible: if one of the captured values cannot be digested.
+    """
+    try:
+        return Digest(_digest_function_bytes(func).decode())
+    except Indigestible:
+        load_entry_points()
+    return Digest(_digest_function_bytes(func).decode())
 
 
 def _digest_bytes(value: Any) -> bytes:
@@ -264,7 +361,7 @@ def _digest_bytes(value: Any) -> bytes:
             m.update(_digest_bytes(str(value.dtype)))
             m.update(pd.util.hash_pandas_object(value).values.tobytes())
         case types.FunctionType():
-            return _digest_bytes(value.__code__)
+            return _digest_function_bytes(value)
         case types.CodeType():
             # captured properties for behavior stability
             props = [

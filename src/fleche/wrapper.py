@@ -314,6 +314,16 @@ def make_wrapper(func, policy, meta, isolate, get_call):
                     return _run_and_cache()
         else:
             return _run_and_cache()
+
+    # Every function shares one type, so the class-level ``__digest__`` protocol
+    # cannot reach a wrapper; ``digest`` honours the attribute per instance for
+    # functions instead.  Without it the wrapper would be digested by its own
+    # code plus closure — identical for every fleche-decorated function bar the
+    # private, mutable bookkeeping cells — so passing a decorated function as an
+    # argument would key on fleche's internals rather than on the function being
+    # wrapped.  Decoration is transparent here: the wrapper digests as the thing
+    # it wraps.
+    setattr(wrapper, "__digest__", partial(digest.digest, func))
     return wrapper
 
 

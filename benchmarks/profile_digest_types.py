@@ -113,6 +113,15 @@ def _walk(value, counter: Counter) -> None:
         counter["str"] += 2   # dtype.str + shape tuple → str
     elif arm == "FunctionType":
         _walk(value.__code__, counter)
+        # captured free variables are digested alongside the code object
+        for name, cell in zip(value.__code__.co_freevars, value.__closure__ or ()):
+            _walk(name, counter)
+            try:
+                contents = cell.cell_contents
+            except ValueError:
+                counter["str"] += 1   # the empty-cell placeholder
+            else:
+                _walk(contents, counter)
     elif arm == "CodeType":
         props = (
             value.co_code, value.co_consts, value.co_names,

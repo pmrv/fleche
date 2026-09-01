@@ -44,6 +44,29 @@ class Required:
         return Annotated[item, cls]
 
 
+def _code_digest(func) -> Digest:
+    """Digest *func*'s code together with what it captured from enclosing scopes.
+
+    Closures handed out by the same factory share a code object, so a code-only
+    digest gives ``make(1)`` and ``make(2)`` the same cache key.  A captured
+    value that cannot be digested falls back to that code-only digest — a
+    closure over, say, a database handle still has to be decoratable — but warns,
+    because the collision comes back with it.
+    """
+    try:
+        return digest.digest_function(func)
+    except digest.Indigestible as e:
+        offender = type(e.args[0]).__name__ if e.args else "?"
+        logger.warning(
+            "Cannot digest what %s captured (a %s); its code digest ignores every "
+            "captured variable and so collides with other closures made from the "
+            "same definition",
+            getattr(func, "__qualname__", func),
+            offender,
+        )
+        return digest.digest(func.__code__)
+
+
 @dataclass(frozen=True)
 class FunctionProfile:
     """All static per-function metadata, cached once per callable."""
@@ -77,7 +100,7 @@ class FunctionProfile:
             qualname = get_qualname(func) or module
             version = None
 
-        code_digest = digest.digest(func.__code__) if hasattr(func, "__code__") else None
+        code_digest = _code_digest(func) if hasattr(func, "__code__") else None
 
         try:
             type_hints = get_type_hints(func, include_extras=True)

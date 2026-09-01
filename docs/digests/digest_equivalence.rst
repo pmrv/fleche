@@ -122,3 +122,93 @@ qualified path:
 
 A custom ``__digest__`` short-circuits the dataclass / attrs path and takes
 precedence over both built-in cases.
+
+Functions and Closures
+----------------------
+
+A function digests by its **code object plus the variables it captured** from
+enclosing scopes.  Two functions compiled from the same source that capture
+nothing digest identically — the digest is about the code, not about where the
+function lives or what it is called:
+
+.. code-block:: pycon
+
+    >>> from fleche.digest import digest
+
+    >>> def add_one(x):
+    ...     return x + 1
+
+    >>> def also_add_one(x):
+    ...     return x + 1
+
+    >>> assert digest(add_one) == digest(also_add_one)
+
+Closures handed out by the same factory share that one code object, so the
+captured cells are the only thing that tells them apart:
+
+.. code-block:: pycon
+
+    >>> def adder(n):
+    ...     def add(x):
+    ...         return x + n
+    ...     return add
+
+    >>> assert digest(adder(1)) != digest(adder(2))
+    >>> assert digest(adder(1)) == digest(adder(1))
+
+Reaching the cache key requires ``hash_code=True``: the decorator leaves
+``code_digest`` out of the key by default, and two closures out of one factory
+agree on qualified name and module, so without that flag they still share an
+entry.
+
+Boundaries for Function Digests
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* **Only captured variables count, not globals.**  A function that reads a
+  module-level constant digests the same before and after that constant is
+  rebound — globals are looked up at call time and are not part of the function
+  object.  Use ``version=`` to invalidate when a global your function depends on
+  changes.
+* **Default arguments are not folded in.**  ``lambda x, n=1: x + n`` and
+  ``lambda x, n=2: x + n`` still digest identically, so the ``n=n`` idiom for
+  avoiding late binding is *not* covered by the closure digest.  Capture through
+  an enclosing scope instead when the difference has to reach the cache key.
+* **Captures are read at digest time.**  Mutating (or rebinding) a captured
+  variable changes the digest of the closure.  That is the point — but it means
+  a closure over mutable state has no single digest.
+* **A capture that cannot be digested is refused, not skipped.**  Digesting a
+  closure over an object ``fleche`` does not know how to hash raises
+  :exc:`~fleche.digest.Indigestible`, just like passing that object as an
+  argument would.  The decorator itself degrades instead of failing: it warns
+  and falls back to a code-only ``code_digest``, which brings the collision
+  between closures from one factory back with it.
+* **A method's implicit class capture is identified by name.**  Mentioning
+  ``super()`` (or ``__class__``) makes the compiler hand the method a
+  ``__class__`` cell holding the class it was defined in.  User-defined classes
+  are :exc:`~fleche.digest.Indigestible` as values, so that cell is folded in as
+  ``module.QualName`` instead — otherwise every method calling ``super()`` would
+  be refused.
+* **Cyclic captures collapse to a placeholder.**  A recursive inner function
+  captures itself; so can two closures capture each other.  The cycle is cut
+  with a fixed marker, so two closures that differ *only* somewhere inside the
+  cycle collide.
+* **Decorated functions digest as what they wrap.**  ``digest(fleche()(f)) ==
+  digest(f)`` — the decoration is transparent, so a cached function does not
+  care whether it is handed the raw or the cached callable.
+
+Giving a Function Its Own Digest
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Every function shares one type, so a class-level ``__digest__`` could never
+distinguish them; for functions the attribute is therefore read off the function
+object itself.  That is the escape hatch when a closure captures something
+unhashable but you know what actually matters:
+
+.. code-block:: pycon
+
+    >>> def make_query(connection, table):
+    ...     def run():
+    ...         return connection.execute(f"SELECT * FROM {table}")
+    ...     # the connection is not part of the result's identity, the table is
+    ...     run.__digest__ = lambda: digest(("run", table))
+    ...     return run

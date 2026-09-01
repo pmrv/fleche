@@ -1,4 +1,7 @@
+import logging
+
 from fleche.call import Call
+from fleche.digest import digest
 
 
 def test_code_digest_is_hashed_in_lookup_key():
@@ -99,3 +102,48 @@ def test_same_function_implementation_has_same_digest():
 
     assert call_a.code_digest == call_b.code_digest
     assert call_a.to_lookup_key() == call_b.to_lookup_key()
+
+
+def _multiplier(n):
+    """Factory whose products share a code object and differ only in what they capture."""
+    def mul(x):
+        return x * n
+    return mul
+
+
+def test_closures_from_the_same_factory_have_different_code_digests():
+    """A code-only digest cannot tell two closures apart; the captured cells can."""
+    call_2 = Call.from_call(_multiplier(2), 5)
+    call_3 = Call.from_call(_multiplier(3), 5)
+
+    assert call_2.code_digest != call_3.code_digest
+    assert call_2.to_lookup_key() != call_3.to_lookup_key()
+
+
+def test_closures_capturing_equal_values_share_a_code_digest():
+    """Same code, same captures — same key, so the cache still hits."""
+    assert Call.from_call(_multiplier(2), 5).code_digest == Call.from_call(_multiplier(2), 5).code_digest
+
+
+def test_indigestible_capture_falls_back_to_the_code_digest_with_a_warning(caplog):
+    """A closure over something unhashable stays decoratable, loudly.
+
+    Falling back re-opens the collision the captured cells would have closed, so
+    it has to be visible rather than silent.
+    """
+    class Opaque:
+        pass
+
+    def make(o):
+        def f(x):
+            return x, o
+        return f
+
+    opaque = make(Opaque())
+    with caplog.at_level(logging.WARNING, logger="fleche.call"):
+        call = Call.from_call(opaque, 1)
+
+    assert "captured" in caplog.text
+    # the fallback is exactly the old behaviour: code only, captures ignored
+    assert call.code_digest == digest(opaque.__code__)
+    assert call.code_digest == Call.from_call(make(Opaque()), 1).code_digest
