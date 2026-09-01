@@ -134,6 +134,30 @@ def load_entry_points():
             logger.error("Failed to load entry point %s: %s", ep.name, e, exc_info=True)
 
 
+def _new_hash(salt: bytes):
+    """Start a running SHA256 under *salt*.
+
+    Every digest in this module is a salted accumulation: the salt discriminates
+    what kind of thing is being hashed (a type name, a section of a function's
+    captured state) before any content goes in.
+    """
+    m = hashlib.sha256()
+    m.update(salt)
+    return m
+
+
+def digest_class(cls: type) -> Digest:
+    """Digest a class by its qualified name, ``module.QualName``.
+
+    This identifies a class *as a class* — a name, not a value.  It is what the
+    built-in ``type`` arm hashes and what a method's compiler-inserted
+    ``__class__`` cell folds in.  Digesting a class as an ordinary *value* is a
+    different question, and still raises :exc:`Indigestible` for anything
+    outside ``builtins``.
+    """
+    return digest(f"{cls.__module__}.{cls.__qualname__}")
+
+
 def _digest_mapping(m, contents: Mapping) -> bytes:
     sorted_items = sorted(
         ((_digest_bytes(k), k, v) for k, v in contents.items()), key=lambda item: item[0]
@@ -164,17 +188,40 @@ _RECURSIVE_FUNCTION = "__fleche_recursive_function__"
 _walking = threading.local()
 
 
+def _fold_freevars(m, code, closure) -> None:
+    """Fold a function's captured cells into the running hash *m*."""
+    # __closure__ is ordered to match co_freevars; pairing them keeps the digest
+    # tied to the *names* the values are bound to, not just position.
+    for name, cell in zip(code.co_freevars, closure):
+        m.update(_digest_bytes(name))
+        try:
+            contents = cell.cell_contents
+        except ValueError:
+            # An empty cell — the free variable is not bound yet.  It has no
+            # value to digest, but its absence is still part of the closure.
+            m.update(_digest_bytes(_EMPTY_CELL))
+            continue
+
+        if name == "__class__" and isinstance(contents, type):
+            # The compiler inserts a ``__class__`` cell into every method that
+            # mentions ``super()`` or ``__class__``.  It is not captured state —
+            # it is always the class the method was defined in — and
+            # user-defined classes are Indigestible as values, so digesting it
+            # would refuse every method that calls super().  Identify the class
+            # by name instead, exactly as the built-in ``type`` arm does.
+            m.update(digest_class(contents).encode())
+        else:
+            m.update(_digest_bytes(contents))
+
+
 def _digest_function_bytes(func) -> bytes:
     """Digest a callable by its code object *and* the values bound alongside it.
 
-    Two functions out of the same factory share one code object, so a code-only
-    digest cannot tell ``make(1)`` from ``make(2)``: what differs is the state
-    captured next to the code — the closure cells, and the argument defaults,
-    which are evaluated once at definition time and are just as much a part of
-    what the function computes (``lambda x, n=1: x + n``).
-
-    Functions with no closure and no defaults keep the historical wire format
-    (``digest(func) == digest(func.__code__)``), so nothing else changes digest.
+    Two functions out of one factory share a code object, so what tells
+    ``make(1)`` from ``make(2)`` — or ``lambda x, n=1`` from ``lambda x, n=2`` —
+    is only the closure cells and the argument defaults, both fixed at
+    definition time.  Functions carrying neither keep the historical wire
+    format, ``digest(func) == digest(func.__code__)``.
     """
     # ``__digest__`` is checked per instance here, unlike everywhere else: all
     # functions share one type, so a class-level lookup could never distinguish
@@ -203,36 +250,11 @@ def _digest_function_bytes(func) -> bytes:
 
     active.add(ident)
     try:
-        m = hashlib.sha256()
-        m.update(_CAPTURED_SALT)
+        m = _new_hash(_CAPTURED_SALT)
         m.update(_digest_bytes(code))
         if closure:
             m.update(_digest_bytes(_FREEVARS_SECTION))
-            # __closure__ is ordered to match co_freevars; pairing them keeps
-            # the digest tied to the *names* the values are bound to, not just
-            # position.
-            for name, cell in zip(code.co_freevars, closure):
-                m.update(_digest_bytes(name))
-                try:
-                    contents = cell.cell_contents
-                except ValueError:
-                    # An empty cell — the free variable is not bound yet.  It
-                    # has no value to digest, but its absence is still part of
-                    # the closure.
-                    m.update(_digest_bytes(_EMPTY_CELL))
-                    continue
-
-                if name == "__class__" and isinstance(contents, type):
-                    # The compiler inserts a ``__class__`` cell into every
-                    # method that mentions ``super()`` or ``__class__``.  It is
-                    # not captured state — it is always the class the method was
-                    # defined in — and user-defined classes are Indigestible as
-                    # values, so digesting it would refuse every method that
-                    # calls super().  Identify the class by name instead, the
-                    # way the built-in ``type`` arm does.
-                    m.update(_digest_bytes(f"{contents.__module__}.{contents.__qualname__}"))
-                else:
-                    m.update(_digest_bytes(contents))
+            _fold_freevars(m, code, closure)
         if defaults:
             # Digested as the plain tuple it is: which parameters they belong to
             # is already pinned by co_varnames inside the code digest, and
@@ -292,8 +314,6 @@ def _digest_bytes(value: Any) -> bytes:
     ``bytes.fromhex(...)``.  That must be coordinated with a ``hash_version``
     bump and a ``Cache.redigest`` migration.
     """
-    m = hashlib.sha256()
-
     # Fast-path: in the common case both hook lists are empty, so skip the
     # ``get_hooks()`` call which would otherwise allocate a fresh combined list
     # on every recursive ``_digest_bytes`` invocation (hot for large iterables).
@@ -313,7 +333,7 @@ def _digest_bytes(value: Any) -> bytes:
             return value.__digest__().encode()
         _TYPES_WITHOUT_DIGEST.add(t)
 
-    m.update(t.__name__.encode())
+    m = _new_hash(t.__name__.encode())
     match value:
         case int():
             # Most-frequent arm; bool ⊂ int so booleans are digested here too
@@ -429,7 +449,7 @@ def _digest_bytes(value: Any) -> bytes:
             # This case must precede the dataclasses check: is_dataclass() returns True
             # for both a class and its instances, but getattr(cls, field) raises
             # AttributeError for required fields that have no class-level default.
-            return _digest_bytes(f"builtins.{value.__qualname__}")
+            return digest_class(value).encode()
         case _ if dataclasses.is_dataclass(value) and not isinstance(value, type):
             # cannot use asdict because it recursively converts values which destroys digests
             # instead (flat-) convert to dictionaries, salt with type name, then fallback to dictionary case.
