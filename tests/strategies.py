@@ -26,12 +26,23 @@ def dataclasses(draw, field_types, frozen=None, clscache={}):
         )
     )
     clsname = 'C' + digest.digest(fields)
-    if clsname not in clscache:
-        cls = clscache[clsname] = make_dataclass(
+    # ``frozen`` must be part of the cache key: it changes the class that comes
+    # out (a non-frozen dataclass is unhashable), and the cache is shared by
+    # every strategy in the process.  Keyed on the name alone,
+    # ``dataclasses(..., frozen=False)`` in one test file poisons the entry for
+    # the ``frozen=True`` draws in ``key_strategies`` below, whose instances are
+    # then used as dict keys -- an order- and draw-dependent
+    # ``TypeError: unhashable type: 'C<digest>'`` from inside the strategy,
+    # landing in whichever test happens to draw the collision next.  The class
+    # *name* stays keyed on the fields alone, so digest equivalence between a
+    # frozen and non-frozen class with the same contents is unchanged.
+    cachekey = (clsname, frozen)
+    if cachekey not in clscache:
+        cls = clscache[cachekey] = make_dataclass(
             clsname, [(k, type(v)) for k, v in fields.items()], frozen=frozen
         )
     else:
-        cls = clscache[clsname]
+        cls = clscache[cachekey]
     return cls(*fields)
 
 
