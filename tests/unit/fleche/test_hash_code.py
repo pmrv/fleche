@@ -1,3 +1,11 @@
+"""The ``hash_code=`` decorator kwarg: whether ``code_digest`` reaches the key.
+
+Layer note: this file owns the *decorator* end — that the flag plumbs
+``code_digest`` into the lookup key at all.  What that digest is made of is
+``tests/unit/digest/test_digest.py``; a real cache round-trip is
+``tests/integration/test_hash_code_integration.py``.
+"""
+
 from fleche import fleche
 
 def test_hash_code_invalidates_on_change():
@@ -42,10 +50,12 @@ def test_hash_code_default_ignores_change():
 
 
 def test_hash_code_separates_closures_over_different_values():
-    """Two closures out of one factory must not share a cache entry.
+    """``hash_code=True`` carries captured variables into the key.
 
-    They agree on qualname, module and code object, so before captured variables
-    were digested ``make(3)(5)`` returned ``make(2)``'s cached 10.
+    Closures out of one factory agree on qualname, module *and* code object, so
+    the captured values are the only thing that can separate their keys.  That
+    they then miss each other's cache entries is
+    ``tests/integration/test_hash_code_integration.py``.
     """
     def make(n):
         def scale(x):
@@ -56,15 +66,17 @@ def test_hash_code_separates_closures_over_different_values():
     triple = fleche(hash_code=True)(make(3))
 
     assert double.fleche.digest(5) != triple.fleche.digest(5)
-    assert double(5) == 10
-    assert triple(5) == 15
 
 
-def test_hash_code_shares_key_for_closures_over_equal_values():
-    """Equal captures still hit the same entry — this is a cache, after all."""
+def test_hash_code_false_ignores_captured_values():
+    """Without the flag nothing separates two closures out of one factory.
+
+    Documented in ``USAGE.md`` and ``digests/digest_equivalence.rst`` rather than
+    changed: flipping the default would invalidate every existing cache.
+    """
     def make(n):
         def scale(x):
             return x * n
         return scale
 
-    assert fleche(hash_code=True)(make(2)).fleche.digest(5) == fleche(hash_code=True)(make(2)).fleche.digest(5)
+    assert fleche()(make(2)).fleche.digest(5) == fleche()(make(3)).fleche.digest(5)

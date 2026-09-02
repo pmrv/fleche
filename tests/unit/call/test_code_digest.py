@@ -1,3 +1,12 @@
+"""``FunctionProfile.code_digest`` and its participation in the lookup key.
+
+Layer note: this file owns the *call* end — how ``code_digest`` is derived
+from a callable and what it does to the key.  What a function digest is made
+of belongs in ``tests/unit/digest/test_digest.py``; this file covers only
+what ``call.py`` adds on top: the warn-and-fall-back on an indigestible
+capture, and the bound-method reduction.
+"""
+
 import logging
 
 from fleche.call import Call
@@ -147,3 +156,27 @@ def test_indigestible_capture_falls_back_to_the_code_digest_with_a_warning(caplo
     # the fallback is exactly the old behaviour: code only, captures ignored
     assert call.code_digest == digest(opaque.__code__)
     assert call.code_digest == Call.from_call(make(Opaque()), 1).code_digest
+
+
+def test_bound_method_code_digest_ignores_the_receiver():
+    """A bound method's ``code_digest`` comes from the underlying function.
+
+    ``digest(obj.method)`` folds the receiver in, but the receiver also arrives
+    as an ordinary argument of the call, so folding it into ``code_digest`` too
+    would record it twice — and would refuse every receiver ``fleche`` cannot
+    hash.  ``_code_digest`` reduces to ``__func__`` for that reason.
+    """
+
+    class Counter:
+        def __init__(self, start):
+            self.start = start
+
+        def advance(self, by):
+            return self.start + by
+
+    one, two = Counter(1), Counter(2)
+
+    # the receiver is opaque to fleche, so a receiver-sensitive code_digest
+    # would have to fall back; instead it is simply not part of it
+    assert Call.from_call(one.advance, 1).code_digest == Call.from_call(two.advance, 1).code_digest
+    assert Call.from_call(one.advance, 1).code_digest == Call.from_call(Counter.advance, one, 1).code_digest
