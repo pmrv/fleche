@@ -603,6 +603,75 @@ def test_mutated_default_changes_digest():
     assert digest(accumulate) != before
 
 
+def _one_hop():
+    """A function whose single free variable decides who it calls.
+
+    Every instance shares one code object, so the *only* thing that can tell two
+    of them apart is the shape of the call graph their cells describe.
+    """
+    def f():
+        return partner()
+
+    partner = None
+    return f
+
+
+def test_cycles_of_equal_length_closing_on_different_functions_differ():
+    """A constant cycle marker would collide two different call graphs.
+
+    ``a -> b -> a`` (mutual ping-pong) and ``c -> d -> d`` (one hop, then self
+    recursion) run to the same depth through identical code objects, so a marker
+    that says only "seen this already" hashes them the same.  The marker names
+    how far back up the walk the target sits instead.
+    """
+    a, b, c, d = _one_hop(), _one_hop(), _one_hop(), _one_hop()
+    a.__closure__[0].cell_contents = b
+    b.__closure__[0].cell_contents = a
+    c.__closure__[0].cell_contents = d
+    d.__closure__[0].cell_contents = d
+
+    assert a.__code__ is c.__code__     # nothing but the cycle shape differs
+    assert digest(a) != digest(c)
+
+
+def test_equivalent_cycles_still_agree():
+    """Discriminating cycle shape must not cost content-based equality."""
+    a, b = _one_hop(), _one_hop()
+    a.__closure__[0].cell_contents = b
+    b.__closure__[0].cell_contents = a
+
+    c, d = _one_hop(), _one_hop()
+    c.__closure__[0].cell_contents = d
+    d.__closure__[0].cell_contents = c
+
+    assert digest(a) == digest(c)
+
+
+def test_cycle_digests_the_same_wherever_it_is_met():
+    """The back-reference is relative, so a cycle is context-independent.
+
+    An absolute depth would make the same cycle hash differently depending on
+    how deeply the walk had already descended when it reached it.
+    """
+    a, b = _one_hop(), _one_hop()
+    a.__closure__[0].cell_contents = b
+    b.__closure__[0].cell_contents = a
+
+    def hold(x):
+        def h():
+            return x()
+        return h
+
+    standalone = digest(a)
+    nested = digest(hold(a))
+    assert nested != standalone         # h wraps it, so of course it differs
+    # but two copies of the same cycle agree at the same nesting
+    c, d = _one_hop(), _one_hop()
+    c.__closure__[0].cell_contents = d
+    d.__closure__[0].cell_contents = c
+    assert digest(hold(c)) == nested
+
+
 def test_self_referential_default_can_be_digested():
     """A function reachable from its own defaults must not recurse forever."""
     def f(x):

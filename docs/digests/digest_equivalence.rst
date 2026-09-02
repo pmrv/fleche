@@ -212,14 +212,17 @@ Boundaries for Function Digests
   are :exc:`~fleche.digest.Indigestible` as values, so that cell is folded in as
   ``module.QualName`` instead — otherwise every method calling ``super()`` would
   be refused.
-* **Cycles are cut with a placeholder.**  A recursive inner function captures
-  itself, two closures can capture each other, and a function can be reached
-  from its own defaults — digesting those by value would recurse forever.  When
-  the walk meets a function it is already digesting, it folds in a fixed marker
-  instead of descending again.  That function's own code, captures and defaults
-  are still folded in where the walk first reached it, so closures out of one
-  factory stay distinguishable; what the marker drops is a second, deeper copy
-  of a function the digest already covers.
+* **Cycles are cut with a back-reference.**  A recursive inner function
+  captures itself, two closures can capture each other, and a function can be
+  reached from its own defaults — digesting those by value would recurse
+  forever.  When the walk meets a function it is already digesting, it folds in
+  a marker naming *how far back up the walk* that function sits, instead of
+  descending again.  The distance matters: a plain "seen it" marker gives
+  ``a -> b -> a`` and ``c -> d -> d`` the same digest, though one ping-pongs
+  between two functions and the other recurses on the second.  Being relative,
+  the marker also makes a cycle digest the same wherever the walk meets it.
+  Everything else about those functions — code, captures, defaults — is folded
+  in where the walk first reached them.
 * **Decorated functions digest as what they wrap.**  ``digest(fleche()(f)) ==
   digest(f)`` — the decoration is transparent, so a cached function does not
   care whether it is handed the raw or the cached callable.

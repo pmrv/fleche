@@ -181,10 +181,12 @@ _RECURSIVE_FUNCTION = "__fleche_recursive_function__"
 # Captured state is digested *by value*, so a function that refers to itself —
 # the ordinary shape of a recursive inner function, and reachable through a
 # default too — or two functions that refer to each other would recurse forever.
-# Remember which functions are currently being walked (per thread, since digests
-# are computed concurrently) and fold a fixed marker in on a re-entrant
-# sighting; the shape of the cycle is already pinned by the code digests along
-# the way.
+# Each function currently being walked is remembered with its depth (per thread,
+# since digests are computed concurrently); meeting one again folds in a marker
+# naming *how far back up the walk* it sits rather than one constant, because
+# the constant collided cycles of the same length that close on different
+# functions: `a -> b -> a` and `c -> d -> d` are different call graphs.  The
+# distance is relative, so a cycle digests the same wherever the walk meets it.
 _walking = threading.local()
 
 
@@ -243,12 +245,12 @@ def _digest_function_bytes(func) -> bytes:
 
     active = getattr(_walking, "functions", None)
     if active is None:
-        active = _walking.functions = set()
+        active = _walking.functions = {}
     ident = id(func)
     if ident in active:
-        return _digest_bytes(_RECURSIVE_FUNCTION)
+        return _digest_bytes((_RECURSIVE_FUNCTION, len(active) - active[ident]))
 
-    active.add(ident)
+    active[ident] = len(active)
     try:
         m = _new_hash(_CAPTURED_SALT)
         m.update(_digest_bytes(code))
@@ -269,15 +271,24 @@ def _digest_function_bytes(func) -> bytes:
             _digest_mapping(m, kwdefaults)
         return m.hexdigest().encode()
     finally:
-        active.discard(ident)
+        del active[ident]
+
+
+def _retrying_on_entry_points(compute, value) -> Digest:
+    """Run *compute*, loading entry-point hooks and retrying once on refusal.
+
+    A hook for the offending type may simply not be loaded yet, so every public
+    entry point pays for one rescan before giving up.
+    """
+    try:
+        return Digest(compute(value).decode())
+    except Indigestible:
+        load_entry_points()
+    return Digest(compute(value).decode())
 
 
 def digest(value: Any) -> Digest:
-    try:
-        return Digest(_digest_bytes(value).decode())
-    except Indigestible:
-        load_entry_points()
-    return Digest(_digest_bytes(value).decode())
+    return _retrying_on_entry_points(_digest_bytes, value)
 
 
 def digest_function(func) -> Digest:
@@ -291,11 +302,7 @@ def digest_function(func) -> Digest:
         Indigestible: if a captured value or an argument default cannot be
             digested.
     """
-    try:
-        return Digest(_digest_function_bytes(func).decode())
-    except Indigestible:
-        load_entry_points()
-    return Digest(_digest_function_bytes(func).decode())
+    return _retrying_on_entry_points(_digest_function_bytes, func)
 
 
 def _digest_bytes(value: Any) -> bytes:
