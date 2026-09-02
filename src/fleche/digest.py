@@ -175,6 +175,7 @@ _CAPTURED_SALT = b"__fleche_captured__"
 _FREEVARS_SECTION = "__closure__"
 _DEFAULTS_SECTION = "__defaults__"
 _KWDEFAULTS_SECTION = "__kwdefaults__"
+_RECEIVER_SECTION = "__self__"
 _EMPTY_CELL = "__fleche_empty_cell__"
 _RECURSIVE_FUNCTION = "__fleche_recursive_function__"
 
@@ -274,35 +275,14 @@ def _digest_function_bytes(func) -> bytes:
         del active[ident]
 
 
-def _retrying_on_entry_points(compute, value) -> Digest:
-    """Run *compute*, loading entry-point hooks and retrying once on refusal.
-
-    A hook for the offending type may simply not be loaded yet, so every public
-    entry point pays for one rescan before giving up.
-    """
+def digest(value: Any) -> Digest:
+    # A hook for the offending type may simply not be loaded yet, so pay for one
+    # rescan before giving up.
     try:
-        return Digest(compute(value).decode())
+        return Digest(_digest_bytes(value).decode())
     except Indigestible:
         load_entry_points()
-    return Digest(compute(value).decode())
-
-
-def digest(value: Any) -> Digest:
-    return _retrying_on_entry_points(_digest_bytes, value)
-
-
-def digest_function(func) -> Digest:
-    """Digest any ``__code__``-carrying callable by its code, captures and defaults.
-
-    Same result as :func:`digest` for a plain function; unlike it, this also
-    works for callables that are not :class:`types.FunctionType` (bound methods,
-    say) instead of raising :exc:`Indigestible` on the type itself.
-
-    Raises:
-        Indigestible: if a captured value or an argument default cannot be
-            digested.
-    """
-    return _retrying_on_entry_points(_digest_function_bytes, func)
+    return Digest(_digest_bytes(value).decode())
 
 
 def _digest_bytes(value: Any) -> bytes:
@@ -415,6 +395,20 @@ def _digest_bytes(value: Any) -> bytes:
             m.update(_digest_bytes(value.name))
             m.update(_digest_bytes(str(value.dtype)))
             m.update(pd.util.hash_pandas_object(value).values.tobytes())
+        case types.MethodType():
+            # A bound method is its function plus the receiver it is bound to.
+            # Leaving __self__ out would collide obj1.method with obj2.method —
+            # the same shape of bug as digesting a closure by code alone.  A
+            # receiver that cannot be digested is refused, exactly as it would
+            # be as an argument; a *class* receiver (a classmethod) is named
+            # rather than valued, the way the __class__ cell is.
+            m.update(_digest_bytes(_RECEIVER_SECTION))
+            receiver = value.__self__
+            if isinstance(receiver, type):
+                m.update(digest_class(receiver).encode())
+            else:
+                m.update(_digest_bytes(receiver))
+            m.update(_digest_function_bytes(value.__func__))
         case types.FunctionType():
             return _digest_function_bytes(value)
         case types.CodeType():

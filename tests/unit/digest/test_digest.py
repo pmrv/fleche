@@ -821,6 +821,69 @@ def test_decorated_function_digests_as_the_function_it_wraps():
 # --- Tests for digesting Python descriptors (staticmethod, classmethod, property) ---
 
 
+# --- Tests for bound methods: digest() covers them like any other value ---
+
+
+@dataclass
+class _Counter:
+    """A digestible receiver, so the method's own digest can be exercised."""
+
+    start: int
+
+    def advance(self, by):
+        return self.start + by
+
+
+def test_bound_method_can_be_digested():
+    """``digest`` handles a bound method directly — no separate entry point."""
+    assert isinstance(digest(_Counter(1).advance), Digest)
+
+
+def test_bound_methods_of_different_receivers_differ():
+    """The receiver is part of what the method computes.
+
+    Leaving ``__self__`` out would collide ``obj1.method`` with ``obj2.method``,
+    the same shape of bug as digesting a closure by its code alone.
+    """
+    assert digest(_Counter(1).advance) != digest(_Counter(2).advance)
+
+
+def test_bound_methods_of_equal_receivers_agree():
+    """Still content-based: equal receivers, equal digest."""
+    assert digest(_Counter(1).advance) == digest(_Counter(1).advance)
+
+
+def test_bound_method_differs_from_its_underlying_function():
+    """Binding is not transparent — the bound method carries a receiver."""
+    assert digest(_Counter(1).advance) != digest(_Counter.advance)
+
+
+def test_classmethod_receiver_is_named_not_valued():
+    """A classmethod's receiver is a class, which is Indigestible as a value.
+
+    It is identified by qualified name instead, exactly as the ``__class__``
+    cell of a ``super()``-using method is.
+    """
+
+    class A:
+        @classmethod
+        def make(cls):
+            return cls
+
+    assert isinstance(digest(A.make), Digest)
+
+
+def test_bound_method_of_indigestible_receiver_raises():
+    """A bound method is no more digestible than the object it is bound to."""
+
+    class Opaque:
+        def go(self):
+            return 1
+
+    with pytest.raises(Indigestible):
+        digest(Opaque().go)
+
+
 def test_staticmethod_can_be_digested():
     """staticmethod objects must be digestible without raising Indigestible."""
 

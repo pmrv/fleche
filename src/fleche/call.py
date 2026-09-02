@@ -52,9 +52,14 @@ def _code_digest(func) -> Digest:
     value that cannot be digested falls back to that code-only digest — a
     closure over, say, a database handle still has to be decoratable — but warns,
     because the collision comes back with it.
+
+    A bound method is reduced to its underlying function first: the receiver
+    arrives as an ordinary argument of the call, so folding ``__self__`` in here
+    would record it twice and refuse every opaque receiver.
     """
+    func = getattr(func, "__func__", func)
     try:
-        return digest.digest_function(func)
+        return digest.digest(func)
     except digest.Indigestible as e:
         offender = type(e.args[0]).__name__ if e.args else "?"
         logger.warning(

@@ -223,6 +223,13 @@ Boundaries for Function Digests
   the marker also makes a cycle digest the same wherever the walk meets it.
   Everything else about those functions — code, captures, defaults — is folded
   in where the walk first reached them.
+* **A bound method carries its receiver.**  ``obj.method`` digests as the
+  underlying function *plus* ``obj``, so two instances do not share a digest —
+  and a method bound to an object ``fleche`` cannot hash is refused, exactly as
+  that object would be as an argument.  A classmethod's receiver is a class, so
+  it is named rather than valued.  The decorator is unaffected: a bound method's
+  ``code_digest`` is taken from the underlying function, because the receiver
+  already arrives as an ordinary argument of the call.
 * **Decorated functions digest as what they wrap.**  ``digest(fleche()(f)) ==
   digest(f)`` — the decoration is transparent, so a cached function does not
   care whether it is handed the raw or the cached callable.
