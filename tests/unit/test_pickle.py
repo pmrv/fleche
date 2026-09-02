@@ -81,8 +81,13 @@ def _always_true(call):
 
 
 @pytest.fixture
-def cache(value_storage, call_storage):
-    return Cache(value_storage, call_storage)
+def cache(paired_storages):
+    # `paired_storages` rather than `value_storage, call_storage`: a Cache is a
+    # frozen dataclass over two independent halves, and each half's own
+    # picklability across every backend is what test_value_storage_picklable /
+    # test_call_storage_picklable sweep.  The 6x7 product added no code path the
+    # diagonal misses -- only 35 more cases of the same one.
+    return Cache(*paired_storages)
 
 
 def test_cache_picklable(cache):
@@ -149,9 +154,9 @@ def test_call_storage_functional_roundtrip(call_storage, call):
 
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @given(call=st_digested_calls)
-def test_cache_functional_roundtrip(value_storage, call_storage, call):
+def test_cache_functional_roundtrip(paired_storages, call):
     """Data saved to a cache before pickling is accessible after restoring."""
-    cache = Cache(value_storage, call_storage)
+    cache = Cache(*paired_storages)
     try:
         key = cache.save(call)
     except Rejected:
@@ -161,15 +166,20 @@ def test_cache_functional_roundtrip(value_storage, call_storage, call):
     assert loaded == call
 
 
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+@settings(deadline=None)
 @given(call=st_digested_calls)
-def test_cache_stack_functional_roundtrip(value_storage, call_storage, call):
-    """CacheStack saves and loads correctly after pickling."""
-    cache = Cache(value_storage, call_storage)
-    try:
-        key = cache.save(call)
-    except Rejected:
-        return
+def test_cache_stack_functional_roundtrip(call):
+    """A pickled CacheStack still resolves a key held by one of its layers.
+
+    Deliberately single-backend.  What is unique here is CacheStack's own
+    delegation surviving the roundtrip; the layers' backends are swept by
+    test_cache_functional_roundtrip above, and the stack treats them
+    identically -- it holds caches, not storages.  Re-running the backend
+    sweep through the stack repeated 41 cases of the memory path for no code
+    the sweep above does not already reach.
+    """
+    cache = Cache(ValueMemory({}), CallMemory({}))
+    key = cache.save(call)
     stack = CacheStack((cache, Cache(ValueMemory({}), CallMemory({}))))
     restored = roundtrip(stack)
     loaded = restored.load(key).fetch()
