@@ -445,6 +445,10 @@ def test_count_reuses_inlined_scalars_not_double_counted():
     assert list(hits.values()) == [0]
 
 
+# Each example builds, digests and stores a freshly generated nested value —
+# dataclass and namedtuple classes included — which can blow the default 200ms
+# deadline on a cold CI runner and get flagged as flaky.
+@settings(deadline=None)
 @given(st_nested_values)
 def test_count_reuses_nonnegative(value):
     """All reuse counts are non-negative for any stored value."""

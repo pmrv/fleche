@@ -31,6 +31,26 @@ Including ``type(self).__name__`` ensures that subclasses of ``MyType`` with oth
    Only include fields that affect the *result* of cached functions.
    Excluding irrelevant fields (e.g. display names, internal caches, attached metadata) makes more results reusable across calls.
 
+``__digest__`` on a Function
+----------------------------
+
+Functions are the one place the attribute is read off the *instance*: every
+function shares the type ``function``, so a class-level lookup could never tell
+two of them apart.  Setting it is how a closure over something ``fleche`` cannot
+hash declares what its identity really is:
+
+.. code-block:: pycon
+
+   >>> def make_query(connection, table):
+   ...     def run():
+   ...         return connection.execute(f"SELECT * FROM {table}")
+   ...     run.__digest__ = lambda: digest(("run", table))
+   ...     return run
+
+Without it, digesting ``run`` walks its captured variables and raises
+:exc:`~fleche.digest.Indigestible` on the connection.  ``fleche``'s own decorator
+uses the same hook to give each wrapper the digest of the function it wraps.
+
 Using ``add_hook``
 ------------------
 
