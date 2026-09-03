@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.1](https://github.com/pmrv/fleche/compare/0.22.0...0.22.1) (2026-09-03)
+
+
+### Bug Fixes
+
+* **digest:** fold captured variables and argument defaults into function digests ([#909](https://github.com/pmrv/fleche/issues/909)) ([cb9ed6c](https://github.com/pmrv/fleche/commit/cb9ed6c3e7c0f1a246b007cd023a28b8b72a52a9))
+
 ## [0.22.0](https://github.com/pmrv/fleche/compare/0.21.2...0.22.0) (2026-08-28)
 
 
