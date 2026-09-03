@@ -160,6 +160,9 @@ def _make_external_sql(env_var: str):
             sql.engine.dispose()
 
 
+VALUE_STORAGE_PARAMS = ["memory", "cloudpickle", "dill", "pickle", "h5", "h5_multi"]
+
+
 def _call_storage_params():
     """Build the parametrization list for ``call_storage``.
 
@@ -174,48 +177,91 @@ def _call_storage_params():
     return params
 
 
-@pytest.fixture(params=_call_storage_params())
-def call_storage(request, tmp_path):
-    if request.param == "memory":
-        yield CallMemory({})
-    elif request.param == "cloudpickle":
-        yield CallPickleFile.with_cloudpickle(
-            tmp_path / "cloudpickle", secret_key=secret_key
-        )
-    elif request.param == "dill":
-        yield CallPickleFile.with_dill(tmp_path / "dill", secret_key=secret_key)
-    elif request.param == "pickle":
-        yield CallPickleFile.with_pickle(tmp_path / "pickle", secret_key=secret_key)
-    elif request.param == "h5":
-        yield CallBagOfHoldingH5File(tmp_path / "h5", prefix_length=None)
-    elif request.param == "h5_multi":
-        yield CallBagOfHoldingH5File(tmp_path / "h5_multi", prefix_length=2)
-    elif request.param == "sql":
-        yield Sql(tmp_path / "calls.db")
-    elif request.param == "sql_postgres":
-        yield from _make_external_sql(POSTGRES_URL_ENV)
-    elif request.param == "sql_mysql":
-        yield from _make_external_sql(MYSQL_URL_ENV)
-    else:
-        raise ValueError(f"Unknown call_storage param: {request.param}")
-
-
-@pytest.fixture(params=["memory", "cloudpickle", "dill", "pickle", "h5", "h5_multi"])
-def value_storage(request, tmp_path):
-    if request.param == "memory":
+def _build_value_storage(param, tmp_path):
+    if param == "memory":
         return ValueMemory({})
-    elif request.param == "cloudpickle":
+    elif param == "cloudpickle":
         return ValuePickleFile.with_cloudpickle(
             tmp_path / "cloudpickle", secret_key=secret_key
         )
-    elif request.param == "dill":
+    elif param == "dill":
         return ValuePickleFile.with_dill(tmp_path / "dill", secret_key=secret_key)
-    elif request.param == "pickle":
+    elif param == "pickle":
         return ValuePickleFile.with_pickle(tmp_path / "pickle", secret_key=secret_key)
-    elif request.param == "h5":
+    elif param == "h5":
         return ValueBagOfHoldingH5File(tmp_path / "h5", prefix_length=None)
-    elif request.param == "h5_multi":
+    elif param == "h5_multi":
         return ValueBagOfHoldingH5File(tmp_path / "h5_multi", prefix_length=2)
+    else:
+        raise ValueError(f"Unknown value_storage param: {param}")
+
+
+@contextmanager
+def _build_call_storage(param, tmp_path):
+    """Yield one call storage; a context manager because the external-SQL
+    params own a database that has to be dropped again."""
+    if param == "memory":
+        yield CallMemory({})
+    elif param == "cloudpickle":
+        yield CallPickleFile.with_cloudpickle(
+            tmp_path / "cloudpickle", secret_key=secret_key
+        )
+    elif param == "dill":
+        yield CallPickleFile.with_dill(tmp_path / "dill", secret_key=secret_key)
+    elif param == "pickle":
+        yield CallPickleFile.with_pickle(tmp_path / "pickle", secret_key=secret_key)
+    elif param == "h5":
+        yield CallBagOfHoldingH5File(tmp_path / "h5", prefix_length=None)
+    elif param == "h5_multi":
+        yield CallBagOfHoldingH5File(tmp_path / "h5_multi", prefix_length=2)
+    elif param == "sql":
+        yield Sql(tmp_path / "calls.db")
+    elif param == "sql_postgres":
+        yield from _make_external_sql(POSTGRES_URL_ENV)
+    elif param == "sql_mysql":
+        yield from _make_external_sql(MYSQL_URL_ENV)
+    else:
+        raise ValueError(f"Unknown call_storage param: {param}")
+
+
+@pytest.fixture(params=_call_storage_params())
+def call_storage(request, tmp_path):
+    with _build_call_storage(request.param, tmp_path) as storage:
+        yield storage
+
+
+@pytest.fixture(params=VALUE_STORAGE_PARAMS)
+def value_storage(request, tmp_path):
+    return _build_value_storage(request.param, tmp_path)
+
+
+def _paired_storage_params():
+    """Pair the value- and call-storage sweeps along a diagonal.
+
+    Requesting ``value_storage`` and ``call_storage`` in the same test takes
+    their Cartesian product (42 cases locally, 54 in the SQL-backends CI job).
+    Where the test only needs *a* cache per backend rather than every
+    combination of two independent halves, this walks both lists in step
+    instead, cycling the shorter one, so every backend on either side still
+    appears at least once for a case count of ``max(len(values), len(calls))``.
+    """
+    values, calls = VALUE_STORAGE_PARAMS, _call_storage_params()
+    return [
+        (values[i % len(values)], calls[i % len(calls)])
+        for i in range(max(len(values), len(calls)))
+    ]
+
+
+@pytest.fixture(
+    params=_paired_storage_params(),
+    ids=[f"{v}-{c}" for v, c in _paired_storage_params()],
+)
+def paired_storages(request, tmp_path):
+    """``(value_storage, call_storage)`` swept diagonally rather than crosswise."""
+    value_param, call_param = request.param
+    value = _build_value_storage(value_param, tmp_path)
+    with _build_call_storage(call_param, tmp_path) as call:
+        yield value, call
 
 @pytest.fixture(params=["memory", "cloudpickle", "dill", "pickle", "h5", "h5_multi"])
 def storage_backend(request, tmp_path):

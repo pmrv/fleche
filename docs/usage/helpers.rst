@@ -155,7 +155,8 @@ To keep the cache-hit hot path fast, ``@fleche`` computes a
 :class:`~fleche.call.FunctionProfile` the first time it sees a given function
 and re-uses it for the lifetime of the process instead of re-introspecting on
 every call. This cache is process-scoped and has no effect on the persistent
-fleche backends. See :doc:`/dev/function_profile` for the internals.
+fleche backends. See :doc:`/dev/function_profile` for the internals, including
+what ``hash_code=True`` folds into the key.
 
 .. warning::
 

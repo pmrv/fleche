@@ -5,7 +5,7 @@ from typing import Iterable
 from fleche import fleche, cache
 from fleche.call import Call
 from fleche.caches import Cache
-from fleche.digest import Digest
+from fleche.digest import Digest, digest
 from fleche.storage import ValueMemory, CallMemory
 
 
@@ -144,3 +144,24 @@ def test_fleche_namespace_bundle():
         assert add.fleche.contains(1, b=2)
         assert add.fleche.load(1, b=2) == 3
         assert add.fleche.rerun(1, b=2) == 3
+
+
+def test_wrapper_digests_as_the_function_it_wraps():
+    """The decorator attaches a ``__digest__`` of the wrapped function.
+
+    Every wrapper `make_wrapper` builds shares one code object, so without an
+    identity of its own each would digest the same as every other — passing two
+    different cached functions to a cached higher-order function would collide.
+    ``digest`` honours ``__digest__`` per instance for functions, which is what
+    makes decoration transparent here.
+    """
+    def plain(x):
+        return x + 1
+
+    def other(x):
+        return x + 2
+
+    wrapped = fleche()(plain)
+    assert wrapped.__digest__() == Digest(digest(plain))
+    assert digest(wrapped) == digest(plain)
+    assert digest(wrapped) != digest(fleche()(other))

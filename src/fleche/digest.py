@@ -6,6 +6,7 @@ import dataclasses
 import numbers
 from numbers import Number
 import struct
+import threading
 import types
 import importlib.metadata
 from collections.abc import Iterable, Mapping
@@ -133,6 +134,30 @@ def load_entry_points():
             logger.error("Failed to load entry point %s: %s", ep.name, e, exc_info=True)
 
 
+def _new_hash(salt: bytes):
+    """Start a running SHA256 under *salt*.
+
+    Every digest in this module is a salted accumulation: the salt discriminates
+    what kind of thing is being hashed (a type name, a section of a function's
+    captured state) before any content goes in.
+    """
+    m = hashlib.sha256()
+    m.update(salt)
+    return m
+
+
+def digest_class(cls: type) -> Digest:
+    """Digest a class by its qualified name, ``module.QualName``.
+
+    This identifies a class *as a class* — a name, not a value.  It is what the
+    built-in ``type`` arm hashes and what a method's compiler-inserted
+    ``__class__`` cell folds in.  Digesting a class as an ordinary *value* is a
+    different question, and still raises :exc:`Indigestible` for anything
+    outside ``builtins``.
+    """
+    return digest(f"{cls.__module__}.{cls.__qualname__}")
+
+
 def _digest_mapping(m, contents: Mapping) -> bytes:
     sorted_items = sorted(
         ((_digest_bytes(k), k, v) for k, v in contents.items()), key=lambda item: item[0]
@@ -143,7 +168,116 @@ def _digest_mapping(m, contents: Mapping) -> bytes:
     return m.hexdigest().encode()
 
 
+# Salt + section markers + placeholders for the captured-state digest.  Kept as
+# module-level constants so the wire format is greppable and cannot drift
+# between the two call sites.
+_CAPTURED_SALT = b"__fleche_captured__"
+_FREEVARS_SECTION = "__closure__"
+_DEFAULTS_SECTION = "__defaults__"
+_KWDEFAULTS_SECTION = "__kwdefaults__"
+_RECEIVER_SECTION = "__self__"
+_EMPTY_CELL = "__fleche_empty_cell__"
+_RECURSIVE_FUNCTION = "__fleche_recursive_function__"
+
+# Captured state is digested *by value*, so a function that refers to itself —
+# the ordinary shape of a recursive inner function, and reachable through a
+# default too — or two functions that refer to each other would recurse forever.
+# Each function currently being walked is remembered with its depth (per thread,
+# since digests are computed concurrently); meeting one again folds in a marker
+# naming *how far back up the walk* it sits rather than one constant, because
+# the constant collided cycles of the same length that close on different
+# functions: `a -> b -> a` and `c -> d -> d` are different call graphs.  The
+# distance is relative, so a cycle digests the same wherever the walk meets it.
+_walking = threading.local()
+
+
+def _fold_freevars(m, code, closure) -> None:
+    """Fold a function's captured cells into the running hash *m*."""
+    # __closure__ is ordered to match co_freevars; pairing them keeps the digest
+    # tied to the *names* the values are bound to, not just position.
+    for name, cell in zip(code.co_freevars, closure):
+        m.update(_digest_bytes(name))
+        try:
+            contents = cell.cell_contents
+        except ValueError:
+            # An empty cell — the free variable is not bound yet.  It has no
+            # value to digest, but its absence is still part of the closure.
+            m.update(_digest_bytes(_EMPTY_CELL))
+            continue
+
+        if name == "__class__" and isinstance(contents, type):
+            # The compiler inserts a ``__class__`` cell into every method that
+            # mentions ``super()`` or ``__class__``.  It is not captured state —
+            # it is always the class the method was defined in — and
+            # user-defined classes are Indigestible as values, so digesting it
+            # would refuse every method that calls super().  Identify the class
+            # by name instead, exactly as the built-in ``type`` arm does.
+            m.update(digest_class(contents).encode())
+        else:
+            m.update(_digest_bytes(contents))
+
+
+def _digest_function_bytes(func) -> bytes:
+    """Digest a callable by its code object *and* the values bound alongside it.
+
+    Two functions out of one factory share a code object, so what tells
+    ``make(1)`` from ``make(2)`` — or ``lambda x, n=1`` from ``lambda x, n=2`` —
+    is only the closure cells and the argument defaults, both fixed at
+    definition time.  Functions carrying neither keep the historical wire
+    format, ``digest(func) == digest(func.__code__)``.
+    """
+    # ``__digest__`` is checked per instance here, unlike everywhere else: all
+    # functions share one type, so a class-level lookup could never distinguish
+    # them.  It is how a closure over something indigestible (or fleche's own
+    # wrapper) declares its own identity.
+    own = getattr(func, "__digest__", None)
+    if own is not None:
+        return own().encode()
+
+    # getattr rather than attribute access: the only thing call._code_digest
+    # checks for is __code__, and an exotic callable carrying that alone must
+    # still digest rather than raise AttributeError.
+    code = func.__code__
+    closure = getattr(func, "__closure__", None)
+    defaults = getattr(func, "__defaults__", None)
+    kwdefaults = getattr(func, "__kwdefaults__", None)
+    if not closure and not defaults and not kwdefaults:
+        return _digest_bytes(code)
+
+    active = getattr(_walking, "functions", None)
+    if active is None:
+        active = _walking.functions = {}
+    ident = id(func)
+    if ident in active:
+        return _digest_bytes((_RECURSIVE_FUNCTION, len(active) - active[ident]))
+
+    active[ident] = len(active)
+    try:
+        m = _new_hash(_CAPTURED_SALT)
+        m.update(_digest_bytes(code))
+        if closure:
+            m.update(_digest_bytes(_FREEVARS_SECTION))
+            _fold_freevars(m, code, closure)
+        if defaults:
+            # Digested as the plain tuple it is: which parameters they belong to
+            # is already pinned by co_varnames inside the code digest, and
+            # pairing them up by hand would need index arithmetic that a
+            # hand-set __defaults__ longer than co_argcount could silently skew.
+            m.update(_digest_bytes(_DEFAULTS_SECTION))
+            m.update(_digest_bytes(defaults))
+        if kwdefaults:
+            # Keyword-only defaults are already a name -> value mapping, so they
+            # go through the ordinary Mapping path (sorted by key digest).
+            m.update(_digest_bytes(_KWDEFAULTS_SECTION))
+            _digest_mapping(m, kwdefaults)
+        return m.hexdigest().encode()
+    finally:
+        del active[ident]
+
+
 def digest(value: Any) -> Digest:
+    # A hook for the offending type may simply not be loaded yet, so pay for one
+    # rescan before giving up.
     try:
         return Digest(_digest_bytes(value).decode())
     except Indigestible:
@@ -167,8 +301,6 @@ def _digest_bytes(value: Any) -> bytes:
     ``bytes.fromhex(...)``.  That must be coordinated with a ``hash_version``
     bump and a ``Cache.redigest`` migration.
     """
-    m = hashlib.sha256()
-
     # Fast-path: in the common case both hook lists are empty, so skip the
     # ``get_hooks()`` call which would otherwise allocate a fresh combined list
     # on every recursive ``_digest_bytes`` invocation (hot for large iterables).
@@ -188,7 +320,7 @@ def _digest_bytes(value: Any) -> bytes:
             return value.__digest__().encode()
         _TYPES_WITHOUT_DIGEST.add(t)
 
-    m.update(t.__name__.encode())
+    m = _new_hash(t.__name__.encode())
     match value:
         case int():
             # Most-frequent arm; bool ⊂ int so booleans are digested here too
@@ -263,8 +395,22 @@ def _digest_bytes(value: Any) -> bytes:
             m.update(_digest_bytes(value.name))
             m.update(_digest_bytes(str(value.dtype)))
             m.update(pd.util.hash_pandas_object(value).values.tobytes())
+        case types.MethodType():
+            # A bound method is its function plus the receiver it is bound to.
+            # Leaving __self__ out would collide obj1.method with obj2.method —
+            # the same shape of bug as digesting a closure by code alone.  A
+            # receiver that cannot be digested is refused, exactly as it would
+            # be as an argument; a *class* receiver (a classmethod) is named
+            # rather than valued, the way the __class__ cell is.
+            m.update(_digest_bytes(_RECEIVER_SECTION))
+            receiver = value.__self__
+            if isinstance(receiver, type):
+                m.update(digest_class(receiver).encode())
+            else:
+                m.update(_digest_bytes(receiver))
+            m.update(_digest_function_bytes(value.__func__))
         case types.FunctionType():
-            return _digest_bytes(value.__code__)
+            return _digest_function_bytes(value)
         case types.CodeType():
             # captured properties for behavior stability
             props = [
@@ -304,7 +450,7 @@ def _digest_bytes(value: Any) -> bytes:
             # This case must precede the dataclasses check: is_dataclass() returns True
             # for both a class and its instances, but getattr(cls, field) raises
             # AttributeError for required fields that have no class-level default.
-            return _digest_bytes(f"builtins.{value.__qualname__}")
+            return digest_class(value).encode()
         case _ if dataclasses.is_dataclass(value) and not isinstance(value, type):
             # cannot use asdict because it recursively converts values which destroys digests
             # instead (flat-) convert to dictionaries, salt with type name, then fallback to dictionary case.

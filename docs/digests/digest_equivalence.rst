@@ -122,3 +122,131 @@ qualified path:
 
 A custom ``__digest__`` short-circuits the dataclass / attrs path and takes
 precedence over both built-in cases.
+
+Functions and Closures
+----------------------
+
+A function digests by its **code object plus the state bound alongside it** —
+the variables it captured from enclosing scopes and its argument defaults.  Two
+functions compiled from the same source that capture nothing and default nothing
+digest identically — the digest is about the code, not about where the
+function lives or what it is called:
+
+.. code-block:: pycon
+
+    >>> from fleche.digest import digest
+
+    >>> def add_one(x):
+    ...     return x + 1
+
+    >>> def also_add_one(x):
+    ...     return x + 1
+
+    >>> assert digest(add_one) == digest(also_add_one)
+
+Closures handed out by the same factory share that one code object, so the
+captured cells are the only thing that tells them apart:
+
+.. code-block:: pycon
+
+    >>> def adder(n):
+    ...     def add(x):
+    ...         return x + n
+    ...     return add
+
+    >>> assert digest(adder(1)) != digest(adder(2))
+    >>> assert digest(adder(1)) == digest(adder(1))
+
+Argument defaults count for the same reason.  They are evaluated once at
+definition time and live on the function object, not in the code, so two
+definitions that differ only in a default share a code object:
+
+.. code-block:: pycon
+
+    >>> assert digest(lambda x, n=1: x + n) != digest(lambda x, n=2: x + n)
+
+That covers the ``k=n`` idiom for avoiding late binding, which captures the
+enclosing value in a default rather than in a cell:
+
+.. code-block:: pycon
+
+    >>> def scaler(n):
+    ...     def scale(x, k=n):
+    ...         return x * k
+    ...     return scale
+
+    >>> assert digest(scaler(2)) != digest(scaler(3))
+
+Keyword-only defaults (``__kwdefaults__``) are folded in the same way.  For a
+decorated function, defaults also reach the cache key by a second route
+regardless of ``hash_code``: :meth:`~fleche.call.Call.from_call` applies them
+when binding, so an unsupplied argument is recorded at its default value.
+
+Reaching the cache key requires ``hash_code=True``: the decorator leaves
+``code_digest`` out of the key by default, and two closures out of one factory
+agree on qualified name and module, so without that flag they still share an
+entry.
+
+Boundaries for Function Digests
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* **Only captured variables count, not globals.**  A function that reads a
+  module-level constant digests the same before and after that constant is
+  rebound — globals are looked up at call time and are not part of the function
+  object.  Use ``version=`` to invalidate when a global your function depends on
+  changes.
+* **Captures and defaults are read at digest time.**  Mutating (or rebinding) a
+  captured variable changes the digest of the closure, and so does mutating a
+  mutable default — the accumulating ``def f(x, acc=[])`` idiom keeps state
+  between calls, and the digest follows it.  That is the point, but it means a
+  function over mutable state has no single digest.
+* **A capture or default that cannot be digested is refused, not skipped.**
+  Digesting a function that holds an object ``fleche`` does not know how to hash
+  raises :exc:`~fleche.digest.Indigestible`, just like passing that object as an
+  argument would.  The decorator itself degrades instead of failing: it warns
+  and falls back to a code-only ``code_digest``, which brings the collision
+  between closures from one factory back with it.
+* **A method's implicit class capture is identified by name.**  Mentioning
+  ``super()`` (or ``__class__``) makes the compiler hand the method a
+  ``__class__`` cell holding the class it was defined in.  User-defined classes
+  are :exc:`~fleche.digest.Indigestible` as values, so that cell is folded in as
+  ``module.QualName`` instead — otherwise every method calling ``super()`` would
+  be refused.
+* **Cycles are cut with a back-reference.**  A recursive inner function
+  captures itself, two closures can capture each other, and a function can be
+  reached from its own defaults — digesting those by value would recurse
+  forever.  When the walk meets a function it is already digesting, it folds in
+  a marker naming *how far back up the walk* that function sits, instead of
+  descending again.  The distance matters: a plain "seen it" marker gives
+  ``a -> b -> a`` and ``c -> d -> d`` the same digest, though one ping-pongs
+  between two functions and the other recurses on the second.  Being relative,
+  the marker also makes a cycle digest the same wherever the walk meets it.
+  Everything else about those functions — code, captures, defaults — is folded
+  in where the walk first reached them.
+* **A bound method carries its receiver.**  ``obj.method`` digests as the
+  underlying function *plus* ``obj``, so two instances do not share a digest —
+  and a method bound to an object ``fleche`` cannot hash is refused, exactly as
+  that object would be as an argument.  A classmethod's receiver is a class, so
+  it is named rather than valued.  The decorator is unaffected: a bound method's
+  ``code_digest`` is taken from the underlying function, because the receiver
+  already arrives as an ordinary argument of the call.
+* **Decorated functions digest as what they wrap.**  ``digest(fleche()(f)) ==
+  digest(f)`` — the decoration is transparent, so a cached function does not
+  care whether it is handed the raw or the cached callable.
+
+Giving a Function Its Own Digest
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Every function shares one type, so a class-level ``__digest__`` could never
+distinguish them; for functions the attribute is therefore read off the function
+object itself.  That is the escape hatch when a closure captures something
+unhashable but you know what actually matters:
+
+.. code-block:: pycon
+
+    >>> def make_query(connection, table):
+    ...     def run():
+    ...         return connection.execute(f"SELECT * FROM {table}")
+    ...     # the connection is not part of the result's identity, the table is
+    ...     run.__digest__ = lambda: digest(("run", table))
+    ...     return run

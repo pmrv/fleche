@@ -1,3 +1,11 @@
+"""``digest()`` dispatch: what each kind of value contributes to its digest.
+
+Layer note: this file owns the *value* end — given a function, a closure, a
+bound method, what comes out.  How ``code_digest`` is derived from a callable
+is ``tests/unit/call/test_code_digest.py``; whether the decorator carries it
+into the key is ``tests/unit/fleche/test_hash_code.py``.
+"""
+
 import cmath
 import datetime
 import struct
@@ -511,6 +519,363 @@ def test_local_function_digests_same_as_module_level():
 
     assert digest(local_add_one) == digest(_module_level_add_one)
 
+
+# --- Functions: plain functions keep their historical wire format ---
+
+def test_closure_free_function_digests_as_its_code_object():
+    """Functions with neither captures nor defaults keep the historical wire format.
+
+    Everything else is untouched by folding captured state in, so no cache built
+    out of ordinary functions is invalidated.
+    """
+    def plain(x):
+        return x + 1
+
+    assert digest(plain) == digest(plain.__code__)
+
+
+# --- Functions: captured free variables ---
+
+def _adder(n):
+    """Factory whose products share a code object and differ only in what they capture."""
+    def add(x):
+        return x + n
+    return add
+
+
+def test_closures_capturing_different_values_have_different_digests():
+    """Two closures out of the same factory are told apart by what they captured.
+
+    They share a code object, so a code-only digest gave them the same cache key
+    while ``_adder(1)(0) != _adder(2)(0)``.
+    """
+    assert digest(_adder(1)) != digest(_adder(2))
+
+
+def test_closures_capturing_equal_values_have_the_same_digest():
+    """The digest stays content-based: equal captures, equal digest."""
+    assert digest(_adder(1)) == digest(_adder(1))
+
+
+def test_closure_over_mutated_capture_changes_digest():
+    """Rebinding a captured variable changes the digest of the closure."""
+    n = 1
+
+    def capture():
+        return n
+
+    before = digest(capture)
+    n = 2
+    assert digest(capture) != before
+
+
+def test_closure_with_unbound_free_variable_can_be_digested():
+    """An empty cell (free variable never bound) has no value but is still digestible."""
+    def outer():
+        def inner():
+            return never_assigned
+        return inner
+        never_assigned = 1  # unreachable, but it is what makes the name a cell
+
+    inner = outer()
+    with pytest.raises(ValueError):
+        inner.__closure__[0].cell_contents
+
+    assert isinstance(digest(inner), Digest)
+
+
+def test_closure_over_indigestible_value_raises():
+    """Captures follow the usual contract: what cannot be hashed is refused, not ignored."""
+    class Opaque:
+        pass
+
+    def make(o):
+        def f():
+            return o
+        return f
+
+    with pytest.raises(Indigestible):
+        digest(make(Opaque()))
+
+
+# --- Functions: argument defaults ---
+
+def test_functions_with_different_defaults_have_different_digests():
+    """Argument defaults are part of what the function computes.
+
+    They are evaluated once at definition time and share the code object, so a
+    code-only digest gave ``lambda x, n=1`` and ``lambda x, n=2`` one cache key.
+    """
+    assert digest(lambda x, n=1: x + n) != digest(lambda x, n=2: x + n)
+
+
+def test_functions_with_equal_defaults_have_the_same_digest():
+    """Still content-based: equal defaults, equal digest."""
+    assert digest(lambda x, n=1: x + n) == digest(lambda x, n=1: x + n)
+
+
+def test_keyword_only_defaults_participate_in_the_digest():
+    """``__kwdefaults__`` is a separate slot from ``__defaults__`` and counts too."""
+    def one(x, *, n=1):
+        return x + n
+
+    def two(x, *, n=2):
+        return x + n
+
+    assert digest(one) != digest(two)
+
+
+def test_late_bound_default_separates_closures_from_one_factory():
+    """``k=n`` captures the enclosing value in a default rather than a cell.
+
+    The idiom exists precisely to avoid late binding, so the two functions it
+    produces differ in behaviour while sharing a code object *and* an empty
+    closure.
+    """
+    def make(n):
+        def scale(x, k=n):
+            return x * k
+        return scale
+
+    assert digest(make(2)) != digest(make(3))
+
+
+def test_mutated_default_changes_digest():
+    """Defaults are read at digest time, so a mutable default moves the digest.
+
+    The mutable-default idiom keeps state between calls; that state is part of
+    what the next call computes, so the digest follows it.
+    """
+    def accumulate(x, acc=[]):
+        acc.append(x)
+        return acc
+
+    before = digest(accumulate)
+    accumulate(1)
+    assert digest(accumulate) != before
+
+
+def test_default_that_cannot_be_digested_raises():
+    """Defaults follow the same contract as captures: refused, not ignored."""
+    class Opaque:
+        pass
+
+    def f(x, o=Opaque()):
+        return o
+
+    with pytest.raises(Indigestible):
+        digest(f)
+
+
+# --- Functions: recursion and cycles in captured state ---
+
+def _one_hop():
+    """A function whose single free variable decides who it calls.
+
+    Every instance shares one code object, so the *only* thing that can tell two
+    of them apart is the shape of the call graph their cells describe.
+    """
+    def f():
+        return partner()
+
+    partner = None
+    return f
+
+
+def test_self_recursive_closure_can_be_digested():
+    """A recursive inner function captures *itself*; digesting must terminate."""
+    def make(k):
+        def countdown(n):
+            return countdown(n - 1) + k if n else 0
+        return countdown
+
+    assert isinstance(digest(make(1)), Digest)
+    # the cycle is broken by a placeholder, but the other capture still discriminates
+    assert digest(make(1)) != digest(make(2))
+
+
+def test_mutually_recursive_closures_can_be_digested():
+    """Two closures capturing each other must not recurse forever either."""
+    def make(k):
+        def even(n):
+            return odd(n)
+
+        def odd(n):
+            return even(n) + k
+        return even
+
+    assert isinstance(digest(make(1)), Digest)
+    assert digest(make(1)) != digest(make(2))
+
+
+def test_self_referential_default_can_be_digested():
+    """A function reachable from its own defaults must not recurse forever."""
+    def f(x):
+        return x
+
+    f.__defaults__ = (f,)
+    assert isinstance(digest(f), Digest)
+
+
+def test_cycles_of_equal_length_closing_on_different_functions_differ():
+    """A constant cycle marker would collide two different call graphs.
+
+    ``a -> b -> a`` (mutual ping-pong) and ``c -> d -> d`` (one hop, then self
+    recursion) run to the same depth through identical code objects, so a marker
+    that says only "seen this already" hashes them the same.  The marker names
+    how far back up the walk the target sits instead.
+    """
+    a, b, c, d = _one_hop(), _one_hop(), _one_hop(), _one_hop()
+    a.__closure__[0].cell_contents = b
+    b.__closure__[0].cell_contents = a
+    c.__closure__[0].cell_contents = d
+    d.__closure__[0].cell_contents = d
+
+    assert a.__code__ is c.__code__     # nothing but the cycle shape differs
+    assert digest(a) != digest(c)
+
+
+def test_equivalent_cycles_still_agree():
+    """Discriminating cycle shape must not cost content-based equality."""
+    a, b = _one_hop(), _one_hop()
+    a.__closure__[0].cell_contents = b
+    b.__closure__[0].cell_contents = a
+
+    c, d = _one_hop(), _one_hop()
+    c.__closure__[0].cell_contents = d
+    d.__closure__[0].cell_contents = c
+
+    assert digest(a) == digest(c)
+
+
+def test_cycle_digests_the_same_wherever_it_is_met():
+    """The back-reference is relative, so a cycle is context-independent.
+
+    An absolute depth would make the same cycle hash differently depending on
+    how deeply the walk had already descended when it reached it.
+    """
+    a, b = _one_hop(), _one_hop()
+    a.__closure__[0].cell_contents = b
+    b.__closure__[0].cell_contents = a
+
+    def hold(x):
+        def h():
+            return x()
+        return h
+
+    standalone = digest(a)
+    nested = digest(hold(a))
+    assert nested != standalone         # h wraps it, so of course it differs
+    # but two copies of the same cycle agree at the same nesting
+    c, d = _one_hop(), _one_hop()
+    c.__closure__[0].cell_contents = d
+    d.__closure__[0].cell_contents = c
+    assert digest(hold(c)) == nested
+
+
+# --- Functions: compiler-inserted cells and per-instance identity ---
+
+def test_method_using_super_can_be_digested():
+    """The compiler-inserted ``__class__`` cell must not make methods indigestible.
+
+    Any method mentioning ``super()`` captures its class in a cell, and a
+    user-defined class is :exc:`Indigestible` as a *value* — so digesting the
+    cell would refuse every such method.  It is identified by name instead.
+    """
+    class Base:
+        def go(self):
+            return 1
+
+    class A(Base):
+        def go(self):
+            return super().go() + 1
+
+    class B(Base):
+        def go(self):
+            return super().go() + 1
+
+    a, b = A.__dict__["go"], B.__dict__["go"]
+    assert a.__code__.co_freevars == ("__class__",)
+    # identical bodies, but the classes they were defined in differ
+    assert digest(a) != digest(b)
+
+
+def test_function_digest_attribute_overrides_closure_digest():
+    """``__digest__`` is honoured per instance for functions.
+
+    Every function shares one type, so the class-level protocol could never
+    reach them; the attribute is how a closure declares its own identity.
+    """
+    def make(o):
+        def f():
+            return o
+        return f
+
+    f = make(object())
+    f.__digest__ = lambda: digest("stable identity")
+    assert digest(f) == digest("stable identity")
+
+
+# --- Bound methods: digest() covers them like any other value ---
+
+@dataclass
+class _Counter:
+    """A digestible receiver, so the method's own digest can be exercised."""
+
+    start: int
+
+    def advance(self, by):
+        return self.start + by
+
+
+def test_bound_method_can_be_digested():
+    """``digest`` handles a bound method directly — no separate entry point."""
+    assert isinstance(digest(_Counter(1).advance), Digest)
+
+
+def test_bound_methods_of_different_receivers_differ():
+    """The receiver is part of what the method computes.
+
+    Leaving ``__self__`` out would collide ``obj1.method`` with ``obj2.method``,
+    the same shape of bug as digesting a closure by its code alone.
+    """
+    assert digest(_Counter(1).advance) != digest(_Counter(2).advance)
+
+
+def test_bound_methods_of_equal_receivers_agree():
+    """Still content-based: equal receivers, equal digest."""
+    assert digest(_Counter(1).advance) == digest(_Counter(1).advance)
+
+
+def test_bound_method_differs_from_its_underlying_function():
+    """Binding is not transparent — the bound method carries a receiver."""
+    assert digest(_Counter(1).advance) != digest(_Counter.advance)
+
+
+def test_bound_classmethod_receiver_is_named_not_valued():
+    """A classmethod's receiver is a class, which is Indigestible as a value.
+
+    It is identified by qualified name instead, exactly as the ``__class__``
+    cell of a ``super()``-using method is.
+    """
+
+    class A:
+        @classmethod
+        def make(cls):
+            return cls
+
+    assert isinstance(digest(A.make), Digest)
+
+
+def test_bound_method_of_indigestible_receiver_raises():
+    """A bound method is no more digestible than the object it is bound to."""
+
+    class Opaque:
+        def go(self):
+            return 1
+
+    with pytest.raises(Indigestible):
+        digest(Opaque().go)
 
 # --- Tests for digesting Python descriptors (staticmethod, classmethod, property) ---
 

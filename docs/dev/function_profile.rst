@@ -12,7 +12,15 @@ in one place:
   checks
 - ``pyiron_snippets.versions.VersionInfo`` for ``qualname``, ``module``, and
   ``version``
-- ``func.__code__`` hashing (``code_digest``)
+- ``func.__code__`` hashing plus the state bound alongside it — the variables
+  the function captured from enclosing scopes and the argument defaults
+  (``code_digest``, via the module-level ``_code_digest``).  Closures out of
+  one factory share a code object, so hashing the code alone handed them the
+  same cache key.  A capture that cannot be digested falls back to the
+  code-only digest — decorating a closure over a database handle has to keep
+  working — and warns, since the collision comes back with it.
+  ``code_digest`` only reaches the cache key when ``hash_code=True``; the
+  default is ``False``
 - ``get_type_hints(include_extras=True)`` to detect ``Ignored`` /
   ``Required`` annotations (populates ``ignored`` / ``required`` fields)
 
