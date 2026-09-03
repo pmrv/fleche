@@ -82,11 +82,11 @@ def _always_true(call):
 
 @pytest.fixture
 def cache(paired_storages):
-    # `paired_storages` rather than `value_storage, call_storage`: a Cache is a
-    # frozen dataclass over two independent halves, and each half's own
-    # picklability across every backend is what test_value_storage_picklable /
-    # test_call_storage_picklable sweep.  The 6x7 product added no code path the
-    # diagonal misses -- only 35 more cases of the same one.
+    # A Cache is a frozen dataclass over two independent halves, and each half's
+    # own picklability across every backend is swept by
+    # test_value_storage_picklable / test_call_storage_picklable.  So a cache
+    # needs one case per backend, not one per pair of them: `paired_storages`
+    # rather than `value_storage, call_storage`.
     return Cache(*paired_storages)
 
 
@@ -171,12 +171,10 @@ def test_cache_functional_roundtrip(paired_storages, call):
 def test_cache_stack_functional_roundtrip(call):
     """A pickled CacheStack still resolves a key held by one of its layers.
 
-    Deliberately single-backend.  What is unique here is CacheStack's own
-    delegation surviving the roundtrip; the layers' backends are swept by
-    test_cache_functional_roundtrip above, and the stack treats them
-    identically -- it holds caches, not storages.  Re-running the backend
-    sweep through the stack repeated 41 cases of the memory path for no code
-    the sweep above does not already reach.
+    Single-backend by design: a stack holds caches, not storages, and treats
+    them identically, so what is unique here is CacheStack's own delegation
+    surviving the roundtrip.  Sweeping the backends is
+    test_cache_functional_roundtrip's job.
     """
     cache = Cache(ValueMemory({}), CallMemory({}))
     key = cache.save(call)
