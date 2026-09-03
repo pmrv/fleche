@@ -45,13 +45,14 @@ Returns a :class:`~fleche.query.QueryIterator` over matching cached calls from t
 .. warning::
 
    Unlike ``.call()``/``.digest()``, ``.query()`` does **not** null out
-   ``version``/``module``/``code_digest`` when ``hash_version``/``hash_module``/
-   ``hash_code`` is ``False`` — it always filters on the function's real
-   values for those fields. If you disable one of those flags, a query for a
-   call cached under that decorator can silently return zero results even
-   though the call is stored. Avoid combining ``hash_version=False`` /
-   ``hash_module=False`` / ``hash_code=False`` with ``.query()`` until this is
-   fixed.
+   ``version``/``module`` when ``hash_version``/``hash_module`` is ``False`` —
+   it always filters on the function's real values. A function decorated with
+   either flag disabled therefore caches normally but returns **zero** query
+   matches, silently: the filter cannot match a record that deliberately
+   stores ``None``. Avoid combining ``hash_version=False`` or
+   ``hash_module=False`` with ``.query()`` until `issue #916
+   <https://github.com/pmrv/fleche/issues/916>`_ is fixed. ``hash_code`` is
+   unaffected.
 
 .. warning::
 

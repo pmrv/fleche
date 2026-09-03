@@ -39,24 +39,22 @@ directory (or anywhere up to ``$HOME``):
 Without a config file, results are cached in memory for the current process
 only.
 
-The essentials beyond that. ``cache(...)`` is sticky, so if you run more than
-one of these lines in the same session, run them top to bottom — switching to
-``"void"`` partway through makes later ``.load()``/``.contains()`` calls miss,
-since it switches the active cache away from ``"persistent"``:
+The essentials beyond that:
 
 .. code-block:: python
 
    from fleche import cache
 
-   # Cache switching — bare call is sticky (permanent); use as context manager for
-   # a temporary switch: `with cache("persistent"): ...`
-   cache("persistent")         # permanently switch the active cache by config name
-   cache("void")               # permanently turn caching off without touching code
-
    expensive.contains(1, 2)    # is this call cached?
    expensive.load(1, 2)        # fetch a result without executing (KeyError on miss)
    expensive.rerun(1, 2)       # force re-execution and overwrite the entry
    expensive.query().table()   # stored calls for this function as a pandas DataFrame
+
+   with cache("void"):         # turn caching off for this block only
+       expensive(1, 2)         # computes, stores nothing
+   # the previous cache is active again here
+
+   cache("persistent")         # without `with`, the switch sticks for the session
 
 That is all you need for everyday use.  The rest of this section covers the
 helper methods in depth (:doc:`helpers`), lazy loading of large cached
