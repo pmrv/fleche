@@ -81,8 +81,13 @@ def _always_true(call):
 
 
 @pytest.fixture
-def cache(value_storage, call_storage):
-    return Cache(value_storage, call_storage)
+def cache(paired_storages):
+    # A Cache is a frozen dataclass over two independent halves, and each half's
+    # own picklability across every backend is swept by
+    # test_value_storage_picklable / test_call_storage_picklable.  So a cache
+    # needs one case per backend, not one per pair of them: `paired_storages`
+    # rather than `value_storage, call_storage`.
+    return Cache(*paired_storages)
 
 
 def test_cache_picklable(cache):
@@ -149,9 +154,9 @@ def test_call_storage_functional_roundtrip(call_storage, call):
 
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @given(call=st_digested_calls)
-def test_cache_functional_roundtrip(value_storage, call_storage, call):
+def test_cache_functional_roundtrip(paired_storages, call):
     """Data saved to a cache before pickling is accessible after restoring."""
-    cache = Cache(value_storage, call_storage)
+    cache = Cache(*paired_storages)
     try:
         key = cache.save(call)
     except Rejected:
@@ -161,15 +166,18 @@ def test_cache_functional_roundtrip(value_storage, call_storage, call):
     assert loaded == call
 
 
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+@settings(deadline=None)
 @given(call=st_digested_calls)
-def test_cache_stack_functional_roundtrip(value_storage, call_storage, call):
-    """CacheStack saves and loads correctly after pickling."""
-    cache = Cache(value_storage, call_storage)
-    try:
-        key = cache.save(call)
-    except Rejected:
-        return
+def test_cache_stack_functional_roundtrip(call):
+    """A pickled CacheStack still resolves a key held by one of its layers.
+
+    Single-backend by design: a stack holds caches, not storages, and treats
+    them identically, so what is unique here is CacheStack's own delegation
+    surviving the roundtrip.  Sweeping the backends is
+    test_cache_functional_roundtrip's job.
+    """
+    cache = Cache(ValueMemory({}), CallMemory({}))
+    key = cache.save(call)
     stack = CacheStack((cache, Cache(ValueMemory({}), CallMemory({}))))
     restored = roundtrip(stack)
     loaded = restored.load(key).fetch()
