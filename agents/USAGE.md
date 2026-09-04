@@ -213,6 +213,11 @@ consume it. `latest()`/`oldest()` order by `Runtime` metadata and raise
 `ValueError` when no matching call carries it (and `IndexError` when
 nothing matches at all). Full API: `docs/usage/query.rst`.
 
+Known trap (bug #916): on a function decorated with `hash_version=False`
+or `hash_module=False`, `.query()` silently matches nothing — the query
+template filters on the real `version`/`module` that the stored records
+deliberately omit. The calls *are* cached; only querying is broken.
+
 ## Security
 
 Only pickle-family backends (`pickle`/`cloudpickle`/`dill`) support
