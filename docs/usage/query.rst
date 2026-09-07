@@ -75,6 +75,30 @@ Behavior details
 - For arguments and result, equality is by digest: the template value and the stored value are each passed through :func:`~fleche.digest.digest` and the resulting hex strings are compared.  Pass a :class:`~fleche.digest.Digest` instance (e.g. via :func:`~fleche.D`) to match by a known digest without re-hashing; a plain ``str`` — even one that looks like a hex digest — is hashed as a string value and will not match.
 - Metadata filtering supports presence checks (empty dict) and equality on simple types (str, bool, int, float). Complex types (e.g., lists) are handled correctly via client-side filtering.
 
+.. warning::
+
+   **Known trap (bug #916):** on a function decorated with
+   ``hash_version=False`` or ``hash_module=False``, ``.query()`` silently
+   matches nothing for calls made under it — even though ``.contains()``
+   correctly returns ``True`` for the same call. The query template built by
+   ``.query()`` always fills in the function's *real* ``version``/``module``,
+   while the stored record has that field nulled out by the ``hash_version``/
+   ``hash_module`` flag, so the two never match::
+
+      >>> from fleche import fleche, cache
+      >>> @fleche(version="v1", hash_version=False)
+      ... def add(a, b): return a + b
+
+      >>> with cache("memory"):
+      ...     add(1, 2)
+      ...     add.contains(1, 2)          # True
+      ...     add.query(1, 2).count()     # 0 -- silently wrong
+
+   The call *is* cached; only querying is broken. Until this is fixed,
+   avoid ``.query()`` on functions decorated with ``hash_version=False`` or
+   ``hash_module=False``, or query via ``cache().query(...)`` with an
+   explicit ``QueryCall`` that sets those fields to ``None`` yourself.
+
 
 Performance
 -----------
@@ -87,7 +111,9 @@ QueryIterator API
 Both ``myfunc.query(...)`` and ``cache().query(...)`` return a
 :class:`~fleche.query.QueryIterator`.  Iterating it yields
 :class:`~fleche.call.LazyCall` objects; the iterator can be consumed
-multiple times (each pass re-runs the underlying query).
+multiple times (each pass re-runs the underlying query) — with the
+exception of ``.groupby()``'s returned iterators, see the note under
+"Grouping" below.
 
 Inspection
 ~~~~~~~~~~
@@ -152,6 +178,15 @@ Grouping
     Partition calls into a dict of ``QueryIterator`` objects.  *key* is a
     callable or a string argument name.  Materialises the full result set
     to build the groups.
+
+.. note::
+
+   ``.groupby()`` materializes its results eagerly; the returned
+   ``QueryIterator``\ s are frozen snapshots of the calls matched at
+   ``.groupby()``-call time and will **not** reflect later changes to the
+   cache — unlike every other ``QueryIterator`` method, which re-runs the
+   underlying query on each pass. Re-query (or re-``groupby``) if the cache
+   may have changed since.
 
 Results and side effects
 ~~~~~~~~~~~~~~~~~~~~~~~~
