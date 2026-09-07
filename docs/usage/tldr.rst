@@ -39,10 +39,12 @@ directory (or anywhere up to ``$HOME``):
 Without a config file, results are cached in memory for the current process
 only.
 
-The essentials beyond that (each line below is independent — running
-``cache("void")`` before the later lines would make ``expensive.load``
-raise ``KeyError``, since it switches the active cache away from
-``"persistent"``):
+The essentials beyond that (run these independently — don't paste them as
+one script):
+
+Note: ``cache("void")`` switches the active cache away from
+``"persistent"``, so running it before the later lines would make
+``expensive.load`` raise ``KeyError``.
 
 .. code-block:: python
 
