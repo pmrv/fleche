@@ -13,11 +13,15 @@ in one place:
 - ``pyiron_snippets.versions.VersionInfo`` for ``qualname``, ``module``, and
   ``version``
 - ``func.__code__`` hashing plus the variables the function captured from
-  enclosing scopes (``code_digest``, via the module-level ``_code_digest``).
-  Closures out of one factory share a code object, so hashing the code alone
-  handed them the same cache key.  A capture that cannot be digested falls
-  back to the code-only digest — decorating a closure over a database handle
-  has to keep working — and warns, since the collision comes back with it
+  enclosing scopes *and its argument defaults* (``__defaults__`` /
+  ``__kwdefaults__``) (``code_digest``, via the module-level
+  ``_code_digest``).  Closures out of one factory share a code object, so
+  hashing the code alone handed them the same cache key — this distinguishes
+  not just ``make(1)`` from ``make(2)`` (closures) but also
+  ``lambda x, n=1`` from ``lambda x, n=2`` (defaults).  A capture or default
+  that cannot be digested falls back to the code-only digest — decorating a
+  closure over a database handle has to keep working — and warns, since the
+  collision comes back with it
 - ``get_type_hints(include_extras=True)`` to detect ``Ignored`` /
   ``Required`` annotations (populates ``ignored`` / ``required`` fields)
 
@@ -31,3 +35,8 @@ correctly without special-casing at call sites.
 ``FunctionProfile`` and populate it inside ``FunctionProfile.of``.  Downstream
 code then reads it from the profile instead of calling introspection APIs
 directly.
+
+See :doc:`/usage/helpers` ("Per-Function Static Caching") for the
+user-facing behavior and caveats — including the "mutating ``func`` after
+the first call isn't picked up" gotcha and how to clear the cache via
+``_profile.cache_clear()``.

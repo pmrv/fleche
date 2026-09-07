@@ -8,6 +8,15 @@ Helper Methods
 
 The following methods are added to the decorated function:
 
+Every helper below is also mirrored under a ``.fleche`` :class:`types.SimpleNamespace`
+attached to the wrapped function — ``expensive.fleche.query(1, 2)`` is
+equivalent to ``expensive.query(1, 2)``, and likewise for ``.call``,
+``.digest``, ``.load``, ``.contains``, ``.rerun``, and ``.bind``. This
+mirrored namespace exists to avoid a naming conflict between fleche's helper
+names and an attribute the wrapped function already carries under the same
+name (e.g. a function object that already has a ``.query`` attribute) — reach
+for ``expensive.fleche.*`` whenever the direct name is shadowed.
+
 ``.call(*args, **kwargs)``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -140,6 +149,9 @@ The original, undecorated function is always accessible via the ``.__wrapped__``
 Per-Function Static Caching
 ---------------------------
 
+See :doc:`/dev/function_profile` for the implementation mechanics of what
+follows in this section.
+
 To keep the cache-hit hot path fast, ``@fleche`` computes a
 :class:`~fleche.call.FunctionProfile` the first time it sees a given function
 and caches it for the lifetime of the process.  A profile captures all static
@@ -154,7 +166,9 @@ per-function metadata in one frozen dataclass:
   ``VersionInfo`` — ``module`` and ``version``
   are included in cache keys by default (``hash_module=True``,
   ``hash_version=True``); set either flag to ``False`` to exclude the
-  corresponding field from the key
+  corresponding field from the key (see the warning on ``.query()`` in
+  :doc:`query` — turning either flag off currently breaks ``.query()``
+  for calls made under it)
 - the sets of :class:`~fleche.call.Ignored`- and
   :class:`~fleche.call.Required`-annotated argument names
 
@@ -206,7 +220,7 @@ Usage with Decorated Methods
    pre-applied; you must pass the instance explicitly as the first positional argument.
 
    For ``fleche`` to cache calls that include ``self``, the class must be
-   *digestible* --- i.e. it must implement a ``__digest__`` method
+   *digestible* — i.e. it must implement a ``__digest__`` method
    (see :doc:`/dev/custom_digests`).
 
    .. code-block:: pycon
