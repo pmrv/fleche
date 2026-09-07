@@ -4,9 +4,9 @@
 ======================
 
 This page is a tour of :mod:`fleche.remote` for contributors hacking on the
-cross-machine cache.  End-user documentation lives in
-:doc:`/storage/configuration`; this page explains *how* the pieces fit
-together.
+cross-machine cache.  End-user configuration lives in
+:doc:`/storage/configuration` (see its SSH (remote) section); this page
+explains *how* the pieces fit together.
 
 Security model
 --------------
