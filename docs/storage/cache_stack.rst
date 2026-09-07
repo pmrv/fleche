@@ -63,7 +63,8 @@ context-manager shortcut ``cache(new_cache, stack=True)``:
 
 ``push`` always flattens rather than nests: pushing onto an existing ``CacheStack``
 prepends the new cache to that stack's members instead of wrapping the whole stack, so
-``stack=True`` never runs into the nesting restriction below.
+``stack=True`` never risks the ``CacheStack``-in-``CacheStack`` error described in
+Restrictions, below.
 
 Restrictions
 ------------
