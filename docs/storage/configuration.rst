@@ -275,7 +275,8 @@ Key descriptions
     Path to the storage directory (string; ``~`` is expanded).
 
 ``compress``
-    (bool, default ``false``) — gzip-compress each stored file.
+    (bool, default ``false``) — *pickle-family only.*  gzip-compress each
+    stored file.
 
 ``lock_timeout``
     (float, default ``1.0``) — maximum seconds to wait to acquire a file lock
@@ -294,13 +295,13 @@ Key descriptions
     ``FLECHE_SECRET_KEY`` environment variable.
 
 ``url``
-    (str, default ``"sqlite:///:memory:"``) — SQLAlchemy connection URL, e.g.
-    ``"sqlite:///~/.cache/fleche/calls.db"``. Leading ``~`` is expanded to the
-    home directory in ``sqlite:///`` URLs.
+    (str, default ``"sqlite:///:memory:"``) — *sql only.*  SQLAlchemy
+    connection URL, e.g. ``"sqlite:///~/.cache/fleche/calls.db"``. Leading
+    ``~`` is expanded to the home directory in ``sqlite:///`` URLs.
 
 ``echo``
-    (bool, default ``false``) — log all SQL statements to stderr (useful for
-    debugging).
+    (bool, default ``false``) — *sql only.*  log all SQL statements to
+    stderr (useful for debugging).
 
 ``version_validator``
     (str, default omitted) — version validation strategy passed to
@@ -375,11 +376,11 @@ Destructuring
 ^^^^^^^^^^^^^
 
 Most value backends (``"memory"``, ``"pickle"``, ``"cloudpickle"``,
-``"dill"``, ``"bagofholding_hdf"``) store collections (:class:`list`,
-:class:`tuple`, :class:`dict`) by *destructuring* them: each element is stored
-independently under its own cache key, and on load the original structure is
-reassembled.  This avoids redundant storage of shared sub-structures across
-different cached calls.  See :doc:`destructuring` for a full discussion with
+``"dill"``, ``"bagofholding_hdf"``) store collections by *destructuring*
+them: each element is stored independently under its own cache key, and on
+load the original structure is reassembled.  This avoids redundant storage of
+shared sub-structures across different cached calls.  See :doc:`destructuring`
+for the full list of containers that are destructured and a discussion with
 figures, including the special cases (opaque objects, namedtuples, empty
 containers).
 
@@ -500,6 +501,71 @@ read from without risking a write to any of them.
    values.root = "/shared/teammate/.cache/fleche/values"
    calls.type = "cloudpickle"
    calls.root = "/shared/teammate/.cache/fleche/calls"
+
+SSH (remote)
+~~~~~~~~~~~~
+
+``type = "ssh"`` configures a :class:`~fleche.remote.SshCache`: a whole
+cache (not a storage backend, so ``type`` sits alongside ``values``/``calls``
+rather than inside one of them) that forwards every operation to a remote
+``python -m fleche remote --serve`` process over SSH.  The remote loads its
+own ``fleche.toml`` and proxies into whichever cache it has configured, so
+it keeps full freedom over its own backend.  It is typically paired with a
+local cache via a :class:`~fleche.caches.CacheStack` — saves go to the local
+layer, and loads fall back to the remote, back-filling hits locally.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 15 65
+
+   * - Key
+     - Required
+     - Meaning
+   * - ``host``
+     - yes
+     - SSH target, e.g. ``"user@host"`` or an alias from ``~/.ssh/config``.
+   * - ``cache_name``
+     - no
+     - Named cache to activate on the remote; defaults to the remote's own
+       default cache.
+   * - ``python``
+     - no
+     - Remote python executable, default ``"python3"``.
+   * - ``ssh_options``
+     - no
+     - Extra arguments inserted between ``ssh`` and *host*, e.g. to enable
+       ``ControlMaster``/``ControlPersist`` so 2FA is only prompted once.
+   * - ``setup_commands``
+     - no
+     - Shell snippets run on the remote before the server starts (module
+       loads, activating a virtualenv, etc.).
+   * - ``workdir``
+     - no
+     - Remote directory to ``cd`` into before launching the server, so it
+       can import project-local modules.
+
+.. code-block:: toml
+
+   [[shared]]                          # local layer (saves go here)
+   values.type = "cloudpickle"
+   values.root = "~/.fleche/values"
+   calls.type = "sql"
+   calls.url = "sqlite:///~/.fleche/calls.db"
+
+   [[shared]]                          # remote layer (read-through)
+   type = "ssh"
+   host = "marvin@bigpc.example.com"
+   cache_name = "shared"               # optional: named cache on remote
+   python = "python3"                  # optional
+   ssh_options = ["-o", "ControlMaster=auto",
+                  "-o", "ControlPath=~/.ssh/cm-%r@%h:%p",
+                  "-o", "ControlPersist=10m"]
+   setup_commands = ["module load python/3.11",
+                     "source ~/.venv/bin/activate"]    # optional
+   workdir = "~/project"               # optional: cd before launching server
+
+See :doc:`/dev/ssh_cache` for the wire protocol, security model, and
+lifecycle details (reconnecting, ``info()``, credential redaction).
 
 Full Configuration Example
 --------------------------
