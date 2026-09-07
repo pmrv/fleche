@@ -1,8 +1,10 @@
 Installation Guide
 ==================
 
-Normal installation
--------------------
+Installing with pip
+--------------------
+
+Requires Python >=3.11, <3.15.
 
 .. code-block:: bash
 
@@ -17,7 +19,9 @@ packages are published:
 * ``fleche-base`` -- the core library only (no optional dependencies).
 * ``fleche`` -- the full install, which also pulls in the optional dependencies
   (``cloudpickle``, ``dill``, ``sqlalchemy`` and ``bagofholding``), enabling the
-  SQL, SSH, alternate-serialization and Bagofholding features out of the box.
+  SQL, SSH, alternate-serialization and Bagofholding features. Note that SSH
+  remote-cache support also needs a working ``ssh`` client on ``PATH`` and a
+  matching install on the remote host -- see :doc:`dev/ssh_cache`.
 
 .. code-block:: bash
 
@@ -61,7 +65,9 @@ brackets, e.g. ``pip install "fleche[sqlalchemy,ssh]"``.
      - ``pip install "fleche[ssh]"``
      - :class:`~fleche.remote.SshCache`, which forwards a whole cache to a
        remote host over SSH. Pulls in ``cloudpickle`` (its wire protocol), so
-       it is required rather than optional.
+       it is required rather than optional. Also requires a working ``ssh``
+       client on ``PATH``, and a matching ``fleche[ssh]`` (or full) install on
+       the remote host -- see :doc:`dev/ssh_cache`.
    * - ``executorlib``
      - ``pip install "fleche[executorlib]"``
      - Running cached calls through `executorlib
@@ -96,11 +102,8 @@ installing them alongside ``fleche`` is all that is needed:
 
    pip install fleche-ase
 
-Installing documentation (optional)
------------------------------------
-
-The documentation relies on a few extra packages. They are provided as an optional
-extra named ``docs``. To install them together with the library you can run:
+Installing documentation
+-------------------------
 
 .. code-block:: bash
 
