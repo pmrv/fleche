@@ -95,7 +95,7 @@ Boundaries to Keep in Mind
   those; coming back out it will not.  In particular, validators do not re-run on
   load.  Make sure your validators express *invariants of the data*, not *side
   effects to perform on construction*.
-* **Different runtime semantics still differ at runtime.**  ``slots``, ``frozen``,
+* **Runtime semantics are not part of the digest.**  ``slots``, ``frozen``,
   custom ``__eq__`` / ``__hash__``, attrs's ``eq_key``/``order_key``, ...  None of
   these affect the digest.  Two records that hash the same may still compare or
   iterate differently.  The digest tells you when ``fleche`` will reuse a cached
@@ -212,17 +212,9 @@ Boundaries for Function Digests
   are :exc:`~fleche.digest.Indigestible` as values, so that cell is folded in as
   ``module.QualName`` instead — otherwise every method calling ``super()`` would
   be refused.
-* **Cycles are cut with a back-reference.**  A recursive inner function
-  captures itself, two closures can capture each other, and a function can be
-  reached from its own defaults — digesting those by value would recurse
-  forever.  When the walk meets a function it is already digesting, it folds in
-  a marker naming *how far back up the walk* that function sits, instead of
-  descending again.  The distance matters: a plain "seen it" marker gives
-  ``a -> b -> a`` and ``c -> d -> d`` the same digest, though one ping-pongs
-  between two functions and the other recurses on the second.  Being relative,
-  the marker also makes a cycle digest the same wherever the walk meets it.
-  Everything else about those functions — code, captures, defaults — is folded
-  in where the walk first reached them.
+* **Cycles are cut with a back-reference.**  A recursive or mutually
+  recursive closure digests without recursing infinitely, and the digest is
+  stable regardless of where the walk enters the cycle.
 * **A bound method carries its receiver.**  ``obj.method`` digests as the
   underlying function *plus* ``obj``, so two instances do not share a digest —
   and a method bound to an object ``fleche`` cannot hash is refused, exactly as
@@ -237,16 +229,5 @@ Boundaries for Function Digests
 Giving a Function Its Own Digest
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Every function shares one type, so a class-level ``__digest__`` could never
-distinguish them; for functions the attribute is therefore read off the function
-object itself.  That is the escape hatch when a closure captures something
-unhashable but you know what actually matters:
-
-.. code-block:: pycon
-
-    >>> def make_query(connection, table):
-    ...     def run():
-    ...         return connection.execute(f"SELECT * FROM {table}")
-    ...     # the connection is not part of the result's identity, the table is
-    ...     run.__digest__ = lambda: digest(("run", table))
-    ...     return run
+Functions are the one type where ``__digest__`` is read per-instance rather
+than per-class — see :doc:`/dev/custom_digests` for the escape-hatch example.
