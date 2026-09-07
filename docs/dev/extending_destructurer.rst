@@ -47,8 +47,8 @@ The usual way to satisfy that contract is *not* to write ``sunder_fn`` by
 hand.  :meth:`~fleche.storage.destructuring.Digested.sunder` is already a
 concrete template method on the ABC: it enumerates child slots, interns each
 one, computes the depth, and picks the inline-vs-store branch for you.  Pass
-``YourDigested.sunder`` as the ``sunder_fn`` and implement the four abstract
-methods it dispatches to:
+``YourDigested.sunder`` as the ``sunder_fn`` and implement the three abstract
+classmethod hooks it dispatches to:
 
 - :meth:`~fleche.storage.destructuring.Digested._slots` — return the
   ``(label, child)`` pairs to recurse into, or ``None`` to opt out (which is
@@ -57,14 +57,62 @@ methods it dispatches to:
   value when no child became a :class:`~fleche.digest.Digest` reference.
 - :meth:`~fleche.storage.destructuring.Digested._rebuild_digest` — build the
   wrapper instance when at least one child did.
-- :meth:`~fleche.storage.destructuring.Digested.mend` — reconstruct the
-  original value from storage.
 
-:meth:`~fleche.storage.destructuring.Digested.underlying` (for hashing) is
-abstract as well and must be implemented either way.  Overriding ``sunder``
-directly is possible but rarely worth it: the three ``_``-prefixed methods
-stay abstract, so you would still need to define them to make the class
-instantiable.  Study
+:meth:`~fleche.storage.destructuring.Digested.mend` and
+:meth:`~fleche.storage.destructuring.Digested.underlying` (for hashing) are
+also abstract and must be implemented, but neither is part of ``sunder``'s
+own dispatch. ``mend`` is the *inverse* hook: it is invoked separately, by
+:meth:`~fleche.storage.destructuring.DestructuringMixin.load` on the
+**read** path, a completely different call site from ``sunder`` (the
+**write**/intern path) — ``sunder`` never calls ``mend``.
+
+Overriding ``sunder`` directly is possible but rarely worth it: the three
+``_``-prefixed methods stay abstract, so you would still need to define them
+to make the class instantiable.  Study
 :class:`~fleche.storage.destructuring.DigestedIterable` or
 :class:`~fleche.storage.destructuring.DigestedDict` as the canonical
-reference implementations — neither overrides ``sunder``.
+reference implementations for the *collection* shape — neither overrides
+``sunder``.  For the *record* shape (a fixed set of named fields rather than
+an arbitrary-length collection), see `Record-shaped types: DigestedFields`_
+below, which needs even less code.
+
+Record-shaped types: ``DigestedFields``
+----------------------------------------
+
+Not every custom type is collection-shaped.  When the type you want to
+destructure is *record*-shaped — a fixed set of named fields, as with a
+dataclass, an ``attrs`` class, or any plain object with a handful of
+attributes — implementing :class:`~fleche.storage.destructuring.Digested`
+from scratch is more work than it needs to be.
+:class:`~fleche.storage.destructuring.DigestedFields` is a concrete
+intermediate base (itself a ``Digested`` subclass) that already implements
+``_slots``, ``_rebuild_plain``, ``_rebuild_digest``, ``mend``, and
+``underlying`` generically for any record-shaped value — it reconstructs
+instances via ``object.__new__`` plus ``__setattr__``, bypassing ``__init__``
+/``__post_init__``, so ``InitVar``, ``init=False``, frozen, and slotted
+fields all round-trip correctly. That leaves exactly **one** abstract hook
+for a subclass to fill in:
+
+- :meth:`~fleche.storage.destructuring.DigestedFields._field_items` — a
+  ``@staticmethod`` returning ``[(name, value), ...]`` for a live instance.
+
+This is the pattern the two built-in record destructurers actually use:
+:class:`~fleche.storage.destructuring.DigestedDataclass` and
+:class:`~fleche.storage.destructuring.DigestedAttrs` are each a one-method
+``_field_items`` override of ``DigestedFields``. For example,
+``DigestedDataclass`` in full:
+
+.. code-block:: python
+
+   class DigestedDataclass(DigestedFields):
+       @staticmethod
+       def _field_items(value):
+           return [(f.name, getattr(value, f.name)) for f in dataclasses.fields(value)]
+
+Study whichever of the two canonical shapes matches your type — collection
+(:class:`~fleche.storage.destructuring.DigestedIterable` /
+:class:`~fleche.storage.destructuring.DigestedDict`) or record
+(:class:`~fleche.storage.destructuring.DigestedFields`, via
+``DigestedDataclass``/``DigestedAttrs``) — before writing a ``Digested``
+subclass from scratch: picking the shape that matches is usually far less
+code than implementing all three ``_``-prefixed hooks yourself.
