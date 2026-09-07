@@ -81,6 +81,57 @@ happen in a future's done-callback rather than on the calling thread, but it
 follows the same rule: it abandons on an exception from the body, and on a
 ``None`` result, which fleche declines to cache.
 
+Around the two-phase save
+--------------------------
+
+The two sections above cover what :meth:`~fleche.caches.BaseCache.prepare`
+and :meth:`~fleche.call.PreparedCall.commit`/:meth:`~fleche.call.PreparedCall.abandon`
+do once the wrapper has decided to run them.  What decides *whether* and
+*when* they run lives in :func:`fleche.wrapper.make_wrapper` — specifically
+``wrapper()`` and the ``_run_and_cache``/``_cache`` closures nested inside it
+(currently around lines 190-327 of :mod:`fleche.wrapper`; read that region
+directly if you need exact behaviour, since line numbers drift).
+
+- **Hit, miss, and concurrent de-dup.**  The wrapper computes the call's
+  lookup key and tries ``cache.load(key).result`` first; a hit returns that
+  result directly and never touches ``prepare``/``commit`` at all.  On a
+  miss, before running the body it also checks a per-wrapper ``_in_flight``
+  map keyed by the same digest: if another in-progress call for the same key
+  is already mid-save — its result is resolved but the cache write hasn't
+  finished — the wrapper just awaits that save's future instead of invoking
+  the function a second time.
+
+- **Metadata hooks around prepare/commit.**  Each active
+  :class:`~fleche.metadata.MetaData`'s ``pre()`` runs *before*
+  ``cache.prepare(call)``, and its ``post()`` runs *after* the function body
+  has returned but *before* ``prepared.commit(...)`` — ``post`` sees both its
+  own ``pre`` output and the call's result, and both are folded into the
+  metadata dict that gets committed alongside the result.
+
+- **The Future path.**  When the body returns a
+  :class:`concurrent.futures.Future` instead of a plain value, the wrapper
+  does not commit on the calling thread: it wires the save up as
+  ``result.add_done_callback(_cache)`` and returns the future unresolved. The
+  callback runs whenever the future settles; if it resolved with an
+  exception, ``future.result()`` re-raises inside the callback and that
+  triggers ``prepared.abandon()`` instead of a commit — the same outcome as a
+  body that raises synchronously.
+
+- **Two uncached fallbacks.**  Before any of the above, the wrapper needs a
+  lookup key for the call; if it can't get one, it runs
+  ``func(*args, **kwargs)`` uncached rather than failing the call:
+
+  - *Indigestible argument* — building the key raises
+    :exc:`~fleche.digest.Indigestible` because some argument can't be
+    hashed, so no key can be sealed.
+  - *Missing* :class:`~fleche.call.Required` *kwarg* — a parameter annotated
+    ``Required`` was not passed explicitly by the caller (its default was
+    used instead); the wrapper warns and declines to cache rather than key
+    on a value the caller never chose.
+
+  Both cases log a warning before falling back; see :mod:`fleche.wrapper`
+  for the exact checks.
+
 Caches that cannot write ahead of the body
 ------------------------------------------
 
