@@ -286,7 +286,19 @@ Cheat sheet of what's been considered. Issue numbers are the entry points — fe
 
     - #829 — `SshCache` should support `Path` values by doing the blob conversion client-side (today values travel by cloudpickle, so a `Path` arg ships its path *string*, not its content); PR #828 landed a client-side refusal (`RemotePathUnsupported`) on the `temppath` feature branch (PR #797) — not merged to `main` yet, but the plan is: path *arg* becomes a digest-only reference computed locally, path *result* is `Rejected`, load raises lazily on `.result` only.
 
-- **In-flight PRs (unmerged — check before touching the same files):** #887 (`BoundWrapper` spawn-safe pickling, under bug #840 above), #786 (pooled HDF5 read handles, draft) and #804 (benchmark hit-phase fix) under the perf theme, #797 (`temppath` path-by-content), #523 (`isolate=` removal), and #905 (`ChildItems` child-declaration interface, targets the `temppath` branch, closes #883) under the path-handling theme. Also open: #907 (docs cross-check pass over `usage/`, `storage/`, README — its review surfaced the `.query()` `hash_version=False`/`hash_module=False` mismatch, since filed as bug #916 below; the PR documents the behaviour as a warning in `docs/usage/helpers.rst`, to be removed once #916 is fixed). Nothing else is in flight as of 2026-09-05.
+- **In-flight PRs (unmerged — check before touching the same files):**
+
+  - #887 (`BoundWrapper` spawn-safe pickling, under bug #840 above).
+
+  - #786 (pooled HDF5 read handles, draft) and #804 (benchmark hit-phase fix) under the perf theme.
+
+  - #797 (`temppath` path-by-content), #523 (`isolate=` removal), and #905 (`ChildItems` child-declaration interface, targets the `temppath` branch, closes #883) under the path-handling theme.
+
+  - #907 (docs cross-check pass over `usage/`, `storage/`, README — its review surfaced the `.query()` `hash_version=False`/`hash_module=False` mismatch, since filed as bug #916 below; the PR documents the behaviour as a warning in `docs/usage/helpers.rst`, to be removed once #916 is fixed).
+
+  - #925–#936 — a docs audit swarm opened 2026-09-07: twelve independent single-page PRs over `docs/`, one per page so each can merge alone (#925 index thread-safety overclaim, #926 installation, #927 tldr, #928 cache_stack, #929 digests_as_args, #930 entry_points, #931 digests dedupe, #932 parallel_execution MPI example, #933 usage `.fleche` namespace / #916 / groupby staleness, #934 SSH config + destructuring list, #935 call_lifecycle hooks/Future/fallbacks, #936 sunder/mend dispatch counts + `DigestedFields`).
+
+  Nothing else is in flight as of 2026-09-08.
 
 **Decisions already landed**
 
