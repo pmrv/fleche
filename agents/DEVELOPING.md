@@ -282,6 +282,10 @@ Cheat sheet of what's been considered. Issue numbers are the entry points — fe
 
     - #918 (opened 2026-09-03, hit through landau's entry-point digest hooks) — destructuring storage ignores digest hooks, breaking the invariant *digestible ⇒ storable*: `digest()` consults `get_hooks()` before any structural walk, but `DestructuringMixin._intern_rec` picks a destructurer purely from the `_DESTRUCTURERS` predicates, so a hooked dataclass is torn into its fields and the opaque field the hook existed to avoid raises `Indigestible` on save. Bites on the *argument values* of a `@fleche` call — the key computes, the write fails, and the error names a type the caller never mentioned. Suggested fix: `_intern_rec` treats hook-covered (or `__digest__`-bearing) values as opaque leaves, mirroring `digest()`'s precedence; the weaker catch-and-store-parent-opaquely fallback loses dedup silently. Composes with #883/#905 (the other destructuring-vs-extension gap) and #333's dispatch-registry plan.
 
+  - **Housekeeping.**
+
+    - #938 (opened 2026-09-09, found in the AGENTS.md audit) — a stray 36 KB SQLite cache file `x.db` (tables `calls`/`arguments`/`metadata`) is committed at the repo root, added by docs/notebook PR #848; nothing references it (`grep -rln "x\.db"` over `notebooks/ tests/ src/ docs/` is empty). Delete it, and consider a `*.db` `.gitignore` entry so a notebook run cannot re-commit one.
+
   - **Feature request.**
 
     - #829 — `SshCache` should support `Path` values by doing the blob conversion client-side (today values travel by cloudpickle, so a `Path` arg ships its path *string*, not its content); PR #828 landed a client-side refusal (`RemotePathUnsupported`) on the `temppath` feature branch (PR #797) — not merged to `main` yet, but the plan is: path *arg* becomes a digest-only reference computed locally, path *result* is `Rejected`, load raises lazily on `.result` only.
@@ -298,7 +302,9 @@ Cheat sheet of what's been considered. Issue numbers are the entry points — fe
 
   - #925–#936 — a docs audit swarm opened 2026-09-07: twelve independent single-page PRs over `docs/`, one per page so each can merge alone (#925 index thread-safety overclaim, #926 installation, #927 tldr, #928 cache_stack, #929 digests_as_args, #930 entry_points, #931 digests dedupe, #932 parallel_execution MPI example, #933 usage `.fleche` namespace / #916 / groupby staleness, #934 SSH config + destructuring list, #935 call_lifecycle hooks/Future/fallbacks, #936 sunder/mend dispatch counts + `DigestedFields`).
 
-  Nothing else is in flight as of 2026-09-08.
+  - #939 (opened 2026-09-09, test-only coverage sweep in two separable commits): a direct mutation-checked pin for the `Intent.READ` no-op fast path in **both** lock mixins (`storage/thread_safe.py` — the contract `CacheStack._operation_context` depends on when it enters non-`stack[0]` members; two threads enter a read context on the *same* key and neither leaves until both are inside), and 11 removals of tests whose assertion is strictly weaker than a sibling's (eight digest "X can be digested" smokes, four `table()` tests collapsed into one) — 1231 → 1220 tests, per-file coverage byte-identical. Also converts `test_local_function_digests_same_as_module_level` into `test_nesting_changes_a_function_digest`: with its counterpart actually at module scope the old claim *fails* — `CO_NESTED` sits in `co_flags`, which the code-object digest folds in, so lifting a helper out of an enclosing function invalidates its cached calls under `hash_code=True`; pinned as observed behaviour, that test is where to flip it if it's ruled a bug.
+
+  Besides the routine dependabot `ty` 0.0.75 → 0.0.78 bump (#940), nothing else is in flight as of 2026-09-10.
 
 **Decisions already landed**
 
