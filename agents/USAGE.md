@@ -166,7 +166,13 @@ Decorator kwargs on `@fleche(...)`:
   applies them when binding, so an unsupplied argument is recorded at its
   default value.
 - `hash_version=` / `hash_module=` — pin the digest scheme / module
-  identity explicitly.
+  identity explicitly. The default `hash_module=True` keys every entry on
+  `__module__`, so moving a function into a package (or renaming its
+  module) silently orphans its whole cache — set `hash_module=False` from
+  day one for code that may be restructured, or plan a call-index
+  migration (issue #942 records a tested recipe:
+  `dataclasses.replace(digested_call, module=new)` + `.to_lookup_key()`,
+  add-only first, against a db copy).
 - `meta=[...]` — metadata classes to record (`Runtime`, `Environment`,
   `Git`, or a `Tags(...)` instance) — see `docs/usage/`.
 - `isolate=True` — runs each call in a unique tempdir (not thread-safe;
