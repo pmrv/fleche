@@ -264,6 +264,16 @@ Cheat sheet of what's been considered. Issue numbers are the entry points — fe
 
     - #923 two `digest.py` copy-paste spots bundled in one issue: `Digest.expand`/`shrink` share an identical lazy-cache preamble (extract a `_resolve_cache` helper — independently worthwhile), and the `staticmethod()`/`classmethod()` match arms are byte-identical (mergeable with an OR-pattern, though that half is subsumed by #834's dispatch-table plan).
 
+  - 2026-09-11 (config/packaging/CI plumbing, no runtime code):
+
+    - #944 `cache_to_config`'s `case _:` branch hand-serialises `SshCache` — the only cache type whose fields *and* their defaults (`python="python3"`, `ssh_options=()`, …) are copy-pasted into `config.py` instead of the class writing its own dict out, the convention every storage backend and the read side (`SshCache(**d)`) already follow. Proposal: `SshCache.to_config()` in `remote.py` comparing fields against `dataclasses.fields(self)` defaults, so adding a field can't silently desync the two files.
+
+    - #945 `tests.yml` / `test-minimum-deps.yml` / `ty.yml` triplicate a byte-identical paths-filter `changes` job (bar the self-referencing filename line), and the copies already use its output inconsistently (per-step guards in `build` vs a job-level `if:` on `sql-backends`). Proposal: a `workflow_call` reusable workflow or composite action — a pure maintainability trade (reusable workflows debug worse), no behaviour change.
+
+    - #946 `updatebenchmarks.yml` / `rendernb.yml` duplicate their commit+push tail (bot identity, conditional-commit guard — already cosmetically drifted) and both pin `ad-m/github-push-action@master`, a mutable ref running with `contents: write` on PR-triggered workflows. Proposal: a repo-local composite commit-and-push action, and pin the action to a tag/SHA or replace it with plain `git push` — the pinning half is a narrow supply-chain fix worth doing on its own.
+
+    - #947 `pyproject.toml` repeats version pins across extras (`cloudpickle >= 2` three times in `cloudpickle`/`ssh`/`tests`; `dill`/`sqlalchemy`/`bagofholding == 0.1.12` twice each) instead of PEP 621 self-referential extras (`ssh = ["fleche[cloudpickle]"]`, `tests = ["fleche[cloudpickle,dill,sqlalchemy,bagofholding]", ...]`). Sanity-check `pip install -e ".[tests]"` and `test-minimum-deps.yml`'s `uv pip install --resolution lowest-direct` before merging — that flag is sensitive to cross-extra constraints (the documented reason the workflow avoids `uv sync`).
+
   - 2026-08-10/12: **Feature requests.** #854 — an opt-in "hard fail on `Indigestible` or argument-stashing errors" mode; the tension is fleche's default "stay out of the way" contract (a fleche-stripped program is semantically identical) versus the cost of only discovering *after* a long run that nothing was cached. #855 — an opt-in `use_dependencies=` decorator kwarg that bakes a `pothenon`-parsed dependency tree into the lookup key (see the [pothenon demo](https://github.com/pyiron/pothenon/pull/36)), so a change in a called function invalidates callers without hand-tagging every layer with `version=`/`hash_code=`.
 
   - **Bugs.**
@@ -308,7 +318,7 @@ Cheat sheet of what's been considered. Issue numbers are the entry points — fe
 
   - #939 (opened 2026-09-09, test-only coverage sweep in two separable commits): a direct mutation-checked pin for the `Intent.READ` no-op fast path in **both** lock mixins (`storage/thread_safe.py` — the contract `CacheStack._operation_context` depends on when it enters non-`stack[0]` members; two threads enter a read context on the *same* key and neither leaves until both are inside), and 11 removals of tests whose assertion is strictly weaker than a sibling's (eight digest "X can be digested" smokes, four `table()` tests collapsed into one) — 1231 → 1220 tests, per-file coverage byte-identical. Also converts `test_local_function_digests_same_as_module_level` into `test_nesting_changes_a_function_digest`: with its counterpart actually at module scope the old claim *fails* — `CO_NESTED` sits in `co_flags`, which the code-object digest folds in, so lifting a helper out of an enclosing function invalidates its cached calls under `hash_code=True`; pinned as observed behaviour, that test is where to flip it if it's ruled a bug.
 
-  Nothing else is in flight as of 2026-09-11 (the routine dependabot `ty` 0.0.75 → 0.0.78 bump merged 2026-09-10 as #940).
+  Nothing else is in flight as of 2026-09-12 (the routine dependabot `ty` 0.0.75 → 0.0.78 bump merged 2026-09-10 as #940).
 
 **Decisions already landed**
 
