@@ -24,6 +24,16 @@ below).  The walk stops at the closest such file: files farther up the tree
 If no configuration file is discovered, ``fleche`` falls back to a default
 in-memory cache.
 
+A relative ``root`` (storage/template) or ``url`` (``sql`` calls) is resolved
+against the directory containing the ``fleche.toml`` that declared it, not
+against the process's current working directory. This is what makes a
+checked-in, machine-portable config file resolve to the *same* cache location
+no matter which subdirectory it is read from during the walk above. Absolute
+paths and ``~``-prefixed paths are unaffected. This resolution only happens
+for paths read from a config file — a ``root``/``url`` passed directly to
+``cache_from_config`` or ``storage_from_config`` still resolves against the
+CWD, as it always has.
+
 Reserved Cache Names
 --------------------
 
@@ -143,6 +153,8 @@ Cache sections
 You can define multiple cache configurations in the same file, each in its own section.
 
 Each cache section must define two storage backends: ``values`` and ``calls``. ``values`` is used to store the results of function calls, and ``calls`` is used to store the function call details.
+
+.. _cache-templates:
 
 Cache templates
 ~~~~~~~~~~~~~~~
@@ -296,7 +308,11 @@ Key descriptions
 ``url``
     (str, default ``"sqlite:///:memory:"``) — SQLAlchemy connection URL, e.g.
     ``"sqlite:///~/.cache/fleche/calls.db"``. Leading ``~`` is expanded to the
-    home directory in ``sqlite:///`` URLs.
+    home directory in ``sqlite:///`` URLs. This default is **not** persistent
+    — history vanishes when the process exits. It only applies to a bare
+    ``calls.type = "sql"`` block; the ``sql`` :ref:`template <cache-templates>`
+    below defaults ``url`` to the persistent ``sqlite:///root/calls.db``
+    instead.
 
 ``echo``
     (bool, default ``false``) — log all SQL statements to stderr (useful for

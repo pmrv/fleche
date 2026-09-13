@@ -2,9 +2,7 @@
 
 [![docs](https://app.readthedocs.org/projects/fleche/badge/?version=latest)](https://fleche.readthedocs.io/en/latest/?badge=latest)
 
-
-
-
+Requires Python 3.11–3.14.
 
 A persistent caching solution for arbitrary Python functions - like `lru_cache` on steroids.
 
@@ -114,7 +112,7 @@ if compute.contains(5):
 else:
     result = compute(5)
 
-# Get Call object with metadata
+# Get the Call object used for lookup (no result/metadata yet — see .query() for stored metadata)
 call = compute.call(5)
 ```
 
@@ -233,6 +231,6 @@ BSD-3-Clause License - see LICENSE file for details.
 
 ## Resources
 
-- **Documentation**: See `docs/` directory
+- **Documentation**: https://fleche.readthedocs.io
 - **Tests**: See `tests/` for usage examples
 - **Benchmarks**: See `benchmarks/` for performance metrics
