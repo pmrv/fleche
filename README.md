@@ -16,7 +16,7 @@ A persistent caching solution for arbitrary Python functions - like `lru_cache` 
 - **Query Support**: Search and retrieve cached results with metadata filtering
 - **Configurable**: Control what gets hashed (version, module, code, arguments)
 - **Multiple Backends**: File (pickle, cloudpickle, dill), SQLAlchemy, Bagofholding, and more
-- **Thread-Safe**: Safe for use in multi-threaded environments
+- **Thread-Safe Active Cache**: `ContextVar`-based active-cache state management (see the [parallel execution docs](https://fleche.readthedocs.io/en/latest/parallel_execution.html) for concurrency caveats — e.g. `isolate=True` uses `os.chdir` and is not thread-safe)
 - **Type-Aware**: Works seamlessly with NumPy, Pandas, and custom types
 
 ## Installation
