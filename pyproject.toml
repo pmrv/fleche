@@ -54,7 +54,7 @@ sqlalchemy = [
     "sqlalchemy >= 2",
 ]
 bagofholding = [
-    "bagofholding == 0.1.12",
+    "bagofholding == 0.1.13",
 ]
 ssh = [
     # SshCache uses cloudpickle for its wire protocol — required, not optional.
@@ -66,7 +66,7 @@ tests = [
     "cloudpickle >= 2",
     "dill >= 0.3",
     "sqlalchemy >= 2",
-    "bagofholding == 0.1.12",
+    "bagofholding == 0.1.13",
     "nbconvert >= 6.5",
     "ipykernel >= 6.26",
     "tabulate >= 0.8",
