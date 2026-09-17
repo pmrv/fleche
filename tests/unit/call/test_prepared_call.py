@@ -7,11 +7,13 @@ an argument was recorded under post-mutation content and could never be found
 by an honest repeat call.  Under the two-phase protocol the recorded identity
 is sealed at prepare time.
 """
+from concurrent.futures import Future
+
 import pytest
 
 from fleche import fleche
 import fleche as fl
-from fleche.call import Call
+from fleche.call import Call, PreparedCall
 from fleche.caches import Cache, CacheStack, RefreshingCache, Rejected
 from fleche.digest import digest
 from fleche.storage.memory import ValueMemory, CallMemory
@@ -240,3 +242,56 @@ def test_body_exception_leaves_no_record(cache):
                 boom(1)
         assert len(runs) == 2            # nothing cached, body ran twice
         assert not boom.contains(1)
+
+
+def _abandon_recording_cache(abandoned: list) -> Cache:
+    """A cache whose prepared calls record their own abandonment.
+
+    ``PreparedCall.abandon`` is documented as a subclass hook, so overriding
+    it is the supported way to observe that the protocol was finished — the
+    default implementation is a no-op, and "nothing was recorded" alone holds
+    whether the call was abandoned or merely dropped on the floor.
+    """
+
+    class RecordingPrepared(PreparedCall):
+        def abandon(self) -> None:
+            abandoned.append(self.to_lookup_key())
+            super().abandon()
+
+    class RecordingCache(Cache):
+        def prepare(self, call):
+            prepared = super().prepare(call)
+            return RecordingPrepared(digested=prepared.digested, cache=prepared.cache)
+
+    return RecordingCache(ValueMemory({}), CallMemory({}))
+
+
+def test_failed_future_abandons_the_prepared_call():
+    """The deferred twin of ``test_body_exception_leaves_no_record``.
+
+    A body that returns a :class:`~concurrent.futures.Future` has already
+    returned by the time the work fails, so the wrapper cannot abandon inline:
+    the call is sealed, the future is handed back to the caller, and the
+    failure only surfaces in the done callback — which is where the two-phase
+    save has to be finished off.
+
+    The future is resolved before it is returned so the callback runs inline
+    in ``add_done_callback``; a worker thread would resolve the caller's
+    ``result()`` before the callback had necessarily run.
+    """
+    abandoned: list = []
+    cache = _abandon_recording_cache(abandoned)
+
+    @fleche
+    def compute(x):
+        future: Future = Future()
+        future.set_exception(ValueError("boom"))
+        return future
+
+    with fl.cache(cache):
+        future = compute(5)
+
+        assert abandoned == [compute.digest(5)]   # sealed call released, not left in limbo
+        with pytest.raises(ValueError):
+            future.result()                       # the failure still reaches the caller
+        assert not compute.contains(5)
