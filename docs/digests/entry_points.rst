@@ -7,11 +7,8 @@ Entry Points
 :mod:`importlib.metadata` plugin mechanism): any installed package can
 register digest hooks for its types in the ``fleche`` entry point group under
 the name ``digest``.  Installing such a package is all it takes — no imports,
-no calls to :func:`~fleche.digest.add_hook`.  Each time
-:func:`~fleche.digest.digest` encounters a value it does not know how to
-handle, it (re-)loads all registered entry points and retries — there is no
-"already loaded" cache, so a type that stays unsupported after the retry
-pays this reload cost on every call, not just the first.
+no calls to :func:`~fleche.digest.add_hook`.  Entry points are loaded lazily
+on demand (see "How Hooks Are Loaded" below for the full mechanism).
 
 Use entry points whenever digest support for a type should "just work" after
 a ``pip install``:
@@ -81,7 +78,7 @@ Precedence rules:
 * An entry point that fails to load is logged as an ``ERROR`` (with
   traceback) and skipped — it never breaks digestion of other values.
 * Hooks — manual or entry-point — take priority over a type's own
-  ``__digest__`` method (see :doc:`digest_equivalence`): if a hook is
+  ``__digest__`` method (see :doc:`/dev/custom_digests`): if a hook is
   registered for a type, its ``__digest__`` is never consulted.
 
 Registering Your Own Entry Point
