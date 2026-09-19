@@ -274,6 +274,14 @@ Cheat sheet of what's been considered. Issue numbers are the entry points — fe
 
     - #947 `pyproject.toml` repeats version pins across extras (`cloudpickle >= 2` three times in `cloudpickle`/`ssh`/`tests`; `dill`/`sqlalchemy`/`bagofholding` twice each — the bagofholding copies are now the `>=0.1.12,<0.1.14` range after #957) instead of PEP 621 self-referential extras (`ssh = ["fleche[cloudpickle]"]`, `tests = ["fleche[cloudpickle,dill,sqlalchemy,bagofholding]", ...]`). Sanity-check `pip install -e ".[tests]"` and `test-minimum-deps.yml`'s `uv pip install --resolution lowest-direct` before merging — that flag is sensitive to cross-extra constraints (the documented reason the workflow avoids `uv sync`).
 
+  - 2026-09-18:
+
+    - #960 dangling value-digest references resolve under three different policies: `LazyArguments.__getitem__` degrades to the bare digest on `KeyError`, while `LazyCall.result` and `Digested.get` (behind every `mend()`) raise uncaught out of ordinary read paths (`.fetch()`, `cache.load()`, `table(results=True)`) when the referenced value was evicted. Proposal: one shared `_load_value_or_digest` helper so the policy is chosen once; needs a regression test evicting a referenced value out from under a stored call. Narrower than the parked corruption-tolerance theme #93.
+
+    - #961 `wrap_executor`'s cache-hit path calls `.contains()` then `.load()` — each independently rebuilds the full `Call` and lookup digest (double hashing per hit), and an eviction between the two turns the patched `submit()` into an uncaught `KeyError` instead of falling through to a real submit. The wrapper's own hit path already does the right thing (single `load` + `except KeyError` treated as a miss); the fix mirrors it. The TOCTOU half makes this more than a cleanup — same race family as #450/#453; needs a regression test evicting between check and read.
+
+    - #962 `BaseCache.table` and `QueryIterator.table` carry copy-pasted docstrings that have already drifted on `shrink_keys` (the `AmbiguousDigestError` full-digest fallback and the large-cache cost note exist only on the query side). Make `QueryIterator.table` authoritative and have the forwarding method point at it, the `_QUERY_DOC` pattern `wrapper.py` already uses.
+
   - 2026-08-10/12: **Feature requests.** #854 — an opt-in "hard fail on `Indigestible` or argument-stashing errors" mode; the tension is fleche's default "stay out of the way" contract (a fleche-stripped program is semantically identical) versus the cost of only discovering *after* a long run that nothing was cached. #855 — an opt-in `use_dependencies=` decorator kwarg that bakes a `pothenon`-parsed dependency tree into the lookup key (see the [pothenon demo](https://github.com/pyiron/pothenon/pull/36)), so a change in a called function invalidates callers without hand-tagging every layer with `version=`/`hash_code=`.
 
   - **Bugs.**
@@ -318,7 +326,7 @@ Cheat sheet of what's been considered. Issue numbers are the entry points — fe
 
   - #955 (opened 2026-09-16, test-only coverage sweep in the shape of #892/#912/#939; avoids the three files #939 touches): pins the deferred-future abandon in `wrapper.py` — the documented contract "`Future` results still deliver via `add_done_callback`, which abandons on future-`raise`" had its synchronous twin pinned (`test_body_exception_leaves_no_record`) but the `except BaseException: prepared.abandon(); raise` arm of the callback executed by no test. The new `test_failed_future_abandons_the_prepared_call` resolves the future *before* returning it so the callback runs inline (no worker thread), observes abandonment through the documented `PreparedCall.abandon` subclass hook ("nothing recorded" alone is too weak — the default `abandon()` is a no-op), and is mutation-checked; `wrapper.py` 97% → 99%. Second commit: a 60-test random knock-out measurement (`random.seed(20260916)`, plus `--cov-context=test` arc attribution) found the suite is *not* fat — 1052 of 1191 tests contribute no exclusive arc but are deliberate contract pins; the one exception was `tests/unit/call/test_dehydrate.py`, where five tests asserting one property each of the same return value collapse into their siblings (38 → 33 in the file, 1230 → 1225 suite-wide, per-file statement *and* branch coverage byte-identical).
 
-  Nothing else is in flight as of 2026-09-18 (the routine dependabot bumps #956 `ty` 0.0.78 → 0.0.80 and #957 `bagofholding` — now a `>=0.1.12,<0.1.14` range — both merged 2026-09-17).
+  Nothing else is in flight as of 2026-09-19 (the routine dependabot bumps #956 `ty` 0.0.78 → 0.0.80 and #957 `bagofholding` — now a `>=0.1.12,<0.1.14` range — both merged 2026-09-17).
 
 **Decisions already landed**
 
