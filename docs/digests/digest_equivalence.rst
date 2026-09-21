@@ -41,6 +41,13 @@ This means you can convert a class from one record framework to the other withou
 invalidating any already-cached call that took an instance of that class as an
 argument (or returned one).
 
+.. note::
+
+   This example needs ``attrs`` (``pip install attrs``). Digesting ``attrs``
+   instances is a soft dependency of ``fleche`` — nothing extra needs to be
+   installed to *use* the equivalence, but ``attrs`` itself is not pulled in
+   by ``pip install fleche``.
+
 .. code-block:: pycon
 
     >>> from dataclasses import dataclass
@@ -182,10 +189,9 @@ decorated function, defaults also reach the cache key by a second route
 regardless of ``hash_code``: :meth:`~fleche.call.Call.from_call` applies them
 when binding, so an unsupplied argument is recorded at its default value.
 
-Reaching the cache key requires ``hash_code=True``: the decorator leaves
-``code_digest`` out of the key by default, and two closures out of one factory
-agree on qualified name and module, so without that flag they still share an
-entry.
+Reaching the cache key requires ``hash_code=True`` (the default is ``False``);
+see :doc:`/dev/function_profile` for how ``code_digest`` is computed and why
+that flag exists.
 
 Boundaries for Function Digests
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -203,9 +209,9 @@ Boundaries for Function Digests
 * **A capture or default that cannot be digested is refused, not skipped.**
   Digesting a function that holds an object ``fleche`` does not know how to hash
   raises :exc:`~fleche.digest.Indigestible`, just like passing that object as an
-  argument would.  The decorator itself degrades instead of failing: it warns
-  and falls back to a code-only ``code_digest``, which brings the collision
-  between closures from one factory back with it.
+  argument would.  The decorator degrades instead of failing — see
+  :doc:`/dev/function_profile` for exactly how it falls back to a code-only
+  ``code_digest``.
 * **A method's implicit class capture is identified by name.**  Mentioning
   ``super()`` (or ``__class__``) makes the compiler hand the method a
   ``__class__`` cell holding the class it was defined in.  User-defined classes
@@ -217,11 +223,11 @@ Boundaries for Function Digests
   stable regardless of where the walk enters the cycle.
 * **A bound method carries its receiver.**  ``obj.method`` digests as the
   underlying function *plus* ``obj``, so two instances do not share a digest —
-  and a method bound to an object ``fleche`` cannot hash is refused, exactly as
-  that object would be as an argument.  A classmethod's receiver is a class, so
-  it is named rather than valued.  The decorator is unaffected: a bound method's
-  ``code_digest`` is taken from the underlying function, because the receiver
-  already arrives as an ordinary argument of the call.
+  and a method bound to an object that ``fleche`` cannot hash is refused,
+  exactly as that object would be as an argument.  A classmethod's receiver is
+  a class, so it is named rather than valued.  The decorator is unaffected: a
+  bound method's ``code_digest`` is taken from the underlying function,
+  because the receiver already arrives as an ordinary argument of the call.
 * **Decorated functions digest as what they wrap.**  ``digest(fleche()(f)) ==
   digest(f)`` — the decoration is transparent, so a cached function does not
   care whether it is handed the raw or the cached callable.
