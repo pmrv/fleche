@@ -104,6 +104,7 @@ This is the pattern the two built-in record destructurers actually use:
 
 .. code-block:: python
 
+   @dataclass
    class DigestedDataclass(DigestedFields):
        @staticmethod
        def _field_items(value):
