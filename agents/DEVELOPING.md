@@ -282,6 +282,14 @@ Cheat sheet of what's been considered. Issue numbers are the entry points — fe
 
     - #962 `BaseCache.table` and `QueryIterator.table` carry copy-pasted docstrings that have already drifted on `shrink_keys` (the `AmbiguousDigestError` full-digest fallback and the large-cache cost note exist only on the query side). Make `QueryIterator.table` authoritative and have the forwarding method point at it, the `_QUERY_DOC` pattern `wrapper.py` already uses.
 
+  - 2026-09-25:
+
+    - #974 `filelock` is a hard top-level dependency (`pyproject.toml`) but only `bagofholding_file.py` imports it — a pre-#843 leftover from when every file backend locked; the multi-bag backend is now the only locker, and its real payload (`bagofholding`/`h5py`) already gates behind `ImportAlarm` while `import filelock` sits ungated above that block. Fix: move the pin into the `bagofholding` extra and defer the import exactly like `h5py` — done carelessly it breaks `import fleche` for everyone else; re-check `test-minimum-deps.yml` and the optional-dep sweep after.
+
+    - #975 `SerializingMixin` and `PerKeyLockMixin` (`storage/thread_safe.py`) open `_operation_context` with a byte-identical `Intent.READ` no-op short-circuit, and `CacheStack._operation_context` carries a third structurally identical copy of the same "reserved for a future shared lock" contract — three sites that must change in lockstep when #444/#453's reader-writer lock lands. Deliberately tiny (6 lines); worth extracting only opportunistically, bundled with other work in these files, not as a standalone PR.
+
+    - #976 `benchmarks.yml` / `benchmarks-main.yml` duplicate their checkout/setup-python/install preamble verbatim (bar `fetch-depth: 0` on the PR side) — the same CI-duplication class as #945/#946, which don't cover this pair. Fix: a parameterized composite action; bundle with #945/#946 rather than doing alone.
+
   - 2026-08-10/12: **Feature requests.** #854 — an opt-in "hard fail on `Indigestible` or argument-stashing errors" mode; the tension is fleche's default "stay out of the way" contract (a fleche-stripped program is semantically identical) versus the cost of only discovering *after* a long run that nothing was cached. #855 — an opt-in `use_dependencies=` decorator kwarg that bakes a `pothenon`-parsed dependency tree into the lookup key (see the [pothenon demo](https://github.com/pyiron/pothenon/pull/36)), so a change in a called function invalidates callers without hand-tagging every layer with `version=`/`hash_code=`.
 
   - **Bugs.**
@@ -330,7 +338,7 @@ Cheat sheet of what's been considered. Issue numbers are the entry points — fe
 
   - #970 (opened 2026-09-23, test-only, one new file `tests/unit/storage/test_sql_evict.py` — no overlap with the files #939/#955 touch): five direct tests for `Sql._evict`, the only wholly uncovered method in the package. `_evict` bypasses the ORM with a bare `DELETE FROM calls` and leans on the schema's `ON DELETE CASCADE` foreign keys to clear the dependent `arguments`/`metadata` rows — which SQLite honours only because `_configure_sqlite_pragmas` re-applies `PRAGMA foreign_keys=ON` on every connect — so the tests assert against the two child tables directly (`load`/`contains` cannot tell a cascaded delete from a leaked row; `metadata` is the fragile one, having no ORM relationship on `CallModel`), plus scoping to the evicted key and the zero-row-delete no-op `CallMixin.save` relies on; mutation-checked by flipping the pragma to `foreign_keys=OFF`. The PR body also records a suite-wide ablation experiment: 946 of 1091 test functions contribute zero *unique* line/branch coverage, but deleting all 946 drops 360 statements and 96 branch partials — redundancy is collective, so "covers nothing uniquely" is not a deletion criterion here; no tests removed.
 
-  Nothing else is in flight as of 2026-09-25 (routine dependabot bumps all merged: #971 `ty` 0.0.80 → 0.0.82 on 2026-09-24; #956 `ty` 0.0.78 → 0.0.80 and #957 `bagofholding` — now a `>=0.1.12,<0.1.14` range — on 2026-09-17).
+  Nothing else is in flight as of 2026-09-26 (routine dependabot bumps all merged: #971 `ty` 0.0.80 → 0.0.82 on 2026-09-24; #956 `ty` 0.0.78 → 0.0.80 and #957 `bagofholding` — now a `>=0.1.12,<0.1.14` range — on 2026-09-17).
 
 **Decisions already landed**
 
