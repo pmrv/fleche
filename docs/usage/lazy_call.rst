@@ -3,7 +3,9 @@ Lazy Loading
 
 In many caching scenarios, function results or arguments can be large objects (e.g., massive datasets, trained models, or high-resolution images). Loading all of them from the cache every time you inspect a call would be expensive and slow.
 
-Fleche avoids this by returning **lazy call objects** from ``load()`` and ``query()`` by default. Arguments and results are only fetched from the underlying storage when you actually access them.
+Fleche avoids this by returning **lazy call objects** from ``cache().load()`` and from ``query()`` (both ``cache().query()`` and the decorator's ``func.query()``) by default. Arguments and results are only fetched from the underlying storage when you actually access them.
+
+This does *not* apply to the decorator's ``func.load(*args, **kwargs)`` helper (see :doc:`helpers`) — that one resolves the value immediately and returns the plain result, equivalent to ``cache().load(key).result``.
 
 What is a LazyCall?
 -------------------
@@ -17,7 +19,8 @@ When you call ``cache().load(key)`` or iterate over ``cache().query(...)``, you 
    ... def process(x):
    ...     return x * 2
    ...
-   >>> process(21)                   # populate the cache; returns 42
+   >>> result = process(21)          # populate the cache
+   >>> assert result == 42
    >>> key = process.digest(21)      # SHA-256 digest for this call
 
    >>> # Default: returns a LazyCall — cheap, no deserialization yet
