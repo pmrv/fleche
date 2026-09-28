@@ -46,11 +46,10 @@ every call to ``cache("memory")``), so data stored in it persists for the lifeti
 the process.  It is **not** shared with other processes and is lost when the current
 process exits.
 
-Note that ``with cache("memory"):`` makes the memory cache active *only for the duration
-of the* ``with`` *block* — the previous cache is restored on exit.  To make the memory
-cache sticky (active until explicitly changed), discard the returned context manager::
-
-   cache("memory")   # sticky — memory cache stays active
+Like any string passed to ``cache()``, ``"memory"`` follows the usual
+``with``-scoped vs. sticky rules (see :doc:`/usage/tldr`); because the
+returned instance is interned, re-entering ``"memory"`` — sticky or
+scoped — always resumes the same in-process data.
 
 Example using the context-manager form to temporarily switch to memory caching:
 
@@ -103,7 +102,10 @@ The ``[default]`` section is used to configure the default behavior of ``fleche`
 ``cache``
 ~~~~~~~~~
 
-The ``cache`` key specifies the name of the default cache to use.
+The ``cache`` key specifies the default cache to activate: either the name
+of another section in this file (a string), or an inline cache config with
+the same shape a named section would have (``values``/``calls``, a
+``template`` table, etc.) — no separate section needed.
 
 Example:
 
@@ -111,6 +113,11 @@ Example:
 
    [default]
    cache = "mycache"
+
+.. code-block:: toml
+
+   [default]
+   cache.template = "memory"   # inline, no separate [mycache] section needed
 
 ``metadata``
 ~~~~~~~~~~~~
@@ -220,7 +227,9 @@ Storage backends
 ~~~~~~~~~~~~~~~~
 
 Each storage backend is configured using a ``type`` key, see the table below. Other keys in the same dict are
-passed as keyword arguments to the storage constructor.
+passed as keyword arguments to the storage constructor. ``type`` values are
+case-sensitive lowercase strings (``"memory"``, not ``"Memory"``); an
+unrecognized value raises ``ValueError``.
 
 Example:
 
@@ -373,17 +382,12 @@ falling back to the default on an empty root.
 ``prefix_length`` is checked against the files already present in ``root``
 when the storage is constructed: opening an existing cache directory with a
 different ``prefix_length`` raises a ``ValueError`` instead of silently
-leaving the old entries unreachable.  To re-shard an existing cache, open it
-with its current ``prefix_length`` and call
+leaving the old entries unreachable.  To re-shard an existing cache, call
 :meth:`~fleche.storage.bagofholding_file.BagOfHoldingH5FileBackend.refix`
-with the new length (``0`` for per-key), which moves every stored entry into
-the new layout and returns a storage addressing it (the original instance is
-left untouched and sees the drained old layout).  A root left with *several*
-layouts — e.g. by an interrupted ``refix`` — cannot be opened normally;
-repair it with
-:meth:`~fleche.storage.bagofholding_file.BagOfHoldingH5FileBackend.consolidate`,
-which migrates every prefix length it finds to a target length and returns
-the resulting storage.
+with the new length; to repair a root left with several layouts (e.g. after
+an interrupted ``refix``), use
+:meth:`~fleche.storage.bagofholding_file.BagOfHoldingH5FileBackend.consolidate`.
+See their docstrings for the exact atomicity/resumability guarantees.
 
 .. _configuring-destructuring:
 
@@ -391,20 +395,12 @@ Destructuring
 ^^^^^^^^^^^^^
 
 Most value backends (``"memory"``, ``"pickle"``, ``"cloudpickle"``,
-``"dill"``, ``"bagofholding_hdf"``) store collections (:class:`list`,
-:class:`tuple`, :class:`dict`) by *destructuring* them: each element is stored
-independently under its own cache key, and on load the original structure is
-reassembled.  This avoids redundant storage of shared sub-structures across
-different cached calls.  See :doc:`destructuring` for a full discussion with
-figures, including the special cases (opaque objects, namedtuples, empty
-containers).
+``"dill"``, ``"bagofholding_hdf"``) *destructure* collections into separate
+storage entries rather than storing them as one blob — see :doc:`destructuring`
+for the full explanation, with figures.
 
 The optional ``remaining_depth`` key (integer, default ``1``) controls the
-granularity — see :doc:`destructuring` for the full depth rule, with figures.
-In short: ``0`` splits every element into its own entry; the default ``1``
-inlines scalars into their parent so a flat list or dict of scalars becomes a
-single entry; higher values inline progressively deeper sub-collections too,
-trading storage entries and structural sharing for fewer, larger entries.
+granularity; see :doc:`destructuring` for the depth rule.
 
 Example:
 
@@ -516,6 +512,61 @@ read from without risking a write to any of them.
    values.root = "/shared/teammate/.cache/fleche/values"
    calls.type = "cloudpickle"
    calls.root = "/shared/teammate/.cache/fleche/calls"
+
+``type = "ssh"`` — remote caches
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A cache section (or a ``[[stack]]``/``pool`` element) with a top-level
+``type = "ssh"`` key is not a normal ``values``/``calls`` cache: it proxies
+every operation to another machine's configured cache over SSH, via
+:class:`~fleche.remote.SshCache`.  The remote runs
+``python -m fleche remote --serve``.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 15 65
+
+   * - Key
+     - Required
+     - Meaning
+   * - ``host``
+     - yes
+     - SSH target, e.g. ``"user@host"`` or any alias from ``~/.ssh/config``.
+   * - ``cache_name``
+     - no
+     - Named cache to select on the remote (default: the remote's own
+       default cache).
+   * - ``python``
+     - no
+     - Remote Python executable, default ``"python3"``.
+   * - ``ssh_options``
+     - no
+     - Extra arguments inserted between ``ssh`` and *host*, e.g. for
+       connection multiplexing.
+   * - ``setup_commands``
+     - no
+     - Shell snippets run on the remote before the server starts.
+   * - ``workdir``
+     - no
+     - Remote directory to ``cd`` into before launching the server.
+
+An ``ssh`` entry is typically the fallback layer of a ``[[stack]]``, with a
+local, writable layer in front (saves go to the local layer; the remote is
+read-through):
+
+.. code-block:: toml
+
+   [[shared]]                          # local layer (saves go here)
+   values.type = "cloudpickle"
+   values.root = "~/.fleche/values"
+   calls.type = "sql"
+   calls.url = "sqlite:///~/.fleche/calls.db"
+
+   [[shared]]                          # remote layer (read-through)
+   type = "ssh"
+   host = "user@bigpc.example.com"
+
+See :doc:`/dev/ssh_cache` for the wire protocol, trust model, and internals.
 
 Full Configuration Example
 --------------------------
