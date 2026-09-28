@@ -140,8 +140,10 @@ each backend achieves this.
 .. note::
 
    With the standard-library ``ProcessPoolExecutor`` (which uses ``pickle``),
-   fleche-decorated functions must be defined at **module level**.  Lambdas and
-   locally-defined functions will raise a ``PicklingError``.
+   fleche-decorated functions must be defined at **module level**.  Lambdas
+   raise ``pickle.PicklingError``; other locally-defined (nested) functions
+   raise ``AttributeError`` — either way, pickling fails and the submission
+   errors.
 
    Third-party executor libraries that use ``dill`` or ``cloudpickle`` for
    serialisation — such as `executorlib <https://executorlib.readthedocs.io/>`_
@@ -153,11 +155,30 @@ each backend achieves this.
    pickle. This is more likely to bite on macOS, where the standard library
    has defaulted to ``spawn`` instead of ``fork`` since Python 3.8 (`bpo-33725
    <https://bugs.python.org/issue33725>`_) — ``spawn`` workers re-import
-   ``__main__`` and hit the same restriction. Prefer a module-level function
-   for anything submitted to a process pool.
+   ``__main__`` and hit the same restriction. **Python 3.14 changed the
+   default start method to** ``forkserver`` **on Linux too**, so this is no
+   longer a macOS-only concern — it broke this project's own
+   ``ConcurrentExecution.ipynb`` notebook, fixed by pinning
+   ``multiprocessing.get_context("fork")`` (see the ``CHANGELOG``). Prefer a
+   module-level function for anything submitted to a process pool.
+
+   fleche's own :class:`~fleche.BoundWrapper` is affected too: today it only
+   survives ``ProcessPoolExecutor`` reliably under the ``fork`` start method,
+   since ``spawn``/``forkserver`` workers re-import ``__main__`` to resolve
+   the submitted callable — this fails for a locally-defined function (`issue
+   #840 <https://github.com/pmrv/fleche/issues/840>`_; a fix is in flight but
+   not yet merged). On Python 3.14, where Linux now defaults to
+   ``forkserver``, pin the fork context explicitly — either
+   ``multiprocessing.get_context("fork")`` passed to
+   :class:`~concurrent.futures.ProcessPoolExecutor` via ``mp_context=``, or by
+   otherwise ensuring the pool uses ``fork`` — mirroring what this project's
+   own ``ConcurrentExecution.ipynb`` notebook does.
 
 BoundWrapper — Freezing State for Workers
 -----------------------------------------
+
+See :doc:`/usage/helpers` for the full ``.bind()`` API; this section covers
+the parallel-execution-specific extension to plain functions.
 
 Beyond decorated functions, :class:`fleche.BoundWrapper` also works on
 **plain functions that call fleche-decorated functions internally**: the
@@ -261,11 +282,8 @@ automatically:
 - Cache hits (for fleche-decorated callables submitted directly) are served
   from an already-completed :class:`~concurrent.futures.Future` without ever
   touching the executor, avoiding submit/serialise overhead on cached inputs.
-- Cache misses: the args are pre-applied to the wrapper via
-  :func:`functools.partial` and the resulting partial is wrapped in a
-  :class:`~fleche.BoundWrapper`, which is then submitted to the executor with
-  no positional arguments.  The worker invokes ``bound()`` which calls
-  ``partial(wrapper, *args)()`` with the captured cache and metadata context.
+- On a cache miss, the call (with its arguments) is bound to the active
+  cache/metadata and submitted to the underlying executor as normal.
 
 .. note::
 
@@ -330,9 +348,19 @@ payload:
    ...         fleche.wrap_executor(executor)
    ...         future = executor.submit(
    ...             heavy_computation, 5,
-   ...             resource_dict={"cores": 4},   # goes to SingleNodeExecutor.submit
+   ...             resource_dict={"cores": 1},   # goes to SingleNodeExecutor.submit
    ...         )
    ...         assert future.result() == 125
+
+.. note::
+
+   ``resource_dict={"cores": N}`` with ``N > 1`` routes through executorlib's
+   MPI spawner, which requires ``mpi4py`` plus a system MPI runtime
+   (``mpiexec``) installed separately — neither is pulled in by the
+   ``fleche[executorlib]`` extra. Without them, this path fails with a
+   ``FileNotFoundError: mpiexec`` raised inside a background thread, where it
+   is swallowed rather than propagated to ``future.result()`` — the call
+   hangs indefinitely instead of raising.
 
 .. note::
 
@@ -438,19 +466,12 @@ Cache Stampede (Thundering Herd)
 Fleche does **not** protect against cache stampedes in general.  When multiple workers
 (threads or processes) call the same fleche-decorated function with identical
 arguments at the same time and the result is not yet cached, all of them will
-experience a cache miss simultaneously.  Each worker then independently
-computes the function and writes the result — wasting redundant work and
-potentially producing inconsistent call metadata (e.g. ``Runtime`` values will
-differ between the duplicate records).
+experience a cache miss simultaneously.  Each worker computes and writes to
+the same key independently — the final stored record reflects whichever
+write lands last, including its ``Runtime`` metadata, discarding the others.
 
-The root cause is that there is no reservation mechanism between the cache
-miss check and the cache write in ``wrapper.py``.  A correct fix would require
-pre-allocating a "pending" slot in the cache so that other workers can detect
-the in-flight computation and wait, rather than starting their own.
-Implementing this correctly is non-trivial: it requires key-scoped locking,
-timeout handling for stale allocations (e.g. if the computing worker crashes),
-and cross-process coordination for file- and SQL-backed stores.  This is
-currently out of scope.
+There is currently no reservation mechanism between the miss check and the
+write, so this isn't planned as a near-term fix — see workarounds below.
 
 .. warning::
 
