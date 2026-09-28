@@ -75,31 +75,6 @@ Behavior details
 - For arguments and result, equality is by digest: the template value and the stored value are each passed through :func:`~fleche.digest.digest` and the resulting hex strings are compared.  Pass a :class:`~fleche.digest.Digest` instance (e.g. via :func:`~fleche.D`) to match by a known digest without re-hashing; a plain ``str`` — even one that looks like a hex digest — is hashed as a string value and will not match.
 - Metadata filtering supports presence checks (empty dict) and equality on simple types (str, bool, int, float). Complex types (e.g., lists) are handled correctly via client-side filtering.
 
-.. warning::
-
-   **Known trap (bug #916):** on a function decorated with
-   ``hash_version=False`` or ``hash_module=False``, ``.query()`` silently
-   matches nothing for calls made under it — even though ``.contains()``
-   correctly returns ``True`` for the same call. The query template built by
-   ``.query()`` always fills in the function's *real* ``version``/``module``,
-   while the stored record has that field nulled out by the ``hash_version``/
-   ``hash_module`` flag, so the two never match::
-
-      >>> from fleche import fleche, cache
-      >>> @fleche(version="v1", hash_version=False)
-      ... def add(a, b): return a + b
-
-      >>> with cache("memory"):
-      ...     add(1, 2)
-      ...     add.contains(1, 2)          # True
-      ...     add.query(1, 2).count()     # 0 -- silently wrong
-
-   The call *is* cached; only querying is broken. Until this is fixed,
-   avoid ``.query()`` on functions decorated with ``hash_version=False`` or
-   ``hash_module=False``, or query via ``cache().query(...)`` with an
-   explicit ``QueryCall`` that sets those fields to ``None`` yourself.
-
-
 Performance
 -----------
 When using the SQL backend, most simple filters (name/module/version/result/arguments and simple metadata predicates) are executed in the database for efficiency. Final results are then loaded and any remaining checks are applied client-side as needed.

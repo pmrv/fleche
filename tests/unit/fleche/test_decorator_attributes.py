@@ -1,6 +1,7 @@
 import inspect
 from typing import Iterable
 
+import pytest
 
 from fleche import fleche, cache
 from fleche.call import Call
@@ -165,3 +166,20 @@ def test_wrapper_digests_as_the_function_it_wraps():
     assert wrapped.__digest__() == Digest(digest(plain))
     assert digest(wrapped) == digest(plain)
     assert digest(wrapped) != digest(fleche()(other))
+
+
+@pytest.mark.parametrize("flag", ["hash_version", "hash_module"])
+def test_query_matches_calls_cached_without_hashing_field(flag):
+    """Regression for #916: ``.query()`` must find calls stored with version/module nulled."""
+    c = Cache(ValueMemory({}), CallMemory({}))
+    with cache(c):
+
+        @fleche(version="v1", **{flag: False})
+        def add(a, b):
+            return a + b
+
+        assert add(1, 2) == 3
+        assert add.contains(1, 2)
+        assert add.query(1, 2).count() == 1
+        assert add.query().count() == 1
+        assert add.query(9, 9).count() == 0

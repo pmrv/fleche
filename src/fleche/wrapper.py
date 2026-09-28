@@ -141,13 +141,22 @@ def make_get_call(func, policy, hash_version, hash_module, hash_code):
     return get_call
 
 
-def make_query(func, policy):
-    """Build the `.query` helper that yields matching calls from the active cache."""
+def make_query(func, policy, hash_version=True, hash_module=True):
+    """Build the `.query` helper that yields matching calls from the active cache.
+
+    ``hash_version``/``hash_module`` mirror :func:`make_get_call`: when off, the stored record has that
+    field nulled, so the query template nulls it too (``None`` is a wildcard) instead of filtering on
+    a value the record deliberately lacks.
+    """
     def _query_func(
         *args, metadata={}, **kwargs
     ) -> Iterable[AnyCall]:
         call = QueryCall.from_call(func, *args, **kwargs)
         policy.strip_for_key(call.arguments)
+        if not hash_version:
+            call.version = None
+        if not hash_module:
+            call.module = None
         if "metadata" in call.arguments:
             logger.warning(
                 "Function argument 'metadata' shadowed by query argument"
@@ -352,7 +361,9 @@ _PRE_WRAPPER_SPECS: list[_HelperSpec] = [
         doc_prefix="Return matching results from current cache for",
         ret=Iterable[Call],
         extra_doc=_QUERY_DOC,
-        builder=lambda ctx: make_query(ctx.func, ctx.policy),
+        builder=lambda ctx: make_query(
+            ctx.func, ctx.policy, ctx.hash_version, ctx.hash_module
+        ),
     ),
     _HelperSpec(
         name="load",

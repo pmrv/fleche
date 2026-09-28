@@ -166,9 +166,8 @@ per-function metadata in one frozen dataclass:
   ``VersionInfo`` — ``module`` and ``version``
   are included in cache keys by default (``hash_module=True``,
   ``hash_version=True``); set either flag to ``False`` to exclude the
-  corresponding field from the key (see the warning on ``.query()`` in
-  :doc:`query` — turning either flag off currently breaks ``.query()``
-  for calls made under it)
+  corresponding field from the key (``.query()`` treats
+  that field as a wildcard for such functions)
 - the sets of :class:`~fleche.call.Ignored`- and
   :class:`~fleche.call.Required`-annotated argument names
 
