@@ -166,9 +166,19 @@ Decorator kwargs on `@fleche(...)`:
   applies them when binding, so an unsupplied argument is recorded at its
   default value.
 - `hash_version=` / `hash_module=` — pin the digest scheme / module
-  identity explicitly.
+  identity explicitly. The default `hash_module=True` keys every entry on
+  `__module__`, so moving a function into a package (or renaming its
+  module) silently orphans its whole cache — set `hash_module=False` from
+  day one for code that may be restructured, or plan a call-index
+  migration (issue #942 records a tested recipe:
+  `dataclasses.replace(digested_call, module=new)` + `.to_lookup_key()`,
+  add-only first, against a db copy).
 - `meta=[...]` — metadata classes to record (`Runtime`, `Environment`,
-  `Git`, or a `Tags(...)` instance) — see `docs/usage/`.
+  `Git`, or a `Tags(...)` instance) — see `docs/usage/`. **Additive, not
+  replacing**: the recorded metadata is `state.get_metadata() + tuple(meta)`
+  (`wrapper.py`), i.e. `meta=` is appended to the active/config default
+  (`[Runtime]` unless `fleche.toml` says otherwise) — `meta=[]` does not
+  suppress `Runtime`.
 - `isolate=True` — runs each call in a unique tempdir (not thread-safe;
   uses `os.chdir`).
 - Per-argument: `Ignored[T]` / `Required[T]` type annotations do the same
@@ -198,14 +208,23 @@ shortcut instead of the real value — the cache expands it back to the
 value before hashing. `D(value)` also accepts a stored value (returns its
 digest) or a hex-digest string, so `cache().load_value(D(x))` retrieves a
 value directly from either shape — see `docs/digests/digests_as_args.rst`
-("Looking Up a Value Directly").
+("Looking Up a Value Directly"). Note this is a **value** digest
+(`fleche.digest.digest()`), not a call's lookup key (`func.digest(...)`):
+`cache().load_value(D(func.digest(x)))` raises `KeyError` — a call's
+lookup key and its result's value digest are different digests over
+different things.
 
 ## Querying stored calls
 
 ```python
-expensive.query().filter(...).table()   # pandas DataFrame of matching calls
+expensive.query(x, y).table()            # kwarg/positional-arg filtering, exact match
+expensive.query().filter(...).table()    # .filter(predicate) — arbitrary predicate
 expensive.query().latest()               # most recent call by Runtime timestamp
 ```
+
+These are two different filtering mechanisms — `.query(**kwargs)` matches
+call arguments/metadata exactly, `.filter(predicate)` runs an arbitrary
+predicate over the (already-fetched) calls — see `docs/usage/query.rst`.
 
 `QueryIterator` is chainable (`take`/`skip`/`filter`/`unique`/`sorted`);
 terminal methods (`only`/`any`/`count`/`table`/`groupby`/`transfer`/`evict`)

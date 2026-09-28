@@ -10,7 +10,7 @@ Behavior
 
 * **Saving**: When saving a result, it is always written to the **first** cache in the stack.
 * **Loading**: When loading a result, the stack is traversed starting from the base cache (index 0) through each fallback cache in order.
-* **Automatic Hit Transfer**: If a result is found in a fallback cache (index > 0), it is automatically copied down to the base cache (index 0). This ensures that frequently accessed data migrates to the fastest cache in your stack.
+* **Automatic Hit Transfer**: If a result is found in a fallback cache (index > 0), it is automatically copied down to the base cache (index 0). This ensures that frequently accessed data migrates to the fastest cache in your stack. This only applies to full function calls (``Call`` objects) — not to individual values loaded via ``load_value``.
 
 Example
 -------
@@ -40,8 +40,6 @@ Example
     ...     # Result is found in remote_cache and automatically copied to local_cache
     ...     my_function(10)
 
-Automatic hit transfer only applies to full function calls (``Call`` objects) and not to individual values loaded via ``load_value``.
-
 Layering Caches at Runtime
 ---------------------------
 
@@ -63,7 +61,8 @@ context-manager shortcut ``cache(new_cache, stack=True)``:
 
 ``push`` always flattens rather than nests: pushing onto an existing ``CacheStack``
 prepends the new cache to that stack's members instead of wrapping the whole stack, so
-``stack=True`` never runs into the nesting restriction below.
+``stack=True`` never risks the ``CacheStack``-in-``CacheStack`` error described in
+Restrictions, below.
 
 Restrictions
 ------------

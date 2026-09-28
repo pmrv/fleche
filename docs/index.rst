@@ -16,7 +16,6 @@ Welcome to the **Fleche** library documentation.
     for numpy, pandas, and custom types
   - **Query support** – search and inspect cached calls as pandas DataFrames
   - **Configurable** – TOML-based project and global configuration
-  - **Thread-safe** – ``ContextVar``-based state management
 
 * **Get started** – see the :doc:`installation`.
 

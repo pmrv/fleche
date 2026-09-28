@@ -41,6 +41,13 @@ This means you can convert a class from one record framework to the other withou
 invalidating any already-cached call that took an instance of that class as an
 argument (or returned one).
 
+.. note::
+
+   This example needs ``attrs`` (``pip install attrs``). Digesting ``attrs``
+   instances is a soft dependency of ``fleche`` — nothing extra needs to be
+   installed to *use* the equivalence, but ``attrs`` itself is not pulled in
+   by ``pip install fleche``.
+
 .. code-block:: pycon
 
     >>> from dataclasses import dataclass
@@ -95,7 +102,7 @@ Boundaries to Keep in Mind
   those; coming back out it will not.  In particular, validators do not re-run on
   load.  Make sure your validators express *invariants of the data*, not *side
   effects to perform on construction*.
-* **Different runtime semantics still differ at runtime.**  ``slots``, ``frozen``,
+* **Runtime semantics are not part of the digest.**  ``slots``, ``frozen``,
   custom ``__eq__`` / ``__hash__``, attrs's ``eq_key``/``order_key``, ...  None of
   these affect the digest.  Two records that hash the same may still compare or
   iterate differently.  The digest tells you when ``fleche`` will reuse a cached
@@ -182,10 +189,9 @@ decorated function, defaults also reach the cache key by a second route
 regardless of ``hash_code``: :meth:`~fleche.call.Call.from_call` applies them
 when binding, so an unsupplied argument is recorded at its default value.
 
-Reaching the cache key requires ``hash_code=True``: the decorator leaves
-``code_digest`` out of the key by default, and two closures out of one factory
-agree on qualified name and module, so without that flag they still share an
-entry.
+Reaching the cache key requires ``hash_code=True`` (the default is ``False``);
+see :doc:`/dev/function_profile` for how ``code_digest`` is computed and why
+that flag exists.
 
 Boundaries for Function Digests
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -203,33 +209,25 @@ Boundaries for Function Digests
 * **A capture or default that cannot be digested is refused, not skipped.**
   Digesting a function that holds an object ``fleche`` does not know how to hash
   raises :exc:`~fleche.digest.Indigestible`, just like passing that object as an
-  argument would.  The decorator itself degrades instead of failing: it warns
-  and falls back to a code-only ``code_digest``, which brings the collision
-  between closures from one factory back with it.
+  argument would.  The decorator degrades instead of failing — see
+  :doc:`/dev/function_profile` for exactly how it falls back to a code-only
+  ``code_digest``.
 * **A method's implicit class capture is identified by name.**  Mentioning
   ``super()`` (or ``__class__``) makes the compiler hand the method a
   ``__class__`` cell holding the class it was defined in.  User-defined classes
   are :exc:`~fleche.digest.Indigestible` as values, so that cell is folded in as
   ``module.QualName`` instead — otherwise every method calling ``super()`` would
   be refused.
-* **Cycles are cut with a back-reference.**  A recursive inner function
-  captures itself, two closures can capture each other, and a function can be
-  reached from its own defaults — digesting those by value would recurse
-  forever.  When the walk meets a function it is already digesting, it folds in
-  a marker naming *how far back up the walk* that function sits, instead of
-  descending again.  The distance matters: a plain "seen it" marker gives
-  ``a -> b -> a`` and ``c -> d -> d`` the same digest, though one ping-pongs
-  between two functions and the other recurses on the second.  Being relative,
-  the marker also makes a cycle digest the same wherever the walk meets it.
-  Everything else about those functions — code, captures, defaults — is folded
-  in where the walk first reached them.
+* **Cycles are cut with a back-reference.**  A recursive or mutually
+  recursive closure digests without recursing infinitely, and the digest is
+  stable regardless of where the walk enters the cycle.
 * **A bound method carries its receiver.**  ``obj.method`` digests as the
   underlying function *plus* ``obj``, so two instances do not share a digest —
-  and a method bound to an object ``fleche`` cannot hash is refused, exactly as
-  that object would be as an argument.  A classmethod's receiver is a class, so
-  it is named rather than valued.  The decorator is unaffected: a bound method's
-  ``code_digest`` is taken from the underlying function, because the receiver
-  already arrives as an ordinary argument of the call.
+  and a method bound to an object that ``fleche`` cannot hash is refused,
+  exactly as that object would be as an argument.  A classmethod's receiver is
+  a class, so it is named rather than valued.  The decorator is unaffected: a
+  bound method's ``code_digest`` is taken from the underlying function,
+  because the receiver already arrives as an ordinary argument of the call.
 * **Decorated functions digest as what they wrap.**  ``digest(fleche()(f)) ==
   digest(f)`` — the decoration is transparent, so a cached function does not
   care whether it is handed the raw or the cached callable.
@@ -237,16 +235,5 @@ Boundaries for Function Digests
 Giving a Function Its Own Digest
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Every function shares one type, so a class-level ``__digest__`` could never
-distinguish them; for functions the attribute is therefore read off the function
-object itself.  That is the escape hatch when a closure captures something
-unhashable but you know what actually matters:
-
-.. code-block:: pycon
-
-    >>> def make_query(connection, table):
-    ...     def run():
-    ...         return connection.execute(f"SELECT * FROM {table}")
-    ...     # the connection is not part of the result's identity, the table is
-    ...     run.__digest__ = lambda: digest(("run", table))
-    ...     return run
+Functions are the one type where ``__digest__`` is read per-instance rather
+than per-class — see :doc:`/dev/custom_digests` for the escape-hatch example.

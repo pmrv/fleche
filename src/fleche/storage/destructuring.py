@@ -247,7 +247,8 @@ class DestructuringMixin(base.ValueStorage):
         >>> from fleche.storage.base import ValueMixin
         >>> from fleche.storage.memory import MemoryBackend
         >>> @dataclass(frozen=True)
-        ... class MyValueStorage(DestructuringMixin, ValueMixin, MemoryBackend): ...
+        ... class MyValueStorage(DestructuringMixin, ValueMixin, MemoryBackend):
+        ...     __hash__ = object.__hash__
         >>> vm = MyValueStorage(storage={})
         >>> key = vm.save([1, [2, 3]])
         >>> vm.load(key) == [1, [2, 3]]
