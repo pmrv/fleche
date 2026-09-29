@@ -106,6 +106,13 @@ calls.type = "cloudpickle"
 calls.root = "~/.cache/fleche/calls"
 ```
 
+`[default].cache` accepts either a section name (a string, as above) or an
+inline cache config with the same shape a named section would have —
+`cache.template = "memory"`, or a full `values`/`calls` table — so a
+single-cache file needs no separate section (`load_cache_config` branches
+on `isinstance(default_cache, str)`; non-strings go straight to
+`cache_from_config`).
+
 For the common cases a section can instead name a `template` plus its
 required storage args — `template = "cloudpickle"` with a single `root`
 splits into `root/values` + `root/calls`; `memory`/`pickle`/`dill`/
