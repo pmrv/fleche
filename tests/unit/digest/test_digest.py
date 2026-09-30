@@ -828,11 +828,6 @@ class _Counter:
         return self.start + by
 
 
-def test_bound_method_can_be_digested():
-    """``digest`` handles a bound method directly — no separate entry point."""
-    assert isinstance(digest(_Counter(1).advance), Digest)
-
-
 def test_bound_methods_of_different_receivers_differ():
     """The receiver is part of what the method computes.
 
@@ -878,39 +873,9 @@ def test_bound_method_of_indigestible_receiver_raises():
         digest(Opaque().go)
 
 # --- Tests for digesting Python descriptors (staticmethod, classmethod, property) ---
-
-
-def test_staticmethod_can_be_digested():
-    """staticmethod objects must be digestible without raising Indigestible."""
-
-    def func(x):
-        return x + 1
-
-    sm = staticmethod(func)
-    result = digest(sm)
-    assert isinstance(result, Digest)
-
-
-def test_classmethod_can_be_digested():
-    """classmethod objects must be digestible without raising Indigestible."""
-
-    def func(cls, x):
-        return x + 1
-
-    cm = classmethod(func)
-    result = digest(cm)
-    assert isinstance(result, Digest)
-
-
-def test_property_can_be_digested():
-    """property objects must be digestible without raising Indigestible."""
-
-    def getter(self):
-        return self._x
-
-    p = property(getter)
-    result = digest(p)
-    assert isinstance(result, Digest)
+#
+# As with the datetime block, plain "X is digestible" smokes are omitted: each
+# test here digests real descriptors, so losing descriptor support fails them.
 
 
 def test_staticmethod_digest_differs_from_underlying_function_digest():
@@ -1110,27 +1075,10 @@ def test_generic_mapping_same_content_same_type_identical_digest():
 
 
 # --- Tests for datetime type digests ---
-
-
-def test_datetime_date_is_digestible():
-    assert digest(datetime.date(2024, 1, 15)) is not None
-
-
-def test_datetime_datetime_is_digestible():
-    assert digest(datetime.datetime(2024, 1, 15, 12, 0, 0)) is not None
-
-
-def test_datetime_time_is_digestible():
-    assert digest(datetime.time(12, 30, 45)) is not None
-
-
-def test_datetime_timedelta_is_digestible():
-    assert digest(datetime.timedelta(days=3, seconds=7200)) is not None
-
-
-def test_datetime_timezone_is_digestible():
-    assert digest(datetime.timezone.utc) is not None
-    assert digest(datetime.timezone(datetime.timedelta(hours=5))) is not None
+#
+# Digestibility of each type is pinned transitively: every test below digests
+# real instances, so a regression that made one of these types Indigestible
+# fails here.  Dedicated "X is digestible" smokes would be strictly weaker.
 
 
 def test_different_dates_have_different_digests():
