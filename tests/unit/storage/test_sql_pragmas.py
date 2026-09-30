@@ -1,7 +1,12 @@
 """Tests for SQLite PRAGMA configuration in the Sql backend."""
 
 import pytest
-import sqlalchemy
+# Named imports rather than attribute access off the package: sqlalchemy's
+# ``__init__`` does not re-export the ``event`` submodule, so ``sqlalchemy.event``
+# resolves only when something else has already imported it.  No importorskip is
+# needed — ``tests/fixtures.py``, registered as a conftest plugin, imports
+# sqlalchemy unconditionally.
+from sqlalchemy import create_engine, create_mock_engine, event, text
 
 from fleche.storage import sql as sql_module
 from fleche.storage.sql import Sql
@@ -9,14 +14,14 @@ from fleche.storage.sql import Sql
 
 def _journal_mode(sql: Sql) -> str:
     with sql._session_context():
-        result = sql._local.session.execute(sqlalchemy.text("PRAGMA journal_mode"))
+        result = sql._local.session.execute(text("PRAGMA journal_mode"))
         return result.scalar()
 
 
 def _record_statements(engine) -> list[str]:
     """Collect every SQL statement executed against ``engine`` into a list."""
     statements: list[str] = []
-    sqlalchemy.event.listen(
+    event.listen(
         engine,
         "before_cursor_execute",
         lambda conn, cursor, statement, *args: statements.append(statement),
@@ -186,7 +191,7 @@ def test_configure_pragmas_is_a_no_op_for_non_sqlite_dialects():
     A mock engine stands in for the real thing: it carries a dialect but
     supports no event registration, so an unguarded configurator raises here.
     """
-    engine = sqlalchemy.create_mock_engine("postgresql://", lambda *a, **kw: None)
+    engine = create_mock_engine("postgresql://", lambda *a, **kw: None)
 
     sql_module._configure_sqlite_pragmas(engine, None)
 
@@ -197,7 +202,7 @@ def test_memory_sqlite_skips_the_journal_mode_round_trip():
     ``is_memory`` short-circuit must actually fire — it reads the parsed URL
     because ``str(engine.url)`` percent-encodes the colons in ``:memory:``.
     """
-    memory = sqlalchemy.create_engine("sqlite:///:memory:", future=True)
+    memory = create_engine("sqlite:///:memory:", future=True)
     memory_statements = _record_statements(memory)
     sql_module._configure_sqlite_pragmas(memory, None)
 
@@ -209,7 +214,7 @@ def test_file_backed_sqlite_still_takes_the_journal_mode_round_trip(tmp_path):
     to file-backed databases, which are the ones WAL is for.
     """
     db_path = tmp_path / "calls.db"
-    on_disk = sqlalchemy.create_engine(f"sqlite:///{db_path}", future=True)
+    on_disk = create_engine(f"sqlite:///{db_path}", future=True)
     on_disk_statements = _record_statements(on_disk)
     sql_module._configure_sqlite_pragmas(on_disk, db_path)
 
