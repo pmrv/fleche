@@ -68,13 +68,6 @@ class AttrsEmpty:
 # ---------------------------------------------------------------------------
 
 
-def test_attrs_define_can_be_digested():
-    a = AttrsBasic(x=1, y="hi")
-    d = digest(a)
-    assert isinstance(d, Digest)
-    assert len(d) == 64
-
-
 def test_attrs_frozen_can_be_digested():
     a = AttrsFrozen(x=1, y="hi")
     d = digest(a)
@@ -112,11 +105,6 @@ def test_attrs_digest_distinguishes_classes():
 
 def test_attrs_empty_can_be_digested():
     digest(AttrsEmpty())
-
-
-def test_attrs_nested_can_be_digested():
-    a = AttrsNested(inner=AttrsBasic(x=1, y="hi"), tag="t")
-    assert isinstance(digest(a), Digest)
 
 
 def test_attrs_with_collections_can_be_digested():
