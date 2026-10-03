@@ -11,6 +11,7 @@ Behavior
 * **Saving**: When saving a result, it is always written to the **first** cache in the stack.
 * **Loading**: When loading a result, the stack is traversed starting from the base cache (index 0) through each fallback cache in order.
 * **Automatic Hit Transfer**: If a result is found in a fallback cache (index > 0), it is automatically copied down to the base cache (index 0). This ensures that frequently accessed data migrates to the fastest cache in your stack. This only applies to full function calls (``Call`` objects) — not to individual values loaded via ``load_value``.
+* **Eviction**: Unlike saving, evicting a key removes it from **every** cache in the stack, not just the base cache. This is asymmetric with saving on purpose — an eviction is meant to forget a result everywhere, not just at the fastest layer.
 
 Example
 -------
