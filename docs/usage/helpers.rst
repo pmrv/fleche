@@ -40,7 +40,7 @@ Returns ``True`` if the result for the given call is already present in the cach
 ``.query(*args, metadata={}, **kwargs)``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Returns a :class:`~fleche.query.QueryIterator` over matching cached calls from the active cache. Any argument passed as ``None`` acts as a wildcard, matching any stored value for that parameter. The ``metadata`` keyword argument accepts a dictionary of metadata tags to further filter results (e.g., ``metadata={"tags": {"project": "alpha"}}``). The iterator supports chainable methods such as ``.filter()``, ``.table()``, ``.count()``, ``.results()``, ``.evict()``, and more.
+Returns a :class:`~fleche.query.QueryIterator` over matching cached calls from the active cache. Any argument passed as ``None`` acts as a wildcard, matching any stored value for that parameter. The ``metadata`` keyword argument accepts a dictionary of metadata tags to further filter results (e.g., ``metadata={"tags": {"project": "alpha"}}``). The iterator supports chainable methods such as ``.filter()``, ``.sorted()``, and ``.take()``, plus terminal methods such as ``.table()``, ``.count()``, ``.results()``, and ``.evict()`` that consume it — see :doc:`query` for which is which.
 
 .. warning::
 
@@ -194,7 +194,7 @@ Usage with Decorated Methods
 .. note::
 
    When ``@fleche`` is applied to a method, the helper methods (`.call`, `.digest`, `.query`,
-   `.load`, `.contains`, `.rerun`) do **not** automatically bind ``self``. Python's bound method
+   `.load`, `.contains`, `.rerun`, `.bind`) do **not** automatically bind ``self``. Python's bound method
    objects delegate custom attribute lookups to the underlying function, so
    ``obj.method.query`` and ``MyClass.method.query`` return the same helper function.
    However, this helper is a plain function — not a bound method — so ``obj`` is not
