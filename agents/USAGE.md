@@ -150,7 +150,7 @@ re-deriving the TOML by hand.
 | `"void"` | no-op | — | discards everything |
 | `"pickle"` / `"cloudpickle"` / `"dill"` | filesystem, one file per entry | `root` | `cloudpickle`/`dill` handle lambdas/closures stdlib `pickle` can't; optional `compress`, `secret_key` (HMAC signing) |
 | `"bagofholding_hdf"` | HDF5 file(s) via `bagofholding` | `root` | optional `version_validator`, `prefix_length` (multiplex keys sharing an N-char digest prefix into one shared `.h5` file instead of one file per key; default `2`, `0` for one file per key, `None` infers from existing files; validated against existing files in `root` at construction — `refix(n)` migrates and returns the re-sharded storage, the `consolidate(root, n)` classmethod repairs a mixed root) |
-| `"sql"` | SQLAlchemy | `url` | **calls only** — pair with a value backend above |
+| `"sql"` | SQLAlchemy | — | **calls only** — pair with a value backend above; `url` is optional and defaults to non-persistent in-memory SQLite (`sqlite:///:memory:`), so set it for anything that should survive the process |
 | `"ssh"` | forwards to a remote `python -m fleche remote --serve` process | `host` | whole-cache forwarding, not a per-key backend |
 
 `values` and `calls` are stored separately on purpose: call records
