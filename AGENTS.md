@@ -14,6 +14,7 @@ Pick the guide that matches what you're doing:
 
 When editing this file or `agents/*.md`, write **one sentence per line** (and one `;`-clause per line);
 never hard-wrap or join lines.
+`python agents/reflow.py` applies this for you.
 Many PRs edit these guides at once, and line-per-sentence keeps their diffs small and mergeable.
 See [agents/DEVELOPING.md](agents/DEVELOPING.md#conventions).
 

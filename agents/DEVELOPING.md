@@ -51,6 +51,8 @@ Other optional deps are gated via `pyiron_snippets.import_alarm.ImportAlarm` —
   Markdown renders the lines as one paragraph, but a diff then touches only the sentences that changed, so concurrent PRs editing these files merge without conflicts.
   Keep tables to short cells;
   anything longer than a phrase belongs in a list.
+  Run `python agents/reflow.py` after editing to apply this (`--check` only reports, exiting 1 if a file needs reflowing);
+  it changes line breaks only, never words.
 
 ## Where to look
 
