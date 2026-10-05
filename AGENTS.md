@@ -11,7 +11,7 @@ This file is deliberately short. Pick the guide that matches what you're doing:
 | Task | Guide |
 |---|---|
 | Writing code that *calls* fleche — decorating functions, configuring a cache via `fleche.toml`, choosing a storage backend, querying stored calls | **[agents/USAGE.md](agents/USAGE.md)** |
-| Changing fleche's *own* source — commands, tests, module map, architecture internals, the design/issue-tracker history, commit conventions | **[agents/DEVELOPING.md](agents/DEVELOPING.md)** |
+| Changing fleche's *own* source — commands, tests, module map, architecture internals, open design themes on the issue tracker, commit conventions | **[agents/DEVELOPING.md](agents/DEVELOPING.md)** |
 
 Full human-facing docs (Sphinx) live in `docs/`; runnable examples live in
 `notebooks/`.
