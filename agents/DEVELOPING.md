@@ -890,8 +890,18 @@ Git history is the changelog.
   ships the differential gc test with a custom destructurer;
   `mend` deliberately does not route through `child_items`, ~70% slower for no gain;
   targets the `temppath` branch, closes #883) under the path-handling theme.
-- Single-page docs PRs over `docs/`, each mergeable alone: #932 (parallel_execution: MPI example), #933 (usage: `.fleche` namespace, #916, groupby staleness — needs a rebase onto `tldr.rst`/`helpers.rst` as they are on `main`), #934 (SSH config + destructuring list), #965 (usage: scope the lazy-return claim to `load()`/`query()`), #989 (parallel_execution: an MPI-decorated call runs once per rank cold and serves one rank's record warm), #990 (digests: ints encode directly, floats/complex reduce via `hash(value)` to the int path), #993 (dev: `ssh_cache.rst` RPC-trace and `info()` claims).
-  Page overlaps: #932 ↔ #989, #934 ↔ #993 — whichever of a pair lands second needs a rebase.
+- Single-page docs PRs over `docs/`, each mergeable alone:
+  - #932 — parallel_execution: MPI example.
+  - #933 — usage: `.fleche` namespace, #916, groupby staleness.
+    Needs a rebase onto `tldr.rst`/`helpers.rst` as they are on `main`.
+  - #934 — SSH config + destructuring list.
+    Needs a rebase onto `ssh_cache.rst` as #993 left it.
+  - #965 — usage: scope the lazy-return claim to `load()`/`query()`.
+  - #989 — parallel_execution: an MPI-decorated call runs once per rank cold and serves one rank's record warm.
+  - #990 — digests: ints encode directly, floats/complex reduce via `hash(value)` to the int path.
+
+  #932 and #989 both edit `parallel_execution.rst`;
+  whichever lands second needs a rebase.
 - Test-only coverage sweeps: #939 (pins the `Intent.READ` no-op fast path in both lock mixins;
   drops 11 tests strictly weaker than a sibling;
   converts `test_local_function_digests_same_as_module_level` into `test_nesting_changes_a_function_digest` — `CO_NESTED` is in `co_flags`, so lifting a helper out of an enclosing function invalidates its cached calls under `hash_code=True`;
