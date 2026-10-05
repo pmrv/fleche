@@ -2,9 +2,12 @@
 
 Usage (from anywhere in the repo):
 
-    python agents/reflow.py            # rewrite AGENTS.md and agents/*.md in place
-    python agents/reflow.py --check    # list files that need reflowing; exit 1 if any
-    python agents/reflow.py FILE...    # only these files
+    python .github/workflows/reflow_agent_docs.py          # rewrite AGENTS.md and agents/*.md in place
+    python .github/workflows/reflow_agent_docs.py --check  # list files that need reflowing; exit 1 if any
+    python .github/workflows/reflow_agent_docs.py FILE...  # only these files
+
+CI runs it on every PR touching those files (reflow-agent-docs.yml) and
+commits the result back to the PR branch.
 
 Every sentence and every ``;``-separated clause starts its own line, and long
 ```a`, `b`, `c``` enumerations break before each item.
@@ -18,7 +21,7 @@ import re
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 ABBREVIATIONS = ("e.g.", "i.e.", "vs.", "etc.", "cf.", "approx.", "resp.")
 LIST_ITEM = re.compile(r"^(\s*)([-*+]|\d+\.)\s+")
 ENUM_LIMIT = 200  # only split ``, `item`` enumerations on lines longer than this

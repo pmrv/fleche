@@ -51,7 +51,7 @@ Other optional deps are gated via `pyiron_snippets.import_alarm.ImportAlarm` —
   Markdown renders the lines as one paragraph, but a diff then touches only the sentences that changed, so concurrent PRs editing these files merge without conflicts.
   Keep tables to short cells;
   anything longer than a phrase belongs in a list.
-  Run `python agents/reflow.py` after editing to apply this (`--check` only reports, exiting 1 if a file needs reflowing);
+  Run `python .github/workflows/reflow_agent_docs.py` after editing to apply this (`--check` only reports, exiting 1 if a file needs reflowing);
   it changes line breaks only, never words.
 
 ## Where to look
@@ -676,8 +676,8 @@ Shared fixtures (in `fixtures.py`):
   `benchmarks.yml`/`benchmarks-main.yml`/`updatebenchmarks.yml`,
   `perf-triage.yml` (Haiku reads the PR diff/description and adds the `benchmark` label when the change touches a hot path — that label is the existing `benchmarks.yml` trigger),
   `rendernb.yml` (re-executes `notebooks/*.ipynb` on PRs labelled `rendernb`),
-  `release-please.yml`,
-  `pypi-publish.yml` (trusted-publisher upload triggered by `release: published`;
+  `reflow-agent-docs.yml` (on PRs touching `AGENTS.md`/`agents/*.md`, runs `reflow_agent_docs.py` and commits the one-sentence-per-line result back to the branch;
+  fork PRs get a failing check instead), `release-please.yml`, `pypi-publish.yml` (trusted-publisher upload triggered by `release: published`;
   #900 flags that it duplicates `release-please.yml`'s `publish` job and both can fire on one release), `claude.yaml` + `ci-failure-summary.yml` (the latter exposes CI status as a tool the in-PR Claude can call).
   Releases use **release-please** (`release-please-config.json`, `.release-please-manifest.json`) — release PRs are opened automatically from conventional-commit history on `main`.
 
