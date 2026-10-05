@@ -51,7 +51,7 @@ jobs:
             echo "Agent docs already one sentence per line."
             exit 0
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -am "docs(agents): reflow to one sentence per line"
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -am "docs(agents): reflow to one sentence per line"
           git push origin "HEAD:refs/heads/$HEAD_REF"
