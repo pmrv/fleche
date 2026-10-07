@@ -23,6 +23,7 @@ from dataclasses import dataclass, make_dataclass, is_dataclass, fields
 import math
 import string
 import keyword
+from decimal import Decimal
 
 
 from fleche import fleche
@@ -176,6 +177,99 @@ def test_different_complex_numbers_have_different_digests(x, y):
 def test_complex_numbers_can_be_digested(x):
     """Test that complex numbers (including NaN) can be digested without error."""
     digest(x)
+
+
+# ---------------------------------------------------------------------------
+# NaN: the one Number arm that bypasses hash()
+#
+# ``hash()`` of a NaN is derived from the object's *address* (CPython special
+# cases NaN in ``pyhash.c``), so two NaNs that are bit-identical hash
+# differently while both are alive.  Routing NaN through ``hash()`` would
+# therefore hand the same value a fresh cache key on every call — and a
+# different one in every process.  ``_digest_bytes`` packs NaN with
+# ``struct.pack`` instead, which is what the tests below pin.  The Hypothesis
+# pair tests above draw NaNs too, but they only compare two draws against each
+# other; none of them holds two NaNs of the *same* value at once, which is the
+# case the branch exists for.
+# ---------------------------------------------------------------------------
+
+def _nan_from_bits(bits: int) -> float:
+    """A float NaN with an exact binary representation, independent of strtod."""
+    return struct.unpack("<d", struct.pack("<Q", bits))[0]
+
+
+QUIET_NAN_BITS = 0x7FF8000000000000
+NEGATIVE_NAN_BITS = 0xFFF8000000000000
+
+
+@pytest.mark.parametrize(
+    "make_nan",
+    [
+        pytest.param(lambda: _nan_from_bits(QUIET_NAN_BITS), id="float"),
+        pytest.param(lambda: complex(_nan_from_bits(QUIET_NAN_BITS), 0.0), id="complex"),
+        pytest.param(lambda: Decimal("nan"), id="decimal"),
+        pytest.param(lambda: np.float64(_nan_from_bits(QUIET_NAN_BITS)), id="numpy"),
+    ],
+)
+def test_nan_digest_is_stable_across_distinct_objects(make_nan):
+    """Two separately constructed NaNs of one type share a digest.
+
+    Both objects are kept alive on purpose: ``hash()`` of a live NaN is
+    address-derived, so ``hash(first) != hash(second)`` here and a digest built
+    on it would not be reproducible.  ``Decimal`` matters as its own case
+    because it is a :class:`numbers.Number` but *not* a
+    :class:`numbers.Complex`, so it packs ``<d`` rather than ``<dd``.
+    """
+    first, second = make_nan(), make_nan()
+    assert first is not second
+    assert digest(first) == digest(second)
+
+
+@pytest.mark.parametrize(
+    "positive, negative",
+    [
+        pytest.param(
+            _nan_from_bits(QUIET_NAN_BITS), _nan_from_bits(NEGATIVE_NAN_BITS), id="float"
+        ),
+        pytest.param(Decimal("nan"), Decimal("-nan"), id="decimal"),
+    ],
+)
+def test_nan_digest_preserves_sign(positive, negative):
+    """A negative NaN digests differently from a positive one.
+
+    Both are ``float('nan')`` to ``==`` and to ``hash()``; only their packed
+    bytes differ, so this is the sign half of the ``struct.pack`` contract.
+    """
+    assert math.isnan(float(positive)) and math.isnan(float(negative))
+    assert digest(positive) != digest(negative)
+
+
+def test_complex_nan_digest_distinguishes_real_and_imaginary_parts():
+    """Complex NaNs pack both components, so a NaN's position is visible.
+
+    ``complex`` goes through ``struct.pack("<dd", real, imag)``; packing only
+    the real part would collide ``nan+0j`` with ``0+nanj``.
+    """
+    nan = _nan_from_bits(QUIET_NAN_BITS)
+    digests = {
+        digest(complex(nan, 0.0)),
+        digest(complex(0.0, nan)),
+        digest(complex(nan, nan)),
+    }
+    assert len(digests) == 3
+
+
+def test_numpy_bool_digests_as_the_python_bool():
+    """``np.bool_`` reaches its own arm and delegates to the builtin ``bool``.
+
+    Since numpy 1.20 ``np.bool_`` is neither an ``int`` subclass nor a
+    :class:`numbers.Number`, so it falls past both the ``int`` and ``Number``
+    arms and would otherwise land in the generic ``Iterable``/``Indigestible``
+    tail.
+    """
+    assert digest(np.bool_(True)) == digest(True)
+    assert digest(np.bool_(False)) == digest(False)
+    assert digest(np.bool_(True)) != digest(np.bool_(False))
 
 
 def test_complex_matches_real_without_imaginary_part():
