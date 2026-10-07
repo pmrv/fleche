@@ -6,7 +6,6 @@ is ``tests/unit/call/test_code_digest.py``; whether the decorator carries it
 into the key is ``tests/unit/fleche/test_hash_code.py``.
 """
 
-import cmath
 import datetime
 import struct
 import collections
@@ -89,18 +88,22 @@ SUPPORTED_VALUES = [
     {"a": 1, "b": None},
     np.array([1, 2, 3]),
     _SupportedData(x=1, y="a"),
+    # NaN takes the one Number arm that bypasses hash() (see the NaN section
+    # below); listing it here is what pins "a NaN never collides with a finite
+    # value", at no extra test.
+    float("nan"),
     *BUILTIN_TYPES,
 ]
 
 
-def test_supported_types():
-    """All supported values can be digested without raising an exception."""
-    for value in SUPPORTED_VALUES:
-        digest(value)
-
-
 def test_supported_values_digest_stably():
-    """Digesting the same value twice yields the same digest."""
+    """Digesting the same value twice yields the same digest.
+
+    Digesting every supported value at all — no ``Indigestible``, no crash — is
+    a precondition of this test and of
+    :func:`test_supported_values_digest_distinctly`, so it needs no test of its
+    own.
+    """
     unstable = [repr(value) for value in SUPPORTED_VALUES if digest(value) != digest(value)]
     assert not unstable, f"digest is not deterministic for: {unstable}"
 
@@ -137,46 +140,32 @@ def test_different_integers_have_different_hashes(x, y):
         assert digest(x) != digest(y)
 
 
-@given(st.floats(allow_nan=True), st.floats(allow_nan=True))
+@given(st.floats(allow_nan=False), st.floats(allow_nan=False))
 def test_different_floats_have_different_hashes(x, y):
-    """Test that two different floats have different hashes."""
-    if math.isnan(x) or math.isnan(y):
-        # NaN case: digest is based on raw binary packing
-        x_bytes = struct.pack("<d", x)
-        y_bytes = struct.pack("<d", y)
-        if x_bytes == y_bytes:
-            assert digest(x) == digest(y)
-        else:
-            assert digest(x) != digest(y)
-    elif x == y:
+    """Test that two different floats have different hashes.
+
+    NaN is excluded on purpose: it takes a different arm, pinned by the
+    deterministic tests in the NaN section below.  Drawing it here only
+    duplicated those — with ``struct.pack`` as its own oracle — and made
+    coverage of that arm depend on the draw.
+    """
+    if x == y:
         assert digest(x) == digest(y)
     else:
         assert digest(x) != digest(y)
 
 
-@given(st.complex_numbers(allow_nan=True), st.complex_numbers(allow_nan=True))
+@given(st.complex_numbers(allow_nan=False), st.complex_numbers(allow_nan=False))
 def test_different_complex_numbers_have_different_digests(x, y):
-    """Test that two different complex numbers have different digests."""
-    if cmath.isnan(x) or cmath.isnan(y):
-        # NaN case: digest is based on raw binary packing of real and imaginary parts
-        x_bytes = struct.pack("<dd", x.real, x.imag)
-        y_bytes = struct.pack("<dd", y.real, y.imag)
-        if x_bytes == y_bytes:
-            assert digest(x) == digest(y)
-        else:
-            assert digest(x) != digest(y)
+    """Test that two different complex numbers have different digests.
+
+    Follows Python hash semantics (``hash(1) == hash(1+0j)``).  NaN is excluded
+    for the same reason as in the float pair test above.
+    """
+    if hash(x) == hash(y):
+        assert digest(x) == digest(y)
     else:
-        # Non-NaN: follows Python hash semantics (hash(1) == hash(1+0j))
-        if hash(x) == hash(y):
-            assert digest(x) == digest(y)
-        else:
-            assert digest(x) != digest(y)
-
-
-@given(st.complex_numbers(allow_nan=True))
-def test_complex_numbers_can_be_digested(x):
-    """Test that complex numbers (including NaN) can be digested without error."""
-    digest(x)
+        assert digest(x) != digest(y)
 
 
 # ---------------------------------------------------------------------------
@@ -187,10 +176,9 @@ def test_complex_numbers_can_be_digested(x):
 # differently while both are alive.  Routing NaN through ``hash()`` would
 # therefore hand the same value a fresh cache key on every call — and a
 # different one in every process.  ``_digest_bytes`` packs NaN with
-# ``struct.pack`` instead, which is what the tests below pin.  The Hypothesis
-# pair tests above draw NaNs too, but they only compare two draws against each
-# other; none of them holds two NaNs of the *same* value at once, which is the
-# case the branch exists for.
+# ``struct.pack`` instead, which is what the tests below pin.  These own the arm
+# outright: the Hypothesis pair tests above draw finite values only, so none of
+# this depends on a draw.
 # ---------------------------------------------------------------------------
 
 def _nan_from_bits(bits: int) -> float:
@@ -550,22 +538,6 @@ def test_pandas_index_hashes_by_content():
     assert digest(i1) != digest(i_named)
 
 
-def test_lambda_can_be_digested():
-    """Test that lambda functions can be digested without raising Indigestible."""
-    f = lambda x: x + 1
-    result = digest(f)
-    assert isinstance(result, Digest)
-
-
-def test_locally_defined_function_can_be_digested():
-    """Test that locally defined functions can be digested without raising Indigestible."""
-    def local_func(x):
-        return x * 2
-
-    result = digest(local_func)
-    assert isinstance(result, Digest)
-
-
 def test_nested_function_can_be_digested():
     """Test that functions nested inside other functions can be digested."""
     def outer():
@@ -578,7 +550,11 @@ def test_nested_function_can_be_digested():
 
 
 def test_function_digest_is_stable():
-    """Test that digesting the same function repeatedly returns the same value."""
+    """Test that digesting the same function repeatedly returns the same value.
+
+    Also the local-function case: that a locally defined function is digestible
+    at all needs no separate test when this one digests the same one twice.
+    """
     def local_func(x):
         return x * 2
 
@@ -586,7 +562,11 @@ def test_function_digest_is_stable():
 
 
 def test_functions_with_different_bodies_have_different_digests():
-    """Test that functions with distinct bodies hash differently."""
+    """Test that functions with distinct bodies hash differently.
+
+    Also the lambda case: that a lambda is digestible at all needs no separate
+    test when this one digests two.
+    """
     f = lambda x: x + 1
     g = lambda x: x + 2
     assert digest(f) != digest(g)
@@ -1401,7 +1381,7 @@ def test_module_digest_function_content_independence():
 # --- Tests for the Indigestible boundary of type objects — issue #469 ---
 #
 # Digestibility, stability, and distinctness of built-in type objects are covered
-# by ``test_supported_types`` / ``test_supported_values_digest_stably`` /
+# by ``test_supported_values_digest_stably`` /
 # ``test_supported_values_digest_distinctly`` (BUILTIN_TYPES are folded into
 # SUPPORTED_VALUES).  Only the negative boundary needs a dedicated test: anything
 # outside the ``builtins`` module — including dataclass *classes* — must raise.
