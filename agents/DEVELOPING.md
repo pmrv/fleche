@@ -131,7 +131,8 @@ Values and calls are stored separately so call records are queryable without des
   `Indigestible`;
   `DIGEST_LENGTH=64`.
   Built-in types are inline `match` cases in `_digest_bytes`, ordered roughly hot-path first: `int` (`bool ⊂ int`) → `Digest` (returns `value.encode()` so `digest(Digest("abc")) == "abc"`) → `str` → `None` → `Number` (`float`, `complex`, `Decimal`, `Fraction`, plus `np.integer`/`np.floating` which satisfy `numbers.Number` automatically;
-  routed through `hash(value)` then recursed as int) → `bytes` → `np.ndarray` (dtype + shape + `tobytes`) → `np.bool_` (delegates to `digest(bool(value))`, because `np.bool_ ∉ Number` since numpy 1.20) → `pd.DataFrame` / `pd.Series` / `pd.Index` (must precede `Iterable` — DataFrame iterates over column names only, so the `Iterable` arm collides any two DataFrames with the same columns regardless of values;
+  routed through `hash(value)` then recursed as int — a lossy encoding under which distinct numbers collide;
+  see the numeric-digest bullet under **Bugs** below) → `bytes` → `np.ndarray` (dtype + shape + `tobytes`) → `np.bool_` (delegates to `digest(bool(value))`, because `np.bool_ ∉ Number` since numpy 1.20) → `pd.DataFrame` / `pd.Series` / `pd.Index` (must precede `Iterable` — DataFrame iterates over column names only, so the `Iterable` arm collides any two DataFrames with the same columns regardless of values;
   DataFrame folds in columns + per-column dtype + index, Series folds in name + dtype + index, Index folds in name + dtype;
   values are mixed via `pd.util.hash_pandas_object(...).values.tobytes()` — `index=False` on the DataFrame/Series arms (the Index arm passes no kwarg since Index has no index) because `hash_pandas_object` only mixes per-element value bytes and ignores name/dtype/index metadata, so we hand-roll those.
   → `types.MethodType` (receiver + `__func__`) → `types.FunctionType` (code object **plus the state bound alongside it**: captured free variables paired with `co_freevars`, then `__defaults__` (as a tuple) and `__kwdefaults__` (as a mapping), each behind a section marker.
@@ -863,6 +864,19 @@ Git history is the changelog.
 - #883 — `DestructuringMixin._raw_sub_digests` hardcodes a `match` over the three built-in `Digested` types, so a subclass registered via `register_destructurer` reports zero children: `Cache.gc()` can evict values reachable only through it (silent data loss) and `count_reuses()` under-counts.
   Fix in flight as PR #905 (below).
 
+- Numeric digest collisions — no issue filed yet;
+  the full investigation (2026-10-06) lives in a comment on PR #990.
+  The `Number` arm digests via `hash(value)`, a lossy 61-bit residue, so distinct numbers share cache keys and produce wrong hits end to end: `digest(-1.0) == digest(-2.0)` (CPython reserves `-1` as an error sentinel),
+  `digest(0.5) == digest(2**60)` (rational hashing mod `2**61 - 1`),
+  `inf` vs `314159`,
+  `np.uint64(2**63)` vs `4`, complex via the `hash(a) + 1000003*hash(b)` formula;
+  digests are also platform-dependent (32-bit builds hash mod `2**31 - 1`).
+  The Hypothesis pair tests in `digest/test_digest.py` can't draw these coincidences, and the complex test's oracle restates the bug (`hash(x) == hash(y)` ⇒ equal digests) — regression tests need explicit `@example`s.
+  A second, separable finding: `digest(3) == digest(3.0)` by design, so equal-value different-type *results* share one value-storage entry and whichever saved last wins the return type.
+  The PR comment carries a validated `_digest_number` prototype (digest the exact rational via `as_integer_ratio`, dedicated salts for rational/complex/inf, NaN keeps `struct.pack`;
+  full suite green) pending maintainer decisions on unknown `Number` types (raise `Indigestible` vs keep `hash()`) and on result-type erasure.
+  The fix invalidates number-bearing keys — pre-1.0 that is a `fix:` per [Commit messages](#commit-messages), and it is worth coordinating with the blake2b switchover #615, which invalidates every key anyway.
+
 **Feature requests**
 
 - #829 — `SshCache` support for `Path` values via client-side blob conversion;
@@ -900,7 +914,8 @@ Git history is the changelog.
     Needs a rebase onto `ssh_cache.rst` as #993 left it.
   - #965 — usage: scope the lazy-return claim to `load()`/`query()`.
   - #989 — parallel_execution: an MPI-decorated call runs once per rank cold and serves one rank's record warm.
-  - #990 — digests: ints encode directly, floats/complex reduce via `hash(value)` to the int path.
+  - #990 — digests: the numeric-digest mechanism explanation;
+    superseded by its own review — the maintainer judged the rewrite the wrong level ("warrants deeper investigation") and the follow-up investigation on the PR found the digest *code* at fault (see the numeric-digest bullet under **Bugs**), so expect it to close in favour of a code fix rather than merge.
 
   #932 and #989 both edit `parallel_execution.rst`;
   whichever lands second needs a rebase.
