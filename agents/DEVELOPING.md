@@ -924,7 +924,12 @@ Git history is the changelog.
   converts `test_local_function_digests_same_as_module_level` into `test_nesting_changes_a_function_digest` — `CO_NESTED` is in `co_flags`, so lifting a helper out of an enclosing function invalidates its cached calls under `hash_code=True`;
   pinned as observed, flip it there if ruled a bug), #955 (pins the deferred-future abandon arm in `wrapper.py`;
   collapses five single-property tests in `test_dehydrate.py`), #980 (covers the `storage/sql.py` PRAGMA guards and fixes the dead in-memory journal-mode short-circuit — SQLAlchemy percent-encodes `:memory:`, so the check becomes `engine.url.database in (None, ":memory:")`;
-  drops 11 vacuous digest smokes).
+  drops 11 vacuous digest smokes), #1000 (pins the NaN `struct.pack` arm deterministically — two *simultaneously live* same-value NaNs must share a digest, which `hash()`-routing would break since CPython's NaN hash is address-derived;
+  covers the `<d` `Decimal`-NaN sub-arm and the `np.bool_` → builtin-`bool` delegation;
+  narrows the Hypothesis float/complex pair tests to `allow_nan=False`, killing their self-fulfilling NaN oracle branches;
+  drops four digest tests subsumed *in assertion* by siblings, after a per-test-arc ablation confirmed 89% of tests have zero unique arcs — reaffirming the collective-redundancy lesson below;
+  also `.gitignore`s `pytest --cov`'s `.coverage` litter;
+  the PR body flags the next deterministic-coverage picks, led by `bagofholding_file.py`'s seed-dependent `SaveError` arm).
 
 **Lessons and standing decisions**
 
