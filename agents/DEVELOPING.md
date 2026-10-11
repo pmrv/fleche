@@ -623,7 +623,8 @@ Shared fixtures (in `fixtures.py`):
 - `call_storage` / `value_storage` / `storage_backend` — *parametrised* over every concrete backend (memory, pickle/cloudpickle/dill files, bagofholding h5, plus sql for `call_storage` only).
   `call_storage`/`value_storage` pickle parametrizations bake in a fixed `secret_key` so signing is exercised by default;
   `storage_backend` skips `secret_key` to test raw `put`/`get` without signing.
-  New backends should be added to these fixtures so they're swept by every consumer test (all three share the `_build_value_storage` / `_build_call_storage` constructors, so a backend is added once).
+  New backends should be added to these fixtures so they're swept by every consumer test.
+  `call_storage` / `value_storage` (and `paired_storages`) share the `_build_value_storage` / `_build_call_storage` constructors, but `storage_backend` carries its own if/elif ladder, so today a backend is added in two places (#791's registry proposal would make it one).
 - `paired_storages` — yields `(value_storage, call_storage)` walked *diagonally* rather than crosswise: requesting `value_storage` and `call_storage` in one test takes their 6x7 Cartesian product, which is what a test needs only if the two halves interact.
   Where it just needs *a* cache per backend, this cycles the shorter list against the longer one for `max(len(values), len(calls))` cases with every backend on either side still present.
 - `call_storage` additionally gains `sql_postgres` / `sql_mysql` parametrizations when `FLECHE_TEST_POSTGRES_URL` / `FLECHE_TEST_MYSQL_URL` are set;
@@ -833,7 +834,7 @@ Git history is the changelog.
   Delete the fallback or share a `workflow_call`, pending a decision on whether the fallback is intentional.
 - #945 `tests.yml` / `test-minimum-deps.yml` / `ty.yml` triplicate the paths-filter `changes` job;
   #976 `benchmarks.yml` / `benchmarks-main.yml` duplicate their setup preamble;
-  #985 the dev Python version (3.12) is hardcoded in four workflows.
+  #985 the dev Python version (3.12) is hardcoded in four places — `ty.yml`, `benchmarks.yml`, `benchmarks-main.yml`, and `tests.yml`'s non-matrix `build` job.
   Do these together as reusable workflows / a composite action.
 - #946 `updatebenchmarks.yml` / `rendernb.yml` duplicate their commit+push tail and pin `ad-m/github-push-action@master`, a mutable ref with `contents: write` on PR-triggered workflows — the pinning half is a supply-chain fix worth doing on its own.
 - #947 `pyproject.toml` repeats version pins across extras instead of self-referential extras (`ssh = ["fleche[cloudpickle]"]`).
