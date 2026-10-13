@@ -34,9 +34,9 @@ jobs:
           # followed by whitespace, punctuation, or end-of-line, so a model is
           # selected with a space -- '@claude [haiku|sonnet|opus]'. This step only
           # maps that alias onto a --model arg; bare or unrecognised mentions fall
-          # back to sonnet. (A glued '@claude[model]' would not trigger the action.)
+          # back to Opus 5.5. (A glued '@claude[model]' would not trigger the action.)
           body="${COMMENT_BODY}${REVIEW_BODY}"
-          model=sonnet
+          model=claude-opus-5-5
           if [[ "$body" =~ @claude[[:space:]]*\[([a-zA-Z]+)\] ]]; then
             choice="${BASH_REMATCH[1],,}"
             case "$choice" in
