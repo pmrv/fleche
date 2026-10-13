@@ -198,7 +198,8 @@ _walking = threading.local()
 # ``str()``, which collides ``1`` with ``"1"`` and keys ``object()`` on its
 # address.  Such columns are digested element by element with our own hash
 # instead, and pandas is handed the column of hex digests to combine with the
-# rest.  ``bytes`` are left out on purpose: pandas hashes ``b"a"`` like ``"a"``.
+# rest.  ``bytes`` columns are included on purpose (``infer_dtype`` calls them
+# ``"bytes"``, not ``"string"``): pandas hashes ``b"a"`` like ``"a"``.
 _PANDAS_SAFE_OBJECT = frozenset({"string", "empty"})
 _OWN_HASHED_SECTION = "__fleche_own_hashed__"
 
