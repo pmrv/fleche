@@ -53,6 +53,6 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          claude_args: '--model ${{ steps.model.outputs.model }} --effort high --allowedTools WebFetch Bash(pip:*) Bash(python:*) Bash(pytest:*) Bash(git:*) Bash(gh pr:*)'
+          claude_args: '--model ${{ steps.model.outputs.model }} --effort high --allowedTools WebFetch Bash(pip:*) Bash(python:*) Bash(pytest:*) Bash(ty:*) Bash(uv:*) Bash(jupyter:*) Bash(git:*) Bash(gh pr:*) Bash(gh run:*)'
           additional_permissions: |
             actions: read
