@@ -456,6 +456,162 @@ def test_pandas_index_hashes_by_content():
     assert digest(i1) != digest(i_named)
 
 
+# Object columns pandas cannot hash faithfully are digested element by element
+# with our own hash (#1004).  hash_pandas_object refuses unhashable elements in
+# factorize and hashes every other non-string object through str().
+
+
+def _frame_with_arrays(*arrays):
+    import pandas as pd
+
+    df = pd.DataFrame({"x": [float(i) for i in range(len(arrays))]})
+    df["v"] = list(arrays)
+    return df
+
+
+def test_pandas_dataframe_object_column_of_arrays():
+    """Issue #1004: an object column of arrays raised TypeError from factorize."""
+    a = _frame_with_arrays(np.zeros(3), np.ones(3))
+    b = _frame_with_arrays(np.zeros(3), np.ones(3))
+    c = _frame_with_arrays(np.zeros(3), np.full(3, 2.0))
+
+    assert digest(a) == digest(b)
+    assert digest(a) != digest(c)
+
+
+def test_pandas_object_column_of_large_arrays_digests_all_elements():
+    """str() of a large array elides its middle, which must not drop it from the digest."""
+    big = np.zeros(10_000)
+    changed = big.copy()
+    changed[5_000] = 1.0
+
+    assert digest(_frame_with_arrays(big)) != digest(_frame_with_arrays(changed))
+
+
+@pytest.mark.parametrize(
+    "values",
+    [[[1, 2], [3]], [{"k": 1}, {"k": 2}], [{1, 2}, {3}]],
+    ids=["lists", "dicts", "sets"],
+)
+def test_pandas_object_column_of_unhashables(values):
+    import pandas as pd
+
+    s = pd.Series(values, dtype=object)
+    assert digest(s) == digest(pd.Series(values, dtype=object))
+    assert digest(s) != digest(pd.Series(values[::-1], dtype=object))
+    assert digest(pd.DataFrame({"c": s})) == digest(pd.DataFrame({"c": s.copy()}))
+
+
+@pytest.mark.parametrize("kind", ["series", "index", "frame", "categorical"])
+def test_pandas_mixed_object_values_do_not_collide_through_str(kind):
+    """``1`` and ``"1"`` share a str(); pandas used to hash both as ``"1"``."""
+    import pandas as pd
+
+    def wrap(values):
+        if kind == "series":
+            return pd.Series(values, dtype=object)
+        if kind == "index":
+            return pd.Index(values, dtype=object)
+        if kind == "frame":
+            return pd.DataFrame({"c": pd.Series(values, dtype=object)})
+        return pd.Series(pd.Categorical(values))
+
+    assert digest(wrap(["a", 1])) != digest(wrap(["a", "1"]))
+    assert digest(wrap(["a", 1])) == digest(wrap(["a", 1]))
+
+
+def test_pandas_bytes_object_column_does_not_collide_with_str():
+    import pandas as pd
+
+    assert digest(pd.Series([b"a"], dtype=object)) != digest(pd.Series(["a"], dtype=object))
+
+
+def test_pandas_object_column_with_pd_na():
+    import pandas as pd
+
+    with_na = pd.Series([1, pd.NA], dtype=object)
+    assert digest(with_na) == digest(pd.Series([1, pd.NA], dtype=object))
+    assert digest(with_na) != digest(pd.Series([1, None], dtype=object))
+
+
+@pytest.mark.parametrize("kind", ["series", "index", "frame"])
+def test_pandas_object_column_of_unknown_objects_is_indigestible(kind):
+    """Strict: pandas would key object() on its repr, i.e. its address."""
+    import pandas as pd
+
+    values = [object(), object()]
+    value = {
+        "series": lambda: pd.Series(values, dtype=object),
+        "index": lambda: pd.Index(values, dtype=object),
+        "frame": lambda: pd.DataFrame({"c": pd.Series(values, dtype=object)}),
+    }[kind]()
+    with pytest.raises(Indigestible):
+        digest(value)
+
+
+def test_pandas_own_hashed_column_does_not_collide_with_its_digests():
+    """A column of arrays and a column holding the arrays' digest strings differ."""
+    import pandas as pd
+
+    arrays = [np.zeros(2), np.ones(2)]
+    as_digests = [digest(a) for a in arrays]
+
+    assert digest(pd.Series(arrays, dtype=object)) != digest(pd.Series(as_digests, dtype=object))
+    assert digest(pd.Index(arrays, dtype=object)) != digest(pd.Index(as_digests, dtype=object))
+    frame = pd.DataFrame({"c": pd.Series(arrays, dtype=object)})
+    frame_digests = pd.DataFrame({"c": pd.Series(as_digests, dtype=object)})
+    assert digest(frame) != digest(frame_digests)
+
+
+def test_pandas_dataframe_object_columns_with_repeated_labels():
+    import pandas as pd
+
+    a = pd.DataFrame([[np.zeros(1), np.ones(1)]], columns=["c", "c"])
+    b = pd.DataFrame([[np.ones(1), np.zeros(1)]], columns=["c", "c"])
+
+    assert digest(a) != digest(b)
+    # The frame the caller passed is not modified.
+    assert isinstance(a.iloc[0, 0], np.ndarray)
+
+
+def _pre_1004_digest(value):
+    """The DataFrame / Series digest exactly as it was before #1004."""
+    import hashlib
+    import pandas as pd
+
+    m = hashlib.sha256(type(value).__name__.encode())
+    if isinstance(value, pd.DataFrame):
+        m.update(digest(list(value.columns)).encode())
+        m.update(digest([str(d) for d in value.dtypes]).encode())
+    else:
+        m.update(digest(value.name).encode())
+        m.update(digest(str(value.dtype)).encode())
+    m.update(digest(value.index).encode())
+    m.update(pd.util.hash_pandas_object(value, index=False).values.tobytes())
+    return m.hexdigest()
+
+
+def _hashed_by_pandas():
+    import pandas as pd
+
+    return {
+        "numeric": pd.DataFrame({"a": [1, 2, 3], "b": [4.0, 5.0, 6.0]}),
+        "object_str": pd.DataFrame({"s": pd.Series(["x", None, "z"], dtype=object)}),
+        "all_null_object": pd.DataFrame({"s": pd.Series([None, None], dtype=object)}),
+        "string_dtype": pd.DataFrame({"s": pd.Series(["x", "y"], dtype="string")}),
+        "datetime": pd.DataFrame({"t": pd.to_datetime(["2020-01-01", "2021-06-30"])}),
+        "categorical": pd.DataFrame({"c": pd.Categorical(["u", "v", "u"])}),
+        "series_object_str": pd.Series(["a", "b"], dtype=object, name="n"),
+    }
+
+
+@pytest.mark.parametrize("name", list(_hashed_by_pandas()))
+def test_pandas_digest_unchanged_where_pandas_hashes_faithfully(name):
+    """Only frames that raised or went through str() get new digests."""
+    value = _hashed_by_pandas()[name]
+    assert digest(value) == _pre_1004_digest(value)
+
+
 def test_lambda_can_be_digested():
     """Test that lambda functions can be digested without raising Indigestible."""
     f = lambda x: x + 1

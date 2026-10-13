@@ -13,6 +13,7 @@ from collections.abc import Iterable, Mapping
 from typing import Any, TypeVar, Callable, Type, Generic
 import numpy as np
 import pandas as pd
+from pandas.api.types import infer_dtype
 
 from . import _attrs
 
@@ -189,6 +190,37 @@ _RECURSIVE_FUNCTION = "__fleche_recursive_function__"
 # functions: `a -> b -> a` and `c -> d -> d` are different call graphs.  The
 # distance is relative, so a cycle digests the same wherever the walk meets it.
 _walking = threading.local()
+
+# ``hash_pandas_object`` only hashes object columns of strings faithfully (by
+# their encoded bytes; missing values share one marker).  Any other object column
+# is either refused by the ``factorize`` it runs first — unhashable elements such
+# as arrays, lists or dicts raise ``TypeError`` — or hashed element-wise through
+# ``str()``, which collides ``1`` with ``"1"`` and keys ``object()`` on its
+# address.  Such columns are digested element by element with our own hash
+# instead, and pandas is handed the column of hex digests to combine with the
+# rest.  ``bytes`` are left out on purpose: pandas hashes ``b"a"`` like ``"a"``.
+_PANDAS_SAFE_OBJECT = frozenset({"string", "empty"})
+_OWN_HASHED_SECTION = "__fleche_own_hashed__"
+
+
+def _needs_own_hash(values) -> bool:
+    """Whether pandas cannot be trusted to hash the elements of *values*."""
+    dtype = values.dtype
+    if isinstance(dtype, pd.CategoricalDtype):
+        # A categorical is hashed by the values of its categories, which suffer
+        # the same str() fallback when they are objects.
+        values = dtype.categories
+        dtype = values.dtype
+    return dtype == object and infer_dtype(values, skipna=True) not in _PANDAS_SAFE_OBJECT
+
+
+def _own_hashed(values) -> np.ndarray:
+    """Replace each element of *values* by its hex digest.
+
+    Elements we cannot digest raise :exc:`Indigestible`, as they would anywhere
+    else, rather than falling back to pandas' unstable ``str()``.
+    """
+    return np.array([_digest_bytes(v).decode() for v in values], dtype=object)
 
 
 def _fold_freevars(m, code, closure) -> None:
@@ -383,6 +415,15 @@ def _digest_bytes(value: Any) -> bytes:
             m.update(_digest_bytes(list(value.columns)))
             m.update(_digest_bytes([str(d) for d in value.dtypes]))
             m.update(_digest_bytes(value.index))
+            own = [i for i, (_, col) in enumerate(value.items()) if _needs_own_hash(col)]
+            if own:
+                value = value.copy(deep=False)
+                for i in own:
+                    # isetitem, not value[label] = ...: column labels may repeat.
+                    value.isetitem(i, _own_hashed(value.iloc[:, i]))
+                # Marks which columns hold our digests, so a column of arrays
+                # cannot collide with a column of their digest strings.
+                m.update(_digest_bytes((_OWN_HASHED_SECTION, own)))
             m.update(pd.util.hash_pandas_object(value, index=False).values.tobytes())
         case pd.Series():
             # Same reasoning as DataFrame: hash_pandas_object ignores name/dtype/
@@ -390,11 +431,23 @@ def _digest_bytes(value: Any) -> bytes:
             m.update(_digest_bytes(value.name))
             m.update(_digest_bytes(str(value.dtype)))
             m.update(_digest_bytes(value.index))
+            if _needs_own_hash(value):
+                value = pd.Series(_own_hashed(value), dtype=object)
+                m.update(_digest_bytes(_OWN_HASHED_SECTION))
             m.update(pd.util.hash_pandas_object(value, index=False).values.tobytes())
         case pd.Index():
             m.update(_digest_bytes(value.name))
             m.update(_digest_bytes(str(value.dtype)))
+            # A MultiIndex is hashed level by level by pandas and is left as is
+            # for now (its object levels still go through str(); see #1004).
+            if not isinstance(value, pd.MultiIndex) and _needs_own_hash(value):
+                value = pd.Index(_own_hashed(value), dtype=object)
+                m.update(_digest_bytes(_OWN_HASHED_SECTION))
             m.update(pd.util.hash_pandas_object(value).values.tobytes())
+        case _ if value is pd.NA:
+            # A singleton like None; it turns up in object columns, which the
+            # arms above digest element by element.
+            m.update(b"__NA__")
         case types.MethodType():
             # A bound method is its function plus the receiver it is bound to.
             # Leaving __self__ out would collide obj1.method with obj2.method —
