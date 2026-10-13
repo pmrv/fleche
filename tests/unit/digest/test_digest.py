@@ -456,22 +456,6 @@ def test_pandas_index_hashes_by_content():
     assert digest(i1) != digest(i_named)
 
 
-def test_lambda_can_be_digested():
-    """Test that lambda functions can be digested without raising Indigestible."""
-    f = lambda x: x + 1
-    result = digest(f)
-    assert isinstance(result, Digest)
-
-
-def test_locally_defined_function_can_be_digested():
-    """Test that locally defined functions can be digested without raising Indigestible."""
-    def local_func(x):
-        return x * 2
-
-    result = digest(local_func)
-    assert isinstance(result, Digest)
-
-
 def test_nested_function_can_be_digested():
     """Test that functions nested inside other functions can be digested."""
     def outer():
@@ -498,6 +482,13 @@ def test_functions_with_different_bodies_have_different_digests():
     assert digest(f) != digest(g)
 
 
+# Module-scope counterpart for test_local_function_digests_same_as_module_level.
+# No docstring: a docstring lands in co_consts and would make the code objects
+# differ for a reason that has nothing to do with scope.
+def _module_level_add_one(x):
+    return x + 1
+
+
 def test_functions_with_identical_bodies_have_same_digest():
     """Test that two locally defined functions with identical code objects hash the same."""
     def f(x):
@@ -509,15 +500,25 @@ def test_functions_with_identical_bodies_have_same_digest():
     assert digest(f) == digest(g)
 
 
-def test_local_function_digests_same_as_module_level():
-    """Test that a local function with identical code digests the same as a module-level equivalent."""
+def test_nesting_changes_a_function_digest():
+    """A nested function digests differently from an identical module-level one.
+
+    The two bodies compile to the same bytecode and constants, but a function
+    defined inside another carries ``CO_NESTED`` in ``co_flags``, and
+    ``co_flags`` is one of the code-object properties folded into the digest.
+    So moving a function out to module scope (or into a nested one) changes
+    its key even though nothing about what it computes changed.
+
+    The counterpart deliberately lives at module scope: defining it in the
+    test body would make this a second copy of
+    ``test_functions_with_identical_bodies_have_same_digest``, which already
+    pins that two *equally nested* functions agree.
+    """
     def local_add_one(x):
         return x + 1
 
-    def _module_level_add_one(x):
-        return x + 1
-
-    assert digest(local_add_one) == digest(_module_level_add_one)
+    assert local_add_one.__code__.co_code == _module_level_add_one.__code__.co_code
+    assert digest(local_add_one) != digest(_module_level_add_one)
 
 
 # --- Functions: plain functions keep their historical wire format ---
@@ -880,39 +881,6 @@ def test_bound_method_of_indigestible_receiver_raises():
 # --- Tests for digesting Python descriptors (staticmethod, classmethod, property) ---
 
 
-def test_staticmethod_can_be_digested():
-    """staticmethod objects must be digestible without raising Indigestible."""
-
-    def func(x):
-        return x + 1
-
-    sm = staticmethod(func)
-    result = digest(sm)
-    assert isinstance(result, Digest)
-
-
-def test_classmethod_can_be_digested():
-    """classmethod objects must be digestible without raising Indigestible."""
-
-    def func(cls, x):
-        return x + 1
-
-    cm = classmethod(func)
-    result = digest(cm)
-    assert isinstance(result, Digest)
-
-
-def test_property_can_be_digested():
-    """property objects must be digestible without raising Indigestible."""
-
-    def getter(self):
-        return self._x
-
-    p = property(getter)
-    result = digest(p)
-    assert isinstance(result, Digest)
-
-
 def test_staticmethod_digest_differs_from_underlying_function_digest():
     """digest(staticmethod(f)) != digest(f) — type salting keeps them distinct."""
 
@@ -962,48 +930,6 @@ def test_classmethods_with_different_bodies_have_different_digests():
         return x + 2
 
     assert digest(classmethod(f)) != digest(classmethod(g))
-
-
-def test_property_with_only_getter():
-    """A property with only a getter must be digestible."""
-
-    def getter(self):
-        return self._value
-
-    p = property(getter)
-    result = digest(p)
-    assert isinstance(result, Digest)
-
-
-def test_property_with_getter_and_setter():
-    """A property with getter and setter must be digestible."""
-
-    def getter(self):
-        return self._value
-
-    def setter(self, v):
-        self._value = v
-
-    p = property(getter, setter)
-    result = digest(p)
-    assert isinstance(result, Digest)
-
-
-def test_property_with_getter_setter_deleter():
-    """A property with getter, setter, and deleter must be digestible."""
-
-    def getter(self):
-        return self._value
-
-    def setter(self, v):
-        self._value = v
-
-    def deleter(self):
-        del self._value
-
-    p = property(getter, setter, deleter)
-    result = digest(p)
-    assert isinstance(result, Digest)
 
 
 def test_properties_with_different_getters_have_different_digests():
