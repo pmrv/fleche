@@ -456,9 +456,10 @@ def test_pandas_index_hashes_by_content():
     assert digest(i1) != digest(i_named)
 
 
-# Object columns pandas cannot hash faithfully are digested element by element
-# with our own hash (#1004).  hash_pandas_object refuses unhashable elements in
-# factorize and hashes every other non-string object through str().
+# Pandas objects are digested column by column from their exact contents
+# (#1004); hash_pandas_object used to do it and refused unhashable elements in
+# object columns, hashed every other non-string object through str(), and
+# dropped categorical categories and MultiIndex level names and dtypes.
 
 
 def _frame_with_arrays(*arrays):
@@ -574,42 +575,182 @@ def test_pandas_dataframe_object_columns_with_repeated_labels():
     assert isinstance(a.iloc[0, 0], np.ndarray)
 
 
-def _pre_1004_digest(value):
-    """The DataFrame / Series digest exactly as it was before #1004."""
-    import hashlib
+def _different_tables():
+    """Pairs of pandas objects that differ, and that used to share a digest."""
     import pandas as pd
 
-    m = hashlib.sha256(type(value).__name__.encode())
-    if isinstance(value, pd.DataFrame):
-        m.update(digest(list(value.columns)).encode())
-        m.update(digest([str(d) for d in value.dtypes]).encode())
-    else:
-        m.update(digest(value.name).encode())
-        m.update(digest(str(value.dtype)).encode())
-    m.update(digest(value.index).encode())
-    m.update(pd.util.hash_pandas_object(value, index=False).values.tobytes())
-    return m.hexdigest()
+    named_columns = pd.DataFrame({"x": [1]})
+    named_columns.columns.name = "c"
 
-
-def _hashed_by_pandas():
-    import pandas as pd
+    def mi(*arrays, names=None):
+        return pd.MultiIndex.from_arrays(list(arrays), names=names)
 
     return {
-        "numeric": pd.DataFrame({"a": [1, 2, 3], "b": [4.0, 5.0, 6.0]}),
-        "object_str": pd.DataFrame({"s": pd.Series(["x", None, "z"], dtype=object)}),
-        "all_null_object": pd.DataFrame({"s": pd.Series([None, None], dtype=object)}),
-        "string_dtype": pd.DataFrame({"s": pd.Series(["x", "y"], dtype="string")}),
-        "datetime": pd.DataFrame({"t": pd.to_datetime(["2020-01-01", "2021-06-30"])}),
-        "categorical": pd.DataFrame({"c": pd.Categorical(["u", "v", "u"])}),
-        "series_object_str": pd.Series(["a", "b"], dtype=object, name="n"),
+        "categorical_unused_category": (
+            pd.Series(pd.Categorical(["a", "b"])),
+            pd.Series(pd.Categorical(["a", "b"], categories=["a", "b", "c"])),
+        ),
+        "categorical_ordered": (
+            pd.DataFrame({"x": pd.Categorical(["a", "b"])}),
+            pd.DataFrame({"x": pd.Categorical(["a", "b"], ordered=True)}),
+        ),
+        "categorical_category_order": (
+            pd.Series(pd.Categorical(["a", "b"], ordered=True)),
+            pd.Series(pd.Categorical(["a", "b"], categories=["b", "a"], ordered=True)),
+        ),
+        "categorical_index_ordered": (
+            pd.CategoricalIndex(["a"]),
+            pd.CategoricalIndex(["a"], ordered=True),
+        ),
+        "columns_name": (pd.DataFrame({"x": [1]}), named_columns),
+        "column_label_int_vs_float": (pd.DataFrame({1: [1]}), pd.DataFrame({1.0: [1]})),
+        "object_none_vs_nan": (
+            pd.Series(["a", None], dtype=object),
+            pd.Series(["a", np.nan], dtype=object),
+        ),
+        "object_none_vs_na": (
+            pd.Series(["a", None], dtype=object),
+            pd.Series(["a", pd.NA], dtype=object),
+        ),
+        "object_str_vs_bytes": (
+            pd.Series(["a"], dtype=object),
+            pd.Series([b"a"], dtype=object),
+        ),
+        "string_na_vs_text": (
+            pd.Series(["a", None], dtype="string"),
+            pd.Series(["a", "<NA>"], dtype="string"),
+        ),
+        "nullable_na_vs_value": (
+            pd.Series([1, None], dtype="Int64"),
+            pd.Series([1, 0], dtype="Int64"),
+        ),
+        "multiindex_level_names": (
+            mi([1], ["a"], names=["x", "y"]),
+            mi([1], ["a"], names=["p", "q"]),
+        ),
+        "multiindex_level_dtypes": (
+            mi(np.array([-1], dtype="i1"), ["a"]),
+            mi(np.array([255], dtype="i8"), ["a"]),
+        ),
+        "multiindex_bool_vs_int_level": (mi([True], ["a"]), mi([1], ["a"])),
+        "multiindex_object_level": (
+            mi(pd.Index(["a", 1], dtype=object), [1, 2]),
+            mi(pd.Index(["a", "1"], dtype=object), [1, 2]),
+        ),
+        "frame_multiindex_index_names": (
+            pd.DataFrame({"v": [1]}, index=mi([1], ["a"], names=["x", "y"])),
+            pd.DataFrame({"v": [1]}, index=mi([1], ["a"], names=["p", "q"])),
+        ),
+        "frame_multiindex_column_names": (
+            pd.DataFrame([[1]], columns=mi([1], ["a"], names=["x", "y"])),
+            pd.DataFrame([[1]], columns=mi([1], ["a"], names=["p", "q"])),
+        ),
+        # Columns used to be combined row-wise into one 64-bit number per row.
+        "columns_swapped_within_row": (
+            pd.DataFrame({"a": [1], "b": [2]}),
+            pd.DataFrame({"a": [2], "b": [1]}),
+        ),
+        "strings_split_differently": (
+            pd.Series(["ab", "c"], dtype=object),
+            pd.Series(["a", "bc"], dtype=object),
+        ),
     }
 
 
-@pytest.mark.parametrize("name", list(_hashed_by_pandas()))
-def test_pandas_digest_unchanged_where_pandas_hashes_faithfully(name):
-    """Only frames that raised or went through str() get new digests."""
-    value = _hashed_by_pandas()[name]
-    assert digest(value) == _pre_1004_digest(value)
+@pytest.mark.parametrize("name", list(_different_tables()))
+def test_pandas_different_tables_digest_differently(name):
+    a, b = _different_tables()[name]
+    assert digest(a) != digest(b)
+
+
+def test_pandas_frame_with_rows_but_no_columns():
+    """hash_pandas_object raised on these."""
+    import pandas as pd
+
+    assert digest(pd.DataFrame(index=[0])) != digest(pd.DataFrame(index=[0, 1]))
+    assert digest(pd.DataFrame(index=[0])) != digest(pd.DataFrame())
+
+
+def _equal_tables():
+    """Pairs that are the same table built differently; they must share a digest."""
+    import pandas as pd
+
+    mi = pd.MultiIndex.from_arrays([[1, 2, 3], ["a", "b", "c"]])
+    object_mi = pd.MultiIndex.from_arrays([pd.Index([np.int64(1), "b", 2.5], dtype=object), [1, 2, 3]])
+    return {
+        "copy": (pd.DataFrame({"a": [1.0, 2.0], "s": ["x", None]}),) * 2,
+        "multiindex_unused_levels": (mi[:2], mi[:2].remove_unused_levels()),
+        "multiindex_object_unused_levels": (object_mi[:2], object_mi[:2].remove_unused_levels()),
+        "multiindex_level_order": (
+            pd.MultiIndex.from_arrays([pd.Index(["b", "a"]), [1, 2]]),
+            pd.MultiIndex(levels=[["b", "a"], [1, 2]], codes=[[0, 1], [0, 1]]),
+        ),
+        "datetime_index_freq": (
+            pd.date_range("2020", periods=3, freq="D"),
+            pd.DatetimeIndex(list(pd.date_range("2020", periods=3, freq="D"))),
+        ),
+    }
+
+
+@pytest.mark.parametrize("name", list(_equal_tables()))
+def test_pandas_equal_tables_digest_equal(name):
+    a, b = _equal_tables()[name]
+    assert digest(a) == digest(b.copy())
+
+
+def test_pandas_multiindex_object_level_digests_like_its_values():
+    """The per-distinct-value shortcut for object levels digests what get_level_values would."""
+    import pandas as pd
+    from fleche.digest import _digest_level, _digest_values
+
+    index = pd.MultiIndex.from_arrays(
+        [pd.Index([np.zeros(0).shape, 1, None, 1], dtype=object), [1, 2, 3, 4]]
+    )
+    assert _digest_level(index, 0) == _digest_values(index.get_level_values(0))
+
+
+def test_pandas_strings_with_lone_surrogates():
+    import pandas as pd
+
+    assert digest(pd.Series(["\ud800"], dtype=object)) != digest(pd.Series(["\ud801"], dtype=object))
+
+
+def _golden_tables():
+    import pandas as pd
+
+    return {
+        # Explicit object dtypes: pandas 3 infers its own str dtype for strings,
+        # also for column labels.
+        "numeric": pd.DataFrame(
+            {"a": np.array([1, 2], dtype="int64"), "b": np.array([0.5, -1.0])},
+        ).set_axis(pd.Index(["a", "b"], dtype=object), axis=1),
+        "object_strings": pd.Series(["x", None, "x"], dtype=object, name="s"),
+        "object_mixed": pd.Index(["a", 1, np.zeros(2)], dtype=object),
+        "categorical": pd.Series(pd.Categorical(["u", "v", "u"], categories=pd.Index(["u", "v"], dtype=object))),
+        "datetime": pd.Series(np.array(["2020-01-01", "NaT"], dtype="datetime64[ns]")),
+        "nullable": pd.Series(pd.array([1, None], dtype="Int64")),
+        "multiindex": pd.MultiIndex.from_arrays(
+            [np.array([1, 2], dtype="int64"), pd.Index(["a", "b"], dtype=object)], names=["i", "k"]
+        ),
+    }
+
+
+# Pinned so that a change to the encoding (or to pandas under it) shows up here
+# rather than as silently invalidated caches.
+_GOLDEN = {
+    "numeric": "8c3f01f07e659613870bf05480e3919a6ada180810ebf07dd1f4fb3debcefc1d",
+    "object_strings": "c4253b6ae7a6e4dd374c75cbfb2d2df453dc44afd2a4a7db98702696b4836ca2",
+    "object_mixed": "f729b8c6dc5ac14bacd0a29c1bfd7ef460d26c7753bfc4b04483624e0e7be399",
+    "categorical": "b861ac8cb33399acfda9154b63567951bcf33b017fe5af8e4437ba111e7dc930",
+    "datetime": "c859fd263e698872463b76aae254f7637d708fdf5d8702500f314e481cf93402",
+    "nullable": "025ef9cb64797fc92bc1f9bc0133e1c90bb66ce6b958809b3a9888a8a14a8b20",
+    "multiindex": "99118f6ff1898b2882cf1c2e45f3f124aef9ef3e6e44ea24bd41e89a582d686c",
+}
+
+
+@pytest.mark.parametrize("name", list(_golden_tables()))
+def test_pandas_digests_are_pinned(name):
+    assert digest(_golden_tables()[name]) == _GOLDEN[name]
 
 
 def test_lambda_can_be_digested():

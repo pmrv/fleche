@@ -191,36 +191,96 @@ _RECURSIVE_FUNCTION = "__fleche_recursive_function__"
 # distance is relative, so a cycle digests the same wherever the walk meets it.
 _walking = threading.local()
 
-# ``hash_pandas_object`` only hashes object columns of strings faithfully (by
-# their encoded bytes; missing values share one marker).  Any other object column
-# is either refused by the ``factorize`` it runs first — unhashable elements such
-# as arrays, lists or dicts raise ``TypeError`` — or hashed element-wise through
-# ``str()``, which collides ``1`` with ``"1"`` and keys ``object()`` on its
-# address.  Such columns are digested element by element with our own hash
-# instead, and pandas is handed the column of hex digests to combine with the
-# rest.  ``bytes`` are left out on purpose: pandas hashes ``b"a"`` like ``"a"``.
-_PANDAS_SAFE_OBJECT = frozenset({"string", "empty"})
-_OWN_HASHED_SECTION = "__fleche_own_hashed__"
+# Pandas objects are digested column by column, and every column by its dtype
+# and *all* of its contents, so that two tables that differ anywhere digest
+# differently (#1004).  ``pd.util.hash_pandas_object`` is not good enough for
+# that on its own: it hashes an object column through ``str()`` (``1`` and
+# ``"1"`` collide, ``object()`` is keyed on its address) or refuses it outright
+# (arrays, lists, dicts), it combines a row's columns into one 64-bit number,
+# it hashes a categorical by its values only (not its categories or order),
+# and it hashes a MultiIndex without level names or level dtypes.
+_PANDAS_VALUES = b"__fleche_pandas_values__"
+# The two encodings of an object column, kept apart.
+_STRINGS = b"s"
+_OBJECTS = b"o"
 
 
-def _needs_own_hash(values) -> bool:
-    """Whether pandas cannot be trusted to hash the elements of *values*."""
-    dtype = values.dtype
-    if isinstance(dtype, pd.CategoricalDtype):
-        # A categorical is hashed by the values of its categories, which suffer
-        # the same str() fallback when they are objects.
-        values = dtype.categories
-        dtype = values.dtype
-    return dtype == object and infer_dtype(values, skipna=True) not in _PANDAS_SAFE_OBJECT
+def _fold_objects(m, values, strings: bool = False) -> None:
+    """Fold the elements of a 1-D object or string array into *m*.
 
-
-def _own_hashed(values) -> np.ndarray:
-    """Replace each element of *values* by its hex digest.
-
-    Elements we cannot digest raise :exc:`Indigestible`, as they would anywhere
-    else, rather than falling back to pandas' unstable ``str()``.
+    *strings* promises that every non-missing element is a ``str``.
     """
-    return np.array([_digest_bytes(v).decode() for v in values], dtype=object)
+    if strings or infer_dtype(values, skipna=True) in ("string", "empty"):
+        # Fast path for strings and missing values: the distinct strings in
+        # order of appearance (count, lengths, UTF-8 bytes), then the code of
+        # every row.  surrogatepass keeps lone surrogates digestible.
+        codes, uniques = pd.factorize(values)
+        if all(isinstance(u, str) for u in uniques):
+            encoded = [u.encode("utf-8", "surrogatepass") for u in uniques]
+            m.update(_STRINGS)
+            m.update(np.array([len(encoded)], dtype="<i8").tobytes())
+            m.update(np.fromiter(map(len, encoded), dtype="<i8", count=len(encoded)).tobytes())
+            m.update(b"".join(encoded))
+            m.update(np.ascontiguousarray(codes, dtype="<i8").tobytes())
+            # Missing rows (code -1) are digested one by one, so None, NaN, NaT
+            # and pd.NA stay distinct.
+            m.update(b"".join(map(_digest_bytes, values[codes == -1])))
+            return
+    # Our own digest per element.  An element we cannot digest raises
+    # Indigestible, as it would anywhere else.
+    m.update(_OBJECTS)
+    m.update(b"".join(map(_digest_bytes, values)))
+
+
+def _digest_values(values) -> bytes:
+    """Digest the dtype and every element of a 1-D pandas *values* (Series or Index).
+
+    Names and indices are not included; the callers fold those in.
+    """
+    dtype = values.dtype
+    m = _new_hash(_PANDAS_VALUES)
+    m.update(_digest_bytes(str(dtype)))
+    if isinstance(dtype, pd.CategoricalDtype):
+        # str(dtype) is just "category": the categories (an Index, recursed into
+        # like any other) and their order are part of the dtype too.
+        m.update(_digest_bytes(dtype.categories))
+        m.update(_digest_bytes(bool(dtype.ordered)))
+        m.update(np.ascontiguousarray(values.array.codes, dtype="<i8").tobytes())
+    elif isinstance(dtype, np.dtype) and dtype != object:
+        # Numbers, booleans, datetimes and timedeltas: their raw bytes are exact.
+        arr = values.to_numpy()
+        m.update(np.ascontiguousarray(arr, dtype=arr.dtype.newbyteorder("<")).tobytes())
+    elif dtype == object:
+        _fold_objects(m, values.to_numpy())
+    elif isinstance(dtype, pd.StringDtype):
+        _fold_objects(m, values.array, strings=True)
+    else:
+        # Any other extension array (nullable numbers, tz-aware datetimes,
+        # periods, intervals, ...) knows how to hash itself.  The missing-value
+        # mask goes in separately: pandas hashes NA to a fixed number that a
+        # real value can hash to as well.
+        m.update(np.asarray(pd.isna(values.array), dtype=bool).tobytes())
+        m.update(pd.util.hash_array(values.array).tobytes())
+    return m.hexdigest().encode()
+
+
+def _digest_level(index: pd.MultiIndex, i: int) -> bytes:
+    """Digest level *i* of *index* as :func:`_digest_values` its values would.
+
+    An object level that needs per-element digests has each distinct value
+    digested once and spread over the rows by the level codes (-1 is missing),
+    rather than digesting every row.
+    """
+    level = index.levels[i]
+    if level.dtype != object or infer_dtype(level, skipna=True) in ("string", "empty"):
+        return _digest_values(index.get_level_values(i))
+    m = _new_hash(_PANDAS_VALUES)
+    m.update(_digest_bytes(str(level.dtype)))
+    m.update(_OBJECTS)
+    # get_level_values() fills missing rows of an object level with NaN.
+    digests = np.array([*map(_digest_bytes, level), _digest_bytes(np.nan)], dtype=object)
+    m.update(b"".join(digests[index.codes[i]]))
+    return m.hexdigest().encode()
 
 
 def _fold_freevars(m, code, closure) -> None:
@@ -404,46 +464,32 @@ def _digest_bytes(value: Any) -> bytes:
             # DataFrame is Iterable (yields column names) but NOT Mapping, so without
             # this arm two DataFrames sharing column names collide regardless of values.
             #
-            # We digest columns/dtypes/index ourselves and pass index=False to
-            # hash_pandas_object rather than letting index=True fold the index in.
-            # hash_pandas_object only mixes per-element value bytes — it ignores
-            # column names, column dtypes, index.name, and index.dtype — so
-            # index=True alone would still collide DataFrames whose indices differ
-            # only in name or dtype.  Recursing through _digest_bytes on
-            # value.index also reuses the pd.Index arm below, keeping a standalone
-            # Index and a DataFrame's .index digest-consistent.
-            m.update(_digest_bytes(list(value.columns)))
-            m.update(_digest_bytes([str(d) for d in value.dtypes]))
+            # Columns and index recurse into the pd.Index arms below, so their
+            # names and dtypes count, and a standalone Index digests the same as
+            # a DataFrame's .index.  Each column is then digested on its own
+            # (dtype and contents, see _digest_values), never combined row-wise.
+            m.update(_digest_bytes(value.columns))
             m.update(_digest_bytes(value.index))
-            own = [i for i, (_, col) in enumerate(value.items()) if _needs_own_hash(col)]
-            if own:
-                value = value.copy(deep=False)
-                for i in own:
-                    # isetitem, not value[label] = ...: column labels may repeat.
-                    value.isetitem(i, _own_hashed(value.iloc[:, i]))
-                # Marks which columns hold our digests, so a column of arrays
-                # cannot collide with a column of their digest strings.
-                m.update(_digest_bytes((_OWN_HASHED_SECTION, own)))
-            m.update(pd.util.hash_pandas_object(value, index=False).values.tobytes())
+            for _, column in value.items():
+                m.update(_digest_values(column))
         case pd.Series():
-            # Same reasoning as DataFrame: hash_pandas_object ignores name/dtype/
-            # index metadata, so we digest those ourselves and pass index=False.
+            # Same reasoning as DataFrame: name and index are ours to fold in.
             m.update(_digest_bytes(value.name))
-            m.update(_digest_bytes(str(value.dtype)))
             m.update(_digest_bytes(value.index))
-            if _needs_own_hash(value):
-                value = pd.Series(_own_hashed(value), dtype=object)
-                m.update(_digest_bytes(_OWN_HASHED_SECTION))
-            m.update(pd.util.hash_pandas_object(value, index=False).values.tobytes())
+            m.update(_digest_values(value))
+        case pd.MultiIndex():
+            # Must precede pd.Index.  Level names and dtypes count, which
+            # value.name (always None here) and hash_pandas_object both miss.
+            # Unused level values are dropped, and each level is digested by
+            # its values per row, so equal indices digest equal however their
+            # levels were built.
+            m.update(_digest_bytes(list(value.names)))
+            value = value.remove_unused_levels()
+            for i in range(value.nlevels):
+                m.update(_digest_level(value, i))
         case pd.Index():
             m.update(_digest_bytes(value.name))
-            m.update(_digest_bytes(str(value.dtype)))
-            # A MultiIndex is hashed level by level by pandas and is left as is
-            # for now (its object levels still go through str(); see #1004).
-            if not isinstance(value, pd.MultiIndex) and _needs_own_hash(value):
-                value = pd.Index(_own_hashed(value), dtype=object)
-                m.update(_digest_bytes(_OWN_HASHED_SECTION))
-            m.update(pd.util.hash_pandas_object(value).values.tobytes())
+            m.update(_digest_values(value))
         case _ if value is pd.NA:
             # A singleton like None; it turns up in object columns, which the
             # arms above digest element by element.

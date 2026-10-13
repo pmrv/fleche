@@ -132,14 +132,18 @@ Values and calls are stored separately so call records are queryable without des
   `DIGEST_LENGTH=64`.
   Built-in types are inline `match` cases in `_digest_bytes`, ordered roughly hot-path first: `int` (`bool ⊂ int`) → `Digest` (returns `value.encode()` so `digest(Digest("abc")) == "abc"`) → `str` → `None` → `Number` (`float`, `complex`, `Decimal`, `Fraction`, plus `np.integer`/`np.floating` which satisfy `numbers.Number` automatically;
   routed through `hash(value)` then recursed as int — a lossy encoding under which distinct numbers collide;
-  see the numeric-digest bullet under **Bugs** below) → `bytes` → `np.ndarray` (dtype + shape + `tobytes`) → `np.bool_` (delegates to `digest(bool(value))`, because `np.bool_ ∉ Number` since numpy 1.20) → `pd.DataFrame` / `pd.Series` / `pd.Index` (must precede `Iterable` — DataFrame iterates over column names only, so the `Iterable` arm collides any two DataFrames with the same columns regardless of values;
-  DataFrame folds in columns + per-column dtype + index, Series folds in name + dtype + index, Index folds in name + dtype;
-  values are mixed via `pd.util.hash_pandas_object(...).values.tobytes()` — `index=False` on the DataFrame/Series arms (the Index arm passes no kwarg since Index has no index) because `hash_pandas_object` only mixes per-element value bytes and ignores name/dtype/index metadata, so we hand-roll those.
-  Object columns pandas cannot hash faithfully — anything `infer_dtype` does not call `"string"` or `"empty"`, including `bytes` and the categories of a categorical — are digested element by element with our own hash first (`_needs_own_hash`/`_own_hashed`), and pandas is handed the column of hex digests plus a `__fleche_own_hashed__` marker (#1004).
-  Without that, `factorize` raises on unhashable elements (arrays, lists, dicts) and every other object is hashed through `str()`, colliding `1` with `"1"` and keying `object()` on its address;
-  an element we cannot digest now raises `Indigestible`.
-  Frames without such columns keep their digests.
-  A `MultiIndex` is still left to pandas, so its object levels still go through `str()`.
+  see the numeric-digest bullet under **Bugs** below) → `bytes` → `np.ndarray` (dtype + shape + `tobytes`) → `np.bool_` (delegates to `digest(bool(value))`, because `np.bool_ ∉ Number` since numpy 1.20) → `pd.DataFrame` / `pd.Series` / `pd.MultiIndex` / `pd.Index` (must precede `Iterable` — DataFrame iterates over column names only, so the `Iterable` arm collides any two DataFrames with the same columns regardless of values;
+  the invariant is that two tables that differ anywhere — values, dtypes, labels, axis names — digest differently (#1004).
+  DataFrame folds in its columns and index (both through the Index arms, so axis names and label dtypes count) and then each column's `_digest_values`;
+  Series folds in name + index + `_digest_values`;
+  Index folds in name + `_digest_values`;
+  MultiIndex folds in its level names and then each level via `_digest_level`, after `remove_unused_levels()` so equal indices digest equal however their levels were built.
+  `_digest_values` digests one column exactly: its `str(dtype)`, then raw little-endian bytes for numpy dtypes, categories + `ordered` + codes for categoricals, and for object and string columns either the distinct strings plus per-row codes (fast path) or our own digest of every element (`_fold_objects`);
+  missing values in object columns are digested one by one, so `None`, `NaN` and `pd.NA` stay distinct;
+  an element we cannot digest raises `Indigestible`.
+  Other extension arrays (nullable numbers, tz-aware datetimes, periods, intervals) still use `pd.util.hash_array`, per column, plus the missing-value mask.
+  `hash_pandas_object` is not used for the rest: it hashes object columns through `str()` (`1` collides with `"1"`, `object()` is keyed on its address) or refuses them (arrays, lists, dicts), combines a row into one 64-bit number, drops categorical categories and MultiIndex level names and dtypes, and raises on a frame with rows but no columns.
+  String data and labels have dtype `str` under pandas 3 and `object` under pandas 2, so the same table digests differently across that upgrade.
   → `pd.NA` (a singleton marker, like `None`) → `types.MethodType` (receiver + `__func__`) → `types.FunctionType` (code object **plus the state bound alongside it**: captured free variables paired with `co_freevars`, then `__defaults__` (as a tuple) and `__kwdefaults__` (as a mapping), each behind a section marker.
   Functions out of one factory share a code object, so a code-only digest could not tell `make(1)` from `make(2)`, nor `lambda x, n=1` from `lambda x, n=2`.
   A function with neither captures nor defaults still digests exactly as its code object, so nothing else changed digest.
