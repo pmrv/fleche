@@ -864,6 +864,11 @@ Git history is the changelog.
   Composes with #883/#905 and #333.
 - #883 — `DestructuringMixin._raw_sub_digests` hardcodes a `match` over the three built-in `Digested` types, so a subclass registered via `register_destructurer` reports zero children: `Cache.gc()` can evict values reachable only through it (silent data loss) and `count_reuses()` under-counts.
   Fix in flight as PR #905 (below).
+- #1004 — digesting a DataFrame with an object column of numpy arrays raises at save time: `hash_pandas_object` calls `factorize`, which needs `hash()`-able elements.
+  Worse, every object column that does *not* raise is hashed through `str()`, so `["a", 1]` collides with `["a", "1"]`, equal-`__str__` objects collide, and `Series([object()])` keys on an address that changes per process;
+  `MultiIndex` levels have the same `str()` weakness, and level names and level dtypes are never folded in at all.
+  Fix in flight as PR #1006 (below);
+  maintainer direction on the issue: be strict (`Indigestible` beats a `str()` fallback), fix the MultiIndex in the same go, and "different tables hash differently" is the main priority.
 
 - Numeric digest collisions — no issue filed yet;
   the full investigation (2026-10-06) lives in a comment on PR #990.
@@ -898,6 +903,10 @@ Git history is the changelog.
 
 - #887 — `BoundWrapper.__reduce__` pre-serialises `func` into a standalone bytes payload (plain `pickle` by reference when importable, `cloudpickle` by value otherwise, a clear `TypeError` when cloudpickle is missing), so it survives `spawn`/`forkserver` pools;
   closes #840, regression pin `tests/regression/test_issue_840.py`.
+- #1006 — digests pandas object columns that pandas cannot hash faithfully with fleche's own per-element hash (anything `infer_dtype` doesn't label `"string"`/`"empty"`, including `bytes` columns and object categories), handing `hash_pandas_object` the column of hex digests plus a marker;
+  elements fleche cannot digest raise `Indigestible` (strict), a new `pd.NA` arm, frames without such columns keep their digests;
+  closes #1004.
+  A second branch (`claude/issue-1004-20261013-1959`, no PR yet) supersedes that approach per the maintainer's fix-in-one-go direction: `hash_pandas_object` leaves the main path entirely (each column digested from its dtype + exact contents, a MultiIndex arm folding in level names/dtypes/values), at the cost of invalidating **every** pandas digest — expect #1006 to be updated or replaced by it rather than merged as is.
 - #786 (draft) — a process-wide cache of read-only `h5py.File` handles for multi-bag files (bounded MRU of 32, `(inode, mtime_ns, size)` invalidation, `locking=False`, writers close the cached handle under the per-bag lock);
   multi-bag `contains` drops from ~240 µs to ~29 µs.
   `evict` deliberately untouched;
@@ -975,8 +984,9 @@ the version bump is not the place to carry that warning.
 
 ## Commit attribution
 
-When running inside a GitHub Action, the workflow may be authenticated with a user PAT (see `.github/workflows/claude.yaml`).
-Without intervention, any commits you create would be attributed to that user.
+When running inside a GitHub Action, git may be authenticated as someone other than you (`.github/workflows/claude.yaml` authenticates through `claude-code-action`'s OAuth token;
+no workflow carries a user PAT).
+Without intervention, any commits you create would be attributed to that identity.
 Always attribute your commits to the bot identity instead:
 
 ```
