@@ -3,7 +3,7 @@ import contextlib
 import logging
 import random
 from dataclasses import dataclass, replace, field
-from typing import Iterable, Any, Callable, Literal, overload
+from typing import TYPE_CHECKING, Iterable, Any, Callable, Literal, overload
 
 import pandas as pd
 
@@ -951,7 +951,11 @@ class SizeLimitedMixin(BaseCache):
     automatically when mixed with :class:`~fleche.caches.Cache`.
     """
 
-    max_size: int
+    if TYPE_CHECKING:
+        # Read-only here so the frozen dataclass field of concrete subclasses is a valid override.
+        @property
+        def max_size(self) -> int: ...
+
     _lock: _PicklableRLock = field(init=False, repr=False, compare=False)
     _keys: set[str] = field(init=False, repr=False, compare=False)
 
