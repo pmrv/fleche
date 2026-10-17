@@ -14,15 +14,36 @@ running hash with ``type(value).__name__`` for type discrimination, and folds in
 representation that is stable across processes and Python versions (where the
 underlying object's representation allows it).
 
-Number types (``int``, ``float``, ``complex``, and subclasses) are an explicit
-exception: their digest is computed via Python's numeric hash protocol
-(``hash(value)``), which itself guarantees ``hash(1) == hash(1.0) == hash(1+0j)``.
-The type name is therefore **not** carried into the final digest for numbers, which is
-precisely why ``digest(1) == digest(1.0) == digest(1+0j)``.
+``int`` packs its value directly — raw signed bytes under the ``"int"`` salt.
+``bool`` (a subclass of ``int``) keeps its own ``"bool"`` salt instead, so
+``digest(True) != digest(1)`` even though ``isinstance(True, int)``.
 
-``bool`` is the one numeric subclass excluded from this equivalence: it keeps
-its own type-name salt, so ``digest(True) != digest(1)`` even though
-``isinstance(True, int)``.
+Every other :class:`numbers.Number` (``float``, ``complex``, ``Decimal``,
+``Fraction``, and subclasses) is folded through Python's numeric hash protocol
+instead: ``fleche`` computes ``hash(value)`` — always a plain ``int`` — and
+digests *that* through the ``int`` case above, discarding the original type.
+Since ``hash(1.0) == hash(1) == hash(1+0j) == 1``, all three recurse into the
+same ``int`` digest, which is why ``digest(1) == digest(1.0) == digest(1+0j)``.
+
+.. note::
+
+   This equivalence rides on Python's hash protocol, not on true numeric
+   equality, so it inherits ``hash()``'s edge cases.  ``int`` is the one type
+   here that does **not** go through ``hash()`` — it packs its own value
+   directly — so an ``int`` and a numerically-equal ``float`` stop digesting
+   identically once the integer exceeds ``sys.hash_info.modulus``
+   (``2**61 - 1`` on most 64-bit builds), the point past which
+   ``hash(n) != n``:
+
+   .. code-block:: pycon
+
+      >>> n = 2 ** 70
+      >>> f = float(n)
+      >>> n == f and hash(n) == hash(f)
+      True
+      >>> from fleche.digest import digest
+      >>> digest(n) == digest(f)
+      False
 
 For all other types the type-name salt is applied normally, so
 ``digest((1, 2)) != digest([1, 2])`` because "tuple" and "list" diverge before
