@@ -193,6 +193,19 @@ processes, the same rules as ``ProcessPoolExecutor`` apply:
 - In-memory caches are **not** shared with workers.
 - Use **file-** or **SQL-backed** storage with :class:`~fleche.BoundWrapper`.
 
+.. warning::
+
+   A fleche cache key has no concept of MPI rank. If a fleche-decorated
+   function wraps a collective MPI call, every rank computes the same
+   lookup key for the same arguments, so a cold run executes the
+   function **once per rank** rather than once overall, and a warm
+   cache serves every rank the *same* cached record — the one whichever
+   rank happened to save it — instead of each rank running its own
+   collective. Don't decorate MPI-collective code directly; cache above
+   or below the collective instead, at a point where each rank's
+   arguments (or the absence of a cache call at all) make this a
+   non-issue.
+
 .. code-block:: pycon
 
    >>> # file_cache and heavy_computation as set up in the ProcessPoolExecutor example above
