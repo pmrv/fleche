@@ -251,7 +251,12 @@ def randomly_digest_subvalues(value, data):
         return digest(value)
 
     # Otherwise, recurse into the structure
-    if isinstance(value, list):
+    if isinstance(value, np.ndarray) and value.dtype == object:
+        out = np.empty(value.shape, dtype=object)
+        for idx, v in np.ndenumerate(value):
+            out[idx] = randomly_digest_subvalues(v, data)
+        return out
+    elif isinstance(value, list):
         return [randomly_digest_subvalues(v, data) for v in value]
     elif isinstance(value, tuple) and hasattr(value, "_fields") and hasattr(value, "_field_defaults"):
         # namedtuple: reconstruct preserving the concrete type, since digest() includes type.__name__
@@ -450,6 +455,59 @@ def test_numpy_object_array_shape_and_indigestible():
     assert digest(a) != digest(a.reshape(2, 2))
     with pytest.raises(Indigestible):
         digest(np.array([object()], dtype=object))
+
+
+def _object_array(elements, shape):
+    # np.array(list_of_lists, dtype=object) would broadcast nested lists into
+    # extra dimensions; assign element by element instead.
+    out = np.empty(len(elements), dtype=object)
+    for i, e in enumerate(elements):
+        out[i] = e
+    return out.reshape(shape)
+
+
+@given(st.data())
+def test_numpy_object_array_merkle_property(data):
+    """Replacing any element (or sub-value of one) of an object array with its
+    digest leaves the array digest unchanged."""
+    elements = data.draw(st.lists(st_nested_values, min_size=1, max_size=6))
+    shape = data.draw(st.sampled_from([(len(elements),), (1, len(elements))]))
+    arr = _object_array(elements, shape)
+    assert digest(randomly_digest_subvalues(arr, data)) == digest(arr)
+
+
+@pytest.mark.parametrize(
+    "value, partially_digested_value",
+    (
+        (
+            _object_array(["a", [1, 2]], (2,)),
+            _object_array(["a", digest([1, 2])], (2,)),
+        ),
+        (
+            _object_array([Input(2), None, 3, "x"], (2, 2)),
+            _object_array([digest(Input(2)), None, 3, digest("x")], (2, 2)),
+        ),
+        (
+            # nested object array as an element, and inside a list
+            _object_array([_object_array([[1], "b"], (2,)), 0], (2,)),
+            _object_array([digest(_object_array([[1], "b"], (2,))), 0], (2,)),
+        ),
+        (
+            [_object_array([np.arange(3), "b"], (2,))],
+            [_object_array([digest(np.arange(3)), "b"], (2,))],
+        ),
+        (
+            [_object_array([np.arange(3), "b"], (2,))],
+            [digest(_object_array([np.arange(3), "b"], (2,)))],
+        ),
+        (
+            np.array([(1, [2])], dtype=[("x", "i8"), ("y", "O")]),
+            np.array([(1, digest([2]))], dtype=[("x", "i8"), ("y", "O")]),
+        ),
+    ),
+)
+def test_numpy_object_array_merkle_property_fixed(value, partially_digested_value):
+    assert digest(value) == digest(partially_digested_value)
 
 
 def test_numpy_structured_array_with_object_field():
