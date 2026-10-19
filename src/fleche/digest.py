@@ -12,7 +12,6 @@ import importlib.metadata
 from collections.abc import Iterable, Mapping
 from typing import Any, TypeVar, Callable, Type, Generic
 import numpy as np
-import pandas as pd
 
 from . import _attrs, _pandas
 
@@ -368,54 +367,10 @@ def _digest_bytes(value: Any) -> bytes:
         case np.bool_():
             # np.bool_ ∉ Number so this arm is reachable
             return _digest_bytes(bool(value))
-        case pd.DataFrame():
-            # DataFrame is Iterable (yields column names) but NOT Mapping, so without
-            # this arm two DataFrames sharing column names collide regardless of values.
-            #
-            # We digest columns/dtypes/index ourselves and pass index=False to
-            # hash_pandas_object rather than letting index=True fold the index in.
-            # hash_pandas_object only mixes per-element value bytes — it ignores
-            # column names, column dtypes, index.name, and index.dtype — so
-            # index=True alone would still collide DataFrames whose indices differ
-            # only in name or dtype.  Recursing through _digest_bytes on
-            # value.index also reuses the pd.Index arm below, keeping a standalone
-            # Index and a DataFrame's .index digest-consistent.
-            m.update(_digest_bytes(list(value.columns)))
-            m.update(_digest_bytes([str(d) for d in value.dtypes]))
-            m.update(_digest_bytes(value.index))
-            own = [i for i, (_, col) in enumerate(value.items()) if _pandas.needs_own_hash(col)]
-            if own:
-                value = value.copy(deep=False)
-                for i in own:
-                    # isetitem, not value[label] = ...: column labels may repeat.
-                    value.isetitem(i, _pandas.own_hashed(value.iloc[:, i], _digest_bytes))
-                # Marks which columns hold our digests, so a column of arrays
-                # cannot collide with a column of their digest strings.
-                m.update(_digest_bytes((_pandas.OWN_HASHED_SECTION, own)))
-            m.update(pd.util.hash_pandas_object(value, index=False).values.tobytes())
-        case pd.Series():
-            # Same reasoning as DataFrame: hash_pandas_object ignores name/dtype/
-            # index metadata, so we digest those ourselves and pass index=False.
-            m.update(_digest_bytes(value.name))
-            m.update(_digest_bytes(str(value.dtype)))
-            m.update(_digest_bytes(value.index))
-            if _pandas.needs_own_hash(value):
-                value = pd.Series(_pandas.own_hashed(value, _digest_bytes), dtype=object)
-                m.update(_digest_bytes(_pandas.OWN_HASHED_SECTION))
-            m.update(pd.util.hash_pandas_object(value, index=False).values.tobytes())
-        case pd.Index():
-            m.update(_digest_bytes(value.name))
-            m.update(_digest_bytes(str(value.dtype)))
-            # A MultiIndex is hashed level by level by pandas and is left as is
-            # for now (its object levels still go through str(); see #1004).
-            if not isinstance(value, pd.MultiIndex) and _pandas.needs_own_hash(value):
-                value = pd.Index(_pandas.own_hashed(value, _digest_bytes), dtype=object)
-                m.update(_digest_bytes(_pandas.OWN_HASHED_SECTION))
-            m.update(pd.util.hash_pandas_object(value).values.tobytes())
-        case _ if value is pd.NA:
-            # A singleton like None; it turns up in object columns, which the
-            # arms above digest element by element.
-            m.update(b"__NA__")
+        case _ if _pandas.is_pandas(value):
+            # Must precede Iterable: a DataFrame iterates over its column names
+            # only, so the Iterable arm would collide any two frames sharing them.
+            _pandas.fold(m, value, _digest_bytes)
         case types.MethodType():
             # A bound method is its function plus the receiver it is bound to.
             # Leaving __self__ out would collide obj1.method with obj2.method —
