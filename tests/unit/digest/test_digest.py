@@ -510,6 +510,40 @@ def test_numpy_object_array_merkle_property_fixed(value, partially_digested_valu
     assert digest(value) == digest(partially_digested_value)
 
 
+@pytest.mark.parametrize(
+    "a, b",
+    (
+        # same itemsize and bytes, different field names / types / order
+        (np.zeros(3, dtype=[("a", "i8"), ("b", "f8")]), np.zeros(3, dtype=[("x", "f8"), ("y", "i8")])),
+        (np.array([(1,)], dtype=[("count", "i8")]), np.array([(1,)], dtype=[("price", "i8")])),
+        (np.zeros(2, dtype=[("a", "i8")]), np.zeros(2, dtype=[("a", "f8")])),
+        (np.zeros(2, dtype=[("a", "<i8")]), np.zeros(2, dtype=[("a", ">i8")])),
+        (
+            np.zeros(2, dtype=[("p", [("x", "f4"), ("y", "f4")])]),
+            np.zeros(2, dtype=[("p", [("u", "f4"), ("v", "f4")])]),
+        ),
+    ),
+)
+def test_numpy_structured_dtypes_distinguished(a, b):
+    """Regression: structured dtypes digested as dtype.str (``|V<itemsize>``),
+    so field names, types and order were invisible."""
+    assert a.tobytes() == b.tobytes()
+    assert digest(a) != digest(b)
+
+
+def test_numpy_structured_array_ignores_padding():
+    """Padding bytes of aligned structured arrays are uninitialised; equal
+    fields must digest equal regardless."""
+    dt = np.dtype([("a", "u1"), ("b", "<i4")], align=True)
+    x = np.empty(4, dtype=dt)
+    y = np.zeros(4, dtype=dt)
+    for arr in (x, y):
+        arr["a"], arr["b"] = 1, 2
+    x.view(np.uint8).reshape(4, 8)[:, 1:4] = 0xAB  # dirty the padding
+    assert x.tobytes() != y.tobytes()
+    assert digest(x) == digest(y)
+
+
 def test_numpy_structured_array_with_object_field():
     dt = [("x", "i8"), ("y", "O")]
     inner = [1]
