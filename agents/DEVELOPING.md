@@ -132,7 +132,7 @@ Values and calls are stored separately so call records are queryable without des
   `DIGEST_LENGTH=64`.
   Built-in types are inline `match` cases in `_digest_bytes`, ordered roughly hot-path first: `int` (`bool ⊂ int`) → `Digest` (returns `value.encode()` so `digest(Digest("abc")) == "abc"`) → `str` → `None` → `Number` (`float`, `complex`, `Decimal`, `Fraction`, plus `np.integer`/`np.floating` which satisfy `numbers.Number` automatically;
   routed through `hash(value)` then recursed as int — a lossy encoding under which distinct numbers collide;
-  see the numeric-digest bullet under **Bugs** below) → `bytes` → `np.ndarray` (dtype + shape + `tobytes`) → `np.bool_` (delegates to `digest(bool(value))`, because `np.bool_ ∉ Number` since numpy 1.20) → pandas (`case _ if _pandas.is_pandas(value)`, whose bodies live in `_pandas.fold`: `pd.DataFrame` / `pd.Series` / `pd.Index` / `pd.NA`;
+  see the numeric-digest bullet under **Bugs** below) → `bytes` → `np.ndarray` (dtype + shape + `tobytes`) → `np.bool_` (delegates to `digest(bool(value))`, because `np.bool_ ∉ Number` since numpy 1.20) → pandas (`case _ if _pandas.is_pandas(value)`, which returns `_pandas.digest_pandas(value, _digest_bytes)`: `pd.DataFrame` / `pd.Series` / `pd.Index` / `pd.NA`;
   must precede `Iterable` — DataFrame iterates over column names only, so the `Iterable` arm collides any two DataFrames with the same columns regardless of values;
   DataFrame folds in columns + per-column dtype + index, Series folds in name + dtype + index, Index folds in name + dtype;
   values are mixed via `pd.util.hash_pandas_object(...).values.tobytes()` — `index=False` on the DataFrame/Series arms (the Index arm passes no kwarg since Index has no index) because `hash_pandas_object` only mixes per-element value bytes and ignores name/dtype/index metadata, so we hand-roll those.
@@ -160,14 +160,14 @@ Values and calls are stored separately so call records are queryable without des
   bound methods are their own arm (`types.MethodType`: receiver + underlying function, so `obj1.m` and `obj2.m` differ;
   a class receiver is named via `digest_class`), so there is no second entry point — `call._code_digest` reduces a bound method to `__func__` (the receiver already arrives as a call argument) and goes through `digest`;
   `digest_class(cls)` names a class `module.QualName` and is shared by the built-in-`type` arm and the `__class__` cell.
-  `_new_hash(salt)` is the one place a salted running hash is started.
+  `_new_hash(salt)` is the one place a salted running hash is started, apart from `_pandas.digest_pandas`, which mirrors it.
   NaN floats are packed via `struct.pack` (sign-preserving) instead of going through `hash()`;
   complex NaNs use `<dd`.
 - `_attrs.py` — Internal `is_attrs_instance` / `field_items` helpers gating optional `attrs` support;
   safe to import without `attrs` installed.
 - `_pandas.py` — Internal digest arms for pandas objects: `is_pandas` gates the one pandas case in `_digest_bytes`,
-  `fold` holds the DataFrame / Series / Index / `pd.NA` bodies, and `needs_own_hash` / `own_hashed` handle object columns (#1004);
-  `fold` and `own_hashed` take `digest._digest_bytes` as an argument, since `digest.py` imports the module.
+  `digest_pandas` digests DataFrame / Series / Index / MultiIndex / `pd.NA` with the same salt and hex return as `_digest_bytes`, and `needs_own_hash` / `own_hashed` handle object columns (#1004);
+  `digest_pandas` and `own_hashed` take `digest._digest_bytes` as an argument, since `digest.py` imports the module.
 - `call.py` — `Call` dataclass (`from_call`, `to_lookup_key`, `.stash(values)→DigestedCall` writes args+result to value storage / `.digest()→DigestedCall` digests without saving);
   `DigestedCall` (storage representation: arguments and result are `Digest` keys;
   `result` is `Digest | None` — `None` marks a record whose result is still pending, i.e. an admission by `Cache.prepare` that has not yet been committed;

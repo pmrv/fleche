@@ -294,7 +294,7 @@ def _digest_bytes(value: Any) -> bytes:
     hex bytes) so the bytes fed into parent hashes are identical to the previous
     ``digest(v).encode()`` calls — no backwards-incompatible change.  To gain
     the raw-bytes speedup (Issue #440), change **only** the final ``return``
-    here to ``m.digest()`` (32 bytes), update ``digest()`` to call ``.hex()``
+    here and in ``_pandas.digest_pandas`` to ``m.digest()`` (32 bytes), update ``digest()`` to call ``.hex()``
     instead of ``.decode()``, and change the ``encode()`` calls on the
     early-return paths (Digest pass-through, hooks, ``__digest__``) to
     ``bytes.fromhex(...)``.  That must be coordinated with a ``hash_version``
@@ -370,7 +370,7 @@ def _digest_bytes(value: Any) -> bytes:
         case _ if _pandas.is_pandas(value):
             # Must precede Iterable: a DataFrame iterates over its column names
             # only, so the Iterable arm would collide any two frames sharing them.
-            _pandas.fold(m, value, _digest_bytes)
+            return _pandas.digest_pandas(value, _digest_bytes)
         case types.MethodType():
             # A bound method is its function plus the receiver it is bound to.
             # Leaving __self__ out would collide obj1.method with obj2.method —

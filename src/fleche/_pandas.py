@@ -1,8 +1,8 @@
 """Digest arms for pandas objects: ``DataFrame``, ``Series``, ``Index`` and ``pd.NA``.
 
-:func:`fleche.digest._digest_bytes` hands any value :func:`is_pandas` accepts to
-:func:`fold`.  The digest function is passed in because :mod:`fleche.digest`
-imports this module.
+:func:`fleche.digest._digest_bytes` returns :func:`digest_pandas` for any value
+:func:`is_pandas` accepts.  The digest function is passed in because
+:mod:`fleche.digest` imports this module.
 
 Object columns need care (#1004).  ``pd.util.hash_pandas_object`` hashes a
 column of strings by their encoded bytes, and every missing value by one shared
@@ -18,6 +18,7 @@ Such columns are digested element by element with our own hash, and pandas is
 handed the column of hex digests instead.
 """
 
+import hashlib
 from collections.abc import Callable
 from typing import Any
 
@@ -51,12 +52,15 @@ def own_hashed(values, digest_bytes: Callable[[Any], bytes]) -> np.ndarray:
 
 
 def is_pandas(value: Any) -> bool:
-    """Whether :func:`fold` digests *value*."""
+    """Whether :func:`digest_pandas` digests *value*."""
     return isinstance(value, (pd.DataFrame, pd.Series, pd.Index)) or value is pd.NA
 
 
-def fold(m, value, digest_bytes: Callable[[Any], bytes]) -> None:
-    """Fold the pandas *value* into the running hash *m*."""
+def digest_pandas(value, digest_bytes: Callable[[Any], bytes]) -> bytes:
+    """Return the digest of the pandas *value*, in the format of *digest_bytes*."""
+    # Salted with the type name and returned as hex, exactly as _new_hash and
+    # _digest_bytes do, so these digests are the ones the arms had in digest.py.
+    m = hashlib.sha256(type(value).__name__.encode())
     match value:
         case pd.DataFrame():
             # We digest columns/dtypes/index ourselves and pass index=False to
@@ -108,3 +112,4 @@ def fold(m, value, digest_bytes: Callable[[Any], bytes]) -> None:
             # A singleton like None; it turns up in object columns, which the
             # arms above digest element by element.
             m.update(b"__NA__")
+    return m.hexdigest().encode()
