@@ -132,7 +132,8 @@ Values and calls are stored separately so call records are queryable without des
   `DIGEST_LENGTH=64`.
   Built-in types are inline `match` cases in `_digest_bytes`, ordered roughly hot-path first: `int` (`bool ⊂ int`) → `Digest` (returns `value.encode()` so `digest(Digest("abc")) == "abc"`) → `str` → `None` → `Number` (`float`, `complex`, `Decimal`, `Fraction`, plus `np.integer`/`np.floating` which satisfy `numbers.Number` automatically;
   routed through `hash(value)` then recursed as int — a lossy encoding under which distinct numbers collide;
-  see the numeric-digest bullet under **Bugs** below) → `bytes` → `np.ndarray` (dtype + shape + `tobytes`) → `np.bool_` (delegates to `digest(bool(value))`, because `np.bool_ ∉ Number` since numpy 1.20) → pandas (`case _ if _pandas.is_pandas(value)`, whose bodies live in `_pandas.fold`: `pd.DataFrame` / `pd.Series` / `pd.Index` / `pd.NA`; must precede `Iterable` — DataFrame iterates over column names only, so the `Iterable` arm collides any two DataFrames with the same columns regardless of values;
+  see the numeric-digest bullet under **Bugs** below) → `bytes` → `np.ndarray` (dtype + shape + `tobytes`) → `np.bool_` (delegates to `digest(bool(value))`, because `np.bool_ ∉ Number` since numpy 1.20) → pandas (`case _ if _pandas.is_pandas(value)`, whose bodies live in `_pandas.fold`: `pd.DataFrame` / `pd.Series` / `pd.Index` / `pd.NA`;
+  must precede `Iterable` — DataFrame iterates over column names only, so the `Iterable` arm collides any two DataFrames with the same columns regardless of values;
   DataFrame folds in columns + per-column dtype + index, Series folds in name + dtype + index, Index folds in name + dtype;
   values are mixed via `pd.util.hash_pandas_object(...).values.tobytes()` — `index=False` on the DataFrame/Series arms (the Index arm passes no kwarg since Index has no index) because `hash_pandas_object` only mixes per-element value bytes and ignores name/dtype/index metadata, so we hand-roll those.
   Object columns pandas cannot hash faithfully — anything `infer_dtype` does not call `"string"` or `"empty"`, including `bytes` and the categories of a categorical — are digested element by element with our own hash first (`_pandas.needs_own_hash`/`own_hashed`), and pandas is handed the column of hex digests plus a `__fleche_own_hashed__` marker (#1004).
@@ -140,8 +141,7 @@ Values and calls are stored separately so call records are queryable without des
   an element we cannot digest now raises `Indigestible`.
   Frames without such columns keep their digests.
   A `MultiIndex` is still left to pandas, so its object levels still go through `str()`.
-  `pd.NA` folds a singleton marker, like `None`)
-  → `types.MethodType` (receiver + `__func__`) → `types.FunctionType` (code object **plus the state bound alongside it**: captured free variables paired with `co_freevars`, then `__defaults__` (as a tuple) and `__kwdefaults__` (as a mapping), each behind a section marker.
+  `pd.NA` folds a singleton marker, like `None`) → `types.MethodType` (receiver + `__func__`) → `types.FunctionType` (code object **plus the state bound alongside it**: captured free variables paired with `co_freevars`, then `__defaults__` (as a tuple) and `__kwdefaults__` (as a mapping), each behind a section marker.
   Functions out of one factory share a code object, so a code-only digest could not tell `make(1)` from `make(2)`, nor `lambda x, n=1` from `lambda x, n=2`.
   A function with neither captures nor defaults still digests exactly as its code object, so nothing else changed digest.
   Cycles — a recursive inner function closes over itself, or a function is reachable from its own defaults — fold in a marker naming how far back up the walk the target sits, guarded by a per-thread dict of the functions currently being walked and their depths (relative, so a cycle digests the same wherever it is met — a constant marker would collide `a -> b -> a` with `c -> d -> d`);
@@ -163,7 +163,8 @@ Values and calls are stored separately so call records are queryable without des
   complex NaNs use `<dd`.
 - `_attrs.py` — Internal `is_attrs_instance` / `field_items` helpers gating optional `attrs` support;
   safe to import without `attrs` installed.
-- `_pandas.py` — Internal digest arms for pandas objects: `is_pandas` gates the one pandas case in `_digest_bytes`, `fold` holds the DataFrame / Series / Index / `pd.NA` bodies, and `needs_own_hash` / `own_hashed` handle object columns (#1004);
+- `_pandas.py` — Internal digest arms for pandas objects: `is_pandas` gates the one pandas case in `_digest_bytes`,
+  `fold` holds the DataFrame / Series / Index / `pd.NA` bodies, and `needs_own_hash` / `own_hashed` handle object columns (#1004);
   `fold` and `own_hashed` take `digest._digest_bytes` as an argument, since `digest.py` imports the module.
 - `call.py` — `Call` dataclass (`from_call`, `to_lookup_key`, `.stash(values)→DigestedCall` writes args+result to value storage / `.digest()→DigestedCall` digests without saving);
   `DigestedCall` (storage representation: arguments and result are `Digest` keys;
