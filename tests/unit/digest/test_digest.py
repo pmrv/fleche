@@ -402,6 +402,66 @@ def test_numpy_explicit_cases():
     assert digest(c) != digest(d)
 
 
+def test_numpy_object_array_digests_elements_not_pointers():
+    """Regression (#1004): object arrays were digested via tobytes(), i.e. by
+    PyObject address, so the digest changed per process and missed mutation."""
+    import subprocess
+    import sys
+
+    code = (
+        "import numpy as np; from fleche.digest import digest; "
+        "print(digest(np.array(['abc', 12345, None, (1, 2)], dtype=object)))"
+    )
+    runs = {
+        subprocess.run(
+            [sys.executable, "-c", code], capture_output=True, text=True, check=True
+        ).stdout
+        for _ in range(2)
+    }
+    assert len(runs) == 1
+
+    inner = [1]
+    arr = np.array([None, inner], dtype=object)
+    before = digest(arr)
+    inner.append(2)
+    assert digest(arr) != before
+
+    # Equal contents in distinct objects digest the same.
+    assert digest(np.array(["a" * 50, [1]], dtype=object)) == digest(
+        np.array(["a" * 50, [1]], dtype=object)
+    )
+
+
+def test_numpy_object_array_of_arrays():
+    """Object arrays holding arrays recurse into the ndarray arm, so a
+    difference deep inside one element is seen."""
+    a = np.empty(2, dtype=object)
+    b = np.empty(2, dtype=object)
+    big = np.arange(10_000)
+    a[0], a[1] = big, np.zeros(3)
+    b[0], b[1] = big.copy(), np.zeros(3)
+    assert digest(a) == digest(b)
+    b[0][5_000] = -1
+    assert digest(a) != digest(b)
+
+
+def test_numpy_object_array_shape_and_indigestible():
+    a = np.array(["a", "b", "c", "d"], dtype=object)
+    assert digest(a) != digest(a.reshape(2, 2))
+    with pytest.raises(Indigestible):
+        digest(np.array([object()], dtype=object))
+
+
+def test_numpy_structured_array_with_object_field():
+    dt = [("x", "i8"), ("y", "O")]
+    inner = [1]
+    s = np.array([(1, inner)], dtype=dt)
+    before = digest(s)
+    assert before == digest(np.array([(1, [1])], dtype=dt))
+    inner.append(2)
+    assert digest(s) != before
+
+
 def test_pandas_dataframe_hashes_by_content():
     """Regression: DataFrame iter yields column names only, so falling through to
     the Iterable arm makes any two DataFrames with the same columns collide."""

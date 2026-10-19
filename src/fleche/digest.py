@@ -364,7 +364,17 @@ def _digest_bytes(value: Any) -> bytes:
         case np.ndarray():
             m.update(_digest_bytes(value.dtype.str))
             m.update(_digest_bytes(value.shape))
-            m.update(value.tobytes())
+            if value.dtype.hasobject:
+                # tobytes() of an object array (or a structured array with
+                # object fields) is its PyObject pointers: unstable across
+                # processes and blind to mutation of the elements.  Digest every
+                # element instead; structured records come out of tolist() as
+                # tuples.  Each element digest has a fixed length and the shape
+                # is folded in above, so the concatenation is unambiguous.
+                for element in value.ravel().tolist():
+                    m.update(_digest_bytes(element))
+            else:
+                m.update(value.tobytes())
         case np.bool_():
             # np.bool_ ∉ Number so this arm is reachable
             return _digest_bytes(bool(value))
