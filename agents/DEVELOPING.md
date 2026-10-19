@@ -140,7 +140,9 @@ Values and calls are stored separately so call records are queryable without des
   Without that, `factorize` raises on unhashable elements (arrays, lists, dicts) and every other object is hashed through `str()`, colliding `1` with `"1"` and keying `object()` on its address;
   an element we cannot digest now raises `Indigestible`.
   Frames without such columns keep their digests.
-  A `MultiIndex` is still left to pandas, so its object levels still go through `str()`.
+  A `MultiIndex` folds the tuple of its levels, each taken as an `Index` of its values (`get_level_values`, so unused level entries do not count) and digested by the `Index` arm, name included;
+  pandas would hash object levels through `str()` and ignore the level names.
+  So every `MultiIndex` digest changed, including frames and series indexed by one.
   `pd.NA` folds a singleton marker, like `None`) → `types.MethodType` (receiver + `__func__`) → `types.FunctionType` (code object **plus the state bound alongside it**: captured free variables paired with `co_freevars`, then `__defaults__` (as a tuple) and `__kwdefaults__` (as a mapping), each behind a section marker.
   Functions out of one factory share a code object, so a code-only digest could not tell `make(1)` from `make(2)`, nor `lambda x, n=1` from `lambda x, n=2`.
   A function with neither captures nor defaults still digests exactly as its code object, so nothing else changed digest.

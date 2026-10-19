@@ -90,12 +90,17 @@ def fold(m, value, digest_bytes: Callable[[Any], bytes]) -> None:
                 value = pd.Series(own_hashed(value, digest_bytes), dtype=object)
                 m.update(digest_bytes(OWN_HASHED_SECTION))
             m.update(pd.util.hash_pandas_object(value, index=False).values.tobytes())
+        case pd.MultiIndex():
+            # pandas hashes a MultiIndex level by level, through str() for object
+            # levels, and ignores the level names (value.name is None).  Instead
+            # each level is digested as an Index of its values, name included,
+            # and the tuple of their digests folded.  The values, not
+            # value.levels: those may hold entries no row uses.
+            m.update(digest_bytes(tuple(value.get_level_values(i) for i in range(value.nlevels))))
         case pd.Index():
             m.update(digest_bytes(value.name))
             m.update(digest_bytes(str(value.dtype)))
-            # A MultiIndex is hashed level by level by pandas and is left as is
-            # for now (its object levels still go through str(); see #1004).
-            if not isinstance(value, pd.MultiIndex) and needs_own_hash(value):
+            if needs_own_hash(value):
                 value = pd.Index(own_hashed(value, digest_bytes), dtype=object)
                 m.update(digest_bytes(OWN_HASHED_SECTION))
             m.update(pd.util.hash_pandas_object(value).values.tobytes())

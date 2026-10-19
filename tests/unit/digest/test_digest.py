@@ -574,6 +574,54 @@ def test_pandas_dataframe_object_columns_with_repeated_labels():
     assert isinstance(a.iloc[0, 0], np.ndarray)
 
 
+def _multiindex(tuples, **kwargs):
+    import pandas as pd
+
+    return pd.MultiIndex.from_tuples(tuples, **kwargs)
+
+
+def test_pandas_multiindex_object_level_does_not_collide_through_str():
+    """pandas hashes a MultiIndex level by level, through str() for object levels."""
+    a = _multiindex([("a", 1), ("b", "x")])
+    b = _multiindex([("a", "1"), ("b", "x")])
+
+    assert digest(a) != digest(b)
+    assert digest(a) == digest(_multiindex([("a", 1), ("b", "x")]))
+
+
+def test_pandas_multiindex_level_names_matter():
+    """pandas ignores level names, and a MultiIndex's .name is None."""
+    assert digest(_multiindex([("a", 1)], names=["p", "q"])) != digest(
+        _multiindex([("a", 1)], names=["p", "r"])
+    )
+
+
+def test_pandas_multiindex_ignores_unused_level_entries():
+    full_a = _multiindex([("a", 1), ("b", 2)])
+    full_b = _multiindex([("a", 1), ("c", 3)])
+
+    assert digest(full_a[:1]) == digest(full_b[:1])
+
+
+def test_pandas_multiindex_order_and_level_order_matter():
+    assert digest(_multiindex([("a", 1), ("b", 2)])) != digest(_multiindex([("b", 2), ("a", 1)]))
+    assert digest(_multiindex([("a", "b")])) != digest(_multiindex([("b", "a")]))
+
+
+def test_pandas_multiindex_of_unknown_objects_is_indigestible():
+    with pytest.raises(Indigestible):
+        digest(_multiindex([(object(), 1)]))
+
+
+def test_pandas_dataframe_with_multiindex_rows():
+    import pandas as pd
+
+    a = pd.DataFrame({"x": [1.0, 2.0]}, index=_multiindex([("a", 1), ("b", "x")]))
+    b = pd.DataFrame({"x": [1.0, 2.0]}, index=_multiindex([("a", "1"), ("b", "x")]))
+
+    assert digest(a) != digest(b)
+
+
 def _pre_1004_digest(value):
     """The DataFrame / Series digest exactly as it was before #1004."""
     import hashlib
