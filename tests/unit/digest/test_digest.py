@@ -251,7 +251,12 @@ def randomly_digest_subvalues(value, data):
         return digest(value)
 
     # Otherwise, recurse into the structure
-    if isinstance(value, list):
+    if isinstance(value, np.ndarray) and value.dtype == object:
+        out = np.empty(value.shape, dtype=object)
+        for idx, v in np.ndenumerate(value):
+            out[idx] = randomly_digest_subvalues(v, data)
+        return out
+    elif isinstance(value, list):
         return [randomly_digest_subvalues(v, data) for v in value]
     elif isinstance(value, tuple) and hasattr(value, "_fields") and hasattr(value, "_field_defaults"):
         # namedtuple: reconstruct preserving the concrete type, since digest() includes type.__name__
@@ -400,6 +405,153 @@ def test_numpy_explicit_cases():
     assert c.tobytes() == d.tobytes()
     assert c.shape != d.shape
     assert digest(c) != digest(d)
+
+
+def test_numpy_object_array_digests_elements_not_pointers():
+    """Regression (#1004): object arrays were digested via tobytes(), i.e. by
+    PyObject address, so the digest changed per process and missed mutation."""
+    import subprocess
+    import sys
+
+    code = (
+        "import numpy as np; from fleche.digest import digest; "
+        "print(digest(np.array(['abc', 12345, None, (1, 2)], dtype=object)))"
+    )
+    runs = {
+        subprocess.run(
+            [sys.executable, "-c", code], capture_output=True, text=True, check=True
+        ).stdout
+        for _ in range(2)
+    }
+    assert len(runs) == 1
+
+    inner = [1]
+    arr = np.array([None, inner], dtype=object)
+    before = digest(arr)
+    inner.append(2)
+    assert digest(arr) != before
+
+    # Equal contents in distinct objects digest the same.
+    assert digest(np.array(["a" * 50, [1]], dtype=object)) == digest(
+        np.array(["a" * 50, [1]], dtype=object)
+    )
+
+
+def test_numpy_object_array_of_arrays():
+    """Object arrays holding arrays recurse into the ndarray arm, so a
+    difference deep inside one element is seen."""
+    a = np.empty(2, dtype=object)
+    b = np.empty(2, dtype=object)
+    big = np.arange(10_000)
+    a[0], a[1] = big, np.zeros(3)
+    b[0], b[1] = big.copy(), np.zeros(3)
+    assert digest(a) == digest(b)
+    b[0][5_000] = -1
+    assert digest(a) != digest(b)
+
+
+def test_numpy_object_array_shape_and_indigestible():
+    a = np.array(["a", "b", "c", "d"], dtype=object)
+    assert digest(a) != digest(a.reshape(2, 2))
+    with pytest.raises(Indigestible):
+        digest(np.array([object()], dtype=object))
+
+
+def _object_array(elements, shape):
+    # np.array(list_of_lists, dtype=object) would broadcast nested lists into
+    # extra dimensions; assign element by element instead.
+    out = np.empty(len(elements), dtype=object)
+    for i, e in enumerate(elements):
+        out[i] = e
+    return out.reshape(shape)
+
+
+@given(st.data())
+def test_numpy_object_array_merkle_property(data):
+    """Replacing any element (or sub-value of one) of an object array with its
+    digest leaves the array digest unchanged."""
+    elements = data.draw(st.lists(st_nested_values, min_size=1, max_size=6))
+    shape = data.draw(st.sampled_from([(len(elements),), (1, len(elements))]))
+    arr = _object_array(elements, shape)
+    assert digest(randomly_digest_subvalues(arr, data)) == digest(arr)
+
+
+@pytest.mark.parametrize(
+    "value, partially_digested_value",
+    (
+        (
+            _object_array(["a", [1, 2]], (2,)),
+            _object_array(["a", digest([1, 2])], (2,)),
+        ),
+        (
+            _object_array([Input(2), None, 3, "x"], (2, 2)),
+            _object_array([digest(Input(2)), None, 3, digest("x")], (2, 2)),
+        ),
+        (
+            # nested object array as an element, and inside a list
+            _object_array([_object_array([[1], "b"], (2,)), 0], (2,)),
+            _object_array([digest(_object_array([[1], "b"], (2,))), 0], (2,)),
+        ),
+        (
+            [_object_array([np.arange(3), "b"], (2,))],
+            [_object_array([digest(np.arange(3)), "b"], (2,))],
+        ),
+        (
+            [_object_array([np.arange(3), "b"], (2,))],
+            [digest(_object_array([np.arange(3), "b"], (2,)))],
+        ),
+        (
+            np.array([(1, [2])], dtype=[("x", "i8"), ("y", "O")]),
+            np.array([(1, digest([2]))], dtype=[("x", "i8"), ("y", "O")]),
+        ),
+    ),
+)
+def test_numpy_object_array_merkle_property_fixed(value, partially_digested_value):
+    assert digest(value) == digest(partially_digested_value)
+
+
+@pytest.mark.parametrize(
+    "a, b",
+    (
+        # same itemsize and bytes, different field names / types / order
+        (np.zeros(3, dtype=[("a", "i8"), ("b", "f8")]), np.zeros(3, dtype=[("x", "f8"), ("y", "i8")])),
+        (np.array([(1,)], dtype=[("count", "i8")]), np.array([(1,)], dtype=[("price", "i8")])),
+        (np.zeros(2, dtype=[("a", "i8")]), np.zeros(2, dtype=[("a", "f8")])),
+        (np.zeros(2, dtype=[("a", "<i8")]), np.zeros(2, dtype=[("a", ">i8")])),
+        (
+            np.zeros(2, dtype=[("p", [("x", "f4"), ("y", "f4")])]),
+            np.zeros(2, dtype=[("p", [("u", "f4"), ("v", "f4")])]),
+        ),
+    ),
+)
+def test_numpy_structured_dtypes_distinguished(a, b):
+    """Regression: structured dtypes digested as dtype.str (``|V<itemsize>``),
+    so field names, types and order were invisible."""
+    assert a.tobytes() == b.tobytes()
+    assert digest(a) != digest(b)
+
+
+def test_numpy_structured_array_ignores_padding():
+    """Padding bytes of aligned structured arrays are uninitialised; equal
+    fields must digest equal regardless."""
+    dt = np.dtype([("a", "u1"), ("b", "<i4")], align=True)
+    x = np.empty(4, dtype=dt)
+    y = np.zeros(4, dtype=dt)
+    for arr in (x, y):
+        arr["a"], arr["b"] = 1, 2
+    x.view(np.uint8).reshape(4, 8)[:, 1:4] = 0xAB  # dirty the padding
+    assert x.tobytes() != y.tobytes()
+    assert digest(x) == digest(y)
+
+
+def test_numpy_structured_array_with_object_field():
+    dt = [("x", "i8"), ("y", "O")]
+    inner = [1]
+    s = np.array([(1, inner)], dtype=dt)
+    before = digest(s)
+    assert before == digest(np.array([(1, [1])], dtype=dt))
+    inner.append(2)
+    assert digest(s) != before
 
 
 def test_pandas_dataframe_hashes_by_content():

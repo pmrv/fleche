@@ -132,7 +132,9 @@ Values and calls are stored separately so call records are queryable without des
   `DIGEST_LENGTH=64`.
   Built-in types are inline `match` cases in `_digest_bytes`, ordered roughly hot-path first: `int` (`bool ⊂ int`) → `Digest` (returns `value.encode()` so `digest(Digest("abc")) == "abc"`) → `str` → `None` → `Number` (`float`, `complex`, `Decimal`, `Fraction`, plus `np.integer`/`np.floating` which satisfy `numbers.Number` automatically;
   routed through `hash(value)` then recursed as int — a lossy encoding under which distinct numbers collide;
-  see the numeric-digest bullet under **Bugs** below) → `bytes` → `np.ndarray` (dtype + shape + `tobytes`) → `np.bool_` (delegates to `digest(bool(value))`, because `np.bool_ ∉ Number` since numpy 1.20) → pandas (`case _ if _pandas.is_pandas(value)`, which returns `_pandas.digest_pandas(value, _digest_bytes)`: `pd.DataFrame` / `pd.Series` / `pd.Index` / `pd.NA`;
+  see the numeric-digest bullet under **Bugs** below) → `bytes` → `np.ndarray` (dtype + shape + `tobytes`;
+  structured dtypes instead digest each field name + field view recursively, because `dtype.str` is only `|V<itemsize>` and padding bytes are uninitialised;
+  other `dtype.hasobject` arrays digest every element of `ravel().tolist()` because their bytes are PyObject pointers) → `np.bool_` (delegates to `digest(bool(value))`, because `np.bool_ ∉ Number` since numpy 1.20) → pandas (`case _ if _pandas.is_pandas(value)`, which returns `_pandas.digest_pandas(value, _digest_bytes)`: `pd.DataFrame` / `pd.Series` / `pd.Index` / `pd.NA`;
   must precede `Iterable` — DataFrame iterates over column names only, so the `Iterable` arm collides any two DataFrames with the same columns regardless of values;
   DataFrame folds in columns + per-column dtype + index, Series folds in name + dtype + index, Index folds in name + dtype;
   values are mixed via `pd.util.hash_pandas_object(...).values.tobytes()` — `index=False` on the DataFrame/Series arms (the Index arm passes no kwarg since Index has no index) because `hash_pandas_object` only mixes per-element value bytes and ignores name/dtype/index metadata, so we hand-roll those.
@@ -875,6 +877,11 @@ Git history is the changelog.
   Composes with #883/#905 and #333.
 - #883 — `DestructuringMixin._raw_sub_digests` hardcodes a `match` over the three built-in `Digested` types, so a subclass registered via `register_destructurer` reports zero children: `Cache.gc()` can evict values reachable only through it (silent data loss) and `count_reuses()` under-counts.
   Fix in flight as PR #905 (below).
+- #1004 — digesting a DataFrame with an object column of numpy arrays raises at save time: `hash_pandas_object` calls `factorize`, which needs `hash()`-able elements.
+  Worse, every object column that does *not* raise is hashed through `str()`, so `["a", 1]` collides with `["a", "1"]`, equal-`__str__` objects collide, and `Series([object()])` keys on an address that changes per process;
+  `MultiIndex` levels have the same `str()` weakness, and level names and level dtypes are never folded in at all.
+  Fix in flight as PR #1006 (below);
+  maintainer direction on the issue: be strict (`Indigestible` beats a `str()` fallback), fix the MultiIndex in the same go, and "different tables hash differently" is the main priority.
 
 - Numeric digest collisions — no issue filed yet;
   the full investigation (2026-10-06) lives in a comment on PR #990.
@@ -909,6 +916,12 @@ Git history is the changelog.
 
 - #887 — `BoundWrapper.__reduce__` pre-serialises `func` into a standalone bytes payload (plain `pickle` by reference when importable, `cloudpickle` by value otherwise, a clear `TypeError` when cloudpickle is missing), so it survives `spawn`/`forkserver` pools;
   closes #840, regression pin `tests/regression/test_issue_840.py`.
+- #1006 — digests pandas object columns that pandas cannot hash faithfully with fleche's own per-element hash (anything `infer_dtype` doesn't label `"string"`/`"empty"`, including `bytes` columns and object categories), handing `hash_pandas_object` the column of hex digests plus a marker;
+  elements fleche cannot digest raise `Indigestible` (strict), a new `pd.NA` arm, frames without such columns keep their digests;
+  a `MultiIndex` is digested as the tuple of its levels (names included), changing every `MultiIndex` digest;
+  the pandas arms move to `fleche._pandas`;
+  closes #1004.
+  A second branch (`claude/issue-1004-20261013-1959`, no PR yet) supersedes that approach per the maintainer's fix-in-one-go direction: `hash_pandas_object` leaves the main path entirely (each column digested from its dtype + exact contents, a MultiIndex arm folding in level names/dtypes/values), at the cost of invalidating **every** pandas digest — expect #1006 to be updated or replaced by it rather than merged as is.
 - #786 (draft) — a process-wide cache of read-only `h5py.File` handles for multi-bag files (bounded MRU of 32, `(inode, mtime_ns, size)` invalidation, `locking=False`, writers close the cached handle under the per-bag lock);
   multi-bag `contains` drops from ~240 µs to ~29 µs.
   `evict` deliberately untouched;
@@ -986,8 +999,9 @@ the version bump is not the place to carry that warning.
 
 ## Commit attribution
 
-When running inside a GitHub Action, the workflow may be authenticated with a user PAT (see `.github/workflows/claude.yaml`).
-Without intervention, any commits you create would be attributed to that user.
+When running inside a GitHub Action, git may be authenticated as someone other than you (`.github/workflows/claude.yaml` authenticates through `claude-code-action`'s OAuth token;
+no workflow carries a user PAT).
+Without intervention, any commits you create would be attributed to that identity.
 Always attribute your commits to the bot identity instead:
 
 ```
