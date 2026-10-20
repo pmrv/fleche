@@ -15,7 +15,8 @@ marker.  It mishandles every other object column:
 ``bytes`` fall in the second group: ``b"a"`` hashes like ``"a"``.
 
 Such columns are digested element by element with our own hash, and pandas is
-handed the column of hex digests instead.
+handed the column of hex digests instead.  No marker records the swap, so as for
+a list, a column digests the same as the column of its elements' digests.
 """
 
 import hashlib
@@ -28,7 +29,6 @@ from pandas.api.types import infer_dtype
 
 # What ``infer_dtype`` calls the object columns pandas hashes faithfully.
 SAFE_OBJECT = frozenset({"string", "empty"})
-OWN_HASHED_SECTION = "__fleche_own_hashed__"
 
 
 def needs_own_hash(values) -> bool:
@@ -80,9 +80,6 @@ def digest_pandas(value, digest_bytes: Callable[[Any], bytes]) -> bytes:
                 for i in own:
                     # isetitem, not value[label] = ...: column labels may repeat.
                     value.isetitem(i, own_hashed(value.iloc[:, i], digest_bytes))
-                # Marks which columns hold our digests, so a column of arrays
-                # cannot collide with a column of their digest strings.
-                m.update(digest_bytes((OWN_HASHED_SECTION, own)))
             m.update(pd.util.hash_pandas_object(value, index=False).values.tobytes())
         case pd.Series():
             # Same reasoning as DataFrame: hash_pandas_object ignores name/dtype/
@@ -92,7 +89,6 @@ def digest_pandas(value, digest_bytes: Callable[[Any], bytes]) -> bytes:
             m.update(digest_bytes(value.index))
             if needs_own_hash(value):
                 value = pd.Series(own_hashed(value, digest_bytes), dtype=object)
-                m.update(digest_bytes(OWN_HASHED_SECTION))
             m.update(pd.util.hash_pandas_object(value, index=False).values.tobytes())
         case pd.MultiIndex():
             # pandas hashes a MultiIndex level by level, through str() for object
@@ -106,7 +102,6 @@ def digest_pandas(value, digest_bytes: Callable[[Any], bytes]) -> bytes:
             m.update(digest_bytes(str(value.dtype)))
             if needs_own_hash(value):
                 value = pd.Index(own_hashed(value, digest_bytes), dtype=object)
-                m.update(digest_bytes(OWN_HASHED_SECTION))
             m.update(pd.util.hash_pandas_object(value).values.tobytes())
         case _ if value is pd.NA:
             # A singleton like None; it turns up in object columns, which the

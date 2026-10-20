@@ -138,10 +138,9 @@ Values and calls are stored separately so call records are queryable without des
   must precede `Iterable` — DataFrame iterates over column names only, so the `Iterable` arm collides any two DataFrames with the same columns regardless of values;
   DataFrame folds in columns + per-column dtype + index, Series folds in name + dtype + index, Index folds in name + dtype;
   values are mixed via `pd.util.hash_pandas_object(...).values.tobytes()` — `index=False` on the DataFrame/Series arms (the Index arm passes no kwarg since Index has no index) because `hash_pandas_object` only mixes per-element value bytes and ignores name/dtype/index metadata, so we hand-roll those.
-  Object columns pandas cannot hash faithfully — anything `infer_dtype` does not call `"string"` or `"empty"`, including `bytes` and the categories of a categorical — are digested element by element with our own hash first (`_pandas.needs_own_hash`/`own_hashed`), and pandas is handed the column of hex digests plus a `__fleche_own_hashed__` marker (#1004).
+  Object columns pandas cannot hash faithfully — anything `infer_dtype` does not call `"string"` or `"empty"`, including `bytes` and the categories of a categorical — are digested element by element with our own hash first (`_pandas.needs_own_hash`/`own_hashed`), and pandas is handed the column of hex digests, with no marker, so a column digests like the column of its elements' `Digest`s (the Merkle property lists have) (#1004).
   Without that, `factorize` raises on unhashable elements (arrays, lists, dicts) and every other object is hashed through `str()`, colliding `1` with `"1"` and keying `object()` on its address;
   an element we cannot digest now raises `Indigestible`.
-  Frames without such columns keep their digests.
   A `MultiIndex` folds the tuple of its levels, each taken as an `Index` of its values (`get_level_values`, so unused level entries do not count) and digested by the `Index` arm, name included;
   pandas would hash object levels through `str()` and ignore the level names.
   So every `MultiIndex` digest changed, including frames and series indexed by one.
