@@ -31,7 +31,7 @@ from pandas.api.types import infer_dtype
 SAFE_OBJECT = frozenset({"string", "empty"})
 
 
-def needs_own_hash(values) -> bool:
+def needs_element_digests(values) -> bool:
     """Whether pandas cannot be trusted to hash the elements of *values*."""
     dtype = values.dtype
     if isinstance(dtype, pd.CategoricalDtype):
@@ -42,8 +42,8 @@ def needs_own_hash(values) -> bool:
     return dtype == object and infer_dtype(values, skipna=True) not in SAFE_OBJECT
 
 
-def own_hashed(values, digest_bytes: Callable[[Any], bytes]) -> np.ndarray:
-    """Replace each element of *values* by its hex digest.
+def element_digests(values, digest_bytes: Callable[[Any], bytes]) -> np.ndarray:
+    """Return the hex digest of each element of *values*, as an object array.
 
     Elements it cannot digest raise :exc:`~fleche.digest.Indigestible`, as they
     would anywhere else, rather than falling back to pandas' unstable ``str()``.
@@ -74,12 +74,12 @@ def digest_pandas(value, digest_bytes: Callable[[Any], bytes]) -> bytes:
             m.update(digest_bytes(list(value.columns)))
             m.update(digest_bytes([str(d) for d in value.dtypes]))
             m.update(digest_bytes(value.index))
-            own = [i for i, (_, col) in enumerate(value.items()) if needs_own_hash(col)]
+            own = [i for i, (_, col) in enumerate(value.items()) if needs_element_digests(col)]
             if own:
                 value = value.copy(deep=False)
                 for i in own:
                     # isetitem, not value[label] = ...: column labels may repeat.
-                    value.isetitem(i, own_hashed(value.iloc[:, i], digest_bytes))
+                    value.isetitem(i, element_digests(value.iloc[:, i], digest_bytes))
             m.update(pd.util.hash_pandas_object(value, index=False).values.tobytes())
         case pd.Series():
             # Same reasoning as DataFrame: hash_pandas_object ignores name/dtype/
@@ -87,8 +87,8 @@ def digest_pandas(value, digest_bytes: Callable[[Any], bytes]) -> bytes:
             m.update(digest_bytes(value.name))
             m.update(digest_bytes(str(value.dtype)))
             m.update(digest_bytes(value.index))
-            if needs_own_hash(value):
-                value = pd.Series(own_hashed(value, digest_bytes), dtype=object)
+            if needs_element_digests(value):
+                value = pd.Series(element_digests(value, digest_bytes), dtype=object)
             m.update(pd.util.hash_pandas_object(value, index=False).values.tobytes())
         case pd.MultiIndex():
             # pandas hashes a MultiIndex level by level, through str() for object
@@ -100,8 +100,8 @@ def digest_pandas(value, digest_bytes: Callable[[Any], bytes]) -> bytes:
         case pd.Index():
             m.update(digest_bytes(value.name))
             m.update(digest_bytes(str(value.dtype)))
-            if needs_own_hash(value):
-                value = pd.Index(own_hashed(value, digest_bytes), dtype=object)
+            if needs_element_digests(value):
+                value = pd.Index(element_digests(value, digest_bytes), dtype=object)
             m.update(pd.util.hash_pandas_object(value).values.tobytes())
         case _ if value is pd.NA:
             # A singleton like None; it turns up in object columns, which the
