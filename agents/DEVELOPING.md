@@ -908,7 +908,7 @@ Git history is the changelog.
 - #1006 — digests pandas object columns that pandas cannot hash faithfully with fleche's own per-element hash (anything `infer_dtype` doesn't label `"string"`/`"empty"`, including `bytes` columns and object categories), handing `hash_pandas_object` the column of hex digests plus a marker;
   elements fleche cannot digest raise `Indigestible` (strict), a new `pd.NA` arm, frames without such columns keep their digests;
   closes #1004.
-  A second branch (`claude/issue-1004-20261013-1959`, no PR yet) supersedes that approach per the maintainer's fix-in-one-go direction: `hash_pandas_object` leaves the main path entirely (each column digested from its dtype + exact contents, a MultiIndex arm folding in level names/dtypes/values), at the cost of invalidating **every** pandas digest — expect #1006 to be updated or replaced by it rather than merged as is.
+  The 2026-10-19 review round reworked #1006 in place rather than replacing it with the once-superseding branch (`claude/issue-1004-20261013-1959`, never opened as a PR): the pandas arms moved to a new `fleche._pandas` module (`digest.py` no longer imports pandas), a `MultiIndex` arm was added (tuple of its levels, names included — every `MultiIndex` digest changes), and `hash_pandas_object` stays on the main path for faithful columns, so only object-column and `MultiIndex` keys change (migratable via `Cache.redigest()`).
 - #786 (draft) — a process-wide cache of read-only `h5py.File` handles for multi-bag files (bounded MRU of 32, `(inode, mtime_ns, size)` invalidation, `locking=False`, writers close the cached handle under the per-bag lock);
   multi-bag `contains` drops from ~240 µs to ~29 µs.
   `evict` deliberately untouched;
