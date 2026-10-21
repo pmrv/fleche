@@ -915,12 +915,11 @@ Git history is the changelog.
 
 - #887 — `BoundWrapper.__reduce__` pre-serialises `func` into a standalone bytes payload (plain `pickle` by reference when importable, `cloudpickle` by value otherwise, a clear `TypeError` when cloudpickle is missing), so it survives `spawn`/`forkserver` pools;
   closes #840, regression pin `tests/regression/test_issue_840.py`.
-- #1006 — digests pandas object columns that pandas cannot hash faithfully with fleche's own per-element hash (anything `infer_dtype` doesn't label `"string"`/`"empty"`, including `bytes` columns and object categories), handing `hash_pandas_object` the column of hex digests plus a marker;
-  elements fleche cannot digest raise `Indigestible` (strict), a new `pd.NA` arm, frames without such columns keep their digests;
-  a `MultiIndex` is digested as the tuple of its levels (names included), changing every `MultiIndex` digest;
-  the pandas arms move to `fleche._pandas`;
+- #1006 — digests pandas object columns that pandas cannot hash faithfully with fleche's own per-element hash (anything `infer_dtype` doesn't label `"string"`/`"empty"`, including `bytes` columns and object categories), handing `hash_pandas_object` the column of hex digests;
+  elements fleche cannot digest raise `Indigestible` (strict), plus a new `pd.NA` arm;
   closes #1004.
-  A second branch (`claude/issue-1004-20261013-1959`, no PR yet) supersedes that approach per the maintainer's fix-in-one-go direction: `hash_pandas_object` leaves the main path entirely (each column digested from its dtype + exact contents, a MultiIndex arm folding in level names/dtypes/values), at the cost of invalidating **every** pandas digest — expect #1006 to be updated or replaced by it rather than merged as is.
+  The 2026-10-19 review round reworked #1006 in place rather than replacing it with the once-superseding branch (`claude/issue-1004-20261013-1959`, never opened as a PR): the pandas arms moved to a new `fleche._pandas` module (`digest.py` no longer imports pandas), a `MultiIndex` arm was added (tuple of its levels, names included — every `MultiIndex` digest changes), and `hash_pandas_object` stays on the main path for faithful columns, so only object-column and `MultiIndex` keys change (migratable via `Cache.redigest()`).
+  The 2026-10-20 round dropped the `__fleche_own_hashed__` marker — no marker records the swap, so a column of arrays digests like the column of its elements' `Digest`s, the Merkle property lists already have — and renamed the helpers to `needs_element_digests`/`element_digests`.
 - #786 (draft) — a process-wide cache of read-only `h5py.File` handles for multi-bag files (bounded MRU of 32, `(inode, mtime_ns, size)` invalidation, `locking=False`, writers close the cached handle under the per-bag lock);
   multi-bag `contains` drops from ~240 µs to ~29 µs.
   `evict` deliberately untouched;
