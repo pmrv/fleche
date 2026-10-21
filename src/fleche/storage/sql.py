@@ -593,3 +593,28 @@ class Sql(PerKeyLockMixin, CallStorage):
 
 
 register_storage("sql", kind="call")(Sql)
+
+
+def _hosted_sql(backend: str):
+    """Config factory for ``type = "postgres"`` / ``"mariadb"``: a plain
+    :class:`Sql` on the server :mod:`fleche.dbserver` hosts for ``datadir``."""
+    def build(
+        datadir: str | None = None,
+        url: str | None = None,
+        autostart: bool = False,
+        host: str = "127.0.0.1",
+        port: int | None = None,
+        bindir: str | None = None,
+        echo: bool = False,
+    ) -> Sql:
+        from ..dbserver import resolve_url
+
+        url = resolve_url(
+            backend, datadir, url=url, autostart=autostart, host=host, port=port, bindir=bindir
+        )
+        return Sql(url, echo=echo)
+    return build
+
+
+for _backend in ("postgres", "mariadb"):
+    register_storage(_backend, kind="call", factory=_hosted_sql(_backend))(Sql)

@@ -88,3 +88,13 @@ def test_main_db_rejects_unknown_backend():
     with pytest.raises(SystemExit) as excinfo:
         _main(["db", "sqlite", "data"])
     assert excinfo.value.code == 2
+
+
+def test_main_db_stop_dispatches_to_stop(monkeypatch):
+    import fleche.dbserver
+
+    received = []
+    monkeypatch.setattr(fleche.dbserver, "stop", lambda datadir: received.append(datadir) or 0)
+
+    assert _main(["db", "stop", "data"]) == 0
+    assert received == ["data"]

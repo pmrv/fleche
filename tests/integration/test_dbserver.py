@@ -42,21 +42,22 @@ def _free_port():
         return s.getsockname()[1]
 
 
-def _start(backend, datadir, port):
-    proc = subprocess.Popen(
-        [sys.executable, "-m", "fleche", "db", backend, str(datadir), "--port", str(port)],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-        text=True,
-    )
+def _start(backend, datadir, port=None):
+    cmd = [sys.executable, "-m", "fleche", "db", backend, str(datadir)]
+    if port is not None:
+        cmd += ["--port", str(port)]
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    # The config line it prints on stdout means the server is ready.
     line = []
     reader = threading.Thread(target=lambda: line.append(proc.stdout.readline()))
     reader.start()
     reader.join(timeout=120)
     if not line or not line[0]:
         proc.kill()
-        pytest.fail(f"{backend} server printed no URL (exit code {proc.poll()})")
-    return proc, line[0].strip()
+        pytest.fail(f"{backend} server never got ready (exit code {proc.poll()})")
+    assert line[0].startswith(f'calls = {{ type = "{backend}", datadir = ')
+    assert "fleche:" not in line[0], "the password must not be printed"
+    return proc, (datadir / "fleche.url").read_text().strip()
 
 
 def _stop(proc):
@@ -103,11 +104,62 @@ def test_db_server_serves_parallel_writers(backend, tmp_path):
         assert _stop(proc) == 0
 
 
-def test_db_server_restart_keeps_credentials(backend, tmp_path):
+def test_db_server_restart_keeps_credentials_and_port(backend, tmp_path):
     datadir = tmp_path / "data"
-    proc, url = _start(backend, datadir, _free_port())
+    proc, url = _start(backend, datadir)
     assert _stop(proc) == 0
+    proc, restarted = _start(backend, datadir)
+    assert _stop(proc) == 0
+    assert restarted == url
     port = _free_port()
-    proc, restarted = _start(backend, datadir, port)
+    proc, moved = _start(backend, datadir, port)
     assert _stop(proc) == 0
-    assert restarted == url.rsplit(":", 1)[0] + f":{port}/fleche"
+    assert moved == url.rsplit(":", 1)[0] + f":{port}/fleche"
+
+
+def _named_square_sum(cfgdir, start):
+    os.chdir(cfgdir)
+
+    @fleche.fleche()
+    def square(x):
+        return x * x
+
+    with fleche.cache("shared"):
+        return sum(square(x) for x in range(start, start + 10))
+
+
+def test_autostart_from_config(backend, tmp_path):
+    """Cold workers race to autostart one background server from fleche.toml;
+    the URL lands in the file, and ``db stop`` shuts the server down."""
+    pytest.importorskip(DRIVERS[backend])
+    pytest.importorskip("tomlkit")
+    cfg = tmp_path / "fleche.toml"
+    cfg.write_text(
+        "[default]\n"
+        "root = true\n\n"
+        "[shared]  # cache shared by the workers\n"
+        'values.type = "pickle"\n'
+        'values.root = "values"\n'
+        f'calls.type = "{backend}"\n'
+        'calls.datadir = "db"\n'
+        "calls.autostart = true\n"
+    )
+    datadir = tmp_path / "db"
+    try:
+        with ProcessPoolExecutor(8) as pool:
+            total = sum(pool.map(_named_square_sum, [tmp_path] * 16, range(0, 160, 10)))
+        assert total == sum(x * x for x in range(160))
+
+        url = (datadir / "fleche.url").read_text().strip()
+        text = cfg.read_text()
+        assert f'calls.url = "{url}"' in text
+        assert "# cache shared by the workers" in text
+        assert (datadir / "fleche.server").exists()
+    finally:
+        rc = subprocess.run(
+            [sys.executable, "-m", "fleche", "db", "stop", str(datadir)], timeout=90
+        ).returncode
+    assert rc == 0
+    assert not (datadir / "fleche.server").exists()
+    with pytest.raises(OSError):
+        socket.create_connection(("127.0.0.1", int(url.rsplit(":", 1)[1].split("/")[0])), timeout=1)

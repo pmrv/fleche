@@ -291,7 +291,7 @@ Values and calls are stored separately so call records are queryable without des
   `cache_from_config` dispatches `type="ssh"` → `SshCache` before its read_only/max_size/plain branches.
   `load_cache_config` routes through `cache_from_config`, so TOML honours `max_size`, `read_only`, and array-of-tables list-stack configs identically to the programmatic API.
   `_default_memory_cache(name, reason)` is the single fall-back/intern path for the "no config" / "not found" cases.
-  `_load_config` runs `_rebase_config` on each discovered file before the merge, rebasing relative `root`/`url` values onto that file's directory (absolute, `~`-prefixed, `sqlite:///:memory:`, non-sqlite dialect URLs, `[default].root = true`, and ssh `workdir` are left alone);
+  `_load_config` runs `_rebase_config` on each discovered file before the merge, rebasing relative `root`/`datadir`/`url` values onto that file's directory (absolute, `~`-prefixed, `sqlite:///:memory:`, non-sqlite dialect URLs, `[default].root = true`, and ssh `workdir` are left alone);
   `root`/`url` passed straight to `cache_from_config`/`storage_from_config` still resolve against the CWD.
   See module docstring for full type reference and TOML examples.
 - `security.py` — `SignedBytes` HMAC-SHA256 wrapper (hex-encoded so it never contains pickle STOP, which is how `loads` finds the signature boundary);
@@ -307,7 +307,16 @@ Values and calls are stored separately so call records are queryable without des
   `db {postgres,mariadb} DATADIR`, which calls `dbserver.serve` and turns a `DbServerError` into exit code 1 with a one-line message.
   Deliberately routed here rather than `python -m fleche.remote` so `runpy` doesn't double-import `remote.py` (once as submodule, once as `__main__`) with duplicate class/exception objects.
   Extend by adding a parser branch in `_build_parser` and a dispatch arm in `_main`.
-- `dbserver.py` — `serve(backend, datadir, host, port, bindir)` hosts a Postgres/MariaDB server for the `sql` calls backend, in the foreground.
+- `dbserver.py` — `serve(backend, datadir, host, port, bindir)` hosts a Postgres/MariaDB server for the `sql` calls backend, in the foreground;
+  `stop(datadir)` SIGTERMs its supervisor and waits for `fleche.server` to vanish (not for the pid, which can linger as a zombie of whoever autostarted it).
+  `resolve_url(backend, datadir, url, autostart, ...)` is what `type = "postgres"`/`"mariadb"` call storage runs (factory `_hosted_sql` in `sql.py`, returning a plain `Sql`): `DATADIR/fleche.url` wins over the config `url` (which only serves clients that cannot read `datadir`);
+  if nothing listens and `autostart`,
+  `_autostart` takes a `FileLock` on `<datadir>.lock`, re-checks, and launches `python -m fleche db …` detached (own session, output to `<datadir>.log`, Popen kept in `_spawned` so it is never collected).
+  `serve` writes `fleche.server` (`{host, pid, port}`) *before* starting the server and removes it on exit: an autostarter that finds it with a live local pid waits for that server instead of launching another, and refuses outright when it names another host (shared-FS datadir, server elsewhere).
+  Ports default to the one in the previous `fleche.url`, else `_free_port()`.
+  After resolving, a URL different from the config's is written back by `store_url`: `tomlkit` round-trip (comments kept) setting `url` on every table in the declaring file whose `type` and rebased `datadir` match, atomic replace with the original mode, under the same lock;
+  best effort — any failure only warns.
+  The declaring file comes from the `config_file` `ContextVar`, which `config._cache_from_file_config` sets around `cache_from_config` using `_load_merged_config_with_sources`.
   Shells out to the system binaries (`--bindir`, else `PATH` plus `/usr/lib/postgresql/*/bin` and `/usr/sbin`);
   nothing is bundled.
   First run initializes offline — `initdb` + `postgres --single`, or `mariadb-install-db` + `mariadbd --bootstrap` (needs `FLUSH PRIVILEGES` first to load grant tables) — creating database and user `fleche` with a `secrets.token_urlsafe` password, and removes the datadir again if init fails.
@@ -602,7 +611,7 @@ Pytest config is `[tool.pytest.ini_options]` in `pyproject.toml` (registers the 
     `fleche/test_workdir.py` (`isolate=` tempdir behaviour).
   - `metadata/test_metadata.py` is the only file under `unit/metadata/` — covers the `MetaData` ABC plus the four built-ins.
   - Six files directly under `unit/` (not inside a subdir): `test_cache_sticky.py` (sticky `cache()` context semantics),
-    `test_dbserver.py` (`python -m fleche db` checks that need no server binaries),
+    `test_dbserver.py` (`python -m fleche db`, `resolve_url`, `store_url` write-back and `stop` checks that need no server binaries — a listening socket stands in for a server),
     `test_pickle.py` (pickling caches/wrappers),
     `test_main.py` (`python -m fleche` CLI dispatcher),
     `test_remote.py` (`SshCache` RPC unit tests, ssh extra),
@@ -616,7 +625,7 @@ Pytest config is `[tool.pytest.ini_options]` in `pyproject.toml` (registers the 
   `test_wrapper_query_integration.py`,
   `test_hash_code_integration.py`,
   `test_remote.py` (`SshCache` end-to-end, ssh extra),
-  `test_dbserver.py` (boots real Postgres/MariaDB via `python -m fleche db` and writes from 8 processes;
+  `test_dbserver.py` (boots real Postgres/MariaDB via `python -m fleche db` and writes from 8 processes, then autostarts from a `fleche.toml` with 8 cold workers racing, checks the URL write-back and `db stop`;
   skips as root or without the binaries, the parallel test also without the driver).
 - `regression/` — `test_issue_{217,297,319,352,451,452,485,578,592,691}.py`, one per issue.
   Notable: #217 — `CacheStack.load` serialises per-key back-fill so concurrent loaders don't all run the base's non-atomic save;

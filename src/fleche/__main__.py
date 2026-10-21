@@ -44,7 +44,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "db",
         help="host a local PostgreSQL/MariaDB server for the sql calls backend",
     )
-    db.add_argument("backend", choices=["postgres", "mariadb"])
+    db.add_argument(
+        "backend",
+        choices=["postgres", "mariadb", "stop"],
+        help="server to run, or stop the one running for DATADIR",
+    )
     db.add_argument("datadir", help="data directory; initialized on first use")
     db.add_argument(
         "--host",
@@ -52,7 +56,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="address to listen on (default: 127.0.0.1; 0.0.0.0 for other nodes)",
     )
     db.add_argument(
-        "--port", type=int, default=None, help="port (default: 5432 / 3306)"
+        "--port", type=int, default=None, help="port (default: last used, else a free one)"
     )
     db.add_argument(
         "--bindir",
@@ -72,9 +76,11 @@ def _main(argv: list[str]) -> int:
 
         return _run_server(cache_name=args.cache)
     if args.command == "db":
-        from .dbserver import DbServerError, serve
+        from .dbserver import DbServerError, serve, stop
 
         try:
+            if args.backend == "stop":
+                return stop(args.datadir)
             return serve(
                 args.backend,
                 args.datadir,
