@@ -118,7 +118,9 @@ jobs:
         # Run the cross-backend conformance tests plus every test that uses
         # the parametrized call_storage fixture. The env vars cause the
         # ``sql_postgres`` / ``sql_mysql`` parametrizations to activate.
-        pytest tests/regression/test_sql_non_sqlite_backends.py tests/unit/storage/ -v
+        # test_dbserver boots the runner image's own Postgres binaries via
+        # ``python -m fleche db`` (MariaDB isn't preinstalled, so it skips).
+        pytest tests/regression/test_sql_non_sqlite_backends.py tests/unit/storage/ tests/integration/test_dbserver.py -v
     - name: Upload Hypothesis example database
       if: always()
       uses: actions/upload-artifact@v4

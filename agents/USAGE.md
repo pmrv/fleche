@@ -107,6 +107,11 @@ Full worked examples for every shape (stack, pool, read-only, size-limited, SSH-
 | `"sql"` | SQLAlchemy | — | **calls only** — pair with a value backend above; `url` is optional and defaults to non-persistent in-memory SQLite (`sqlite:///:memory:`), so set it for anything that should survive the process |
 | `"ssh"` | forwards to a remote `python -m fleche remote --serve` process | `host` | whole-cache forwarding, not a per-key backend |
 
+For many processes or nodes sharing one call store, a Postgres/MariaDB server beats sqlite's file locking.
+`python -m fleche db {postgres,mariadb} DATADIR [--host 0.0.0.0] [--port N] [--bindir DIR]` hosts one in the foreground: it initializes `DATADIR` on first use (database and user `fleche`, random password), prints the URL to use as `calls.url` (also kept in `DATADIR/fleche.url`, mode `0600`), and shuts down cleanly on Ctrl-C/SIGTERM.
+The server binaries are not bundled — install `postgresql`/`mariadb` (apt, conda-forge, ...);
+clients need the driver the URL names (`psycopg2` or `pymysql`).
+
 `values` and `calls` are stored separately on purpose: call records (arguments, metadata) are queryable without deserializing the (potentially heavy) result values.
 
 ## Controlling the cache key

@@ -1,7 +1,9 @@
 """``python -m fleche <command> ...`` dispatcher.
 
-Currently the only subcommand is ``remote``, which runs the cache RPC
-server :class:`fleche.remote.SshCache` connects to.  Register additional
+Subcommands: ``remote`` runs the cache RPC server
+:class:`fleche.remote.SshCache` connects to; ``db`` hosts a local
+PostgreSQL/MariaDB server for the ``sql`` calls backend
+(:mod:`fleche.dbserver`).  Register additional
 subcommands by adding a parser in :func:`_build_parser` and a branch in
 :func:`_main`.
 
@@ -37,6 +39,26 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="named cache from the local fleche.toml (default: the file's default)",
     )
+
+    db = sub.add_parser(
+        "db",
+        help="host a local PostgreSQL/MariaDB server for the sql calls backend",
+    )
+    db.add_argument("backend", choices=["postgres", "mariadb"])
+    db.add_argument("datadir", help="data directory; initialized on first use")
+    db.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="address to listen on (default: 127.0.0.1; 0.0.0.0 for other nodes)",
+    )
+    db.add_argument(
+        "--port", type=int, default=None, help="port (default: 5432 / 3306)"
+    )
+    db.add_argument(
+        "--bindir",
+        default=None,
+        help="directory holding the server binaries (default: search PATH)",
+    )
     return parser
 
 
@@ -49,6 +71,20 @@ def _main(argv: list[str]) -> int:
         from .remote import _run_server
 
         return _run_server(cache_name=args.cache)
+    if args.command == "db":
+        from .dbserver import DbServerError, serve
+
+        try:
+            return serve(
+                args.backend,
+                args.datadir,
+                host=args.host,
+                port=args.port,
+                bindir=args.bindir,
+            )
+        except DbServerError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
     parser.error(f"unknown command: {args.command!r}")
     return 2
 

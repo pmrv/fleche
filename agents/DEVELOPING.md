@@ -65,6 +65,7 @@ Other optional deps are gated via `pyiron_snippets.import_alarm.ImportAlarm` —
 | TOML config + named-cache interning | `config.py` |
 | Storage backends (memory / pickle / bagofholding / sql) | `storage/` |
 | SSH remote forwarding | `remote.py` |
+| Hosting a Postgres/MariaDB server (`python -m fleche db`) | `dbserver.py` |
 | Chainable queries | `query.py` |
 | Test layout | [Test layout](#test-layout) |
 | CI workflows | `.github/workflows/` (see [Other directories](#other-directories)) |
@@ -302,9 +303,20 @@ Values and calls are stored separately so call records are queryable without des
   Splits off executor-reserved kw-only params (e.g. `resources=`) from payload kwargs.
   Idempotent (`submit._fleche_wrapped`).
 - `__main__.py` — `python -m fleche <command> …` argparse dispatcher.
-  The only subcommand is `remote --serve [--cache NAME]`, which imports `remote._run_server` and runs the RPC server `SshCache` connects to.
+  Subcommands: `remote --serve [--cache NAME]`, which imports `remote._run_server` and runs the RPC server `SshCache` connects to;
+  `db {postgres,mariadb} DATADIR`, which calls `dbserver.serve` and turns a `DbServerError` into exit code 1 with a one-line message.
   Deliberately routed here rather than `python -m fleche.remote` so `runpy` doesn't double-import `remote.py` (once as submodule, once as `__main__`) with duplicate class/exception objects.
   Extend by adding a parser branch in `_build_parser` and a dispatch arm in `_main`.
+- `dbserver.py` — `serve(backend, datadir, host, port, bindir)` hosts a Postgres/MariaDB server for the `sql` calls backend, in the foreground.
+  Shells out to the system binaries (`--bindir`, else `PATH` plus `/usr/lib/postgresql/*/bin` and `/usr/sbin`);
+  nothing is bundled.
+  First run initializes offline — `initdb` + `postgres --single`, or `mariadb-install-db` + `mariadbd --bootstrap` (needs `FLUSH PRIVILEGES` first to load grant tables) — creating database and user `fleche` with a `secrets.token_urlsafe` password, and removes the datadir again if init fails.
+  The URL (`postgresql+psycopg2://` / `mysql+pymysql://`, spelled out because SQLAlchemy 2.1 changed the bare `postgresql://` default to psycopg 3) lives in `DATADIR/fleche.url` (`0600`), is the only record of the password, and is rewritten each start with the current host/port.
+  Postgres disables unix sockets;
+  MariaDB's socket goes to a short tempdir since datadir paths can exceed `sun_path`.
+  The server runs in its own session so a terminal ^C reaches only us;
+  we forward SIGINT to postgres (fast shutdown — SIGTERM would wait for clients) and SIGTERM to mariadbd (ignores SIGINT).
+  Readiness is a TCP connect poll.
 - `remote.py` — `SshCache(BaseCache)` (frozen dataclass): forwards every cache op to a `python -m fleche remote --serve` subprocess (note the **space** — the CLI is an argparse dispatcher in `__main__.py`) over one persistent SSH subprocess carrying length-prefixed **cloudpickle** RPC frames — one round-trip per method.
   `load`/`_query` rebind returned `DigestedCall`s back to `self`.
   Lazy connect + an `info` handshake that warns on fleche/cloudpickle version skew and caches a `read_only` flag to short-circuit `save`/`evict`.
@@ -385,6 +397,7 @@ Values and calls are stored separately so call records are queryable without des
   Metadata filters are pushed down only when *every* filter value is a simple scalar (`str`/`bool`/`int`/`float`) via JSON-extract `as_*` casts;
   any `None` or complex (e.g. list) value disables metadata pushdown only — name/argument filters still apply at SQL level — and the post-load `meta_matches` check runs on every yielded result regardless.
   `Sql` does not inherit from `CallMixin` — it implements `CallStorage.save` directly, folding the existing-row check into a private `_persist_call` helper that runs in one transaction (no separate `contains`+`evict` round-trip), with `PerKeyLockMixin` keeping concurrent saves serialised (see `regression/test_sql_concurrent_save.py`).
+  That lock is per process, so two retries cover what it can't: `_create_schema` retries `create_all` on `DBAPIError` (processes opening an empty server database at once race on `CREATE TABLE`), and `save` retries `_persist_call` up to `_DEADLOCK_ATTEMPTS` times when `_is_deadlock` (InnoDB 1213, Postgres SQLSTATE `40P01`/`40001`) — InnoDB picks concurrent inserts into `metadata` as deadlock victims (unit-pinned in `unit/storage/test_sql_retries.py`, live in `integration/test_dbserver.py`).
   The companion private helper `_fetch_call` materialises a `DigestedCall` from a row plus its argument/metadata child rows;
   `Sql` does not expose any `put`/`get` methods (it isn't a `StorageBackend` subclass).
   `_coerce_sqlite_url` accepts a bare path (treated as sqlite, parent dir auto-created), a `sqlite:` URL, or any other SQLAlchemy URL (e.g. `postgresql://`, `mysql+pymysql://`) verbatim.
@@ -588,7 +601,8 @@ Pytest config is `[tool.pytest.ini_options]` in `pyproject.toml` (registers the 
     `fleche/test_rerun.py` (`.rerun` helper),
     `fleche/test_workdir.py` (`isolate=` tempdir behaviour).
   - `metadata/test_metadata.py` is the only file under `unit/metadata/` — covers the `MetaData` ABC plus the four built-ins.
-  - Five files directly under `unit/` (not inside a subdir): `test_cache_sticky.py` (sticky `cache()` context semantics),
+  - Six files directly under `unit/` (not inside a subdir): `test_cache_sticky.py` (sticky `cache()` context semantics),
+    `test_dbserver.py` (`python -m fleche db` checks that need no server binaries),
     `test_pickle.py` (pickling caches/wrappers),
     `test_main.py` (`python -m fleche` CLI dispatcher),
     `test_remote.py` (`SshCache` RPC unit tests, ssh extra),
@@ -601,7 +615,9 @@ Pytest config is `[tool.pytest.ini_options]` in `pyproject.toml` (registers the 
   `test_methods.py` (caching of bound methods / methods-as-args),
   `test_wrapper_query_integration.py`,
   `test_hash_code_integration.py`,
-  `test_remote.py` (`SshCache` end-to-end, ssh extra).
+  `test_remote.py` (`SshCache` end-to-end, ssh extra),
+  `test_dbserver.py` (boots real Postgres/MariaDB via `python -m fleche db` and writes from 8 processes;
+  skips as root or without the binaries, the parallel test also without the driver).
 - `regression/` — `test_issue_{217,297,319,352,451,452,485,578,592,691}.py`, one per issue.
   Notable: #217 — `CacheStack.load` serialises per-key back-fill so concurrent loaders don't all run the base's non-atomic save;
   #451 — `Cache.redigest` holds both old- and new-key locks across save+evict so a concurrent reader never sees the call under both keys nor neither;
