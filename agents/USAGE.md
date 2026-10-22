@@ -106,12 +106,9 @@ Full worked examples for every shape (stack, pool, read-only, size-limited, SSH-
 | `"bagofholding_hdf"` | HDF5 file(s) via `bagofholding` | `root` | optional `version_validator`, `prefix_length` (multiplex keys sharing an N-char digest prefix into one shared `.h5` file instead of one file per key; default `2`, `0` for one file per key, `None` infers from existing files; validated against existing files in `root` at construction — `refix(n)` migrates and returns the re-sharded storage, the `consolidate(root, n)` classmethod repairs a mixed root) |
 | `"sql"` | SQLAlchemy | — | **calls only** — pair with a value backend above; `url` is optional and defaults to non-persistent in-memory SQLite (`sqlite:///:memory:`), so set it for anything that should survive the process |
 | `"ssh"` | forwards to a remote `python -m fleche remote --serve` process | `host` | whole-cache forwarding, not a per-key backend |
-| `"postgres"` / `"mariadb"` | `"sql"` on a server fleche hosts itself | `datadir` | **calls only**; connects to the server `python -m fleche db` runs for `datadir` — see below |
+| `"postgres"` / `"mariadb"` | `"sql"` on a server fleche hosts itself | `datadir` | **calls only**; `autostart = true` launches the server in the background when nothing is listening — see below |
 
-For many processes or nodes sharing one call store, a Postgres/MariaDB server beats sqlite's file locking.
-`python -m fleche db {postgres,mariadb} DATADIR [--host 0.0.0.0] [--port N] [--bindir DIR]` runs one in the foreground until Ctrl-C/SIGTERM (`python -m fleche db stop DATADIR` stops it from elsewhere);
-the first run initializes `DATADIR` (database and user `fleche`, random password, free port, all kept in `DATADIR/fleche.url`, mode `0600`).
-Point caches at it by data directory, so the password never has to be copied:
+For many processes or nodes sharing one call store, a Postgres/MariaDB server beats sqlite's file locking:
 
 ```toml
 [shared]
@@ -119,11 +116,22 @@ values.type = "pickle"
 values.root = "values"
 calls.type = "postgres"      # or "mariadb"
 calls.datadir = "db"         # relative to this file, like `root`
-# calls.url = "..."          # only for clients that cannot read `datadir`
+calls.autostart = true       # launch the server in the background if it isn't running
+# optional: host = "0.0.0.0" (listen for other nodes), port, bindir
 ```
 
+The first process to need the server initializes `datadir` (database and user `fleche`, random password, free port) and starts it detached;
+racing processes wait on a lock next to `datadir` instead of starting a second one.
+The server keeps running after the process exits;
+`python -m fleche db stop DATADIR` stops it.
+fleche then writes `calls.url` (password included) back into the `fleche.toml` that declared the table, keeping comments, for clients that cannot read `datadir` — so don't commit that file with the URL in it.
+Without `autostart`, run the server yourself: `python -m fleche db {postgres,mariadb} DATADIR [--host 0.0.0.0] [--port N] [--bindir DIR] [--cache NAME]` runs it in the foreground until Ctrl-C/SIGTERM.
+`--cache NAME` records the server in `fleche.toml` once it is up: the URL goes into the file that declares `NAME`, or, if none does, a new `[NAME]` table goes into `./fleche.toml` (mode `0600` when created): the active default cache's config with its calls moved to the server.
+Only a layer with persistent values gets the server — values in memory would leave other processes with records they cannot load — so a stack needs exactly one such layer (a memory front layer stays as is), and pools and SSH caches are refused.
+`autostart` is for single-host use;
+for several nodes, run the server explicitly with `--host 0.0.0.0` and let the clients use the written-back `url`.
 The server binaries are not bundled — install `postgresql`/`mariadb` (apt, conda-forge, ...);
-`pip install fleche[postgres]` / `fleche[mariadb]` brings sqlalchemy and the driver.
+`pip install fleche[postgres]` / `fleche[mariadb]` brings sqlalchemy, the driver and `tomlkit`.
 
 `values` and `calls` are stored separately on purpose: call records (arguments, metadata) are queryable without deserializing the (potentially heavy) result values.
 
