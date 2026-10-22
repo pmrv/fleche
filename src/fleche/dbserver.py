@@ -453,31 +453,56 @@ def _uses_server(node, backend: str, datadir: Path) -> bool:
     return False
 
 
-def _active_values_config() -> dict:
-    """The value storage config of the active cache, to pair with the server."""
-    from . import caches, config, state, storage
+_TRANSIENT_VALUES = ("memory", "void")
+
+
+def _active_cache_table(backend: str, datadir: Path) -> dict | list:
+    """``cache_to_config`` of the active cache, its calls moved to the server.
+
+    Only layers with persistent values get the server: values that live in
+    one process's memory would leave other processes with call records they
+    cannot load.  A stack therefore needs exactly one such layer (two would
+    share one call table over separate value roots); a pool never writes
+    and an SSH cache has no calls of its own, so neither can use it.
+    """
+    from . import config, state
 
     active = state.get_cache()
-    if not isinstance(active, caches.Cache):
+    try:
+        table = config.cache_to_config(active)
+    except ValueError as e:
+        raise DbServerError(f"{e}; add the table to fleche.toml by hand") from None
+    calls = {"type": backend, "datadir": str(datadir)}
+    layers = table if isinstance(table, list) else [table]
+    if isinstance(table, dict) and ("pool" in table or table.get("type") == "ssh"):
+        kind = "pool, which never writes" if "pool" in table else "SSH cache, which has no calls storage"
+        raise DbServerError(f"the active cache is a {kind}; add the table to fleche.toml by hand")
+    if not all(isinstance(layer, dict) and "values" in layer for layer in layers):
         raise DbServerError(
-            f"the active cache is a {type(active).__name__}, so there is no single value "
-            f"storage to pair with the server; add the table to fleche.toml by hand"
+            "the active cache nests stacks or pools; add the table to fleche.toml by hand"
         )
-    if isinstance(active.values, (storage.ValueMemory, storage.ValueVoid)):
+    persistent = [layer for layer in layers if layer["values"]["type"] not in _TRANSIENT_VALUES]
+    if not persistent:
         raise DbServerError(
             "the active cache keeps values in memory, where other processes cannot load "
             "them; configure a persistent default cache or add the table to fleche.toml by hand"
         )
-    return config.storage_to_config(active.values)
+    if len(persistent) > 1:
+        raise DbServerError(
+            "the active cache stacks several persistent layers, which cannot share one "
+            "server's call table; add the table to fleche.toml by hand"
+        )
+    persistent[0]["calls"] = calls
+    return table
 
 
-def plan_cache_table(name: str, backend: str, datadir: Path) -> tuple[Path, dict | None]:
+def plan_cache_table(name: str, backend: str, datadir: Path) -> tuple[Path, dict | list | None]:
     """Decide where cache *name* records the server for *datadir*.
 
     Returns ``(file, None)`` when a discovered config file already declares
     *name* (its ``url`` gets updated in place), else ``(./fleche.toml,
-    values)`` for a new table whose value storage is copied from the active
-    cache, since a calls-only table is no usable cache.
+    table)`` for a new table built from the active cache by
+    :func:`_active_cache_table`.
     """
     from . import config
 
@@ -493,16 +518,16 @@ def plan_cache_table(name: str, backend: str, datadir: Path) -> tuple[Path, dict
                 f'calls to type = "{backend}", datadir = "{datadir}" or pick another name'
             )
         return sources[name], None
-    return Path.cwd() / "fleche.toml", _active_values_config()
+    return Path.cwd() / "fleche.toml", _active_cache_table(backend, datadir)
 
 
 def record_cache_table(
-    path: Path, values: dict | None, name: str, backend: str, datadir: Path, url: str
+    path: Path, table: dict | list | None, name: str, backend: str, datadir: Path, url: str
 ) -> None:
     """Carry out a :func:`plan_cache_table` decision now that *url* is live."""
     import tomlkit
 
-    if values is None:
+    if table is None:
         store_url(path, backend, datadir, url)
         return
     with FileLock(_sidecar(datadir, ".lock")):
@@ -511,9 +536,9 @@ def record_cache_table(
             # Someone added it since we planned; treat it as declared.
             store_url(path, backend, datadir, url)
             return
-        table = tomlkit.table()
-        table["values"] = values
-        table["calls"] = {"type": backend, "datadir": str(datadir), "url": url}
+        for layer in table if isinstance(table, list) else [table]:
+            if layer["calls"] == {"type": backend, "datadir": str(datadir)}:
+                layer["calls"]["url"] = url
         doc[name] = table
         fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
         with os.fdopen(fd, "w") as f:

@@ -126,7 +126,8 @@ The server keeps running after the process exits;
 `python -m fleche db stop DATADIR` stops it.
 fleche then writes `calls.url` (password included) back into the `fleche.toml` that declared the table, keeping comments, for clients that cannot read `datadir` — so don't commit that file with the URL in it.
 Without `autostart`, run the server yourself: `python -m fleche db {postgres,mariadb} DATADIR [--host 0.0.0.0] [--port N] [--bindir DIR] [--cache NAME]` runs it in the foreground until Ctrl-C/SIGTERM.
-`--cache NAME` records the server in `fleche.toml` once it is up: the URL goes into the file that declares `NAME`, or, if none does, a new `[NAME]` table goes into `./fleche.toml` (mode `0600` when created) with its value storage copied from the active default cache — refused when that cache keeps values in memory, since other processes could not load them.
+`--cache NAME` records the server in `fleche.toml` once it is up: the URL goes into the file that declares `NAME`, or, if none does, a new `[NAME]` table goes into `./fleche.toml` (mode `0600` when created): the active default cache's config with its calls moved to the server.
+Only a layer with persistent values gets the server — values in memory would leave other processes with records they cannot load — so a stack needs exactly one such layer (a memory front layer stays as is), and pools and SSH caches are refused.
 `autostart` is for single-host use;
 for several nodes, run the server explicitly with `--host 0.0.0.0` and let the clients use the written-back `url`.
 The server binaries are not bundled — install `postgresql`/`mariadb` (apt, conda-forge, ...);

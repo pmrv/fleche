@@ -316,7 +316,8 @@ Values and calls are stored separately so call records are queryable without des
   Ports default to the one in the previous `fleche.url`, else `_free_port()`.
   After resolving, a URL different from the config's is written back by `store_url`: `tomlkit` round-trip (comments kept) setting `url` on every table in the declaring file whose `type` and rebased `datadir` match, atomic replace with the original mode, under the same lock;
   best effort — any failure only warns.
-  `serve(cache=NAME)` (CLI `--cache`) runs `plan_cache_table` before starting anything — the file declaring `NAME` (must already point at this backend/datadir) or `./fleche.toml` plus the active cache's `storage_to_config(values)` (plain `Cache` with non-memory values only) — and `record_cache_table` once the server is up, via `store_url` or a new tomlkit table.
+  `serve(cache=NAME)` (CLI `--cache`) runs `plan_cache_table` before starting anything — the file declaring `NAME` (must already point at this backend/datadir) or `./fleche.toml` plus `_active_cache_table` — `cache_to_config(active)` with `calls` swapped for the server in the one layer with non-memory/void values (wrappers keep `read_only`/`max_size`;
+  no or several persistent layers, pools, SSH and nested shapes are refused) — and `record_cache_table` once the server is up, via `store_url` or a new tomlkit table.
   The declaring file comes from the `config_file` `ContextVar`, which `config._cache_from_file_config` sets around `cache_from_config` using `_load_merged_config_with_sources`.
   Shells out to the system binaries (`--bindir`, else `PATH` plus `/usr/lib/postgresql/*/bin` and `/usr/sbin`);
   nothing is bundled.

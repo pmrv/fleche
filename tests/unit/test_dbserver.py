@@ -258,27 +258,68 @@ def isolated_config(tmp_path, monkeypatch):
     fleche_config._live_caches.clear()
 
 
-def test_new_cache_table_copies_values_from_active_cache(isolated_config, tmp_path):
+def _default_cache(tmp_path, body):
     xdg = tmp_path / "xdg" / "fleche"
     xdg.mkdir(parents=True)
-    (xdg / "cache.toml").write_text(
-        '[default]\ncache = "persistent"\n'
-        '[persistent]\nvalues.type = "cloudpickle"\nvalues.root = "/data/values"\n'
-        'calls.type = "memory"\n'
-    )
+    (xdg / "cache.toml").write_text('[default]\ncache = "active"\n' + body)
+
+
+PICKLE = 'values.type = "cloudpickle"\nvalues.root = "/data/values"\ncalls.type = "memory"\n'
+
+
+def test_new_cache_table_is_the_active_cache_on_the_server(isolated_config, tmp_path):
+    _default_cache(tmp_path, "[active]\n" + PICKLE)
     datadir = tmp_path / "db"
-    path, values = plan_cache_table("shared", "postgres", datadir)
+    path, table = plan_cache_table("shared", "postgres", datadir)
     assert path == isolated_config / "fleche.toml"
-    assert values is not None and values["type"] == "cloudpickle"
-    assert values["root"] == "/data/values"
 
     url = "postgresql+psycopg2://fleche:pw@127.0.0.1:1/fleche"
-    record_cache_table(path, values, "shared", "postgres", datadir, url)
+    record_cache_table(path, table, "shared", "postgres", datadir, url)
 
-    table = fleche_config._load_config(path)["shared"]
-    assert table["values"] == values
-    assert table["calls"] == {"type": "postgres", "datadir": str(datadir), "url": url}
+    written = fleche_config._load_config(path)["shared"]
+    assert written["values"]["type"] == "cloudpickle"
+    assert written["values"]["root"] == "/data/values"
+    assert written["calls"] == {"type": "postgres", "datadir": str(datadir), "url": url}
     assert path.stat().st_mode & 0o777 == 0o600, "the new file holds a password"
+
+
+@pytest.mark.parametrize("modifier", ["read_only = true", "max_size = 10"])
+def test_new_cache_table_keeps_cache_modifiers(isolated_config, tmp_path, modifier):
+    _default_cache(tmp_path, f"[active]\n{modifier}\n" + PICKLE)
+    _, table = plan_cache_table("shared", "postgres", tmp_path / "db")
+    key, value = modifier.split(" = ")
+    assert str(table[key]).lower() == value
+    assert table["calls"]["type"] == "postgres"
+
+
+def test_new_cache_table_moves_only_the_persistent_stack_layer(isolated_config, tmp_path):
+    """A memory front layer stays as it is; the persistent layer gets the server."""
+    _default_cache(
+        tmp_path,
+        '[[active]]\nvalues.type = "memory"\ncalls.type = "memory"\n[[active]]\n' + PICKLE,
+    )
+    datadir = tmp_path / "db"
+    path, table = plan_cache_table("shared", "postgres", datadir)
+    record_cache_table(path, table, "shared", "postgres", datadir, "postgresql+psycopg2://u")
+    front, back = fleche_config._load_config(path)["shared"]
+    assert front["calls"] == {"type": "memory"}
+    assert back["calls"]["type"] == "postgres"
+    assert back["calls"]["url"] == "postgresql+psycopg2://u"
+
+
+@pytest.mark.parametrize(
+    "body, match",
+    [
+        ("[[active]]\n" + PICKLE + "[[active]]\n" + PICKLE.replace("/data", "/other"), "several persistent layers"),
+        ("[[active.pool]]\n" + PICKLE, "pool"),
+        ('[active]\ntype = "ssh"\nhost = "nowhere.invalid"\n', "SSH cache"),
+    ],
+    ids=["two-persistent-layers", "pool", "ssh"],
+)
+def test_new_cache_table_refuses_caches_without_one_call_store(isolated_config, tmp_path, body, match):
+    _default_cache(tmp_path, body)
+    with pytest.raises(DbServerError, match=match):
+        plan_cache_table("shared", "postgres", tmp_path / "db")
 
 
 def test_new_cache_table_refuses_in_memory_values(isolated_config, tmp_path):
