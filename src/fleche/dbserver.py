@@ -246,15 +246,19 @@ def serve(
     port: int | None = None,
     bindir: str | None = None,
     startup_timeout: float = 60.0,
+    cache: str | None = None,
 ) -> int:
     """Initialize *datadir* if needed and run the server until SIGINT/SIGTERM.
 
     *port* defaults to the one used last time, or a free one on first use.
-    Returns the server's exit code.
+    With *cache*, the server is recorded in ``fleche.toml`` once it is ready
+    (see :func:`plan_cache_table`).  Returns the server's exit code.
     """
     if backend not in BACKENDS:
         raise DbServerError(f"unknown backend {backend!r}; expected one of {list(BACKENDS)}")
     datadir = Path(datadir).expanduser().resolve()
+    # Before starting anything, so a cache we cannot record fails fast.
+    table = plan_cache_table(cache, backend, datadir) if cache else None
     url_file = datadir / URL_FILE
     server_file = datadir / SERVER_FILE
 
@@ -308,6 +312,12 @@ def serve(
         }
         try:
             _wait_for_port(proc, host, port, startup_timeout)
+            if table is not None and cache is not None:
+                try:
+                    record_cache_table(*table, cache, backend, datadir, url)
+                    print(f"# stored cache {cache!r} in {table[0]}", file=sys.stderr)
+                except Exception as e:
+                    print(f"warning: could not store cache {cache!r} in {table[0]}: {e}", file=sys.stderr)
             print(f"# {backend} ready on {host}:{port}; use it from fleche.toml as", file=sys.stderr)
             print(
                 f"calls = {{ type = \"{backend}\", datadir = {json.dumps(str(datadir))} }}",
@@ -429,6 +439,90 @@ def resolve_url(
     if source is not None and current != url:
         store_url(source, backend, datadir, current)
     return current
+
+
+def _uses_server(node, backend: str, datadir: Path) -> bool:
+    """Whether a (rebased) config value has a *backend* table on *datadir*."""
+    if isinstance(node, dict):
+        if node.get("type") == backend and node.get("datadir") is not None:
+            if Path(str(node["datadir"])).expanduser().resolve() == datadir:
+                return True
+        return any(_uses_server(v, backend, datadir) for v in node.values())
+    if isinstance(node, list):
+        return any(_uses_server(v, backend, datadir) for v in node)
+    return False
+
+
+def _active_values_config() -> dict:
+    """The value storage config of the active cache, to pair with the server."""
+    from . import caches, config, state, storage
+
+    active = state.get_cache()
+    if not isinstance(active, caches.Cache):
+        raise DbServerError(
+            f"the active cache is a {type(active).__name__}, so there is no single value "
+            f"storage to pair with the server; add the table to fleche.toml by hand"
+        )
+    if isinstance(active.values, (storage.ValueMemory, storage.ValueVoid)):
+        raise DbServerError(
+            "the active cache keeps values in memory, where other processes cannot load "
+            "them; configure a persistent default cache or add the table to fleche.toml by hand"
+        )
+    return config.storage_to_config(active.values)
+
+
+def plan_cache_table(name: str, backend: str, datadir: Path) -> tuple[Path, dict | None]:
+    """Decide where cache *name* records the server for *datadir*.
+
+    Returns ``(file, None)`` when a discovered config file already declares
+    *name* (its ``url`` gets updated in place), else ``(./fleche.toml,
+    values)`` for a new table whose value storage is copied from the active
+    cache, since a calls-only table is no usable cache.
+    """
+    from . import config
+
+    try:
+        import tomlkit  # noqa: F401
+    except ImportError:
+        raise DbServerError("storing the server in fleche.toml needs tomlkit") from None
+    merged, sources = config._load_merged_config_with_sources()
+    if name in sources:
+        if not _uses_server(merged[name], backend, datadir):
+            raise DbServerError(
+                f"cache {name!r} in {sources[name]} does not use this server; set its "
+                f'calls to type = "{backend}", datadir = "{datadir}" or pick another name'
+            )
+        return sources[name], None
+    return Path.cwd() / "fleche.toml", _active_values_config()
+
+
+def record_cache_table(
+    path: Path, values: dict | None, name: str, backend: str, datadir: Path, url: str
+) -> None:
+    """Carry out a :func:`plan_cache_table` decision now that *url* is live."""
+    import tomlkit
+
+    if values is None:
+        store_url(path, backend, datadir, url)
+        return
+    with FileLock(_sidecar(datadir, ".lock")):
+        doc = tomlkit.parse(path.read_text()) if path.exists() else tomlkit.document()
+        if name in doc:
+            # Someone added it since we planned; treat it as declared.
+            store_url(path, backend, datadir, url)
+            return
+        table = tomlkit.table()
+        table["values"] = values
+        table["calls"] = {"type": backend, "datadir": str(datadir), "url": url}
+        doc[name] = table
+        fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+        with os.fdopen(fd, "w") as f:
+            f.write(tomlkit.dumps(doc))
+        if path.exists():
+            shutil.copymode(path, tmp)
+        else:
+            os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
 
 
 def _same_dir(raw: str, base: Path, datadir: Path) -> bool:

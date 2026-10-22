@@ -316,6 +316,7 @@ Values and calls are stored separately so call records are queryable without des
   Ports default to the one in the previous `fleche.url`, else `_free_port()`.
   After resolving, a URL different from the config's is written back by `store_url`: `tomlkit` round-trip (comments kept) setting `url` on every table in the declaring file whose `type` and rebased `datadir` match, atomic replace with the original mode, under the same lock;
   best effort — any failure only warns.
+  `serve(cache=NAME)` (CLI `--cache`) runs `plan_cache_table` before starting anything — the file declaring `NAME` (must already point at this backend/datadir) or `./fleche.toml` plus the active cache's `storage_to_config(values)` (plain `Cache` with non-memory values only) — and `record_cache_table` once the server is up, via `store_url` or a new tomlkit table.
   The declaring file comes from the `config_file` `ContextVar`, which `config._cache_from_file_config` sets around `cache_from_config` using `_load_merged_config_with_sources`.
   Shells out to the system binaries (`--bindir`, else `PATH` plus `/usr/lib/postgresql/*/bin` and `/usr/sbin`);
   nothing is bundled.
@@ -611,7 +612,7 @@ Pytest config is `[tool.pytest.ini_options]` in `pyproject.toml` (registers the 
     `fleche/test_workdir.py` (`isolate=` tempdir behaviour).
   - `metadata/test_metadata.py` is the only file under `unit/metadata/` — covers the `MetaData` ABC plus the four built-ins.
   - Six files directly under `unit/` (not inside a subdir): `test_cache_sticky.py` (sticky `cache()` context semantics),
-    `test_dbserver.py` (`python -m fleche db`, `resolve_url`, `store_url` write-back and `stop` checks that need no server binaries — a listening socket stands in for a server),
+    `test_dbserver.py` (`python -m fleche db`, `resolve_url`, `store_url` write-back, `--cache` table planning/writing and `stop` checks that need no server binaries — a listening socket stands in for a server),
     `test_pickle.py` (pickling caches/wrappers),
     `test_main.py` (`python -m fleche` CLI dispatcher),
     `test_remote.py` (`SshCache` RPC unit tests, ssh extra),
@@ -625,7 +626,7 @@ Pytest config is `[tool.pytest.ini_options]` in `pyproject.toml` (registers the 
   `test_wrapper_query_integration.py`,
   `test_hash_code_integration.py`,
   `test_remote.py` (`SshCache` end-to-end, ssh extra),
-  `test_dbserver.py` (boots real Postgres/MariaDB via `python -m fleche db` and writes from 8 processes, then autostarts from a `fleche.toml` with 8 cold workers racing, checks the URL write-back and `db stop`;
+  `test_dbserver.py` (boots real Postgres/MariaDB via `python -m fleche db` and writes from 8 processes, checks `--cache` writes a working table, then autostarts from a `fleche.toml` with 8 cold workers racing, checks the URL write-back and `db stop`;
   skips as root or without the binaries, the parallel test also without the driver).
 - `regression/` — `test_issue_{217,297,319,352,451,452,485,578,592,691}.py`, one per issue.
   Notable: #217 — `CacheStack.load` serialises per-key back-fill so concurrent loaders don't all run the base's non-atomic save;

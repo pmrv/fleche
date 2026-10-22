@@ -42,11 +42,13 @@ def _free_port():
         return s.getsockname()[1]
 
 
-def _start(backend, datadir, port=None):
-    cmd = [sys.executable, "-m", "fleche", "db", backend, str(datadir)]
+def _start(backend, datadir, port=None, *extra, **popen):
+    cmd = [sys.executable, "-m", "fleche", "db", backend, str(datadir), *extra]
     if port is not None:
         cmd += ["--port", str(port)]
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    proc = subprocess.Popen(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, **popen
+    )
     # The config line it prints on stdout means the server is ready.
     line = []
     reader = threading.Thread(target=lambda: line.append(proc.stdout.readline()))
@@ -115,6 +117,39 @@ def test_db_server_restart_keeps_credentials_and_port(backend, tmp_path):
     proc, moved = _start(backend, datadir, port)
     assert _stop(proc) == 0
     assert moved == url.rsplit(":", 1)[0] + f":{port}/fleche"
+
+
+def test_db_server_writes_cache_table(backend, tmp_path):
+    """``--cache`` without a config adds a table whose values come from the
+    active (here: XDG default) cache, and that table works."""
+    pytest.importorskip(DRIVERS[backend])
+    pytest.importorskip("tomlkit")
+    xdg = tmp_path / "xdg" / "fleche"
+    xdg.mkdir(parents=True)
+    (xdg / "cache.toml").write_text(
+        '[default]\ncache = "persistent"\n'
+        f'[persistent]\nvalues.type = "pickle"\nvalues.root = "{tmp_path / "values"}"\n'
+        'calls.type = "memory"\n'
+    )
+    project = tmp_path / "project"
+    project.mkdir()
+    env = dict(os.environ, HOME=str(tmp_path), XDG_CONFIG_HOME=str(tmp_path / "xdg"))
+    proc, url = _start(backend, tmp_path / "db", None, "--cache", "shared", cwd=project, env=env)
+    try:
+        table = fleche.config._load_config(project / "fleche.toml")["shared"]
+        assert table["values"]["root"] == str(tmp_path / "values")
+        assert table["calls"]["url"] == url
+        cache = Cache.from_config(table)
+
+        @fleche.fleche()
+        def double(x):
+            return 2 * x
+
+        with fleche.cache(cache):
+            assert double(21) == 42
+        assert len(list(cache.query())) == 1
+    finally:
+        assert _stop(proc) == 0
 
 
 def _named_square_sum(cfgdir, start):

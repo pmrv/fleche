@@ -9,8 +9,17 @@ import socket
 import pytest
 
 from fleche import config as fleche_config
-from fleche import dbserver
-from fleche.dbserver import DbServerError, make_url, resolve_url, serve, stop, store_url
+from fleche import dbserver, state
+from fleche.dbserver import (
+    DbServerError,
+    make_url,
+    plan_cache_table,
+    record_cache_table,
+    resolve_url,
+    serve,
+    stop,
+    store_url,
+)
 
 
 @pytest.mark.parametrize(
@@ -229,3 +238,72 @@ def test_config_rebases_datadir_and_records_sources(tmp_path, monkeypatch):
         "c": tmp_path / "fleche.toml",
         "d": tmp_path / "sub" / "fleche.toml",
     }
+
+
+# --- recording the server as a cache in fleche.toml (--cache) ---------------
+
+
+@pytest.fixture
+def isolated_config(tmp_path, monkeypatch):
+    """cwd = tmp_path/project, config walk stops at tmp_path, XDG in tmp_path/xdg."""
+    project = tmp_path / "project"
+    project.mkdir()
+    monkeypatch.chdir(project)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    state._DEFAULTS.clear()
+    fleche_config._live_caches.clear()
+    yield project
+    state._DEFAULTS.clear()
+    fleche_config._live_caches.clear()
+
+
+def test_new_cache_table_copies_values_from_active_cache(isolated_config, tmp_path):
+    xdg = tmp_path / "xdg" / "fleche"
+    xdg.mkdir(parents=True)
+    (xdg / "cache.toml").write_text(
+        '[default]\ncache = "persistent"\n'
+        '[persistent]\nvalues.type = "cloudpickle"\nvalues.root = "/data/values"\n'
+        'calls.type = "memory"\n'
+    )
+    datadir = tmp_path / "db"
+    path, values = plan_cache_table("shared", "postgres", datadir)
+    assert path == isolated_config / "fleche.toml"
+    assert values is not None and values["type"] == "cloudpickle"
+    assert values["root"] == "/data/values"
+
+    url = "postgresql+psycopg2://fleche:pw@127.0.0.1:1/fleche"
+    record_cache_table(path, values, "shared", "postgres", datadir, url)
+
+    table = fleche_config._load_config(path)["shared"]
+    assert table["values"] == values
+    assert table["calls"] == {"type": "postgres", "datadir": str(datadir), "url": url}
+    assert path.stat().st_mode & 0o777 == 0o600, "the new file holds a password"
+
+
+def test_new_cache_table_refuses_in_memory_values(isolated_config, tmp_path):
+    """Without a config the active cache is the in-memory fallback, whose
+    values other processes could never load."""
+    with pytest.raises(DbServerError, match="keeps values in memory"):
+        plan_cache_table("shared", "postgres", tmp_path / "db")
+
+
+def test_declared_cache_table_gets_its_url_updated(isolated_config, tmp_path):
+    cfg = tmp_path / "fleche.toml"
+    cfg.write_text('[shared]  # declared up the tree\ncalls.type = "postgres"\ncalls.datadir = "db"\n')
+    datadir = tmp_path / "db"
+    path, values = plan_cache_table("shared", "postgres", datadir)
+    assert (path, values) == (cfg, None)
+
+    url = "postgresql+psycopg2://fleche:pw@127.0.0.1:1/fleche"
+    record_cache_table(path, values, "shared", "postgres", datadir, url)
+    assert f'calls.url = "{url}"' in cfg.read_text()
+    assert not (isolated_config / "fleche.toml").exists()
+
+
+def test_declared_cache_table_on_another_server_is_refused(isolated_config, tmp_path):
+    (tmp_path / "fleche.toml").write_text(
+        '[shared]\ncalls.type = "sql"\ncalls.url = "sqlite:///calls.db"\n'
+    )
+    with pytest.raises(DbServerError, match="does not use this server"):
+        plan_cache_table("shared", "postgres", tmp_path / "db")
