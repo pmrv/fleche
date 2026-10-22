@@ -120,18 +120,20 @@ calls.autostart = true       # launch the server in the background if it isn't r
 # optional: host = "0.0.0.0" (listen for other nodes), port, bindir
 ```
 
-The first process to need the server initializes `datadir` (database and user `fleche`, random password, free port) and starts it detached;
+Create the database once with `python -m fleche db postgres db` (initializes `datadir`: database and user `fleche`, random password, free port;
+stop it again with Ctrl-C).
+After that, the first process that finds the server down starts it detached;
 racing processes wait on a lock next to `datadir` instead of starting a second one.
+Autostart never creates a database — a missing or uninitialized `datadir` is an error naming that command.
 The server keeps running after the process exits;
 `python -m fleche db stop DATADIR` stops it.
-fleche then writes `calls.url` (password included) back into the `fleche.toml` that declared the table, keeping comments, for clients that cannot read `datadir` — so don't commit that file with the URL in it.
-Without `autostart`, run the server yourself: `python -m fleche db {postgres,mariadb} DATADIR [--host 0.0.0.0] [--port N] [--bindir DIR] [--cache NAME]` runs it in the foreground until Ctrl-C/SIGTERM.
-`--cache NAME` records the server in `fleche.toml` once it is up: the URL goes into the file that declares `NAME`, or, if none does, a new `[NAME]` table goes into `./fleche.toml` (mode `0600` when created): the active default cache's config with its calls moved to the server.
-Only a layer with persistent values gets the server — values in memory would leave other processes with records they cannot load — so a stack needs exactly one such layer (a memory front layer stays as is), and pools and SSH caches are refused.
+Without `autostart`, run the server yourself: `python -m fleche db {postgres,mariadb} DATADIR [--host 0.0.0.0] [--port N] [--bindir DIR]` runs it in the foreground until Ctrl-C/SIGTERM.
+The URL, password included, stays in `DATADIR/fleche.url` (mode `0600`);
+config only names `datadir`, plus `calls.url` for clients that cannot read it.
 `autostart` is for single-host use;
-for several nodes, run the server explicitly with `--host 0.0.0.0` and let the clients use the written-back `url`.
+for several nodes, run the server explicitly with `--host 0.0.0.0` and give the clients `url`.
 The server binaries are not bundled — install `postgresql`/`mariadb` (apt, conda-forge, ...);
-`pip install fleche[postgres]` / `fleche[mariadb]` brings sqlalchemy, the driver and `tomlkit`.
+`pip install fleche[postgres]` / `fleche[mariadb]` brings sqlalchemy and the driver.
 
 `values` and `calls` are stored separately on purpose: call records (arguments, metadata) are queryable without deserializing the (potentially heavy) result values.
 

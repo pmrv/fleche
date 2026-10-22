@@ -67,7 +67,7 @@ def test_main_db_dispatches_to_serve(monkeypatch):
 
     assert rc == 0
     assert received == [
-        (("mariadb", "data"), {"host": "0.0.0.0", "port": 3307, "bindir": None, "cache": None})
+        (("mariadb", "data"), {"host": "0.0.0.0", "port": 3307, "bindir": None})
     ]
 
 
