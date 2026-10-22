@@ -84,8 +84,9 @@ following **lowercase** identifiers:
     fleche db postgres DATADIR`` once for that.  Optional: ``host``
     (listen address for an autostarted server, default ``"127.0.0.1"``),
     ``port`` (default: last used, else a free one), ``bindir`` (server
-    binaries), ``echo``, ``url`` (used when ``datadir`` is unreadable, e.g.
-    from another node).
+    binaries), ``echo``.  ``url`` is filled in by fleche — written back into
+    the declaring file, password included — for clients that cannot read
+    ``datadir``.
 
 Example fleche.toml
 -------------------
@@ -268,7 +269,7 @@ from pathlib import Path
 import os
 from typing import Any
 
-from . import storage, metadata, caches
+from . import storage, metadata, caches, dbserver
 from .remote import SshCache
 
 logger = logging.getLogger("fleche.config")
@@ -418,16 +419,35 @@ def _load_merged_config() -> dict[str, Any]:
     that file acts as the top of the hierarchy, and any files farther up
     (including the XDG fallback) are ignored.
     """
+    return _load_merged_config_with_sources()[0]
+
+
+def _load_merged_config_with_sources() -> "tuple[dict[str, Any], dict[str, Path]]":
+    """:func:`_load_merged_config` plus the file each top-level key came from."""
     merged: dict[str, Any] = {}
+    sources: dict[str, Path] = {}
     for path in _collect_config_paths():  # closest first
         config = _load_config(path)
         # setdefault, not update: a closer file already in `merged` wins over
         # the same top-level key in a farther file.
         for key, value in config.items():
-            merged.setdefault(key, value)
+            if key not in merged:
+                merged[key] = value
+                sources[key] = path
         if _is_root_config(config):
             break
-    return merged
+    return merged, sources
+
+
+def _cache_from_file_config(d: Any, source: "Path | None") -> caches.BaseCache:
+    """:func:`cache_from_config` for a table read from *source*, so storages
+    that learn something worth keeping (a ``postgres``/``mariadb`` server's
+    URL) can write it back there."""
+    token = dbserver.config_file.set(source)
+    try:
+        return cache_from_config(d)
+    finally:
+        dbserver.config_file.reset(token)
 
 
 def load_default_metadata():
@@ -796,7 +816,7 @@ def load_cache_config(name: str | None = None) -> caches.BaseCache:
         _live_caches["default"] = cache
         return cache
 
-    config = _load_merged_config()
+    config, sources = _load_merged_config_with_sources()
     if not config:
         reason = f"no config file found (name={name!r})" if name is not None else "no config file found"
         return _default_memory_cache(name, reason)
@@ -808,11 +828,11 @@ def load_cache_config(name: str | None = None) -> caches.BaseCache:
         if isinstance(default_cache, str):
             cache = load_cache_config(default_cache)
         else:
-            cache = cache_from_config(default_cache)
+            cache = _cache_from_file_config(default_cache, sources.get("default"))
     else:
         if name not in config:
             return _default_memory_cache(name, f"cache {name!r} not found in configuration")
-        cache = cache_from_config(config[name])
+        cache = _cache_from_file_config(config[name], sources.get(name))
 
     # Intern under the requested name (the same key callers look up by, ``None``
     # for the default cache) so repeated lookups return the same instance rather
