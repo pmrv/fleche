@@ -59,13 +59,6 @@ def _build_parser() -> argparse.ArgumentParser:
         "--port", type=int, default=None, help="port (default: last used, else a free one)"
     )
     db.add_argument(
-        "--cache",
-        default=None,
-        metavar="NAME",
-        help="record the server in fleche.toml as cache NAME: update the file declaring "
-        "it, or add it to ./fleche.toml with the active cache's value storage",
-    )
-    db.add_argument(
         "--bindir",
         default=None,
         help="directory holding the server binaries (default: search PATH)",
@@ -94,7 +87,6 @@ def _main(argv: list[str]) -> int:
                 host=args.host,
                 port=args.port,
                 bindir=args.bindir,
-                cache=args.cache,
             )
         except DbServerError as e:
             print(f"error: {e}", file=sys.stderr)
