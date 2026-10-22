@@ -304,14 +304,15 @@ Values and calls are stored separately so call records are queryable without des
   Idempotent (`submit._fleche_wrapped`).
 - `__main__.py` — `python -m fleche <command> …` argparse dispatcher.
   Subcommands: `remote --serve [--cache NAME]`, which imports `remote._run_server` and runs the RPC server `SshCache` connects to;
-  `db {postgres,mariadb} DATADIR` and `db stop DATADIR`, which call `dbserver.serve` / `dbserver.stop` and turn a `DbServerError` into exit code 1 with a one-line message.
+  `db {postgres,mariadb} DATADIR`, which calls `dbserver.serve` and turns a `DbServerError` into exit code 1 with a one-line message.
   Deliberately routed here rather than `python -m fleche.remote` so `runpy` doesn't double-import `remote.py` (once as submodule, once as `__main__`) with duplicate class/exception objects.
   Extend by adding a parser branch in `_build_parser` and a dispatch arm in `_main`.
 - `dbserver.py` — `serve(backend, datadir, host, port, bindir)` hosts a Postgres/MariaDB server for the `sql` calls backend, in the foreground;
-  `stop(datadir)` SIGTERMs its supervisor and waits for `fleche.server` to vanish (not for the pid, which can linger as a zombie of whoever launched it).
-  `resolve_url(backend, datadir, url)` is what `type = "postgres"`/`"mariadb"` call storage runs (factory `_hosted_sql` in `sql.py`, returning a plain `Sql`): `DATADIR/fleche.url` wins over the config `url` (which only serves clients that cannot read `datadir`), and nothing listening is a `DbServerError` naming the command to start one.
-  `serve` writes `fleche.server` (`{host, pid, port}`) before starting the server and removes it on exit;
-  `stop` refuses one naming another host.
+  `stop(datadir)` SIGTERMs its supervisor and waits for `fleche.server` to vanish (not for the pid, which can linger as a zombie of whoever autostarted it).
+  `resolve_url(backend, datadir, url, autostart, ...)` is what `type = "postgres"`/`"mariadb"` call storage runs (factory `_hosted_sql` in `sql.py`, returning a plain `Sql`): `DATADIR/fleche.url` wins over the config `url` (which only serves clients that cannot read `datadir`);
+  if nothing listens and `autostart`, an uninitialized `datadir` (no `fleche.url` or no `PG_VERSION`/`mysql`) is a `DbServerError` (autostart never creates a database);
+  otherwise `_autostart` takes a `FileLock` on `<datadir>.lock`, re-checks, and launches `python -m fleche db …` detached (own session, output to `<datadir>.log`, Popen kept in `_spawned` so it is never collected).
+  `serve` writes `fleche.server` (`{host, pid, port}`) *before* starting the server and removes it on exit: an autostarter that finds it with a live local pid waits for that server instead of launching another, and refuses outright when it names another host (shared-FS datadir, server elsewhere).
   Ports default to the one in the previous `fleche.url`, else `_free_port()`.
   Shells out to the system binaries (`--bindir`, else `PATH` plus `/usr/lib/postgresql/*/bin` and `/usr/sbin`);
   nothing is bundled.
@@ -607,7 +608,7 @@ Pytest config is `[tool.pytest.ini_options]` in `pyproject.toml` (registers the 
     `fleche/test_workdir.py` (`isolate=` tempdir behaviour).
   - `metadata/test_metadata.py` is the only file under `unit/metadata/` — covers the `MetaData` ABC plus the four built-ins.
   - Six files directly under `unit/` (not inside a subdir): `test_cache_sticky.py` (sticky `cache()` context semantics),
-    `test_dbserver.py` (`python -m fleche db`, `resolve_url` and `stop` checks that need no server binaries — a listening socket stands in for a server),
+    `test_dbserver.py` (`python -m fleche db`, `resolve_url`, autostart refusals and `stop` checks that need no server binaries — a listening socket stands in for a server),
     `test_pickle.py` (pickling caches/wrappers),
     `test_main.py` (`python -m fleche` CLI dispatcher),
     `test_remote.py` (`SshCache` RPC unit tests, ssh extra),
@@ -621,7 +622,7 @@ Pytest config is `[tool.pytest.ini_options]` in `pyproject.toml` (registers the 
   `test_wrapper_query_integration.py`,
   `test_hash_code_integration.py`,
   `test_remote.py` (`SshCache` end-to-end, ssh extra),
-  `test_dbserver.py` (boots real Postgres/MariaDB via `python -m fleche db` and writes from 8 processes through `type = "postgres"`/`"mariadb"` storage, then restarts it;
+  `test_dbserver.py` (boots real Postgres/MariaDB via `python -m fleche db` and writes from 8 processes, then autostarts from a `fleche.toml` with 8 cold workers racing and checks `db stop`;
   skips as root or without the binaries, the parallel test also without the driver).
 - `regression/` — `test_issue_{217,297,319,352,451,452,485,578,592,691}.py`, one per issue.
   Notable: #217 — `CacheStack.load` serialises per-key back-fill so concurrent loaders don't all run the base's non-atomic save;

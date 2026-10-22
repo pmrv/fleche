@@ -6,7 +6,10 @@ Two ways in, sharing one data directory layout:
   foreground until interrupted; ``python -m fleche db stop DATADIR`` stops a
   server started either way.
 * A ``postgres`` / ``mariadb`` calls storage in ``fleche.toml`` (built by
-  :func:`resolve_url`) connects to the server running for ``datadir``.
+  :func:`resolve_url`) connects to the server for ``datadir`` and, with
+  ``autostart = true``, launches that same command detached when nothing is
+  listening.  Autostart only starts an existing ``datadir``; creating the
+  database is left to an explicit ``python -m fleche db`` run.
 
 Either gives many processes a shared call store without sqlite's
 file-locking contention.
@@ -26,6 +29,7 @@ the supervising ``python -m fleche db`` process.
 
 import glob
 import json
+import logging
 import os
 import re
 import secrets
@@ -39,10 +43,19 @@ import time
 import urllib.parse
 from pathlib import Path
 
+from filelock import FileLock
+
+logger = logging.getLogger("fleche.dbserver")
+
 NAME = "fleche"
 URL_FILE = "fleche.url"
 SERVER_FILE = "fleche.server"
 BACKENDS = ("postgres", "mariadb")
+
+# Detached servers we launched; kept referenced so their Popen objects are
+# never collected (and warn) while the server outlives our interest in it.
+_spawned: list[subprocess.Popen] = []
+
 
 class DbServerError(RuntimeError):
     pass
@@ -182,6 +195,12 @@ def _write_private(path: Path, text: str) -> None:
         f.write(text)
 
 
+def _sidecar(datadir: Path, suffix: str) -> Path:
+    """A file next to *datadir*; inside it would break ``initdb``'s
+    empty-directory requirement."""
+    return datadir.with_name(datadir.name + suffix)
+
+
 def _read_url(datadir: Path) -> str | None:
     try:
         return (datadir / URL_FILE).read_text().strip() or None
@@ -260,6 +279,8 @@ def serve(
 
     with tempfile.TemporaryDirectory(prefix="fleche-db-") as sockdir:
         cmd = _server_command(backend, datadir, host, port, bindir, sockdir)
+        # Before the server opens its port, so autostarters wait for us
+        # instead of launching a second server on the same datadir.
         _write_private(server_file, json.dumps(
             {"host": socket.gethostname(), "pid": os.getpid(), "port": port}
         ))
@@ -309,7 +330,7 @@ def stop(datadir: str | Path, timeout: float = 60.0) -> int:
         (datadir / SERVER_FILE).unlink(missing_ok=True)
         return 0
     # The supervisor removes SERVER_FILE once the server has exited; its pid
-    # alone could linger as a zombie of whoever launched it.
+    # alone could linger as a zombie of whoever autostarted it.
     deadline = time.monotonic() + timeout
     while (datadir / SERVER_FILE).exists() and _pid_alive(info["pid"]):
         if time.monotonic() > deadline:
@@ -318,8 +339,67 @@ def stop(datadir: str | Path, timeout: float = 60.0) -> int:
     return 0
 
 
-def resolve_url(backend: str, datadir: str | Path | None = None, url: str | None = None) -> str:
-    """Return the SQLAlchemy URL of the server running for *datadir*.
+def _autostart(
+    backend: str, datadir: Path, host: str, port: int | None, bindir: str | None, timeout: float
+) -> str:
+    if not ((datadir / URL_FILE).exists() and _is_initialized(backend, datadir)):
+        raise DbServerError(
+            f"no {backend} database in {datadir}; autostart only starts existing ones, "
+            f"so create it once with `python -m fleche db {backend} {datadir}`"
+        )
+    # Serializes processes racing to autostart the same server.
+    with FileLock(_sidecar(datadir, ".lock")):
+        url = _read_url(datadir)
+        if url and _url_reachable(url):
+            return url
+        proc = None
+        log = _sidecar(datadir, ".log")
+        info = _read_server_info(datadir)
+        if info is not None and info["host"] != socket.gethostname():
+            raise DbServerError(
+                f"the server for {datadir} is recorded as running on {info['host']} "
+                f"but is unreachable from here; not starting a second one on the same "
+                f"data directory (delete {datadir / SERVER_FILE} if it is dead)"
+            )
+        if info is None or not _pid_alive(info["pid"]):
+            cmd = [sys.executable, "-m", "fleche", "db", backend, str(datadir), "--host", host]
+            if port:
+                cmd += ["--port", str(port)]
+            if bindir:
+                cmd += ["--bindir", bindir]
+            logger.info("autostarting %s server for %s (log: %s)", backend, datadir, log)
+            with open(log, "ab") as out:
+                proc = subprocess.Popen(
+                    cmd, stdin=subprocess.DEVNULL, stdout=out, stderr=out,
+                    start_new_session=True,
+                )
+            _spawned.append(proc)
+        # Else a server is already starting (pid alive, port not open yet).
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            url = _read_url(datadir)
+            if url and _url_reachable(url):
+                return url
+            if proc is not None and proc.poll() is not None:
+                raise DbServerError(
+                    f"{backend} server exited with code {proc.returncode}; see {log}"
+                )
+            time.sleep(0.2)
+    raise DbServerError(f"{backend} server for {datadir} not ready within {timeout:g}s; see {log}")
+
+
+def resolve_url(
+    backend: str,
+    datadir: str | Path | None = None,
+    url: str | None = None,
+    autostart: bool = False,
+    host: str = "127.0.0.1",
+    port: int | None = None,
+    bindir: str | None = None,
+    startup_timeout: float = 120.0,
+) -> str:
+    """Return the SQLAlchemy URL of the server for *datadir*, starting it if
+    *autostart* and nothing is listening.
 
     ``DATADIR/fleche.url`` wins over *url*, which only matters to clients
     that cannot read *datadir* (another node).
@@ -333,8 +413,10 @@ def resolve_url(backend: str, datadir: str | Path | None = None, url: str | None
     datadir = Path(datadir).expanduser().resolve()
     current = _read_url(datadir) or url
     if current is None or not _url_reachable(current):
-        raise DbServerError(
-            f"no {backend} server is running for {datadir}; start one with "
-            f"`python -m fleche db {backend} {datadir}`"
-        )
+        if not autostart:
+            raise DbServerError(
+                f"no {backend} server is running for {datadir}; start one with "
+                f"`python -m fleche db {backend} {datadir}` or set `autostart = true`"
+            )
+        current = _autostart(backend, datadir, host, port, bindir, startup_timeout)
     return current

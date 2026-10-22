@@ -3,7 +3,7 @@
 Skipped unless the server binaries are installed (see
 :func:`fleche.dbserver._which` for where they are looked up) and we are not
 root (postgres refuses to run as root).  The parallel round-trip additionally
-needs the client driver the URL names.
+needs the client driver the printed URL names.
 """
 
 import os
@@ -94,7 +94,7 @@ def test_db_server_serves_parallel_writers(backend, tmp_path):
         # and InnoDB deadlock races in Sql both show up here.
         cfg = {
             "values": {"type": "pickle", "root": str(tmp_path / "values")},
-            "calls": {"type": backend, "datadir": str(datadir)},
+            "calls": {"type": "sql", "url": url},
         }
         with ProcessPoolExecutor(8) as pool:
             total = sum(pool.map(_square_sum, [cfg] * 16, range(0, 160, 10)))
@@ -115,3 +115,49 @@ def test_db_server_restart_keeps_credentials_and_port(backend, tmp_path):
     proc, moved = _start(backend, datadir, port)
     assert _stop(proc) == 0
     assert moved == url.rsplit(":", 1)[0] + f":{port}/fleche"
+
+
+def _named_square_sum(cfgdir, start):
+    os.chdir(cfgdir)
+
+    @fleche.fleche()
+    def square(x):
+        return x * x
+
+    with fleche.cache("shared"):
+        return sum(square(x) for x in range(start, start + 10))
+
+
+def test_autostart_from_config(backend, tmp_path):
+    """Cold workers race to autostart one background server from fleche.toml
+    for a datadir created beforehand, and ``db stop`` shuts it down."""
+    pytest.importorskip(DRIVERS[backend])
+    cfg = tmp_path / "fleche.toml"
+    cfg.write_text(
+        "[default]\n"
+        "root = true\n\n"
+        "[shared]  # cache shared by the workers\n"
+        'values.type = "pickle"\n'
+        'values.root = "values"\n'
+        f'calls.type = "{backend}"\n'
+        'calls.datadir = "db"\n'
+        "calls.autostart = true\n"
+    )
+    datadir = tmp_path / "db"
+    # Autostart never creates the database, so do that once up front.
+    assert _stop(_start(backend, datadir)[0]) == 0
+    try:
+        with ProcessPoolExecutor(8) as pool:
+            total = sum(pool.map(_named_square_sum, [tmp_path] * 16, range(0, 160, 10)))
+        assert total == sum(x * x for x in range(160))
+
+        url = (datadir / "fleche.url").read_text().strip()
+        assert (datadir / "fleche.server").exists()
+    finally:
+        rc = subprocess.run(
+            [sys.executable, "-m", "fleche", "db", "stop", str(datadir)], timeout=90
+        ).returncode
+    assert rc == 0
+    assert not (datadir / "fleche.server").exists()
+    with pytest.raises(OSError):
+        socket.create_connection(("127.0.0.1", int(url.rsplit(":", 1)[1].split("/")[0])), timeout=1)

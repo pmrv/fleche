@@ -77,10 +77,15 @@ following **lowercase** identifiers:
 
 ``"postgres"`` / ``"mariadb"``
     :class:`~fleche.storage.Sql` on a server fleche hosts itself
-    (``python -m fleche db``, :mod:`fleche.dbserver`).  *Call storage only.*
-    ``datadir`` (path, the server's data directory) locates the running
-    server through ``DATADIR/fleche.url``.  Optional: ``url`` (used when
-    ``datadir`` is unreadable, e.g. from another node), ``echo``.
+    (:mod:`fleche.dbserver`).  *Call storage only.*  ``datadir`` (path, the
+    server's data directory) locates the server; ``autostart`` (bool,
+    default ``False``) launches it in the background when nothing is
+    listening.  Autostart never creates the database: run ``python -m
+    fleche db postgres DATADIR`` once for that.  Optional: ``host``
+    (listen address for an autostarted server, default ``"127.0.0.1"``),
+    ``port`` (default: last used, else a free one), ``bindir`` (server
+    binaries), ``echo``, ``url`` (used when ``datadir`` is unreadable, e.g.
+    from another node).
 
 Example fleche.toml
 -------------------
@@ -107,12 +112,14 @@ Example fleche.toml
     calls.type = "sql"
     calls.url = "sqlite:///~/.fleche/calls.db"
 
-    # Postgres server run by `python -m fleche db postgres ~/.fleche/postgres`
+    # Postgres server hosted by fleche (created once with
+    # `python -m fleche db postgres ~/.fleche/postgres`), started when needed
     [with_postgres_calls]
     values.type = "cloudpickle"
     values.root = "~/.fleche/values"
     calls.type = "postgres"
     calls.datadir = "~/.fleche/postgres"
+    calls.autostart = true
 
     # SizeLimitedCache — evicts a uniformly-random entry once 100 entries
     # are stored (override _pick_eviction_target for LRU/LFU/etc.)
@@ -475,7 +482,7 @@ def storage_from_config(d: dict[str, Any], type: Literal["call", "value"]) -> st
     * ``{"type": "sql", "url": "<sqlalchemy-url>"}``  *(call storage only)*
       — optional: ``echo``
     * ``{"type": "postgres" | "mariadb", "datadir": "<path>"}``  *(call storage only)*
-      — optional: ``url``, ``echo``
+      — optional: ``autostart``, ``host``, ``port``, ``bindir``, ``url``, ``echo``
 
     See the module docstring for full descriptions of each key.
     """

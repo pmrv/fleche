@@ -68,7 +68,7 @@ def test_serve_refuses_port_in_use(tmp_path):
             serve("postgres", datadir, port=port)
 
 
-# --- resolve_url / stop without server binaries --------- -----------------
+# --- resolve_url / stop without server binaries ---------------------------
 
 
 @pytest.fixture
@@ -82,13 +82,14 @@ def listener():
 
 def _fake_datadir(path, port, password="pw"):
     path.mkdir()
+    (path / "PG_VERSION").write_text("16\n")
     url = f"postgresql+psycopg2://fleche:{password}@127.0.0.1:{port}/fleche"
     (path / "fleche.url").write_text(url + "\n")
     return url
 
 
-def test_resolve_url_without_server_says_how_to_start_one(tmp_path):
-    with pytest.raises(DbServerError, match="python -m fleche db postgres"):
+def test_resolve_url_without_server_or_autostart_says_how_to_start_one(tmp_path):
+    with pytest.raises(DbServerError, match="python -m fleche db postgres .*autostart = true"):
         resolve_url("postgres", tmp_path / "db")
 
 
@@ -108,6 +109,26 @@ def test_resolve_url_falls_back_to_config_url(tmp_path, listener):
     """Clients that cannot read the datadir (another node) use the stored url."""
     url = f"postgresql+psycopg2://fleche:pw@127.0.0.1:{listener}/fleche"
     assert resolve_url("postgres", tmp_path / "elsewhere", url=url) == url
+
+
+@pytest.mark.parametrize("make", ["missing", "empty", "no-url"])
+def test_autostart_never_creates_a_database(tmp_path, make):
+    datadir = tmp_path / "db"
+    if make != "missing":
+        datadir.mkdir()
+    if make == "no-url":
+        (datadir / "PG_VERSION").write_text("16\n")
+    with pytest.raises(DbServerError, match="create it once with `python -m fleche db postgres"):
+        resolve_url("postgres", datadir, autostart=True)
+    assert not (datadir / "fleche.url").exists()
+
+
+def test_autostart_refuses_datadir_served_from_another_host(tmp_path):
+    datadir = tmp_path / "db"
+    _fake_datadir(datadir, 1)
+    (datadir / "fleche.server").write_text(json.dumps({"host": "elsewhere", "pid": 1, "port": 1}))
+    with pytest.raises(DbServerError, match="running on elsewhere"):
+        resolve_url("postgres", datadir, autostart=True)
 
 
 def test_stop_without_server_is_a_noop(tmp_path):
