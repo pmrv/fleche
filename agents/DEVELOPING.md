@@ -937,6 +937,15 @@ Git history is the changelog.
   closes #1004.
   The 2026-10-19 review round reworked #1006 in place rather than replacing it with the once-superseding branch (`claude/issue-1004-20261013-1959`, never opened as a PR): the pandas arms moved to a new `fleche._pandas` module (`digest.py` no longer imports pandas), a `MultiIndex` arm was added (tuple of its levels, names included — every `MultiIndex` digest changes), and `hash_pandas_object` stays on the main path for faithful columns, so only object-column and `MultiIndex` keys change (migratable via `Cache.redigest()`).
   The 2026-10-20 round dropped the `__fleche_own_hashed__` marker — no marker records the swap, so a column of arrays digests like the column of its elements' `Digest`s, the Merkle property lists already have — and renamed the helpers to `needs_element_digests`/`element_digests`.
+- #1014 (opened 2026-10-21) — fleche-hosted Postgres/MariaDB call storage with autostart: `calls.type = "postgres"` / `"mariadb"` plus `calls.datadir` (resolved relative to the declaring `fleche.toml`, like `root`) in config;
+  with `calls.autostart = true` the first process that finds nothing listening sets up `datadir` and launches `python -m fleche db …` detached (a `FileLock` on `<datadir>.lock` means racing processes wait for the winner, so exactly one server starts, and it outlives the process).
+  Setup creates database and user `fleche` with a random password and a free port;
+  the URL is written back as `url` into the declaring `fleche.toml` via tomlkit (comments survive), and a readable `DATADIR/fleche.url` takes precedence over it;
+  to support the write-back, the config loader now records which file each top-level table came from.
+  New CLI `python -m fleche db {postgres,mariadb} DATADIR` runs the server in the foreground (`--cache NAME` records the server into config, refusing in-memory values, stacks with several persistent layers, pools and SSH caches) and `python -m fleche db stop DATADIR` shuts it down;
+  `serve` writes host+pid to `DATADIR/fleche.server` before starting, and autostart refuses a datadir another host is serving (shared filesystems).
+  New extras `fleche[postgres]` / `fleche[mariadb]` (sqlalchemy + driver + tomlkit).
+  Rides with two `Sql` concurrency fixes hit with 8 writers on a fresh server database — `create_all`'s check-then-create schema race retries, and `save` retries deadlock-aborted transactions (MariaDB error 1213, Postgres SQLSTATEs `40P01`/`40001`) — and a test-hygiene fix (`_test_missing_dep` now restores the storage registry it used to leave broken for later tests).
 - #786 (draft) — a process-wide cache of read-only `h5py.File` handles for multi-bag files (bounded MRU of 32, `(inode, mtime_ns, size)` invalidation, `locking=False`, writers close the cached handle under the per-bag lock);
   multi-bag `contains` drops from ~240 µs to ~29 µs.
   `evict` deliberately untouched;
