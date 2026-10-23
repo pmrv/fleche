@@ -22,7 +22,6 @@ rather than trusting a trailing ``==``.
 
 import cmath
 import dataclasses
-import hashlib
 import math
 import numbers
 import struct
@@ -30,6 +29,8 @@ from collections.abc import Callable
 from decimal import Decimal
 from fractions import Fraction
 from typing import Any
+
+from ._hashing import running_hash
 
 DigestBytes = Callable[[Any], bytes]
 
@@ -105,13 +106,12 @@ def _salted(name: str, *parts: bytes) -> bytes:
 
     Not the bare type name the generic arms salt with, or a user type that
     happens to share the name (a NamedTuple called Fraction) and to feed the
-    same bytes would collide with the number.  Same SHA256 and hex encoding as
-    :func:`fleche.digest._new_hash` and ``_digest_bytes``; change both together.
+    same bytes would collide with the number.
     """
-    m = hashlib.sha256(f"__fleche_{name}__".encode())
-    for part in parts:
-        m.update(part)
-    return m.hexdigest().encode()
+    with running_hash(f"__fleche_{name}__".encode()) as h:
+        for part in parts:
+            h.update(part)
+    return h.result
 
 
 def _encode_int(value: int, digest_bytes: DigestBytes) -> bytes:

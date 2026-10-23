@@ -1,5 +1,4 @@
 import datetime
-import hashlib
 import logging
 import dataclasses
 from numbers import Number
@@ -11,6 +10,7 @@ from typing import Any, TypeVar, Callable, Type, Generic
 import numpy as np
 
 from . import _attrs, _numbers, _pandas
+from ._hashing import new_hash as _new_hash
 
 logger = logging.getLogger("fleche.digest")
 
@@ -128,18 +128,6 @@ def load_entry_points():
                 seen_types[hook.type] = ep.value
         except Exception as e:
             logger.error("Failed to load entry point %s: %s", ep.name, e, exc_info=True)
-
-
-def _new_hash(salt: bytes):
-    """Start a running SHA256 under *salt*.
-
-    Every digest in this module is a salted accumulation: the salt discriminates
-    what kind of thing is being hashed (a type name, a section of a function's
-    captured state) before any content goes in.
-    """
-    m = hashlib.sha256()
-    m.update(salt)
-    return m
 
 
 def digest_class(cls: type) -> Digest:
@@ -291,12 +279,11 @@ def _digest_bytes(value: Any) -> bytes:
     hex bytes) so the bytes fed into parent hashes are identical to the previous
     ``digest(v).encode()`` calls — no backwards-incompatible change.  To gain
     the raw-bytes speedup (Issue #440), change the final ``return`` here and
-    the ones in ``_numbers._salted`` and ``_pandas.digest_pandas`` to
-    ``m.digest()`` (32 bytes), update ``digest()`` to call ``.hex()`` instead
-    of ``.decode()``, and change the ``encode()`` calls on the early-return
-    paths (Digest pass-through, hooks, ``__digest__``) to
-    ``bytes.fromhex(...)``.  That must be coordinated with a ``hash_version``
-    bump and a ``Cache.redigest`` migration.
+    ``_hashing.running_hash.__exit__`` to ``m.digest()`` (32 bytes), update
+    ``digest()`` to call ``.hex()`` instead of ``.decode()``, and change the
+    ``encode()`` calls on the early-return paths (Digest pass-through, hooks,
+    ``__digest__``) to ``bytes.fromhex(...)``.  That must be coordinated with
+    a ``hash_version`` bump and a ``Cache.redigest`` migration.
     """
     # Fast-path: in the common case both hook lists are empty, so skip the
     # ``get_hooks()`` call which would otherwise allocate a fresh combined list

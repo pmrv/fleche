@@ -161,9 +161,15 @@ Values and calls are stored separately so call records are queryable without des
   bound methods are their own arm (`types.MethodType`: receiver + underlying function, so `obj1.m` and `obj2.m` differ;
   a class receiver is named via `digest_class`), so there is no second entry point — `call._code_digest` reduces a bound method to `__func__` (the receiver already arrives as a call argument) and goes through `digest`;
   `digest_class(cls)` names a class `module.QualName` and is shared by the built-in-`type` arm and the `__class__` cell.
-  `_new_hash(salt)` is the one place a salted running hash is started, apart from `_pandas.digest_pandas` and `_numbers._salted`, which mirror it.
+  `_new_hash(salt)` (imported from `_hashing.new_hash`) starts every salted running hash.
+- `_hashing.py` — the hash primitive, kept out of `digest.py` so the arm modules it imports (`_numbers`, `_pandas`) can share it without importing it back.
+  `new_hash(salt)` starts a salted SHA256;
+  `running_hash(salt)` is a context manager over it whose `.result` is the finished digest in `_digest_bytes`'s wire format (hex as bytes) once the block exits, and raises `RuntimeError` if read earlier, so an arm module never spells out `hexdigest().encode()` itself.
+  The primitive lives only here and the encoding only here and in `digest.py`'s own `hexdigest()` returns, never in an arm module: the #440 raw-bytes switch touches those, and patching `_hashing.hashlib` swaps every digest's hash (`test_redigest`, `test_hashing`).
+  `running_hash` costs about 0.3 µs per use, so `digest.py`'s own hot path keeps the bare `_new_hash` + `hexdigest()`.
 - `_numbers.py` — the number digest arm, kept out of `digest.py`;
-  `digest_bytes` is passed in because `digest.py` imports it, and it hashes with `hashlib` directly (`_salted`), so the #440 raw-bytes switch must touch it too.
+  `digest_bytes` is passed in because `digest.py` imports it;
+  it hashes through `_hashing.running_hash` (`_salted`), never `hashlib` directly.
   `digest_number` walks `NUMBER_TREE` (`int` → `float` → {`complex`, `Fraction` → `Decimal`}; a complex with zero imaginary part first drops to its real part) from the root down to the value's own type and digests it as the first type whose converter holds it exactly, so equal values digest alike unless they sit on different branches below that type (none do in the current tree);
   foreign types attach via `_NUMBER_ABCS` (`Integral` → `int`, `Real` → `Fraction`, `Complex` → `complex`), and a value nothing on its path holds gets `None`, which `digest.py` raises as `Indigestible`.
   Converters must refuse inexact conversions themselves rather than rely on a trailing `==`: numpy compares `Fraction` to `np.longdouble` by rounding the `Fraction` to double, and an `np.longdouble` to an `int` through `str` (subject to `sys.int_max_str_digits`).
@@ -179,7 +185,7 @@ Values and calls are stored separately so call records are queryable without des
 - `_attrs.py` — Internal `is_attrs_instance` / `field_items` helpers gating optional `attrs` support;
   safe to import without `attrs` installed.
 - `_pandas.py` — Internal digest arms for pandas objects: `is_pandas` gates the one pandas case in `_digest_bytes`,
-  `digest_pandas` digests DataFrame / Series / Index / MultiIndex / `pd.NA` with the same salt and hex return as `_digest_bytes`, and `needs_element_digests` / `element_digests` handle object columns (#1004);
+  `digest_pandas` digests DataFrame / Series / Index / MultiIndex / `pd.NA` with the same bare-type-name salt as `_digest_bytes`, through `_hashing.running_hash`, and `needs_element_digests` / `element_digests` handle object columns (#1004);
   `digest_pandas` and `element_digests` take `digest._digest_bytes` as an argument, since `digest.py` imports the module.
 - `call.py` — `Call` dataclass (`from_call`, `to_lookup_key`, `.stash(values)→DigestedCall` writes args+result to value storage / `.digest()→DigestedCall` digests without saving);
   `DigestedCall` (storage representation: arguments and result are `Digest` keys;
