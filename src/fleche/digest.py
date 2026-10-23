@@ -12,9 +12,8 @@ import importlib.metadata
 from collections.abc import Iterable, Mapping
 from typing import Any, TypeVar, Callable, Type, Generic
 import numpy as np
-import pandas as pd
 
-from . import _attrs
+from . import _attrs, _pandas
 
 logger = logging.getLogger("fleche.digest")
 
@@ -295,7 +294,7 @@ def _digest_bytes(value: Any) -> bytes:
     hex bytes) so the bytes fed into parent hashes are identical to the previous
     ``digest(v).encode()`` calls — no backwards-incompatible change.  To gain
     the raw-bytes speedup (Issue #440), change **only** the final ``return``
-    here to ``m.digest()`` (32 bytes), update ``digest()`` to call ``.hex()``
+    here and in ``_pandas.digest_pandas`` to ``m.digest()`` (32 bytes), update ``digest()`` to call ``.hex()``
     instead of ``.decode()``, and change the ``encode()`` calls on the
     early-return paths (Digest pass-through, hooks, ``__digest__``) to
     ``bytes.fromhex(...)``.  That must be coordinated with a ``hash_version``
@@ -378,33 +377,10 @@ def _digest_bytes(value: Any) -> bytes:
         case np.bool_():
             # np.bool_ ∉ Number so this arm is reachable
             return _digest_bytes(bool(value))
-        case pd.DataFrame():
-            # DataFrame is Iterable (yields column names) but NOT Mapping, so without
-            # this arm two DataFrames sharing column names collide regardless of values.
-            #
-            # We digest columns/dtypes/index ourselves and pass index=False to
-            # hash_pandas_object rather than letting index=True fold the index in.
-            # hash_pandas_object only mixes per-element value bytes — it ignores
-            # column names, column dtypes, index.name, and index.dtype — so
-            # index=True alone would still collide DataFrames whose indices differ
-            # only in name or dtype.  Recursing through _digest_bytes on
-            # value.index also reuses the pd.Index arm below, keeping a standalone
-            # Index and a DataFrame's .index digest-consistent.
-            m.update(_digest_bytes(list(value.columns)))
-            m.update(_digest_bytes([str(d) for d in value.dtypes]))
-            m.update(_digest_bytes(value.index))
-            m.update(pd.util.hash_pandas_object(value, index=False).values.tobytes())
-        case pd.Series():
-            # Same reasoning as DataFrame: hash_pandas_object ignores name/dtype/
-            # index metadata, so we digest those ourselves and pass index=False.
-            m.update(_digest_bytes(value.name))
-            m.update(_digest_bytes(str(value.dtype)))
-            m.update(_digest_bytes(value.index))
-            m.update(pd.util.hash_pandas_object(value, index=False).values.tobytes())
-        case pd.Index():
-            m.update(_digest_bytes(value.name))
-            m.update(_digest_bytes(str(value.dtype)))
-            m.update(pd.util.hash_pandas_object(value).values.tobytes())
+        case _ if _pandas.is_pandas(value):
+            # Must precede Iterable: a DataFrame iterates over its column names
+            # only, so the Iterable arm would collide any two frames sharing them.
+            return _pandas.digest_pandas(value, _digest_bytes)
         case types.MethodType():
             # A bound method is its function plus the receiver it is bound to.
             # Leaving __self__ out would collide obj1.method with obj2.method —

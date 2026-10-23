@@ -134,10 +134,17 @@ Values and calls are stored separately so call records are queryable without des
   routed through `hash(value)` then recursed as int — a lossy encoding under which distinct numbers collide;
   see the numeric-digest bullet under **Bugs** below) → `bytes` → `np.ndarray` (dtype + shape + `tobytes`;
   structured dtypes instead digest each field name + field view recursively, because `dtype.str` is only `|V<itemsize>` and padding bytes are uninitialised;
-  other `dtype.hasobject` arrays digest every element of `ravel().tolist()` because their bytes are PyObject pointers) → `np.bool_` (delegates to `digest(bool(value))`, because `np.bool_ ∉ Number` since numpy 1.20) → `pd.DataFrame` / `pd.Series` / `pd.Index` (must precede `Iterable` — DataFrame iterates over column names only, so the `Iterable` arm collides any two DataFrames with the same columns regardless of values;
+  other `dtype.hasobject` arrays digest every element of `ravel().tolist()` because their bytes are PyObject pointers) → `np.bool_` (delegates to `digest(bool(value))`, because `np.bool_ ∉ Number` since numpy 1.20) → pandas (`case _ if _pandas.is_pandas(value)`, which returns `_pandas.digest_pandas(value, _digest_bytes)`: `pd.DataFrame` / `pd.Series` / `pd.Index` / `pd.NA`;
+  must precede `Iterable` — DataFrame iterates over column names only, so the `Iterable` arm collides any two DataFrames with the same columns regardless of values;
   DataFrame folds in columns + per-column dtype + index, Series folds in name + dtype + index, Index folds in name + dtype;
   values are mixed via `pd.util.hash_pandas_object(...).values.tobytes()` — `index=False` on the DataFrame/Series arms (the Index arm passes no kwarg since Index has no index) because `hash_pandas_object` only mixes per-element value bytes and ignores name/dtype/index metadata, so we hand-roll those.
-  → `types.MethodType` (receiver + `__func__`) → `types.FunctionType` (code object **plus the state bound alongside it**: captured free variables paired with `co_freevars`, then `__defaults__` (as a tuple) and `__kwdefaults__` (as a mapping), each behind a section marker.
+  Object columns pandas cannot hash faithfully — anything `infer_dtype` does not call `"string"` or `"empty"`, including `bytes` and the categories of a categorical — are digested element by element with our own hash first (`_pandas.needs_element_digests`/`element_digests`), and pandas is handed the column of hex digests, with no marker, so a column digests like the column of its elements' `Digest`s (the Merkle property lists have) (#1004).
+  Without that, `factorize` raises on unhashable elements (arrays, lists, dicts) and every other object is hashed through `str()`, colliding `1` with `"1"` and keying `object()` on its address;
+  an element we cannot digest now raises `Indigestible`.
+  A `MultiIndex` folds the tuple of its levels, each taken as an `Index` of its values (`get_level_values`, so unused level entries do not count) and digested by the `Index` arm, name included;
+  pandas would hash object levels through `str()` and ignore the level names.
+  So every `MultiIndex` digest changed, including frames and series indexed by one.
+  `pd.NA` folds a singleton marker, like `None`) → `types.MethodType` (receiver + `__func__`) → `types.FunctionType` (code object **plus the state bound alongside it**: captured free variables paired with `co_freevars`, then `__defaults__` (as a tuple) and `__kwdefaults__` (as a mapping), each behind a section marker.
   Functions out of one factory share a code object, so a code-only digest could not tell `make(1)` from `make(2)`, nor `lambda x, n=1` from `lambda x, n=2`.
   A function with neither captures nor defaults still digests exactly as its code object, so nothing else changed digest.
   Cycles — a recursive inner function closes over itself, or a function is reachable from its own defaults — fold in a marker naming how far back up the walk the target sits, guarded by a per-thread dict of the functions currently being walked and their depths (relative, so a cycle digests the same wherever it is met — a constant marker would collide `a -> b -> a` with `c -> d -> d`);
@@ -154,11 +161,14 @@ Values and calls are stored separately so call records are queryable without des
   bound methods are their own arm (`types.MethodType`: receiver + underlying function, so `obj1.m` and `obj2.m` differ;
   a class receiver is named via `digest_class`), so there is no second entry point — `call._code_digest` reduces a bound method to `__func__` (the receiver already arrives as a call argument) and goes through `digest`;
   `digest_class(cls)` names a class `module.QualName` and is shared by the built-in-`type` arm and the `__class__` cell.
-  `_new_hash(salt)` is the one place a salted running hash is started.
+  `_new_hash(salt)` is the one place a salted running hash is started, apart from `_pandas.digest_pandas`, which mirrors it.
   NaN floats are packed via `struct.pack` (sign-preserving) instead of going through `hash()`;
   complex NaNs use `<dd`.
 - `_attrs.py` — Internal `is_attrs_instance` / `field_items` helpers gating optional `attrs` support;
   safe to import without `attrs` installed.
+- `_pandas.py` — Internal digest arms for pandas objects: `is_pandas` gates the one pandas case in `_digest_bytes`,
+  `digest_pandas` digests DataFrame / Series / Index / MultiIndex / `pd.NA` with the same salt and hex return as `_digest_bytes`, and `needs_element_digests` / `element_digests` handle object columns (#1004);
+  `digest_pandas` and `element_digests` take `digest._digest_bytes` as an argument, since `digest.py` imports the module.
 - `call.py` — `Call` dataclass (`from_call`, `to_lookup_key`, `.stash(values)→DigestedCall` writes args+result to value storage / `.digest()→DigestedCall` digests without saving);
   `DigestedCall` (storage representation: arguments and result are `Digest` keys;
   `result` is `Digest | None` — `None` marks a record whose result is still pending, i.e. an admission by `Cache.prepare` that has not yet been committed;

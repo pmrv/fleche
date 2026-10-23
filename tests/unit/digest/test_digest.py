@@ -608,6 +608,186 @@ def test_pandas_index_hashes_by_content():
     assert digest(i1) != digest(i_named)
 
 
+# The pandas containers whose arms digest object values element by element.
+OBJECT_KINDS = ("series", "index", "frame")
+
+
+def _pandas_of(kind, values):
+    """Wrap *values* in the pandas container *kind*, so one test covers every arm.
+
+    ``"series"`` and ``"index"`` hold *values* with object dtype, ``"frame"`` is a
+    DataFrame whose single column does, and ``"categorical"`` is a Series of a
+    Categorical over *values*, whose categories then have object dtype.
+    """
+    import pandas as pd
+
+    match kind:
+        case "series":
+            return pd.Series(values, dtype=object)
+        case "index":
+            return pd.Index(values, dtype=object)
+        case "frame":
+            return pd.DataFrame({"c": pd.Series(values, dtype=object)})
+        case "categorical":
+            return pd.Series(pd.Categorical(values))
+    raise ValueError(f"unknown pandas kind {kind!r}")
+
+
+@pytest.mark.parametrize("kind", OBJECT_KINDS)
+def test_pandas_object_column_of_arrays_digests_by_content(kind):
+    """Issue #1004: pandas' default digester raised TypeError on a column of arrays.
+
+    Now equal arrays give equal digests, and changing the values of one array
+    changes the digest.
+    """
+    arrays = [np.zeros(3), np.ones(3)]
+    changed = [np.zeros(3), np.full(3, 2.0)]
+
+    assert digest(_pandas_of(kind, arrays)) == digest(_pandas_of(kind, [a.copy() for a in arrays]))
+    assert digest(_pandas_of(kind, arrays)) != digest(_pandas_of(kind, changed))
+
+
+def test_pandas_object_column_of_large_arrays_digests_all_elements():
+    """Regression against pandas' default digester, which hashes objects through str().
+
+    str() of a large array elides its middle, so a change there must still change
+    the digest.
+    """
+    big = np.zeros(10_000)
+    changed = big.copy()
+    changed[5_000] = 1.0
+
+    assert digest(_pandas_of("frame", [big])) != digest(_pandas_of("frame", [changed]))
+
+
+@pytest.mark.parametrize("kind", OBJECT_KINDS)
+@pytest.mark.parametrize(
+    "values",
+    [[[1, 2], [3]], [{"k": 1}, {"k": 2}], [{1, 2}, {3}]],
+    ids=["lists", "dicts", "sets"],
+)
+def test_pandas_object_column_of_unhashables(kind, values):
+    """Unhashable elements made pandas' default digester raise; they digest by content now.
+
+    Equal values agree and the same values in another order differ.
+    """
+    assert digest(_pandas_of(kind, values)) == digest(_pandas_of(kind, values))
+    assert digest(_pandas_of(kind, values)) != digest(_pandas_of(kind, values[::-1]))
+
+
+@pytest.mark.parametrize("kind", OBJECT_KINDS + ("categorical",))
+def test_pandas_mixed_object_values_do_not_collide_through_str(kind):
+    """``1`` and ``"1"`` share a str(); pandas' default digester hashed both as ``"1"``."""
+    assert digest(_pandas_of(kind, ["a", 1])) != digest(_pandas_of(kind, ["a", "1"]))
+    assert digest(_pandas_of(kind, ["a", 1])) == digest(_pandas_of(kind, ["a", 1]))
+
+
+def test_pandas_bytes_object_column_does_not_collide_with_str():
+    """pandas' default digester hashed ``b"a"`` like ``"a"``."""
+    assert digest(_pandas_of("series", [b"a"])) != digest(_pandas_of("series", ["a"]))
+
+
+def test_pandas_object_column_with_pd_na():
+    """``pd.NA`` digests stably, and differently from ``None``."""
+    import pandas as pd
+
+    assert digest(_pandas_of("series", [1, pd.NA])) == digest(_pandas_of("series", [1, pd.NA]))
+    assert digest(_pandas_of("series", [1, pd.NA])) != digest(_pandas_of("series", [1, None]))
+
+
+@pytest.mark.parametrize("kind", OBJECT_KINDS)
+def test_pandas_object_column_of_unknown_objects_is_indigestible(kind):
+    """Strict: pandas' default digester would key object() on its repr, i.e. its address."""
+    with pytest.raises(Indigestible):
+        digest(_pandas_of(kind, [object(), object()]))
+
+
+@pytest.mark.parametrize("kind", OBJECT_KINDS)
+def test_pandas_object_column_digests_like_the_column_of_its_digests(kind):
+    """Merkle property, as for a list: replacing each element by its Digest keeps the digest."""
+    arrays = [np.zeros(2), np.ones(2)]
+    as_digests = [digest(a) for a in arrays]
+
+    assert digest(arrays) == digest(as_digests)
+    assert digest(_pandas_of(kind, arrays)) == digest(_pandas_of(kind, as_digests))
+
+
+def test_pandas_dataframe_object_columns_with_repeated_labels():
+    """Columns are swapped for their digests by position, so repeated labels still work."""
+    import pandas as pd
+
+    a = pd.DataFrame([[np.zeros(1), np.ones(1)]], columns=["c", "c"])
+    b = pd.DataFrame([[np.ones(1), np.zeros(1)]], columns=["c", "c"])
+
+    assert digest(a) != digest(b)
+
+
+def test_pandas_dataframe_digest_leaves_the_frame_unchanged():
+    """The digest columns go into a shallow copy, never into the frame passed in."""
+    import pandas as pd
+
+    arrays = [np.zeros(1), np.ones(1)]
+    frame = pd.DataFrame([arrays], columns=["c", "d"])
+
+    digest(frame)
+
+    assert frame.iloc[0, 0] is arrays[0]
+    assert frame.iloc[0, 1] is arrays[1]
+
+
+def _multiindex(tuples, **kwargs):
+    """A MultiIndex over *tuples*; *kwargs* go to ``MultiIndex.from_tuples``."""
+    import pandas as pd
+
+    return pd.MultiIndex.from_tuples(tuples, **kwargs)
+
+
+def test_pandas_multiindex_object_level_does_not_collide_through_str():
+    """pandas hashes a MultiIndex level by level, through str() for object levels."""
+    a = _multiindex([("a", 1), ("b", "x")])
+    b = _multiindex([("a", "1"), ("b", "x")])
+
+    assert digest(a) != digest(b)
+    assert digest(a) == digest(_multiindex([("a", 1), ("b", "x")]))
+
+
+def test_pandas_multiindex_level_names_matter():
+    """pandas ignores level names, and a MultiIndex's .name is None."""
+    assert digest(_multiindex([("a", 1)], names=["p", "q"])) != digest(
+        _multiindex([("a", 1)], names=["p", "r"])
+    )
+
+
+def test_pandas_multiindex_ignores_unused_level_entries():
+    """Equal slices digest equal, whatever their ``.levels`` still hold from the full index."""
+    full_a = _multiindex([("a", 1), ("b", 2)])
+    full_b = _multiindex([("a", 1), ("c", 3)])
+
+    assert digest(full_a[:1]) == digest(full_b[:1])
+
+
+def test_pandas_multiindex_order_and_level_order_matter():
+    """Reordering the rows, or swapping values between levels, changes the digest."""
+    assert digest(_multiindex([("a", 1), ("b", 2)])) != digest(_multiindex([("b", 2), ("a", 1)]))
+    assert digest(_multiindex([("a", "b")])) != digest(_multiindex([("b", "a")]))
+
+
+def test_pandas_multiindex_of_unknown_objects_is_indigestible():
+    """Strict, as for a flat Index: an object level of unknown objects raises."""
+    with pytest.raises(Indigestible):
+        digest(_multiindex([(object(), 1)]))
+
+
+def test_pandas_dataframe_with_multiindex_rows():
+    """A frame folds in its MultiIndex through the MultiIndex arm, object levels included."""
+    import pandas as pd
+
+    a = pd.DataFrame({"x": [1.0, 2.0]}, index=_multiindex([("a", 1), ("b", "x")]))
+    b = pd.DataFrame({"x": [1.0, 2.0]}, index=_multiindex([("a", "1"), ("b", "x")]))
+
+    assert digest(a) != digest(b)
+
+
 def test_lambda_can_be_digested():
     """Test that lambda functions can be digested without raising Indigestible."""
     f = lambda x: x + 1
