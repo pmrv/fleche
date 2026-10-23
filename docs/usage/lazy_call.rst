@@ -5,7 +5,7 @@ In many caching scenarios, function results or arguments can be large objects (e
 
 Fleche avoids this by returning **lazy call objects** from ``cache().load()`` and from ``query()`` (both ``cache().query()`` and the decorator's ``func.query()``) by default. Arguments and results are only fetched from the underlying storage when you actually access them.
 
-This does *not* apply to the decorator's ``func.load(*args, **kwargs)`` helper (see :doc:`helpers`) — that one resolves the value immediately and returns the plain result, equivalent to ``cache().load(key).result``.
+This does *not* apply to the decorator's ``func.load(*args, **kwargs)`` helper (see :doc:`helpers`).
 
 What is a LazyCall?
 -------------------
