@@ -312,11 +312,11 @@ def _draw_number_tree(node, prefix=""):
 
 
 def test_number_tree_matches_its_drawings():
-    from fleche import digest as digest_module
+    from fleche import _numbers
 
-    lines = [digest_module._NUMBER_TREE.type.__name__]
-    lines += _draw_number_tree(digest_module._NUMBER_TREE)
-    source = inspect.getsource(digest_module)
+    lines = [_numbers.NUMBER_TREE.type.__name__]
+    lines += _draw_number_tree(_numbers.NUMBER_TREE)
+    source = inspect.getsource(_numbers)
     assert "\n".join("#   " + line for line in lines) in source
     docs = (
         pathlib.Path(__file__).parents[3] / "docs/digests/digest_equivalence.rst"
@@ -457,9 +457,11 @@ def test_huge_longdouble_digests_as_int_whatever_the_str_limit(max_str_digits):
 
 
 def test_integral_ratio_has_one_encoding():
-    from fleche.digest import _encode_ratio
+    from fleche._numbers import _encode_ratio
+    from fleche.digest import _digest_bytes
 
-    assert _encode_ratio(Fraction)(Fraction(2**200)).decode() == digest(2**200)
+    encoded = _encode_ratio(Fraction)(Fraction(2**200), _digest_bytes)
+    assert encoded.decode() == digest(2**200)
 
 
 def test_decimal_with_large_exponent_digests_quickly():

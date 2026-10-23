@@ -131,18 +131,7 @@ Values and calls are stored separately so call records are queryable without des
   `Indigestible`;
   `DIGEST_LENGTH=64`.
   Built-in types are inline `match` cases in `_digest_bytes`, ordered roughly hot-path first: `int` (`bool ⊂ int`) → `Digest` (returns `value.encode()` so `digest(Digest("abc")) == "abc"`) → `str` → `None` → `datetime.timedelta` / `np.timedelta64` (must precede `Number`, as numpy registers `timedelta64` `Integral`; refused with `Indigestible` until a digest honours their cross-type, cross-unit `==` — the old `total_seconds()` float merged unequal `pd.Timedelta` nanoseconds; `datetime.timezone` digests its offset as exact microseconds instead) → `Number` (`float`, `complex`, `Decimal`, `Fraction`, plus `np.integer`/`np.floating` which satisfy `numbers.Number` automatically;
-  `_digest_number` walks `_NUMBER_TREE` (`int` → `float` → {`complex`, `Fraction` → `Decimal`}; a complex with zero imaginary part first drops to its real part) from the root down to the value's own type and digests it as the first type whose converter holds it exactly, so equal values digest alike unless they sit on different branches below that type (none do in the current tree);
-  foreign types attach via `_NUMBER_ABCS` (`Integral` → `int`, `Real` → `Fraction`, `Complex` → `complex`), and a value nothing on its path holds raises `Indigestible`.
-  Converters must refuse inexact conversions themselves rather than rely on a trailing `==`: numpy compares `Fraction` to `np.longdouble` by rounding the `Fraction` to double, and an `np.longdouble` to an `int` through `str` (subject to `sys.int_max_str_digits`).
-  So `_as_int` decides on `as_integer_ratio` / `numerator`+`denominator` (also avoiding a quadratic `int()` round trip for `Decimal("1e1000000")`), falling back to `math.trunc` for a foreign `Real`, which promises `__trunc__` but neither `__int__` nor `as_integer_ratio`;
-  `_encode_ratio` hands integral ratios back to the `int` path so an integer has one encoding.
-  Node encoders, the NaN branch (one `NaN` salt for every type, so equal bits meet across types) and the `Decimal`-NaN arm salt via `_salted` (`__fleche_<name>__`), not the bare type name the generic arms use, so a user type sharing the name (a `NamedTuple` called `Fraction`) cannot collide.
-  `_is_nan` skips `Rational`s and treats `OverflowError` as not-NaN, since `cmath.isnan` converts to float and `Fraction(10**400)` overflows it.
-  The promise, worded in `digest_equivalence.rst`: non-NaN numbers digest equal iff they hold the same exact value — numpy's `==` (NEP 50 down-casts, `Fraction` rounding) is not the reference.
-  `int` subclasses (`bool`, `IntEnum`) never reach the tree: the `int` arm catches them under their own type name, unlike `float` subclasses, which downcast.
-  The tree is drawn in the code comment and in `docs/digests/digest_equivalence.rst`; `test_number_tree_matches_its_drawings` keeps all three in sync.
-  NaN keeps `struct.pack`.
-  Equal-value results of different numeric types therefore share one value-storage entry, and whichever saved last wins the return type — intended, not a bug.
+  handed to `_numbers.digest_number(value, _digest_bytes)`, see `_numbers.py` below, and `Indigestible` when it returns `None`;
   This replaced `hash(value)`, a lossy encoding under which distinct numbers collided) → `bytes` → `np.ndarray` (dtype + shape + `tobytes`;
   structured dtypes instead digest each field name + field view recursively, because `dtype.str` is only `|V<itemsize>` and padding bytes are uninitialised;
   other `dtype.hasobject` arrays digest every element of `ravel().tolist()` because their bytes are PyObject pointers) → `np.bool_` (delegates to `digest(bool(value))`, because `np.bool_ ∉ Number` since numpy 1.20) → pandas (`case _ if _pandas.is_pandas(value)`, which returns `_pandas.digest_pandas(value, _digest_bytes)`: `pd.DataFrame` / `pd.Series` / `pd.Index` / `pd.NA`;
@@ -172,9 +161,21 @@ Values and calls are stored separately so call records are queryable without des
   bound methods are their own arm (`types.MethodType`: receiver + underlying function, so `obj1.m` and `obj2.m` differ;
   a class receiver is named via `digest_class`), so there is no second entry point — `call._code_digest` reduces a bound method to `__func__` (the receiver already arrives as a call argument) and goes through `digest`;
   `digest_class(cls)` names a class `module.QualName` and is shared by the built-in-`type` arm and the `__class__` cell.
-  `_new_hash(salt)` is the one place a salted running hash is started, apart from `_pandas.digest_pandas`, which mirrors it.
-  NaN floats are packed via `struct.pack` (sign-preserving) instead of going through `hash()`;
-  complex NaNs use `<dd`.
+  `_new_hash(salt)` is the one place a salted running hash is started, apart from `_pandas.digest_pandas` and `_numbers._salted`, which mirror it.
+- `_numbers.py` — the number digest arm, kept out of `digest.py`;
+  `digest_bytes` is passed in because `digest.py` imports it, and it hashes with `hashlib` directly (`_salted`), so the #440 raw-bytes switch must touch it too.
+  `digest_number` walks `NUMBER_TREE` (`int` → `float` → {`complex`, `Fraction` → `Decimal`}; a complex with zero imaginary part first drops to its real part) from the root down to the value's own type and digests it as the first type whose converter holds it exactly, so equal values digest alike unless they sit on different branches below that type (none do in the current tree);
+  foreign types attach via `_NUMBER_ABCS` (`Integral` → `int`, `Real` → `Fraction`, `Complex` → `complex`), and a value nothing on its path holds gets `None`, which `digest.py` raises as `Indigestible`.
+  Converters must refuse inexact conversions themselves rather than rely on a trailing `==`: numpy compares `Fraction` to `np.longdouble` by rounding the `Fraction` to double, and an `np.longdouble` to an `int` through `str` (subject to `sys.int_max_str_digits`).
+  So `_as_int` decides on `as_integer_ratio` / `numerator`+`denominator` (also avoiding a quadratic `int()` round trip for `Decimal("1e1000000")`), falling back to `math.trunc` for a foreign `Real`, which promises `__trunc__` but neither `__int__` nor `as_integer_ratio`;
+  `_encode_ratio` hands integral ratios back to the `int` path so an integer has one encoding.
+  Node encoders, the NaN branch (one `NaN` salt for every type, so equal bits meet across types) and the `Decimal`-NaN arm salt via `_salted` (`__fleche_<name>__`), not the bare type name the generic arms use, so a user type sharing the name (a `NamedTuple` called `Fraction`) cannot collide.
+  `_is_nan` skips `Rational`s and treats `OverflowError` as not-NaN, since `cmath.isnan` converts to float and `Fraction(10**400)` overflows it.
+  The promise, worded in `digest_equivalence.rst`: non-NaN numbers digest equal iff they hold the same exact value — numpy's `==` (NEP 50 down-casts, `Fraction` rounding) is not the reference.
+  `int` subclasses (`bool`, `IntEnum`) never reach the tree: the `int` arm catches them under their own type name, unlike `float` subclasses, which downcast.
+  The tree is drawn in the code comment and in `docs/digests/digest_equivalence.rst`; `test_number_tree_matches_its_drawings` keeps all three in sync.
+  NaNs are packed via `struct.pack` (sign-preserving, `<dd` for every `numbers.Complex`) instead of going through `hash()`.
+  Equal-value results of different numeric types share one value-storage entry, and whichever saved last wins the return type — intended, not a bug.
 - `_attrs.py` — Internal `is_attrs_instance` / `field_items` helpers gating optional `attrs` support;
   safe to import without `attrs` installed.
 - `_pandas.py` — Internal digest arms for pandas objects: `is_pandas` gates the one pandas case in `_digest_bytes`,
