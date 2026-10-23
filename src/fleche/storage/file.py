@@ -47,7 +47,7 @@ class FileStorage(StorageBackend):
         return self.root / key
 
     def list(self) -> Iterable[Digest]:
-        # ".lock" files linger in caches written by fleche < 2.1; dot-files
+        # ".lock" files linger in caches written by fleche < 0.22; dot-files
         # cover in-flight atomic-write temp files (and are good hygiene).
         self.root.mkdir(parents=True, exist_ok=True)
         return (

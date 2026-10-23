@@ -194,8 +194,11 @@ def _configure_sqlite_pragmas(engine, db_path: Path | None) -> None:
         return
 
     # WAL mode requires a real file; skip it for in-memory databases where it
-    # is a silent no-op but adds an unnecessary round-trip.
-    is_memory = str(engine.url).endswith(":memory:")
+    # is a silent no-op but adds an unnecessary round-trip.  Ask the parsed
+    # URL rather than ``str(url)``: SQLAlchemy percent-encodes the colons of
+    # ``:memory:`` when rendering, so a string match never fires.  ``None``
+    # is the bare ``sqlite://`` form, which is in-memory too.
+    is_memory = engine.url.database in (None, ":memory:")
 
     @event.listens_for(engine, "connect")
     def _set_sqlite_pragma(dbapi_connection, connection_record):

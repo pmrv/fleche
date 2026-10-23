@@ -34,9 +34,9 @@ jobs:
           # followed by whitespace, punctuation, or end-of-line, so a model is
           # selected with a space -- '@claude [haiku|sonnet|opus]'. This step only
           # maps that alias onto a --model arg; bare or unrecognised mentions fall
-          # back to sonnet. (A glued '@claude[model]' would not trigger the action.)
+          # back to opus. (A glued '@claude[model]' would not trigger the action.)
           body="${COMMENT_BODY}${REVIEW_BODY}"
-          model=sonnet
+          model=opus
           if [[ "$body" =~ @claude[[:space:]]*\[([a-zA-Z]+)\] ]]; then
             choice="${BASH_REMATCH[1],,}"
             case "$choice" in
@@ -53,6 +53,6 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          claude_args: '--model ${{ steps.model.outputs.model }} --effort high --allowedTools WebFetch Bash(pip:*) Bash(python:*) Bash(pytest:*) Bash(git:*) Bash(gh pr:*)'
+          claude_args: '--model ${{ steps.model.outputs.model }} --effort high --allowedTools WebFetch Bash(pip:*) Bash(python:*) Bash(pytest:*) Bash(ty:*) Bash(uv:*) Bash(jupyter:*) Bash(git:*) Bash(gh pr:*) Bash(gh run:*)'
           additional_permissions: |
             actions: read

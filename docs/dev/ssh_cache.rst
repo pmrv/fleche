@@ -47,9 +47,13 @@ signing keys (``secret_key``) as hex strings, and the SQL backend's
 ``_server_info()`` therefore walks the config through
 ``_redact_config()`` before putting it on the wire: ``secret_key``
 values are replaced with ``"<redacted>"`` and URL passwords are masked
-to ``***``.  This matters because the client's DEBUG-level RPC tracing
-logs the full response payload — without the redactor, signing keys
-would land in any DEBUG log file by default.
+to ``***``.  This matters because ``info()``'s return value is
+ordinary user-visible data — a caller that prints or logs it (or the
+:ref:`info RPC <ssh-cache-info>` diagnostics flow) would otherwise leak
+credentials.  The client's own DEBUG-level RPC tracing (see *Client
+side* below) only ever logs the method name and an ``ok``/``err`` tag,
+never the response payload, so it is not the exposure path the
+redaction guards against.
 
 If you add a new storage type that round-trips credentials through
 ``cache_to_config``, extend ``_SENSITIVE_CONFIG_KEYS`` to cover the new
@@ -277,11 +281,17 @@ via :py:mod:`atexit` (the client's hook is registered on first
    :meth:`~fleche.remote.SshCache.info` and the
    :attr:`~fleche.remote.SshCache.read_only` property are not free: the
    first access fetches the server info dict over the wire (and drives
-   the version handshake).  The result is cached for the lifetime of
-   the connection, so only the first access pays; but a user poking
-   ``sc.read_only`` in a REPL should know it is a network round-trip,
-   not a local attribute.  :meth:`~fleche.remote.SshCache.reconnect`
-   invalidates the cache, so the next access re-fetches.
+   the version handshake). They differ after that first access, though:
+   ``read_only`` goes through the cached info dict, so only its first
+   read pays for a round-trip — later reads reuse the cached value.
+   ``info()`` itself defaults to ``refresh=True``, so it issues a fresh
+   RPC on **every** call unless you pass ``info(refresh=False)`` to
+   reuse the cached copy. A user poking ``sc.read_only`` or ``sc.info()``
+   in a REPL should know both are network round-trips at least once,
+   and ``info()`` by default is one every time.
+   :meth:`~fleche.remote.SshCache.reconnect` invalidates the cache, so
+   the next ``read_only`` access (or an ``info(refresh=False)`` call)
+   re-fetches.
 
 There is no automatic reconnect.  If the SSH subprocess dies — network
 hiccup, server reboot, idle timeout — every subsequent op raises

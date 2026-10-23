@@ -5,6 +5,8 @@ Digests as Arguments
 
 This allows for efficient chaining of cached functions where intermediate results can be referenced by their value digest rather than held in memory.
 
+This page also covers the opposite direction — looking up a value already in the cache by hand — in :ref:`Looking Up a Value Directly <digests-as-args-lookup>` below.
+
 Usage
 -----
 
@@ -40,7 +42,9 @@ Behavior
 - **Automatic Expansion**: Only immediate ``Digest`` arguments are expanded.
 - **Non-recursive**: If you pass a list of digests like ``[D(a), D(b)]``, the list will be passed as-is to the function, and the digests inside it will **not** be expanded.
 - **Missing Digests**: If a ``Digest`` is passed but its value cannot be found in the current cache, a ``KeyError`` will be raised.
-- **Short Digests**: If the underlying storage supports short-hand digest expansion, you can pass a short digest (at least 4 characters) to ``D()``, and it will be expanded to the full value.
+- **Short Digests**: If the underlying storage supports short-hand digest expansion, ``D()`` accepts a short digest hex string (see ``D``'s docstring below for the exact rule) and expands it to the full value.
+
+.. _digests-as-args-lookup:
 
 Looking Up a Value Directly
 ----------------------------
@@ -65,17 +69,19 @@ storage without importing ``fleche.digest.digest`` yourself.
      ...     result = compute(21)                # populates the cache
      ...     assert cache().load_value(D(result)) == result
 
-- **You have a digest hex string** (possibly shortened). ``D()`` recognises hex
-  strings and wraps them into a :class:`~fleche.digest.Digest` instead of hashing
-  them; call :meth:`~fleche.digest.Digest.expand` to resolve a short prefix back to
-  the full digest before loading it:
+- **You have a digest hex string** (possibly shortened; see ``D``'s docstring
+  below for the exact rule). ``D()`` wraps it into a
+  :class:`~fleche.digest.Digest` instead of hashing it; call
+  :meth:`~fleche.digest.Digest.expand` to resolve a short prefix back to the
+  full digest before loading it:
 
   .. code-block:: pycon
 
      >>> with cache("memory"):
      ...     result = compute(21)
      ...     short = D(result).shrink()          # shortest unambiguous prefix
-     ...     assert cache().load_value(D(short).expand()) == result
+     ...     full = short.expand()               # Digest itself carries expand()/shrink()
+     ...     assert cache().load_value(full) == result
 
 If you instead have the *original arguments* of a decorated call rather than its
 result, prefer ``func.load(*args, **kwargs)`` (see :doc:`/usage/helpers`) — it

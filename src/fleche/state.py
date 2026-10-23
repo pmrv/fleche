@@ -1,7 +1,7 @@
 from contextlib import AbstractContextManager, contextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
-from typing import overload, Any, Callable, Iterator, TypeVar
+from typing import overload, Any, Callable, Generator, TypeVar
 
 from . import caches, config, metadata
 
@@ -73,7 +73,7 @@ def _sticky_set(var: ContextVar, value: object) -> _StickyContext:
 
 
 @contextmanager
-def _hard_set(pairs: list[tuple[ContextVar, object]]) -> Iterator[None]:
+def _hard_set(pairs: list[tuple[ContextVar, object]]) -> Generator[None, None, None]:
     """Set every ``ContextVar`` in *pairs* immediately; reset in reverse order on exit.
 
     Unlike :func:`_sticky_set`, this is a hard scope: the values are always reset when

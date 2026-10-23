@@ -1,0 +1,57 @@
+name: reflow agent docs
+
+# Keeps AGENTS.md and agents/*.md at one sentence per line (see the
+# Conventions section of agents/DEVELOPING.md). On a same-repo PR the reflowed
+# files are committed back to the branch; a fork PR cannot be pushed to, so
+# there the job fails and asks the author to run the script.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'AGENTS.md'
+      - 'agents/*.md'
+      - '.github/workflows/reflow_agent_docs.py'
+      - '.github/workflows/reflow-agent-docs.yml'
+
+concurrency:
+  group: reflow-agent-docs-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  reflow:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Reflow (fork PR, check only)
+        if: env.SAME_REPO != 'true'
+        run: |
+          python .github/workflows/reflow_agent_docs.py --check || {
+            echo "::error::Agent docs need reflowing; run 'python .github/workflows/reflow_agent_docs.py' and push."
+            exit 1
+          }
+      - name: Reflow
+        if: env.SAME_REPO == 'true'
+        run: python .github/workflows/reflow_agent_docs.py
+      - name: Commit and push
+        if: env.SAME_REPO == 'true'
+        run: |
+          if git diff --quiet; then
+            echo "Agent docs already one sentence per line."
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -am "docs(agents): reflow to one sentence per line"
+          git push origin "HEAD:refs/heads/$HEAD_REF"

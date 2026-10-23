@@ -70,9 +70,10 @@ following **lowercase** identifiers:
 
 ``"sql"``
     SQL database via SQLAlchemy (:class:`~fleche.storage.Sql`).
-    *Call storage only.*  Required: ``url`` (SQLAlchemy connection URL,
-    e.g. ``"sqlite:///~/.fleche/calls.db"``).
-    Optional: ``echo`` (bool, default ``False``) — log SQL statements.
+    *Call storage only.*  Optional: ``url`` (SQLAlchemy connection URL,
+    e.g. ``"sqlite:///~/.fleche/calls.db"``; defaults to the non-persistent
+    ``"sqlite:///:memory:"`` if omitted), ``echo`` (bool, default
+    ``False``) — log SQL statements.
 
 Example fleche.toml
 -------------------
@@ -99,7 +100,8 @@ Example fleche.toml
     calls.type = "sql"
     calls.url = "sqlite:///~/.fleche/calls.db"
 
-    # SizeLimitedCache — evicts oldest entries once 100 entries are stored
+    # SizeLimitedCache — evicts a uniformly-random entry once 100 entries
+    # are stored (override _pick_eviction_target for LRU/LFU/etc.)
     [limited]
     values.type = "memory"
     calls.type = "memory"

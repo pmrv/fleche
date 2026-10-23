@@ -40,7 +40,19 @@ Returns ``True`` if the result for the given call is already present in the cach
 ``.query(*args, metadata={}, **kwargs)``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Returns a :class:`~fleche.query.QueryIterator` over matching cached calls from the active cache. Any argument passed as ``None`` acts as a wildcard, matching any stored value for that parameter. The ``metadata`` keyword argument accepts a dictionary of metadata tags to further filter results (e.g., ``metadata={"tags": {"project": "alpha"}}``). The iterator supports chainable methods such as ``.filter()``, ``.table()``, ``.count()``, ``.results()``, ``.evict()``, and more.
+Returns a :class:`~fleche.query.QueryIterator` over matching cached calls from the active cache. Any argument passed as ``None`` acts as a wildcard, matching any stored value for that parameter. The ``metadata`` keyword argument accepts a dictionary of metadata tags to further filter results (e.g., ``metadata={"tags": {"project": "alpha"}}``). The iterator supports chainable methods such as ``.filter()``, ``.sorted()``, and ``.take()``, plus terminal methods such as ``.table()``, ``.count()``, ``.results()``, and ``.evict()`` that consume it — see :doc:`query` for which is which.
+
+.. warning::
+
+   Unlike ``.call()``/``.digest()``, ``.query()`` does **not** null out
+   ``version``/``module`` when ``hash_version``/``hash_module`` is ``False`` —
+   it always filters on the function's real values. A function decorated with
+   either flag disabled therefore caches normally but returns **zero** query
+   matches, silently: the filter cannot match a record that deliberately
+   stores ``None``. Avoid combining ``hash_version=False`` or
+   ``hash_module=False`` with ``.query()`` until `issue #916
+   <https://github.com/pmrv/fleche/issues/916>`_ is fixed. ``hash_code`` is
+   unaffected.
 
 .. warning::
 
@@ -142,27 +154,10 @@ Per-Function Static Caching
 
 To keep the cache-hit hot path fast, ``@fleche`` computes a
 :class:`~fleche.call.FunctionProfile` the first time it sees a given function
-and caches it for the lifetime of the process.  A profile captures all static
-per-function metadata in one frozen dataclass:
-
-- ``inspect.signature(func)`` — used for argument binding
-- the digest of ``func.__code__`` together with the state bound alongside it —
-  the variables captured from enclosing scopes and the argument defaults
-  (included in cache keys only when ``hash_code=True``; the default is
-  ``False``, so closures out of one factory share a key unless it is enabled)
-- ``(qualname, module, version)`` extracted via
-  ``VersionInfo`` — ``module`` and ``version``
-  are included in cache keys by default (``hash_module=True``,
-  ``hash_version=True``); set either flag to ``False`` to exclude the
-  corresponding field from the key
-- the sets of :class:`~fleche.call.Ignored`- and
-  :class:`~fleche.call.Required`-annotated argument names
-
-All fields are stored in a single frozen :class:`~fleche.call.FunctionProfile`
-dataclass, backed by one ``_profile`` LRU cache (max 1000 entries) keyed on
-the callable's identity.  Subsequent calls re-use the cached profile instead
-of re-introspecting on every invocation.  The cache is process-scoped and has
-no effect on the persistent fleche backends.
+and re-uses it for the lifetime of the process instead of re-introspecting on
+every call. This cache is process-scoped and has no effect on the persistent
+fleche backends. See :doc:`/dev/function_profile` for the internals, including
+what ``hash_code=True`` folds into the key.
 
 .. warning::
 
@@ -199,7 +194,7 @@ Usage with Decorated Methods
 .. note::
 
    When ``@fleche`` is applied to a method, the helper methods (`.call`, `.digest`, `.query`,
-   `.load`, `.contains`, `.rerun`) do **not** automatically bind ``self``. Python's bound method
+   `.load`, `.contains`, `.rerun`, `.bind`) do **not** automatically bind ``self``. Python's bound method
    objects delegate custom attribute lookups to the underlying function, so
    ``obj.method.query`` and ``MyClass.method.query`` return the same helper function.
    However, this helper is a plain function — not a bound method — so ``obj`` is not

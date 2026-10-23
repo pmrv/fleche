@@ -251,7 +251,12 @@ def randomly_digest_subvalues(value, data):
         return digest(value)
 
     # Otherwise, recurse into the structure
-    if isinstance(value, list):
+    if isinstance(value, np.ndarray) and value.dtype == object:
+        out = np.empty(value.shape, dtype=object)
+        for idx, v in np.ndenumerate(value):
+            out[idx] = randomly_digest_subvalues(v, data)
+        return out
+    elif isinstance(value, list):
         return [randomly_digest_subvalues(v, data) for v in value]
     elif isinstance(value, tuple) and hasattr(value, "_fields") and hasattr(value, "_field_defaults"):
         # namedtuple: reconstruct preserving the concrete type, since digest() includes type.__name__
@@ -402,6 +407,153 @@ def test_numpy_explicit_cases():
     assert digest(c) != digest(d)
 
 
+def test_numpy_object_array_digests_elements_not_pointers():
+    """Regression (#1004): object arrays were digested via tobytes(), i.e. by
+    PyObject address, so the digest changed per process and missed mutation."""
+    import subprocess
+    import sys
+
+    code = (
+        "import numpy as np; from fleche.digest import digest; "
+        "print(digest(np.array(['abc', 12345, None, (1, 2)], dtype=object)))"
+    )
+    runs = {
+        subprocess.run(
+            [sys.executable, "-c", code], capture_output=True, text=True, check=True
+        ).stdout
+        for _ in range(2)
+    }
+    assert len(runs) == 1
+
+    inner = [1]
+    arr = np.array([None, inner], dtype=object)
+    before = digest(arr)
+    inner.append(2)
+    assert digest(arr) != before
+
+    # Equal contents in distinct objects digest the same.
+    assert digest(np.array(["a" * 50, [1]], dtype=object)) == digest(
+        np.array(["a" * 50, [1]], dtype=object)
+    )
+
+
+def test_numpy_object_array_of_arrays():
+    """Object arrays holding arrays recurse into the ndarray arm, so a
+    difference deep inside one element is seen."""
+    a = np.empty(2, dtype=object)
+    b = np.empty(2, dtype=object)
+    big = np.arange(10_000)
+    a[0], a[1] = big, np.zeros(3)
+    b[0], b[1] = big.copy(), np.zeros(3)
+    assert digest(a) == digest(b)
+    b[0][5_000] = -1
+    assert digest(a) != digest(b)
+
+
+def test_numpy_object_array_shape_and_indigestible():
+    a = np.array(["a", "b", "c", "d"], dtype=object)
+    assert digest(a) != digest(a.reshape(2, 2))
+    with pytest.raises(Indigestible):
+        digest(np.array([object()], dtype=object))
+
+
+def _object_array(elements, shape):
+    # np.array(list_of_lists, dtype=object) would broadcast nested lists into
+    # extra dimensions; assign element by element instead.
+    out = np.empty(len(elements), dtype=object)
+    for i, e in enumerate(elements):
+        out[i] = e
+    return out.reshape(shape)
+
+
+@given(st.data())
+def test_numpy_object_array_merkle_property(data):
+    """Replacing any element (or sub-value of one) of an object array with its
+    digest leaves the array digest unchanged."""
+    elements = data.draw(st.lists(st_nested_values, min_size=1, max_size=6))
+    shape = data.draw(st.sampled_from([(len(elements),), (1, len(elements))]))
+    arr = _object_array(elements, shape)
+    assert digest(randomly_digest_subvalues(arr, data)) == digest(arr)
+
+
+@pytest.mark.parametrize(
+    "value, partially_digested_value",
+    (
+        (
+            _object_array(["a", [1, 2]], (2,)),
+            _object_array(["a", digest([1, 2])], (2,)),
+        ),
+        (
+            _object_array([Input(2), None, 3, "x"], (2, 2)),
+            _object_array([digest(Input(2)), None, 3, digest("x")], (2, 2)),
+        ),
+        (
+            # nested object array as an element, and inside a list
+            _object_array([_object_array([[1], "b"], (2,)), 0], (2,)),
+            _object_array([digest(_object_array([[1], "b"], (2,))), 0], (2,)),
+        ),
+        (
+            [_object_array([np.arange(3), "b"], (2,))],
+            [_object_array([digest(np.arange(3)), "b"], (2,))],
+        ),
+        (
+            [_object_array([np.arange(3), "b"], (2,))],
+            [digest(_object_array([np.arange(3), "b"], (2,)))],
+        ),
+        (
+            np.array([(1, [2])], dtype=[("x", "i8"), ("y", "O")]),
+            np.array([(1, digest([2]))], dtype=[("x", "i8"), ("y", "O")]),
+        ),
+    ),
+)
+def test_numpy_object_array_merkle_property_fixed(value, partially_digested_value):
+    assert digest(value) == digest(partially_digested_value)
+
+
+@pytest.mark.parametrize(
+    "a, b",
+    (
+        # same itemsize and bytes, different field names / types / order
+        (np.zeros(3, dtype=[("a", "i8"), ("b", "f8")]), np.zeros(3, dtype=[("x", "f8"), ("y", "i8")])),
+        (np.array([(1,)], dtype=[("count", "i8")]), np.array([(1,)], dtype=[("price", "i8")])),
+        (np.zeros(2, dtype=[("a", "i8")]), np.zeros(2, dtype=[("a", "f8")])),
+        (np.zeros(2, dtype=[("a", "<i8")]), np.zeros(2, dtype=[("a", ">i8")])),
+        (
+            np.zeros(2, dtype=[("p", [("x", "f4"), ("y", "f4")])]),
+            np.zeros(2, dtype=[("p", [("u", "f4"), ("v", "f4")])]),
+        ),
+    ),
+)
+def test_numpy_structured_dtypes_distinguished(a, b):
+    """Regression: structured dtypes digested as dtype.str (``|V<itemsize>``),
+    so field names, types and order were invisible."""
+    assert a.tobytes() == b.tobytes()
+    assert digest(a) != digest(b)
+
+
+def test_numpy_structured_array_ignores_padding():
+    """Padding bytes of aligned structured arrays are uninitialised; equal
+    fields must digest equal regardless."""
+    dt = np.dtype([("a", "u1"), ("b", "<i4")], align=True)
+    x = np.empty(4, dtype=dt)
+    y = np.zeros(4, dtype=dt)
+    for arr in (x, y):
+        arr["a"], arr["b"] = 1, 2
+    x.view(np.uint8).reshape(4, 8)[:, 1:4] = 0xAB  # dirty the padding
+    assert x.tobytes() != y.tobytes()
+    assert digest(x) == digest(y)
+
+
+def test_numpy_structured_array_with_object_field():
+    dt = [("x", "i8"), ("y", "O")]
+    inner = [1]
+    s = np.array([(1, inner)], dtype=dt)
+    before = digest(s)
+    assert before == digest(np.array([(1, [1])], dtype=dt))
+    inner.append(2)
+    assert digest(s) != before
+
+
 def test_pandas_dataframe_hashes_by_content():
     """Regression: DataFrame iter yields column names only, so falling through to
     the Iterable arm makes any two DataFrames with the same columns collide."""
@@ -456,6 +608,186 @@ def test_pandas_index_hashes_by_content():
     assert digest(i1) != digest(i_named)
 
 
+# The pandas containers whose arms digest object values element by element.
+OBJECT_KINDS = ("series", "index", "frame")
+
+
+def _pandas_of(kind, values):
+    """Wrap *values* in the pandas container *kind*, so one test covers every arm.
+
+    ``"series"`` and ``"index"`` hold *values* with object dtype, ``"frame"`` is a
+    DataFrame whose single column does, and ``"categorical"`` is a Series of a
+    Categorical over *values*, whose categories then have object dtype.
+    """
+    import pandas as pd
+
+    match kind:
+        case "series":
+            return pd.Series(values, dtype=object)
+        case "index":
+            return pd.Index(values, dtype=object)
+        case "frame":
+            return pd.DataFrame({"c": pd.Series(values, dtype=object)})
+        case "categorical":
+            return pd.Series(pd.Categorical(values))
+    raise ValueError(f"unknown pandas kind {kind!r}")
+
+
+@pytest.mark.parametrize("kind", OBJECT_KINDS)
+def test_pandas_object_column_of_arrays_digests_by_content(kind):
+    """Issue #1004: pandas' default digester raised TypeError on a column of arrays.
+
+    Now equal arrays give equal digests, and changing the values of one array
+    changes the digest.
+    """
+    arrays = [np.zeros(3), np.ones(3)]
+    changed = [np.zeros(3), np.full(3, 2.0)]
+
+    assert digest(_pandas_of(kind, arrays)) == digest(_pandas_of(kind, [a.copy() for a in arrays]))
+    assert digest(_pandas_of(kind, arrays)) != digest(_pandas_of(kind, changed))
+
+
+def test_pandas_object_column_of_large_arrays_digests_all_elements():
+    """Regression against pandas' default digester, which hashes objects through str().
+
+    str() of a large array elides its middle, so a change there must still change
+    the digest.
+    """
+    big = np.zeros(10_000)
+    changed = big.copy()
+    changed[5_000] = 1.0
+
+    assert digest(_pandas_of("frame", [big])) != digest(_pandas_of("frame", [changed]))
+
+
+@pytest.mark.parametrize("kind", OBJECT_KINDS)
+@pytest.mark.parametrize(
+    "values",
+    [[[1, 2], [3]], [{"k": 1}, {"k": 2}], [{1, 2}, {3}]],
+    ids=["lists", "dicts", "sets"],
+)
+def test_pandas_object_column_of_unhashables(kind, values):
+    """Unhashable elements made pandas' default digester raise; they digest by content now.
+
+    Equal values agree and the same values in another order differ.
+    """
+    assert digest(_pandas_of(kind, values)) == digest(_pandas_of(kind, values))
+    assert digest(_pandas_of(kind, values)) != digest(_pandas_of(kind, values[::-1]))
+
+
+@pytest.mark.parametrize("kind", OBJECT_KINDS + ("categorical",))
+def test_pandas_mixed_object_values_do_not_collide_through_str(kind):
+    """``1`` and ``"1"`` share a str(); pandas' default digester hashed both as ``"1"``."""
+    assert digest(_pandas_of(kind, ["a", 1])) != digest(_pandas_of(kind, ["a", "1"]))
+    assert digest(_pandas_of(kind, ["a", 1])) == digest(_pandas_of(kind, ["a", 1]))
+
+
+def test_pandas_bytes_object_column_does_not_collide_with_str():
+    """pandas' default digester hashed ``b"a"`` like ``"a"``."""
+    assert digest(_pandas_of("series", [b"a"])) != digest(_pandas_of("series", ["a"]))
+
+
+def test_pandas_object_column_with_pd_na():
+    """``pd.NA`` digests stably, and differently from ``None``."""
+    import pandas as pd
+
+    assert digest(_pandas_of("series", [1, pd.NA])) == digest(_pandas_of("series", [1, pd.NA]))
+    assert digest(_pandas_of("series", [1, pd.NA])) != digest(_pandas_of("series", [1, None]))
+
+
+@pytest.mark.parametrize("kind", OBJECT_KINDS)
+def test_pandas_object_column_of_unknown_objects_is_indigestible(kind):
+    """Strict: pandas' default digester would key object() on its repr, i.e. its address."""
+    with pytest.raises(Indigestible):
+        digest(_pandas_of(kind, [object(), object()]))
+
+
+@pytest.mark.parametrize("kind", OBJECT_KINDS)
+def test_pandas_object_column_digests_like_the_column_of_its_digests(kind):
+    """Merkle property, as for a list: replacing each element by its Digest keeps the digest."""
+    arrays = [np.zeros(2), np.ones(2)]
+    as_digests = [digest(a) for a in arrays]
+
+    assert digest(arrays) == digest(as_digests)
+    assert digest(_pandas_of(kind, arrays)) == digest(_pandas_of(kind, as_digests))
+
+
+def test_pandas_dataframe_object_columns_with_repeated_labels():
+    """Columns are swapped for their digests by position, so repeated labels still work."""
+    import pandas as pd
+
+    a = pd.DataFrame([[np.zeros(1), np.ones(1)]], columns=["c", "c"])
+    b = pd.DataFrame([[np.ones(1), np.zeros(1)]], columns=["c", "c"])
+
+    assert digest(a) != digest(b)
+
+
+def test_pandas_dataframe_digest_leaves_the_frame_unchanged():
+    """The digest columns go into a shallow copy, never into the frame passed in."""
+    import pandas as pd
+
+    arrays = [np.zeros(1), np.ones(1)]
+    frame = pd.DataFrame([arrays], columns=["c", "d"])
+
+    digest(frame)
+
+    assert frame.iloc[0, 0] is arrays[0]
+    assert frame.iloc[0, 1] is arrays[1]
+
+
+def _multiindex(tuples, **kwargs):
+    """A MultiIndex over *tuples*; *kwargs* go to ``MultiIndex.from_tuples``."""
+    import pandas as pd
+
+    return pd.MultiIndex.from_tuples(tuples, **kwargs)
+
+
+def test_pandas_multiindex_object_level_does_not_collide_through_str():
+    """pandas hashes a MultiIndex level by level, through str() for object levels."""
+    a = _multiindex([("a", 1), ("b", "x")])
+    b = _multiindex([("a", "1"), ("b", "x")])
+
+    assert digest(a) != digest(b)
+    assert digest(a) == digest(_multiindex([("a", 1), ("b", "x")]))
+
+
+def test_pandas_multiindex_level_names_matter():
+    """pandas ignores level names, and a MultiIndex's .name is None."""
+    assert digest(_multiindex([("a", 1)], names=["p", "q"])) != digest(
+        _multiindex([("a", 1)], names=["p", "r"])
+    )
+
+
+def test_pandas_multiindex_ignores_unused_level_entries():
+    """Equal slices digest equal, whatever their ``.levels`` still hold from the full index."""
+    full_a = _multiindex([("a", 1), ("b", 2)])
+    full_b = _multiindex([("a", 1), ("c", 3)])
+
+    assert digest(full_a[:1]) == digest(full_b[:1])
+
+
+def test_pandas_multiindex_order_and_level_order_matter():
+    """Reordering the rows, or swapping values between levels, changes the digest."""
+    assert digest(_multiindex([("a", 1), ("b", 2)])) != digest(_multiindex([("b", 2), ("a", 1)]))
+    assert digest(_multiindex([("a", "b")])) != digest(_multiindex([("b", "a")]))
+
+
+def test_pandas_multiindex_of_unknown_objects_is_indigestible():
+    """Strict, as for a flat Index: an object level of unknown objects raises."""
+    with pytest.raises(Indigestible):
+        digest(_multiindex([(object(), 1)]))
+
+
+def test_pandas_dataframe_with_multiindex_rows():
+    """A frame folds in its MultiIndex through the MultiIndex arm, object levels included."""
+    import pandas as pd
+
+    a = pd.DataFrame({"x": [1.0, 2.0]}, index=_multiindex([("a", 1), ("b", "x")]))
+    b = pd.DataFrame({"x": [1.0, 2.0]}, index=_multiindex([("a", "1"), ("b", "x")]))
+
+    assert digest(a) != digest(b)
+
+
 def test_nested_function_can_be_digested():
     """Test that functions nested inside other functions can be digested."""
     def outer():
@@ -482,7 +814,7 @@ def test_functions_with_different_bodies_have_different_digests():
     assert digest(f) != digest(g)
 
 
-# Module-scope counterpart for test_local_function_digests_same_as_module_level.
+# Module-scope counterpart for test_nesting_changes_a_function_digest.
 # No docstring: a docstring lands in co_consts and would make the code objects
 # differ for a reason that has nothing to do with scope.
 def _module_level_add_one(x):
@@ -829,11 +1161,6 @@ class _Counter:
         return self.start + by
 
 
-def test_bound_method_can_be_digested():
-    """``digest`` handles a bound method directly — no separate entry point."""
-    assert isinstance(digest(_Counter(1).advance), Digest)
-
-
 def test_bound_methods_of_different_receivers_differ():
     """The receiver is part of what the method computes.
 
@@ -879,6 +1206,9 @@ def test_bound_method_of_indigestible_receiver_raises():
         digest(Opaque().go)
 
 # --- Tests for digesting Python descriptors (staticmethod, classmethod, property) ---
+#
+# As with the datetime block, plain "X is digestible" smokes are omitted: each
+# test here digests real descriptors, so losing descriptor support fails them.
 
 
 def test_staticmethod_digest_differs_from_underlying_function_digest():
@@ -1036,27 +1366,10 @@ def test_generic_mapping_same_content_same_type_identical_digest():
 
 
 # --- Tests for datetime type digests ---
-
-
-def test_datetime_date_is_digestible():
-    assert digest(datetime.date(2024, 1, 15)) is not None
-
-
-def test_datetime_datetime_is_digestible():
-    assert digest(datetime.datetime(2024, 1, 15, 12, 0, 0)) is not None
-
-
-def test_datetime_time_is_digestible():
-    assert digest(datetime.time(12, 30, 45)) is not None
-
-
-def test_datetime_timedelta_is_digestible():
-    assert digest(datetime.timedelta(days=3, seconds=7200)) is not None
-
-
-def test_datetime_timezone_is_digestible():
-    assert digest(datetime.timezone.utc) is not None
-    assert digest(datetime.timezone(datetime.timedelta(hours=5))) is not None
+#
+# Digestibility of each type is pinned transitively: every test below digests
+# real instances, so a regression that made one of these types Indigestible
+# fails here.  Dedicated "X is digestible" smokes would be strictly weaker.
 
 
 def test_different_dates_have_different_digests():
