@@ -53,3 +53,48 @@ def test_main_missing_subcommand_errors():
     with pytest.raises(SystemExit) as excinfo:
         _main([])
     assert excinfo.value.code == 2
+
+
+def test_main_db_dispatches_to_serve(monkeypatch):
+    import fleche.dbserver
+
+    received = []
+    monkeypatch.setattr(
+        fleche.dbserver, "serve", lambda *args, **kwargs: received.append((args, kwargs)) or 0
+    )
+
+    rc = _main(["db", "mariadb", "data", "--host", "0.0.0.0", "--port", "3307"])
+
+    assert rc == 0
+    assert received == [
+        (("mariadb", "data"), {"host": "0.0.0.0", "port": 3307, "bindir": None})
+    ]
+
+
+def test_main_db_reports_server_errors(monkeypatch, capsys):
+    """A :class:`DbServerError` becomes a one-line message and exit code 1."""
+    import fleche.dbserver
+
+    def fail(*args, **kwargs):
+        raise fleche.dbserver.DbServerError("no initdb found")
+
+    monkeypatch.setattr(fleche.dbserver, "serve", fail)
+
+    assert _main(["db", "postgres", "data"]) == 1
+    assert capsys.readouterr().err == "error: no initdb found\n"
+
+
+def test_main_db_rejects_unknown_backend():
+    with pytest.raises(SystemExit) as excinfo:
+        _main(["db", "sqlite", "data"])
+    assert excinfo.value.code == 2
+
+
+def test_main_db_stop_dispatches_to_stop(monkeypatch):
+    import fleche.dbserver
+
+    received = []
+    monkeypatch.setattr(fleche.dbserver, "stop", lambda datadir: received.append(datadir) or 0)
+
+    assert _main(["db", "stop", "data"]) == 0
+    assert received == ["data"]

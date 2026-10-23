@@ -75,6 +75,13 @@ following **lowercase** identifiers:
     ``"sqlite:///:memory:"`` if omitted), ``echo`` (bool, default
     ``False``) — log SQL statements.
 
+``"postgres"`` / ``"mariadb"``
+    :class:`~fleche.storage.Sql` on a server fleche hosts itself
+    (``python -m fleche db``, :mod:`fleche.dbserver`).  *Call storage only.*
+    ``datadir`` (path, the server's data directory) locates the running
+    server through ``DATADIR/fleche.url``.  Optional: ``url`` (used when
+    ``datadir`` is unreadable, e.g. from another node), ``echo``.
+
 Example fleche.toml
 -------------------
 
@@ -99,6 +106,13 @@ Example fleche.toml
     values.root = "~/.fleche/values"
     calls.type = "sql"
     calls.url = "sqlite:///~/.fleche/calls.db"
+
+    # Postgres server run by `python -m fleche db postgres ~/.fleche/postgres`
+    [with_postgres_calls]
+    values.type = "cloudpickle"
+    values.root = "~/.fleche/values"
+    calls.type = "postgres"
+    calls.datadir = "~/.fleche/postgres"
 
     # SizeLimitedCache — evicts a uniformly-random entry once 100 entries
     # are stored (override _pick_eviction_target for LRU/LFU/etc.)
@@ -212,7 +226,8 @@ same key in a farther file (tables are *not* recursively merged).
 Relative paths
 --------------
 
-A relative ``root`` (storage/template) or ``url`` (``sql`` calls) is
+A relative ``root`` (storage/template), ``datadir`` (``postgres``/``mariadb``
+calls) or ``url`` (``sql`` calls) is
 resolved against the directory containing the ``fleche.toml`` that declared
 it, not against the process's current working directory.  This is what
 makes a checked-in, machine-portable config file resolve to the *same*
@@ -306,14 +321,15 @@ def _rebase_config(config: dict[str, Any], base: Path) -> dict[str, Any]:
     declared it" instead of "relative to whatever directory the process
     happens to run from" (#810) — the config-discovery walk means the same
     file can otherwise be read from many different working directories.
-    ``root`` (values/calls storage, templates) and ``url`` (``sql`` call
-    storage) are the only path-bearing keys; everything else — including
+    ``root`` (values/calls storage, templates), ``datadir`` (``postgres``/
+    ``mariadb`` call storage) and ``url`` (``sql`` call storage) are the only
+    path-bearing keys; everything else — including
     the unrelated boolean ``[default].root`` marker and remote-side keys
     like ``workdir`` on an ``ssh`` entry — passes through untouched.
     """
     rebased: dict[str, Any] = {}
     for key, value in config.items():
-        if key == "root" and isinstance(value, str):
+        if key in ("root", "datadir") and isinstance(value, str):
             rebased[key] = _rebase_relative_path(value, base)
         elif key == "url" and isinstance(value, str):
             rebased[key] = _rebase_url(value, base)
@@ -458,6 +474,8 @@ def storage_from_config(d: dict[str, Any], type: Literal["call", "value"]) -> st
       ``version_validator``, ``prefix_length``, ``remaining_depth`` (value only)
     * ``{"type": "sql", "url": "<sqlalchemy-url>"}``  *(call storage only)*
       — optional: ``echo``
+    * ``{"type": "postgres" | "mariadb", "datadir": "<path>"}``  *(call storage only)*
+      — optional: ``url``, ``echo``
 
     See the module docstring for full descriptions of each key.
     """
