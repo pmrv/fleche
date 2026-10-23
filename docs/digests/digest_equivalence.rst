@@ -56,8 +56,8 @@ the two digest apart, and it rounds a ``Fraction`` to double, so
 ``np.longdouble(1) / 3`` compares unequal to its exact ``Fraction`` although
 the two digest alike.  A foreign :mod:`numbers` type is held to the promise
 only as far as its conversions (``__trunc__``, ``__float__``, ``__complex__``,
-``as_integer_ratio``) and its ``__eq__`` are exact.  ``int`` subclasses and
-NaNs fall outside it, as described below.
+``as_integer_ratio``) and its ``__eq__`` are exact.  ``int`` subclasses,
+timedeltas and NaNs fall outside it, as described below.
 
 Number types outside the tree hang off it by their :mod:`numbers` ABC, most
 specific first: ``Integral`` under ``int`` (``np.int64``), ``Real`` under
@@ -74,6 +74,15 @@ nothing, are digested by their bit pattern alone, whatever their type (so
 Python's own ``hash()`` is *not* used: it reduces the value modulo a
 platform-dependent prime and remaps ``-1`` to ``-2``, so unequal numbers such
 as ``-1.0`` and ``-2.0``, or ``0.5`` and ``2**60``, hash alike.
+
+Timedeltas (``datetime.timedelta``, ``pd.Timedelta`` and ``np.timedelta64``)
+are refused for now with :exc:`~fleche.digest.Indigestible`.  They compare
+equal across types and units (``pd.Timedelta("5s") == np.timedelta64(5000,
+"ms")``), and no digest yet honours that while keeping unequal ones apart.
+``np.timedelta64`` is not treated as a number either, although numpy
+registers it as ``numbers.Integral``.  A hook registered with
+:func:`~fleche.digest.add_hook` can digest them meanwhile.  A
+``datetime.timezone`` is still digested, by its exact UTC offset.
 
 Subclasses of ``int`` are excluded from this equivalence: ``bool``,
 ``IntEnum`` and ``IntFlag`` members and any other ``int`` subclass keep their

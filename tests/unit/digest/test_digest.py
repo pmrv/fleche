@@ -27,6 +27,7 @@ from hypothesis import strategies as st
 from hypothesis.extra import numpy as hnp
 from tests.strategies import st_nested_values
 import numpy as np
+import pandas as pd
 from dataclasses import dataclass, make_dataclass, is_dataclass, fields
 import math
 import string
@@ -37,7 +38,7 @@ from fractions import Fraction
 
 from fleche import fleche
 from fleche.state import cache
-from fleche.digest import digest, Digest, Indigestible
+from fleche.digest import _HOOKS, add_hook, digest, Digest, Indigestible
 from fleche.call import Call
 
 
@@ -321,6 +322,37 @@ def test_number_tree_matches_its_drawings():
         pathlib.Path(__file__).parents[3] / "docs/digests/digest_equivalence.rst"
     ).read_text()
     assert "\n".join("   " + line for line in lines) in docs
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        datetime.timedelta(seconds=5),
+        pd.Timedelta("5s"),
+        np.timedelta64(5, "s"),
+        np.timedelta64(5),
+        np.timedelta64("NaT", "s"),
+        datetime.timedelta.resolution,
+        [np.timedelta64(1, "D")],
+    ],
+    ids=repr,
+)
+def test_timedeltas_are_refused(value):
+    # No digest yet under which the timedelta types that compare equal digest
+    # equal; total_seconds() merged pd.Timedelta(days=50, nanoseconds=1) and
+    # nanoseconds=2.  np.timedelta64 is registered as Integral, so it must not
+    # slip into the number arm either.
+    with pytest.raises(Indigestible):
+        digest(value)
+
+
+def test_timedeltas_can_be_digested_by_hook():
+    saved = list(_HOOKS)
+    add_hook((datetime.timedelta, lambda td: digest((td.days, td.seconds, td.microseconds))))
+    try:
+        assert digest(datetime.timedelta(hours=1)) == digest(datetime.timedelta(minutes=60))
+    finally:
+        _HOOKS[:] = saved
 
 
 @pytest.mark.parametrize(
@@ -1752,17 +1784,16 @@ def test_different_times_have_different_digests():
     assert digest(datetime.time(12, 0, 0)) != digest(datetime.time(13, 0, 0))
 
 
-def test_different_timedeltas_have_different_digests():
-    assert digest(datetime.timedelta(days=1)) != digest(datetime.timedelta(days=2))
-    assert digest(datetime.timedelta(seconds=1)) != digest(datetime.timedelta(seconds=2))
-
-
 def test_different_timezones_have_different_digests():
     tz_utc = datetime.timezone.utc
     tz_plus5 = datetime.timezone(datetime.timedelta(hours=5))
     tz_minus3 = datetime.timezone(datetime.timedelta(hours=-3))
     assert digest(tz_utc) != digest(tz_plus5)
     assert digest(tz_plus5) != digest(tz_minus3)
+    tz_plus5_us = datetime.timezone(datetime.timedelta(hours=5, microseconds=1))
+    assert digest(tz_plus5) != digest(tz_plus5_us)
+    # timezone == compares the offset only, so the name must not split them.
+    assert digest(tz_plus5) == digest(datetime.timezone(datetime.timedelta(hours=5), "X"))
 
 
 def test_datetime_subclass_matches_before_date():
@@ -1776,7 +1807,6 @@ def test_datetime_same_value_same_digest():
     assert digest(datetime.date(2024, 3, 10)) == digest(datetime.date(2024, 3, 10))
     assert digest(datetime.datetime(2024, 3, 10, 8, 0)) == digest(datetime.datetime(2024, 3, 10, 8, 0))
     assert digest(datetime.time(8, 30)) == digest(datetime.time(8, 30))
-    assert digest(datetime.timedelta(hours=2)) == digest(datetime.timedelta(hours=2))
     assert digest(datetime.timezone.utc) == digest(datetime.timezone.utc)
 
 
@@ -1794,14 +1824,10 @@ def test_datetime_stdlib_class_constants_digestible():
     """
     assert digest(datetime.date.min) is not None
     assert digest(datetime.date.max) is not None
-    assert digest(datetime.date.resolution) is not None
     assert digest(datetime.datetime.min) is not None
     assert digest(datetime.datetime.max) is not None
     assert digest(datetime.time.min) is not None
     assert digest(datetime.time.max) is not None
-    assert digest(datetime.timedelta.min) is not None
-    assert digest(datetime.timedelta.max) is not None
-    assert digest(datetime.timedelta.resolution) is not None
     assert digest(datetime.timezone.utc) is not None
 
 

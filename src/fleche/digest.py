@@ -545,6 +545,14 @@ def _digest_bytes(value: Any) -> bytes:
             m.update(value.encode())
         case None:
             m.update(b"__None__")
+        case datetime.timedelta() | np.timedelta64():
+            # Must precede Number: numpy registers timedelta64 as Integral.
+            # Refused until there is a digest under which every timedelta
+            # type digests equal to those it compares equal to
+            # (datetime.timedelta, its subclass pd.Timedelta, np.timedelta64
+            # in any unit).  The old total_seconds() float merged unequal
+            # pd.Timedelta nanoseconds.  A hook can supply one meanwhile.
+            raise Indigestible(value)
         case Decimal() if value.is_nan():
             # Must precede Number, whose cmath.isnan raises on a signalling
             # NaN.  str keeps sign, signalling and payload apart.
@@ -629,9 +637,10 @@ def _digest_bytes(value: Any) -> bytes:
                 props.append(value.co_exceptiontable)
             m.update(_digest_bytes(tuple(props)))
         case datetime.timezone():
-            m.update(_digest_bytes(value.utcoffset(None)))
-        case datetime.timedelta():
-            m.update(_digest_bytes(value.total_seconds()))
+            # The offset is a timedelta, which is refused (see that arm), so
+            # take it as an exact count of microseconds.
+            offset = value.utcoffset(None)
+            m.update(_digest_bytes(offset // datetime.timedelta(microseconds=1)))
         case datetime.datetime():  # datetime subclasses date; must precede date case
             m.update(value.isoformat().encode())
         case datetime.date():
