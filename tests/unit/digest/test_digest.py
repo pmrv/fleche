@@ -6,15 +6,23 @@ is ``tests/unit/call/test_code_digest.py``; whether the decorator carries it
 into the key is ``tests/unit/fleche/test_hash_code.py``.
 """
 
+import abc
 import cmath
+import enum
+import sys
+import time
+from typing import NamedTuple
+import inspect
+import pathlib
 import datetime
 import struct
 import collections
+import numbers as numbers_module
 import collections.abc
 import types as types_module
 
 import pytest
-from hypothesis import given
+from hypothesis import example, given
 from hypothesis import strategies as st
 from hypothesis.extra import numpy as hnp
 from tests.strategies import st_nested_values
@@ -23,9 +31,12 @@ from dataclasses import dataclass, make_dataclass, is_dataclass, fields
 import math
 import string
 import keyword
+from decimal import Decimal
+from fractions import Fraction
 
 
 from fleche import fleche
+from fleche.state import cache
 from fleche.digest import digest, Digest, Indigestible
 from fleche.call import Call
 
@@ -137,6 +148,14 @@ def test_different_integers_have_different_hashes(x, y):
 
 
 @given(st.floats(allow_nan=True), st.floats(allow_nan=True))
+# Pairs hash() collided (PR #990); random draws practically never hit them.
+@example(-1.0, -2.0)
+@example(0.5, 2.0**60)
+@example(2.0**100, 2.0**39)
+@example(2.0**61, 1.0)
+@example(math.inf, 314159.0)
+@example(-math.inf, -314159.0)
+@example(-0.0, 0.0)
 def test_different_floats_have_different_hashes(x, y):
     """Test that two different floats have different hashes."""
     if math.isnan(x) or math.isnan(y):
@@ -154,6 +173,11 @@ def test_different_floats_have_different_hashes(x, y):
 
 
 @given(st.complex_numbers(allow_nan=True), st.complex_numbers(allow_nan=True))
+# Pairs hash() collided (PR #990); random draws practically never hit them.
+@example(1j, 1000003 + 0j)
+@example(-1 + 0j, -2 + 0j)
+@example(0.5 + 0j, 2.0**60 + 0j)
+@example(complex(math.inf, 0), 314159 + 0j)
 def test_different_complex_numbers_have_different_digests(x, y):
     """Test that two different complex numbers have different digests."""
     if cmath.isnan(x) or cmath.isnan(y):
@@ -164,12 +188,10 @@ def test_different_complex_numbers_have_different_digests(x, y):
             assert digest(x) == digest(y)
         else:
             assert digest(x) != digest(y)
+    elif x == y:
+        assert digest(x) == digest(y)
     else:
-        # Non-NaN: follows Python hash semantics (hash(1) == hash(1+0j))
-        if hash(x) == hash(y):
-            assert digest(x) == digest(y)
-        else:
-            assert digest(x) != digest(y)
+        assert digest(x) != digest(y)
 
 
 @given(st.complex_numbers(allow_nan=True))
@@ -190,6 +212,308 @@ def test_int_matches_float_without_fractional_part():
     assert digest(1) == digest(1.0)
     assert digest(2) == digest(2.0)
     assert digest(-3) == digest(-3.0)
+
+
+# Unequal numbers whose hash() coincides, from the investigation on PR #990.
+# Digests used to be hash(value), so every pair here was one cache key and a
+# wrong cache hit; random pairs practically never land on them.
+HASH_COLLISIONS = [
+    (-1.0, -2.0),  # CPython remaps the error sentinel hash -1 to -2
+    (Fraction(-1), -2),
+    (Decimal(-1), -2),
+    (np.float32(-1), -2),
+    (-1 + 0j, -2),
+    (0.5, 2**60),  # a fraction hashes to num * den**-1 mod 2**61 - 1
+    (Fraction(1, 3), 1537228672809129301),
+    (2.0**100, 2.0**39),  # reduction mod 2**61 - 1
+    (2.0**61, 1),
+    (np.uint64(2**63), 4),  # np.integer used to take the hash() path
+    (math.inf, 314159),  # sys.hash_info.inf
+    (-math.inf, -314159),
+    (1j, 1000003),  # hash(a + bj) == hash(a) + 1000003 * hash(b)
+]
+
+
+@pytest.mark.parametrize(
+    "a, b",
+    HASH_COLLISIONS
+    + [
+        (Decimal("1e400"), math.inf),  # finite, though float() overflows it
+        (0.1, Decimal("0.1")),  # the float is not exactly 1/10
+    ],
+)
+def test_unequal_numbers_have_different_digests(a, b):
+    assert a != b
+    assert digest(a) != digest(b)
+
+
+@pytest.mark.parametrize("a, b", HASH_COLLISIONS)
+def test_unequal_numbers_do_not_share_a_cache_entry(clean_cache, a, b):
+    # The end-to-end symptom on PR #990: the second call was a cache hit on the
+    # first and returned its result.
+    @fleche
+    def identity(x):
+        return x
+
+    with cache(clean_cache):
+        assert identity(a) == a
+        assert identity(b) == b
+
+
+@pytest.mark.parametrize(
+    "a, b",
+    [
+        (-1.0, -1),  # hash(-1.0) was -2, while the int path never hashed
+        (np.float32(-1), -1),
+        (-1 + 0j, -1),
+        (float(2**70), 2**70),
+        (Fraction(-1), -1),
+        (Decimal(-1), -1),
+        (0.5, Fraction(1, 2)),
+        (0.5, Decimal("0.5")),
+        (0.5, np.float32(0.5)),
+        (0.5, 0.5 + 0j),
+        (np.float16(0.75), Fraction(3, 4)),
+        (np.longdouble(0.25), 0.25),
+        (-0.0, 0),
+        (-0.0, 0.0),
+        (math.inf, Decimal("Infinity")),
+        (-math.inf, np.float32("-inf")),
+        (np.uint64(2**63), 2**63),
+        (1.5 + 2j, np.complex64(1.5 + 2j)),
+        (Decimal("1e400"), 10**400),  # float() would overflow, int() does not
+        (Decimal("0.10"), Decimal("0.1")),  # same value, different exponent
+        (Fraction(1, 10), Decimal("0.1")),  # neither fits in a float
+    ],
+)
+def test_equal_numbers_have_equal_digests(a, b):
+    assert a == b
+    assert digest(a) == digest(b)
+
+
+def test_wide_numpy_float_digests_as_fraction():
+    # Wider than a float on x86-64; equal to float precision elsewhere, where
+    # both sides take the float node instead.
+    x = np.longdouble(1) / 3
+    assert digest(x) == digest(Fraction(*x.as_integer_ratio()))
+    # A zero imaginary part must not strand the real part on the complex path,
+    # which has no node to hold it.
+    assert digest(np.clongdouble(x)) == digest(x)
+
+
+def _draw_number_tree(node, prefix=""):
+    lines = []
+    for i, child in enumerate(node.children):
+        last = i == len(node.children) - 1
+        lines.append(prefix + ("└── " if last else "├── ") + child.type.__name__)
+        lines += _draw_number_tree(child, prefix + ("    " if last else "│   "))
+    return lines
+
+
+def test_number_tree_matches_its_drawings():
+    from fleche import digest as digest_module
+
+    lines = [digest_module._NUMBER_TREE.type.__name__]
+    lines += _draw_number_tree(digest_module._NUMBER_TREE)
+    source = inspect.getsource(digest_module)
+    assert "\n".join("#   " + line for line in lines) in source
+    docs = (
+        pathlib.Path(__file__).parents[3] / "docs/digests/digest_equivalence.rst"
+    ).read_text()
+    assert "\n".join("   " + line for line in lines) in docs
+
+
+@pytest.mark.parametrize(
+    "a, b",
+    [
+        (np.float64("nan"), float("nan")),
+        (np.float32("nan"), float("nan")),
+        (np.longdouble("nan"), float("nan")),
+        (complex(math.nan, 0), math.nan),
+    ],
+)
+def test_nans_with_the_same_bits_digest_equal_across_types(a, b):
+    assert digest(a) == digest(b)
+
+
+@pytest.mark.parametrize("nan", ["NaN", "-NaN", "sNaN", "NaN123"])
+def test_decimal_nans_are_digestible(nan):
+    # A signalling NaN raised ValueError from cmath.isnan (PR #990).
+    assert digest(Decimal(nan)) == digest(Decimal(nan))
+    assert digest(Decimal(nan)) != digest(float("nan"))
+
+
+def test_decimal_nans_digest_apart():
+    digests = {digest(Decimal(nan)) for nan in ["NaN", "-NaN", "sNaN", "NaN123"]}
+    assert len(digests) == 4
+
+
+def _unused(*args):
+    raise NotImplementedError
+
+
+class ExactReal(numbers_module.Real):
+    """A foreign Real holding n/d exactly.
+
+    It has only what numbers.Real promises: no __int__, no as_integer_ratio.
+    """
+
+    def __init__(self, n, d=1):
+        self.q = Fraction(n, d)
+
+    def __float__(self):
+        return float(self.q)
+
+    def __trunc__(self):
+        return math.trunc(self.q)
+
+    def __eq__(self, other):
+        return self.q == other
+
+    def __hash__(self):
+        return hash(self.q)
+
+
+for _name in numbers_module.Real.__abstractmethods__ - vars(ExactReal).keys():
+    setattr(ExactReal, _name, _unused)
+abc.update_abstractmethods(ExactReal)
+
+
+@pytest.mark.filterwarnings("error")
+def test_foreign_real_downcasts_without_int():
+    # int() on it would delegate to __trunc__, deprecated and due to go.
+    assert digest(ExactReal(2)) == digest(2)
+    assert digest(ExactReal(1, 2)) == digest(0.5)
+
+
+def test_foreign_real_beyond_float_without_ratio_is_indigestible():
+    # Neither int nor float holds 1/3, and it offers no as_integer_ratio for
+    # the Fraction node; that must end as Indigestible, not AttributeError.
+    with pytest.raises(Indigestible):
+        digest(ExactReal(1, 3))
+
+
+@pytest.mark.parametrize(
+    "value", [Fraction(10**400), Fraction(-(10**400), 7), [Fraction(2**1024)]]
+)
+def test_fraction_beyond_float_range_is_digestible(value):
+    # The NaN check converted to float, which overflowed.
+    digest(value)
+
+
+def test_fraction_beyond_float_range_digests_as_its_value():
+    assert digest(Fraction(10**400)) == digest(10**400)
+    assert digest(Fraction(10**400)) == digest(Decimal("1e400"))
+
+
+@pytest.mark.skipif(
+    np.finfo(np.longdouble).maxexp < 16384, reason="np.longdouble cannot hold 1e4400"
+)
+@pytest.mark.parametrize("max_str_digits", [None, 0])
+def test_huge_longdouble_digests_as_int_whatever_the_str_limit(max_str_digits):
+    # numpy compares a longdouble with an int through str, so an int() == check
+    # failed under the default sys.int_max_str_digits and passed without it.
+    x = np.longdouble("1e4400")
+    n = int(x)
+    old = sys.get_int_max_str_digits()
+    if max_str_digits is not None:
+        sys.set_int_max_str_digits(max_str_digits)
+    try:
+        assert digest(x) == digest(n)
+    finally:
+        sys.set_int_max_str_digits(old)
+
+
+def test_integral_ratio_has_one_encoding():
+    from fleche.digest import _encode_ratio
+
+    assert _encode_ratio(Fraction)(Fraction(2**200)).decode() == digest(2**200)
+
+
+def test_decimal_with_large_exponent_digests_quickly():
+    # Taking it to int and back was quadratic: about 3.5 s for 1e300000.
+    start = time.perf_counter()
+    d = digest(Decimal("1e300000"))
+    assert time.perf_counter() - start < 1
+    assert d == digest(10**300000)
+
+
+class Fraction_(NamedTuple):
+    numerator: int
+    denominator: int
+
+
+Fraction_.__name__ = "Fraction"
+
+
+class float_(bytes):
+    pass
+
+
+float_.__name__ = "float"
+
+
+@pytest.mark.parametrize(
+    "a, b",
+    [
+        (Fraction_(1, 3), Fraction(1, 3)),
+        (float_(struct.pack("<d", 0.5)), 0.5),
+        (float_(struct.pack("<dd", math.nan, 0)), math.nan),
+    ],
+    ids=["NamedTuple-Fraction", "bytes-float", "bytes-float-NaN"],
+)
+def test_user_type_named_like_a_number_does_not_collide(a, b):
+    # Same type name, same bytes fed under it; the number salts are reserved.
+    assert type(a).__name__ == type(b).__name__
+    assert digest(a) != digest(b)
+
+
+# What the digest promises equality against is the exact value, not == as
+# numpy computes it: numpy casts a Python float down to float32 (NEP 50) and
+# rounds a Fraction to double before comparing.
+@pytest.mark.parametrize(
+    "a, b, equal",
+    [
+        (np.float32(0.1), 0.1, False),
+        (np.complex64(0.1 + 0.1j), complex(0.1, 0.1), False),
+        (np.longdouble(1) / 3, Fraction(*(np.longdouble(1) / 3).as_integer_ratio()), True),
+        (Decimal("Infinity"), np.longdouble("inf"), True),
+        (complex(1.5, -0.0), 1.5, True),
+    ],
+)
+def test_digest_follows_exact_value_not_numpy_equality(a, b, equal):
+    assert (digest(a) == digest(b)) is equal
+
+
+class MyInt(int):
+    pass
+
+
+class MyFloat(float):
+    pass
+
+
+class Colour(enum.IntEnum):
+    RED = 1
+
+
+def test_int_subclasses_keep_their_type_name_unlike_float_subclasses():
+    # Pinned as observed: the int arm catches every int subclass and salts it
+    # with its own name, like bool, while float subclasses downcast.
+    assert digest(MyInt(5)) != digest(5)
+    assert digest(Colour.RED) != digest(1)
+    assert digest(MyFloat(5.0)) == digest(5)
+
+
+def test_number_without_exact_value_is_indigestible():
+    # Convertible to float, so it gets past the NaN check, but with no exact
+    # value to offer: neither numerator/denominator nor as_integer_ratio.
+    class Opaque(numbers_module.Number):
+        def __float__(self):
+            return 0.5
+
+    with pytest.raises(Indigestible):
+        digest(Opaque())
 
 
 @given(

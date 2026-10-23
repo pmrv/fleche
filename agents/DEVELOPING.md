@@ -131,8 +131,19 @@ Values and calls are stored separately so call records are queryable without des
   `Indigestible`;
   `DIGEST_LENGTH=64`.
   Built-in types are inline `match` cases in `_digest_bytes`, ordered roughly hot-path first: `int` (`bool ⊂ int`) → `Digest` (returns `value.encode()` so `digest(Digest("abc")) == "abc"`) → `str` → `None` → `Number` (`float`, `complex`, `Decimal`, `Fraction`, plus `np.integer`/`np.floating` which satisfy `numbers.Number` automatically;
-  routed through `hash(value)` then recursed as int — a lossy encoding under which distinct numbers collide;
-  see the numeric-digest bullet under **Bugs** below) → `bytes` → `np.ndarray` (dtype + shape + `tobytes`;
+  `_digest_number` walks `_NUMBER_TREE` (`int` → `float` → {`complex`, `Fraction` → `Decimal`}; a complex with zero imaginary part first drops to its real part) from the root down to the value's own type and digests it as the first type whose converter holds it exactly, so equal values digest alike unless they sit on different branches below that type (none do in the current tree);
+  foreign types attach via `_NUMBER_ABCS` (`Integral` → `int`, `Real` → `Fraction`, `Complex` → `complex`), and a value nothing on its path holds raises `Indigestible`.
+  Converters must refuse inexact conversions themselves rather than rely on a trailing `==`: numpy compares `Fraction` to `np.longdouble` by rounding the `Fraction` to double, and an `np.longdouble` to an `int` through `str` (subject to `sys.int_max_str_digits`).
+  So `_as_int` decides on `as_integer_ratio` / `numerator`+`denominator` (also avoiding a quadratic `int()` round trip for `Decimal("1e1000000")`), falling back to `math.trunc` for a foreign `Real`, which promises `__trunc__` but neither `__int__` nor `as_integer_ratio`;
+  `_encode_ratio` hands integral ratios back to the `int` path so an integer has one encoding.
+  Node encoders, the NaN branch (one `NaN` salt for every type, so equal bits meet across types) and the `Decimal`-NaN arm salt via `_salted` (`__fleche_<name>__`), not the bare type name the generic arms use, so a user type sharing the name (a `NamedTuple` called `Fraction`) cannot collide.
+  `_is_nan` skips `Rational`s and treats `OverflowError` as not-NaN, since `cmath.isnan` converts to float and `Fraction(10**400)` overflows it.
+  The promise, worded in `digest_equivalence.rst`: non-NaN numbers digest equal iff they hold the same exact value — numpy's `==` (NEP 50 down-casts, `Fraction` rounding) is not the reference.
+  `int` subclasses (`bool`, `IntEnum`) never reach the tree: the `int` arm catches them under their own type name, unlike `float` subclasses, which downcast.
+  The tree is drawn in the code comment and in `docs/digests/digest_equivalence.rst`; `test_number_tree_matches_its_drawings` keeps all three in sync.
+  NaN keeps `struct.pack`.
+  Equal-value results of different numeric types therefore share one value-storage entry, and whichever saved last wins the return type — intended, not a bug.
+  This replaced `hash(value)`, a lossy encoding under which distinct numbers collided) → `bytes` → `np.ndarray` (dtype + shape + `tobytes`;
   structured dtypes instead digest each field name + field view recursively, because `dtype.str` is only `|V<itemsize>` and padding bytes are uninitialised;
   other `dtype.hasobject` arrays digest every element of `ravel().tolist()` because their bytes are PyObject pointers) → `np.bool_` (delegates to `digest(bool(value))`, because `np.bool_ ∉ Number` since numpy 1.20) → pandas (`case _ if _pandas.is_pandas(value)`, which returns `_pandas.digest_pandas(value, _digest_bytes)`: `pd.DataFrame` / `pd.Series` / `pd.Index` / `pd.NA`;
   must precede `Iterable` — DataFrame iterates over column names only, so the `Iterable` arm collides any two DataFrames with the same columns regardless of values;
@@ -881,18 +892,6 @@ Git history is the changelog.
   A verified fix (bind the function once behind an annotated alias with a single boundary `# ty: ignore`) is written up in a comment on PR #1000 but not pushed;
   no issue filed yet.
 
-- Numeric digest collisions — no issue filed yet;
-  the full investigation (2026-10-06) lives in a comment on PR #990.
-  The `Number` arm digests via `hash(value)`, a lossy 61-bit residue, so distinct numbers share cache keys and produce wrong hits end to end: `digest(-1.0) == digest(-2.0)` (CPython reserves `-1` as an error sentinel),
-  `digest(0.5) == digest(2**60)` (rational hashing mod `2**61 - 1`),
-  `inf` vs `314159`,
-  `np.uint64(2**63)` vs `4`, complex via the `hash(a) + 1000003*hash(b)` formula;
-  digests are also platform-dependent (32-bit builds hash mod `2**31 - 1`).
-  The Hypothesis pair tests in `digest/test_digest.py` can't draw these coincidences, and the complex test's oracle restates the bug (`hash(x) == hash(y)` ⇒ equal digests) — regression tests need explicit `@example`s.
-  A second, separable finding: `digest(3) == digest(3.0)` by design, so equal-value different-type *results* share one value-storage entry and whichever saved last wins the return type.
-  The fix is in flight as PR #1020 (below), which digests numbers by exact value through a downcast tree.
-  It invalidates number-bearing keys — pre-1.0 that is a `fix:` per [Commit messages](#commit-messages), and it is worth coordinating with the blake2b switchover #615, which invalidates every key anyway.
-
 **Feature requests**
 
 - #829 — `SshCache` support for `Path` values via client-side blob conversion;
@@ -934,7 +933,7 @@ Git history is the changelog.
   **#1018** (on #1017): the URL is written back as `url` into the declaring `fleche.toml` via tomlkit (comments survive;
   the config loader records which file each top-level table came from to support this), and `db --cache NAME` records the server into config (refusing in-memory values;
   stacks with persistent layers, pools and SSH caches).
-- #1020 (opened 2026-10-23) — fixes the numeric digest collisions (see **Bugs**): `_digest_bytes`'s `Number` arm stops routing through lossy `hash()` and instead digests each number as the first type on an explicit downcast tree (`int → float → {complex, Fraction → Decimal}`) that holds its exact value, so non-NaN numbers digest equal **iff** they are the same exact value (`1 == 1.0 == 1+0j` as `int`;
+- #1020 (opened 2026-10-23) — fixes the numeric digest collisions found on PR #990 (`hash()` made `digest(-1.0) == digest(-2.0)` and `digest(0.5) == digest(2**60)`): `_digest_bytes`'s `Number` arm stops routing through lossy `hash()` and instead digests each number as the first type on an explicit downcast tree (`int → float → {complex, Fraction → Decimal}`) that holds its exact value, so non-NaN numbers digest equal **iff** they are the same exact value (`1 == 1.0 == 1+0j` as `int`;
   `0.5 == Fraction(1, 2) == Decimal("0.5")` as `float`), with converters deciding exactness themselves (`as_integer_ratio`, `math.trunc`) rather than trusting numpy's NEP-50 `==`;
   a `Number` nothing on its path holds exactly raises `Indigestible`, never `hash()`.
   All NaNs share one salt and are told apart by bits only;
