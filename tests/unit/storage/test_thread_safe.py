@@ -13,6 +13,7 @@ from fleche.storage import (
     ValueMixin,
     ValuePickleFile,
 )
+from fleche.storage.base import Intent
 from fleche.storage.memory import MemoryBackend
 from fleche.storage.pickle_file import PickleFileBackend
 from fleche.storage.thread_safe import _PicklableLock, _PicklableRLock
@@ -175,6 +176,34 @@ def test_per_key_lock_released_when_unused():
     gc.collect()
     # The lock is no longer held by anyone, so it should be collectable.
     assert ref() is None
+
+
+# ---------------------------------------------------------------------------
+# Intent.READ fast path
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("cls", [SerializingValueMemory, PerKeyValueMemory])
+def test_read_intent_does_not_take_the_exclusive_lock(cls):
+    """``Intent.READ`` must not acquire either mixin's write lock.
+
+    ``CacheStack._operation_context`` enters every member but ``stack[0]``
+    with ``Intent.READ`` precisely because those members are not written to;
+    a mixin that took its exclusive lock anyway would serialize the whole
+    stack behind whichever key a single member happened to be locking.
+
+    Both threads enter a read context on the *same* key — the case an
+    exclusive lock would serialize — and only leave once both are inside.  If
+    the fast path went away the second thread would block outside the barrier
+    and the wait would time out.
+    """
+    store = cls(storage={})
+    both_inside = threading.Barrier(2, timeout=5)
+
+    def reader(_):
+        with store._operation_context("samekey", intent=Intent.READ):
+            both_inside.wait()
+
+    assert not run_workers(reader, 2)
 
 
 # ---------------------------------------------------------------------------
