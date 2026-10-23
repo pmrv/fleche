@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.22.2](https://github.com/pmrv/fleche/compare/0.22.1...0.22.2) (2026-10-23)
+
+
+### Bug Fixes
+
+* **digest:** digest object and structured numpy arrays by value ([#1010](https://github.com/pmrv/fleche/issues/1010)) ([35fae96](https://github.com/pmrv/fleche/commit/35fae964b3b1c7bc7ff2301fd830baad6c360538))
+* **digest:** hash pandas object columns pandas cannot hash faithfully ([#1006](https://github.com/pmrv/fleche/issues/1006)) ([c0eed1b](https://github.com/pmrv/fleche/commit/c0eed1bd75c1f5ff0c19d8ddb13baa1158653a13))
+
 ## [0.22.1](https://github.com/pmrv/fleche/compare/0.22.0...0.22.1) (2026-09-03)
 
 
