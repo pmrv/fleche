@@ -138,11 +138,11 @@ class NumberType:
 
 
 # The downcast hierarchy for numbers.  A number is digested as the first type
-# on the path from the root down to its own type that holds it exactly.  A type
-# is placed by its class or, failing that, by the numbers ABC it is registered
-# with: np.int64 under numbers.Integral, np.float32 and np.longdouble under
-# numbers.Real (so float still catches what it can hold), np.complex64 under
-# numbers.Complex.  The ABC nodes and Decimal hold nothing themselves (every
+# on the path from the root down to its own node that holds it exactly.  A
+# number's node is the most derived tree type its type subclasses, registered
+# ABCs included: np.int64 sits under numbers.Integral, np.float32 and
+# np.longdouble under numbers.Real (so float still catches what it can hold),
+# np.complex64 under numbers.Complex.  The ABC nodes and Decimal hold nothing themselves (every
 # finite Decimal is an exact Fraction).  Mirrored in
 # docs/digests/digest_equivalence.rst (a test keeps the two in sync):
 #
@@ -194,24 +194,37 @@ def _number_paths(node, path=()):
 
 
 _NUMBER_PATHS = dict(_number_paths(NUMBER_TREE))
-
-# For types registered with an ABC rather than subclassing it (numpy scalars),
-# which the MRO lookup misses: the ABC nodes, most specific first.
-_ABC_PATHS = sorted(
-    ((t, path) for t, path in _NUMBER_PATHS.items() if path[-1].convert is None),
-    key=lambda item: len(item[0].__mro__),
-    reverse=True,
-)
+_PATHS_BY_TYPE: dict[type, tuple[NumberType, ...]] = {}
 
 
-def _path(value) -> tuple[NumberType, ...]:
-    for c in type(value).__mro__:
-        if c in _NUMBER_PATHS:
-            return _NUMBER_PATHS[c]
-    for t, path in _ABC_PATHS:
-        if isinstance(value, t):
-            return path
-    return ()
+def _path(t: type) -> tuple[NumberType, ...]:
+    """The path from the root to the node of type *t*, or () if it has none.
+
+    The node is the most derived tree type that *t* subclasses, which covers
+    both real subclasses and types only registered with a numbers ABC (numpy
+    scalars).  Cached per type, so an ABC registration made after a type was
+    first digested is not seen.
+    """
+    path = _PATHS_BY_TYPE.get(t)
+    if path is None:
+        bases = [b for b in _NUMBER_PATHS if issubclass(t, b)]
+        most_derived = [b for b in bases if all(issubclass(b, o) for o in bases)]
+        path = _NUMBER_PATHS[most_derived[0]] if most_derived else ()
+        _PATHS_BY_TYPE[t] = path
+    return path
+
+
+def _hold(value) -> tuple[NumberType, Any] | None:
+    """The first node on *value*'s path that holds it exactly, and the value as
+    that node's type; None if no node does."""
+    for node in _path(type(value)):
+        if node.convert is None:
+            continue
+        try:
+            return node, node.convert(value)
+        except (TypeError, ValueError, ArithmeticError):
+            continue
+    return None
 
 
 def _is_nan(value) -> bool | None:
@@ -263,12 +276,9 @@ def digest_number(value, digest_bytes: DigestBytes) -> bytes | None:
         if is_complex:
             return _encode_complex(value, digest_bytes)
         return _encode_float(value, digest_bytes)
-    for node in _path(value):
-        if node.convert is None or node.encode is None:
-            continue
-        try:
-            v = node.convert(value)
-        except (TypeError, ValueError, ArithmeticError):
-            continue
-        return node.encode(v, digest_bytes)
-    return None
+    held = _hold(value)
+    if held is None:
+        return None
+    node, v = held
+    assert node.encode is not None
+    return node.encode(v, digest_bytes)

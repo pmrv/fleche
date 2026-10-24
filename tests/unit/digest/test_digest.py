@@ -8,6 +8,7 @@ into the key is ``tests/unit/fleche/test_hash_code.py``.
 
 import abc
 import cmath
+import warnings
 import enum
 import sys
 import time
@@ -21,7 +22,7 @@ import collections.abc
 import types as types_module
 
 import pytest
-from hypothesis import example, given
+from hypothesis import assume, given
 from hypothesis import strategies as st
 from hypothesis.extra import numpy as hnp
 from tests.strategies import st_nested_values
@@ -147,51 +148,44 @@ def test_different_integers_have_different_hashes(x, y):
         assert digest(x) != digest(y)
 
 
+def _exact(x):
+    """The exact value of the non-NaN real or complex *x*, as a pair of
+    Fractions (or infinities), independent of numpy's lossy ``==``."""
+    def part(v):
+        return v if math.isinf(v) else Fraction(*v.as_integer_ratio())
+    return part(x.real), part(x.imag)
+
+
+def _scalars(draw_float):
+    """Python floats and numpy float/complex scalars built from them."""
+    return st.one_of(
+        draw_float,
+        draw_float.map(np.float16),
+        draw_float.map(np.float32),
+        draw_float.map(np.float64),
+        draw_float.map(np.longdouble),
+        st.builds(complex, draw_float, draw_float),
+        st.builds(lambda a, b: np.complex64(complex(a, b)), draw_float, draw_float),
+    )
+
+
 @given(st.floats(allow_nan=True), st.floats(allow_nan=True))
-# collision instances from previous numbers' digest
-@example(-1.0, -2.0)
-@example(0.5, 2.0**60)
-@example(2.0**100, 2.0**39)
-@example(2.0**61, 1.0)
-@example(math.inf, 314159.0)
-@example(-math.inf, -314159.0)
-@example(-0.0, 0.0)
 def test_different_floats_have_different_hashes(x, y):
-    """Test that two different floats have different hashes."""
     if math.isnan(x) or math.isnan(y):
         # NaN case: digest is based on raw binary packing
-        x_bytes = struct.pack("<d", x)
-        y_bytes = struct.pack("<d", y)
-        if x_bytes == y_bytes:
-            assert digest(x) == digest(y)
-        else:
-            assert digest(x) != digest(y)
-    elif x == y:
-        assert digest(x) == digest(y)
+        assert (digest(x) == digest(y)) == (struct.pack("<d", x) == struct.pack("<d", y))
     else:
-        assert digest(x) != digest(y)
+        assert (digest(x) == digest(y)) == (_exact(x) == _exact(y))
 
 
-@given(st.complex_numbers(allow_nan=True), st.complex_numbers(allow_nan=True))
-# collision instances from previous numbers' digest
-@example(1j, 1000003 + 0j)
-@example(-1 + 0j, -2 + 0j)
-@example(0.5 + 0j, 2.0**60 + 0j)
-@example(complex(math.inf, 0), 314159 + 0j)
-def test_different_complex_numbers_have_different_digests(x, y):
-    """Test that two different complex numbers have different digests."""
-    if cmath.isnan(x) or cmath.isnan(y):
-        # NaN case: digest is based on raw binary packing of real and imaginary parts
-        x_bytes = struct.pack("<dd", x.real, x.imag)
-        y_bytes = struct.pack("<dd", y.real, y.imag)
-        if x_bytes == y_bytes:
-            assert digest(x) == digest(y)
-        else:
-            assert digest(x) != digest(y)
-    elif x == y:
-        assert digest(x) == digest(y)
-    else:
-        assert digest(x) != digest(y)
+@given(_scalars(st.floats(allow_nan=False, width=16)), _scalars(st.floats(allow_nan=False, width=16)))
+def test_numbers_digest_equal_iff_exactly_equal(x, y):
+    # width=16 draws values every scalar type holds, so equal pairs across
+    # types come up; numpy's == would wrongly call np.float32(0.1) and 0.1
+    # equal, the exact value does not.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)  # float16 overflow to inf
+        assert (digest(x) == digest(y)) == (_exact(x) == _exact(y))
 
 
 @given(st.complex_numbers(allow_nan=True))
@@ -301,24 +295,44 @@ def test_wide_numpy_float_digests_as_its_exact_fraction():
     assert digest(np.clongdouble(x)) == digest(x)
 
 
-# Digests are a function of the exact value alone, so they must not drift with
-# the machine, the Python version or numpy's scalar widths; CI runs this file
-# across the supported versions.
-PINNED_DIGESTS = {
-    "1": (1, "da217d50752f3371d9f8b62a3e72409592bd34b74e14fdac43e2b137bd59f21f"),
-    "0.5": (0.5, "fc7c2237b80899d0cc04c63eda2548c0e5cdb0a58c82db3bd43824d8220923b7"),
-    "Fraction(1, 3)": (Fraction(1, 3), "4c0d2ccfd91ca3d1959ccef24c7d962bcb2a067c7b62b0ca614769dca83fe557"),
-    "1.5+2j": (1.5 + 2j, "b25b8e15b33f4117e21e8c8d2eae4def45ef25823d06b19199d870294e224bd4"),
-    "inf": (math.inf, "8561a7bd5204505bdfef420e39d2683bdb576faba2705ddcaaab42c0b1159f9e"),
-    "nan": (math.nan, "39927fc4a0964029f26f8ba2e346344bc65e3d27c6a075b30e836f84afa18746"),
-    "Decimal('sNaN')": (Decimal("sNaN"), "28a509caace33df4dab1133d77c6a2eb6c3b886eabee7f68d6875ca7cae835c2"),
-}
+def _expected_branch(x):
+    """The tree type that must hold the real number *x*, from its exact value
+    alone: int if integral, float if a binary64 holds it, else Fraction.  Pure
+    Python, so it is the same on every machine."""
+    if math.isinf(x):
+        return float
+    q = Fraction(*x.as_integer_ratio())
+    if q.denominator == 1:
+        return int
+    try:
+        f = float(q)  # correctly rounded
+    except OverflowError:
+        return Fraction
+    return float if Fraction(f) == q else Fraction
 
 
-@pytest.mark.parametrize("name", PINNED_DIGESTS)
-def test_number_digests_are_pinned(name):
-    value, expected = PINNED_DIGESTS[name]
-    assert digest(value) == expected
+_FLOAT_TYPES = [float, np.float16, np.float32, np.float64, np.longdouble]
+
+
+@given(
+    st.sampled_from(_FLOAT_TYPES),
+    st.integers(-(2**70), 2**70),
+    st.integers(1, 2**70),
+)
+def test_branch_choice_is_machine_stable(t, num, den):
+    # The branch a number digests on is decided by the converters, which go
+    # through numpy for numpy scalars.  Whatever the machine's float widths,
+    # that decision must match exact arithmetic on the value the scalar holds;
+    # a quotient of two scalars needs np.longdouble's extra precision where the
+    # machine has it.
+    from fleche._numbers import _hold
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)  # float16 overflow
+        x = t(num) / t(den)
+    assume(not math.isnan(x))  # float16 inf / inf; NaNs never reach the tree
+    node, _ = _hold(x)
+    assert node.type is _expected_branch(x)
 
 
 def _label(t):

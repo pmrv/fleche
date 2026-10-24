@@ -42,10 +42,7 @@ part.  A number that no type on its path holds exactly is
 :exc:`~fleche.digest.Indigestible` unless a hook handles it.
 
 Two numbers therefore digest equal exactly when they hold the same exact value.
-Exact means the value the number really stores, which is not always what
-numpy's ``==`` reports: ``np.float32(0.1)`` stores 0.100000001490116…, so it
-digests apart from ``0.1`` although numpy calls the two equal.  Three kinds of
-value are not digested as numbers:
+Three kinds of value are not digested as numbers:
 
 * ``bool`` and other ``int`` subclasses, such as ``IntEnum`` members, digest
   as their own type, so ``digest(True) != digest(1)``.
@@ -66,6 +63,10 @@ For example:
    digest(-1.0) != digest(-2.0)
    digest(0.1) != digest(Decimal("0.1"))   # the float is not exactly 1/10
    digest(True) != digest(1)
+
+The exact value is what a number really stores, which is not always what
+numpy's ``==`` reports: ``np.float32(0.1)`` stores 0.100000001490116…, so it
+digests apart from ``0.1`` although numpy calls the two equal.
 
 Other types
 -----------
