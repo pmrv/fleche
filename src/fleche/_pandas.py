@@ -25,6 +25,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from pandas.api.types import infer_dtype
+from pandas.util import hash_pandas_object
 
 from ._hashing import running_hash
 
@@ -81,7 +82,7 @@ def digest_pandas(value, digest_bytes: Callable[[Any], bytes]) -> bytes:
                     for i in own:
                         # isetitem, not value[label] = ...: column labels may repeat.
                         value.isetitem(i, element_digests(value.iloc[:, i], digest_bytes))
-                m.update(pd.util.hash_pandas_object(value, index=False).values.tobytes())
+                m.update(hash_pandas_object(value, index=False).values.tobytes())
             case pd.Series():
                 # Same reasoning as DataFrame: hash_pandas_object ignores name/dtype/
                 # index metadata, so we digest those ourselves and pass index=False.
@@ -90,7 +91,7 @@ def digest_pandas(value, digest_bytes: Callable[[Any], bytes]) -> bytes:
                 m.update(digest_bytes(value.index))
                 if needs_element_digests(value):
                     value = pd.Series(element_digests(value, digest_bytes), dtype=object)
-                m.update(pd.util.hash_pandas_object(value, index=False).values.tobytes())
+                m.update(hash_pandas_object(value, index=False).values.tobytes())
             case pd.MultiIndex():
                 # pandas hashes a MultiIndex level by level, through str() for object
                 # levels, and ignores the level names (value.name is None).  Instead
@@ -103,7 +104,7 @@ def digest_pandas(value, digest_bytes: Callable[[Any], bytes]) -> bytes:
                 m.update(digest_bytes(str(value.dtype)))
                 if needs_element_digests(value):
                     value = pd.Index(element_digests(value, digest_bytes), dtype=object)
-                m.update(pd.util.hash_pandas_object(value).values.tobytes())
+                m.update(hash_pandas_object(value).values.tobytes())
             case _ if value is pd.NA:
                 # A singleton like None; it turns up in object columns, which the
                 # arms above digest element by element.
