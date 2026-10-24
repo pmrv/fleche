@@ -9,24 +9,71 @@ hold the same numeric value, and ``digest((1, 2)) != digest([1, 2])`` because th
 container type matters.  This page documents the deliberate equivalences ``fleche``
 guarantees, and the boundaries you should keep in mind.
 
-The digest function is content-based: it walks each value, typically salts the
-running hash with ``type(value).__name__`` for type discrimination, and folds in a
-representation that is stable across processes and Python versions (where the
+The digest function is content-based: it walks each value and folds in its type
+and a representation that is stable across processes and Python versions (where the
 underlying object's representation allows it).
 
-Number types (``int``, ``float``, ``complex``, and subclasses) are an explicit
-exception: their digest is computed via Python's numeric hash protocol
-(``hash(value)``), which itself guarantees ``hash(1) == hash(1.0) == hash(1+0j)``.
-The type name is therefore **not** carried into the final digest for numbers, which is
-precisely why ``digest(1) == digest(1.0) == digest(1+0j)``.
+Numbers
+-------
 
-``bool`` is the one numeric subclass excluded from this equivalence: it keeps
-its own type-name salt, so ``digest(True) != digest(1)`` even though
-``isinstance(True, int)``.
+Numbers digest by their value, not their type: ``1``, ``1.0``, ``1+0j`` and
+``Fraction(1)`` all digest alike.  To find that value, ``fleche`` walks a fixed
+tree of number types:
 
-For all other types the type-name salt is applied normally, so
-``digest((1, 2)) != digest([1, 2])`` because "tuple" and "list" diverge before
-the elements are processed.
+.. code-block:: text
+
+   int
+   ├── numbers.Integral
+   └── float
+       ├── complex
+       │   └── numbers.Complex
+       └── fractions.Fraction
+           ├── decimal.Decimal
+           └── numbers.Real
+
+A number's place in the tree is its class or, for a type the tree does not
+name, the :mod:`numbers` ABC the type belongs to; that is where numpy scalars
+such as ``np.int64`` or ``np.float32`` sit.  The digest walks from ``int`` down
+to that place and tries to convert the number to each type it passes.  The
+first type that holds the number exactly digests it: ``0.5`` is no ``int`` but
+an exact ``float``, and ``Fraction(1, 3)`` is neither, so it digests as a
+``Fraction``.  A complex number with no imaginary part digests as its real
+part.  A number that no type on its path holds exactly is
+:exc:`~fleche.digest.Indigestible` unless a hook handles it.
+
+Two numbers therefore digest equal exactly when they hold the same exact value.
+Three kinds of value are not digested as numbers:
+
+* ``bool`` and other ``int`` subclasses, such as ``IntEnum`` members, digest
+  as their own type, so ``digest(True) != digest(1)``.
+* NaNs equal nothing, so they digest by their bit pattern: NaNs with the same
+  bits digest alike whatever their type.
+* Timedeltas (``datetime.timedelta``, ``pd.Timedelta`` and ``np.timedelta64``)
+  are refused with :exc:`~fleche.digest.Indigestible` for now, although numpy
+  counts ``np.timedelta64`` as a ``numbers.Integral``.  A hook registered with
+  :func:`~fleche.digest.add_hook` can digest them meanwhile.
+
+For example:
+
+.. code-block:: python
+
+   digest(1) == digest(1.0) == digest(1 + 0j) == digest(Fraction(1))   # as int
+   digest(0.5) == digest(np.float32(0.5)) == digest(Decimal("0.5"))     # as float
+   digest(Fraction(1, 10)) == digest(Decimal("0.1"))                    # as Fraction
+   digest(-1.0) != digest(-2.0)
+   digest(0.1) != digest(Decimal("0.1"))   # the float is not exactly 1/10
+   digest(True) != digest(1)
+
+The exact value is what a number really stores, which is not always what
+numpy's ``==`` reports: ``np.float32(0.1)`` stores 0.100000001490116…, so it
+digests apart from ``0.1`` although numpy calls the two equal.
+
+Other types
+-----------
+
+Every other value digests by its type as well as its content, so
+``digest((1, 2)) != digest([1, 2])``: a tuple and a list never digest alike,
+whatever their elements.
 
 Dataclasses and ``attrs`` classes
 ---------------------------------

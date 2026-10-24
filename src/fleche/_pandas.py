@@ -19,13 +19,21 @@ handed the column of hex digests instead.  No marker records the swap, so as for
 a list, a column digests the same as the column of its elements' digests.
 """
 
-import hashlib
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import infer_dtype
+
+if TYPE_CHECKING:
+    # pandas.util hands it out through a module __getattr__ annotated as
+    # returning object (pandas 3.1), which type checkers cannot call.
+    from pandas.core.util.hashing import hash_pandas_object
+else:
+    from pandas.util import hash_pandas_object
+
+from ._hashing import running_hash
 
 # What ``infer_dtype`` calls the object columns pandas hashes faithfully.
 SAFE_OBJECT = frozenset({"string", "empty"})
@@ -58,53 +66,51 @@ def is_pandas(value: Any) -> bool:
 
 def digest_pandas(value, digest_bytes: Callable[[Any], bytes]) -> bytes:
     """Return the digest of the pandas *value*, in the format of *digest_bytes*."""
-    # Salted with the type name and returned as hex, exactly as _new_hash and
-    # _digest_bytes do, so these digests are the ones the arms had in digest.py.
-    m = hashlib.sha256(type(value).__name__.encode())
-    match value:
-        case pd.DataFrame():
-            # We digest columns/dtypes/index ourselves and pass index=False to
-            # hash_pandas_object rather than letting index=True fold the index in.
-            # hash_pandas_object only mixes per-element value bytes — it ignores
-            # column names, column dtypes, index.name, and index.dtype — so
-            # index=True alone would still collide DataFrames whose indices differ
-            # only in name or dtype.  Recursing through digest_bytes on
-            # value.index also reuses the pd.Index arm below, keeping a standalone
-            # Index and a DataFrame's .index digest-consistent.
-            m.update(digest_bytes(list(value.columns)))
-            m.update(digest_bytes([str(d) for d in value.dtypes]))
-            m.update(digest_bytes(value.index))
-            own = [i for i, (_, col) in enumerate(value.items()) if needs_element_digests(col)]
-            if own:
-                value = value.copy(deep=False)
-                for i in own:
-                    # isetitem, not value[label] = ...: column labels may repeat.
-                    value.isetitem(i, element_digests(value.iloc[:, i], digest_bytes))
-            m.update(pd.util.hash_pandas_object(value, index=False).values.tobytes())
-        case pd.Series():
-            # Same reasoning as DataFrame: hash_pandas_object ignores name/dtype/
-            # index metadata, so we digest those ourselves and pass index=False.
-            m.update(digest_bytes(value.name))
-            m.update(digest_bytes(str(value.dtype)))
-            m.update(digest_bytes(value.index))
-            if needs_element_digests(value):
-                value = pd.Series(element_digests(value, digest_bytes), dtype=object)
-            m.update(pd.util.hash_pandas_object(value, index=False).values.tobytes())
-        case pd.MultiIndex():
-            # pandas hashes a MultiIndex level by level, through str() for object
-            # levels, and ignores the level names (value.name is None).  Instead
-            # each level is digested as an Index of its values, name included,
-            # and the tuple of their digests folded.  The values, not
-            # value.levels: those may hold entries no row uses.
-            m.update(digest_bytes(tuple(value.get_level_values(i) for i in range(value.nlevels))))
-        case pd.Index():
-            m.update(digest_bytes(value.name))
-            m.update(digest_bytes(str(value.dtype)))
-            if needs_element_digests(value):
-                value = pd.Index(element_digests(value, digest_bytes), dtype=object)
-            m.update(pd.util.hash_pandas_object(value).values.tobytes())
-        case _ if value is pd.NA:
-            # A singleton like None; it turns up in object columns, which the
-            # arms above digest element by element.
-            m.update(b"__NA__")
-    return m.hexdigest().encode()
+    with running_hash(type(value).__name__.encode()) as m:
+        match value:
+            case pd.DataFrame():
+                # We digest columns/dtypes/index ourselves and pass index=False to
+                # hash_pandas_object rather than letting index=True fold the index in.
+                # hash_pandas_object only mixes per-element value bytes — it ignores
+                # column names, column dtypes, index.name, and index.dtype — so
+                # index=True alone would still collide DataFrames whose indices differ
+                # only in name or dtype.  Recursing through digest_bytes on
+                # value.index also reuses the pd.Index arm below, keeping a standalone
+                # Index and a DataFrame's .index digest-consistent.
+                m.update(digest_bytes(list(value.columns)))
+                m.update(digest_bytes([str(d) for d in value.dtypes]))
+                m.update(digest_bytes(value.index))
+                own = [i for i, (_, col) in enumerate(value.items()) if needs_element_digests(col)]
+                if own:
+                    value = value.copy(deep=False)
+                    for i in own:
+                        # isetitem, not value[label] = ...: column labels may repeat.
+                        value.isetitem(i, element_digests(value.iloc[:, i], digest_bytes))
+                m.update(hash_pandas_object(value, index=False).values.tobytes())
+            case pd.Series():
+                # Same reasoning as DataFrame: hash_pandas_object ignores name/dtype/
+                # index metadata, so we digest those ourselves and pass index=False.
+                m.update(digest_bytes(value.name))
+                m.update(digest_bytes(str(value.dtype)))
+                m.update(digest_bytes(value.index))
+                if needs_element_digests(value):
+                    value = pd.Series(element_digests(value, digest_bytes), dtype=object)
+                m.update(hash_pandas_object(value, index=False).values.tobytes())
+            case pd.MultiIndex():
+                # pandas hashes a MultiIndex level by level, through str() for object
+                # levels, and ignores the level names (value.name is None).  Instead
+                # each level is digested as an Index of its values, name included,
+                # and the tuple of their digests folded.  The values, not
+                # value.levels: those may hold entries no row uses.
+                m.update(digest_bytes(tuple(value.get_level_values(i) for i in range(value.nlevels))))
+            case pd.Index():
+                m.update(digest_bytes(value.name))
+                m.update(digest_bytes(str(value.dtype)))
+                if needs_element_digests(value):
+                    value = pd.Index(element_digests(value, digest_bytes), dtype=object)
+                m.update(hash_pandas_object(value).values.tobytes())
+            case _ if value is pd.NA:
+                # A singleton like None; it turns up in object columns, which the
+                # arms above digest element by element.
+                m.update(b"__NA__")
+    return m.result
