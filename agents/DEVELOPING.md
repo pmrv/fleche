@@ -404,7 +404,7 @@ Values and calls are stored separately so call records are queryable without des
   best-effort — non-Linux or an unreadable `/proc/mounts` reports "not network";
   network types are `nfs`/`nfs4`/`cifs`/`smb*`/`ceph*`/`glusterfs`/`9p`/`lustre`/`gpfs`/`panfs`/`afs`/`afpfs`;
   a warning is logged when WAL is skipped).
-  `:memory:` skips `journal_mode` entirely.
+  `:memory:` skips `journal_mode` entirely — the check is `engine.url.database in (None, ":memory:")`, because SQLAlchemy percent-encodes `:memory:` when rendering the URL, so a string match on the rendered URL never fires (a dead short-circuit until PR #980 fixed it).
   The schema is three tables: `calls`, `arguments` (one row per arg, `UNIQUE(call_key, name)`, ordered by `position`), `metadata` (one JSON blob per metadata namespace, `UNIQUE(call_key, name)`).
   `arguments.call_key`/`metadata.call_key` are FKs with `ondelete="CASCADE"`, so `_evict` is a single `session.execute(delete(CallModel).where(...))` (SQLAlchemy DSL, no raw SQL or ORM materialisation) and lets the DB clean up child rows (SQLite needs the `foreign_keys=ON` PRAGMA the dialect listener installs;
   Postgres/MySQL enforce FK cascades natively).
@@ -876,11 +876,10 @@ Git history is the changelog.
   Composes with #883/#905 and #333.
 - #883 — `DestructuringMixin._raw_sub_digests` hardcodes a `match` over the three built-in `Digested` types, so a subclass registered via `register_destructurer` reports zero children: `Cache.gc()` can evict values reachable only through it (silent data loss) and `count_reuses()` under-counts.
   Fix in flight as PR #905 (below).
-- #1004 — digesting a DataFrame with an object column of numpy arrays raises at save time: `hash_pandas_object` calls `factorize`, which needs `hash()`-able elements.
-  Worse, every object column that does *not* raise is hashed through `str()`, so `["a", 1]` collides with `["a", "1"]`, equal-`__str__` objects collide, and `Series([object()])` keys on an address that changes per process;
-  `MultiIndex` levels have the same `str()` weakness, and level names and level dtypes are never folded in at all.
-  Fix in flight as PR #1006 (below);
-  maintainer direction on the issue: be strict (`Indigestible` beats a `str()` fallback), fix the MultiIndex in the same go, and "different tables hash differently" is the main priority.
+- `ty` is red on `main` since 2026-10-23 with no repo change: pandas 3.1.0 annotated `pandas/util/__init__.py`'s module-level `__getattr__` as `-> object`, so `pd.util.hash_pandas_object` in `_pandas.py` type-checks as a non-callable `object` (three `call-non-callable` diagnostics).
+  The `ty` job pins `ty` but installs pandas unpinned, and its green runs on docs/release commits are paths-filter *skips*, not passes — so any `src/`-touching PR sees a red `ty` check that is not its own.
+  A verified fix (bind the function once behind an annotated alias with a single boundary `# ty: ignore`) is written up in a comment on PR #1000 but not pushed;
+  no issue filed yet.
 
 - Numeric digest collisions — no issue filed yet;
   the full investigation (2026-10-06) lives in a comment on PR #990.
@@ -891,9 +890,8 @@ Git history is the changelog.
   digests are also platform-dependent (32-bit builds hash mod `2**31 - 1`).
   The Hypothesis pair tests in `digest/test_digest.py` can't draw these coincidences, and the complex test's oracle restates the bug (`hash(x) == hash(y)` ⇒ equal digests) — regression tests need explicit `@example`s.
   A second, separable finding: `digest(3) == digest(3.0)` by design, so equal-value different-type *results* share one value-storage entry and whichever saved last wins the return type.
-  The PR comment carries a validated `_digest_number` prototype (digest the exact rational via `as_integer_ratio`, dedicated salts for rational/complex/inf, NaN keeps `struct.pack`;
-  full suite green) pending maintainer decisions on unknown `Number` types (raise `Indigestible` vs keep `hash()`) and on result-type erasure.
-  The fix invalidates number-bearing keys — pre-1.0 that is a `fix:` per [Commit messages](#commit-messages), and it is worth coordinating with the blake2b switchover #615, which invalidates every key anyway.
+  The fix is in flight as PR #1020 (below), which digests numbers by exact value through a downcast tree.
+  It invalidates number-bearing keys — pre-1.0 that is a `fix:` per [Commit messages](#commit-messages), and it is worth coordinating with the blake2b switchover #615, which invalidates every key anyway.
 
 **Feature requests**
 
@@ -906,6 +904,13 @@ Git history is the changelog.
 
 **Field reports**
 
+- #1019 — config lookup misses inside executorlib *file-backend* jobs (`SlurmClusterExecutor`, `TestClusterExecutor`) when `cache_directory` sits behind a symlink: the job chdirs into its task folder,
+  `getcwd()` returns the physical path, the upward `fleche.toml` walk never reaches the project directory, and fleche silently (INFO-level) falls back to a transient memory cache.
+  Inside an MPI/collective job the miss then recomputes on *every rank*.
+  Workarounds that hit: `wrap_executor` in the driver (the `BoundWrapper` carries the cache config into the payload), or resolving cached values in the driver and passing them in — the latter is the only option that also avoids per-rank recompute on a genuinely cold call.
+  Asks in the issue: document the collective-job pattern, make the fallback loud (WARN/raise when a parent had a persistent cache), and a `FLECHE_CONFIG`-style explicit config location (prototype on local branch `claude/fleche-config-env-var`, not pushed;
+  related to #868 and #568).
+
 - #942 — mine it before building anything in this area: migrating ~20k cached calls across a module rename under the default `hash_module=True`.
   The call index was rewritten via `dataclasses.replace(digested_call, module=new)` + `.to_lookup_key()` (reusing fleche's own key derivation), run add-only first against a backup copy, verified by a recompute-counter test (a `contains()` check would pass on a silent recompute), then `--replace` + `VACUUM` (SQLite does not shrink on delete).
   Value storage is untouched — a module rename changes call keys only.
@@ -915,20 +920,31 @@ Git history is the changelog.
 
 - #887 — `BoundWrapper.__reduce__` pre-serialises `func` into a standalone bytes payload (plain `pickle` by reference when importable, `cloudpickle` by value otherwise, a clear `TypeError` when cloudpickle is missing), so it survives `spawn`/`forkserver` pools;
   closes #840, regression pin `tests/regression/test_issue_840.py`.
-- #1006 — digests pandas object columns that pandas cannot hash faithfully with fleche's own per-element hash (anything `infer_dtype` doesn't label `"string"`/`"empty"`, including `bytes` columns and object categories), handing `hash_pandas_object` the column of hex digests;
-  elements fleche cannot digest raise `Indigestible` (strict), plus a new `pd.NA` arm;
-  closes #1004.
-  The 2026-10-19 review round reworked #1006 in place rather than replacing it with the once-superseding branch (`claude/issue-1004-20261013-1959`, never opened as a PR): the pandas arms moved to a new `fleche._pandas` module (`digest.py` no longer imports pandas), a `MultiIndex` arm was added (tuple of its levels, names included — every `MultiIndex` digest changes), and `hash_pandas_object` stays on the main path for faithful columns, so only object-column and `MultiIndex` keys change (migratable via `Cache.redigest()`).
-  The 2026-10-20 round dropped the `__fleche_own_hashed__` marker — no marker records the swap, so a column of arrays digests like the column of its elements' `Digest`s, the Merkle property lists already have — and renamed the helpers to `needs_element_digests`/`element_digests`.
-- #1014 (opened 2026-10-21) — fleche-hosted Postgres/MariaDB call storage with autostart: `calls.type = "postgres"` / `"mariadb"` plus `calls.datadir` (resolved relative to the declaring `fleche.toml`, like `root`) in config;
-  with `calls.autostart = true` the first process that finds nothing listening sets up `datadir` and launches `python -m fleche db …` detached (a `FileLock` on `<datadir>.lock` means racing processes wait for the winner, so exactly one server starts, and it outlives the process).
-  Setup creates database and user `fleche` with a random password and a free port;
-  the URL is written back as `url` into the declaring `fleche.toml` via tomlkit (comments survive), and a readable `DATADIR/fleche.url` takes precedence over it;
-  to support the write-back, the config loader now records which file each top-level table came from.
-  New CLI `python -m fleche db {postgres,mariadb} DATADIR` runs the server in the foreground (`--cache NAME` records the server into config, refusing in-memory values, stacks with several persistent layers, pools and SSH caches) and `python -m fleche db stop DATADIR` shuts it down;
-  `serve` writes host+pid to `DATADIR/fleche.server` before starting, and autostart refuses a datadir another host is serving (shared filesystems).
-  New extras `fleche[postgres]` / `fleche[mariadb]` (sqlalchemy + driver + tomlkit).
+- #1014 / #1017 / #1018 (opened 2026-10-21/22) — fleche-hosted Postgres/MariaDB call storage, a stack of three PRs, each based on the previous.
+  **#1014** (base): new CLI `python -m fleche db {postgres,mariadb} DATADIR` sets up `DATADIR` on first run (database and user `fleche`, random password kept in `DATADIR/fleche.url` mode 0600, a free port remembered across restarts) and runs the server in the foreground;
+  `python -m fleche db stop DATADIR` stops it via the host+pid that `serve` records in `DATADIR/fleche.server`.
+  Config side: `calls.type = "postgres"` / `"mariadb"` plus `calls.datadir` (resolved relative to the declaring `fleche.toml`, like `root`) builds a plain `Sql` on the URL from `DATADIR/fleche.url`, so the password is never copied;
+  nothing listening raises an error naming the start command.
+  New extras `fleche[postgres]` / `fleche[mariadb]`;
+  URLs name their driver explicitly because SQLAlchemy 2.1 changed what driver a bare `postgresql://` selects.
   Rides with two `Sql` concurrency fixes hit with 8 writers on a fresh server database — `create_all`'s check-then-create schema race retries, and `save` retries deadlock-aborted transactions (MariaDB error 1213, Postgres SQLSTATEs `40P01`/`40001`) — and a test-hygiene fix (`_test_missing_dep` now restores the storage registry it used to leave broken for later tests).
+  **#1017** (on #1014): `calls.autostart = true` — when nothing is listening, the first process launches `python -m fleche db …` detached (own session, logging to `<datadir>.log`) and waits until ready;
+  a `FileLock` on `<datadir>.lock` makes racing processes wait for the winner, so exactly one server starts, and it outlives the process.
+  Autostart never *creates* a database — a missing or uninitialized datadir is a `DbServerError` naming the setup command — and refuses a datadir another host is serving (shared filesystems).
+  **#1018** (on #1017): the URL is written back as `url` into the declaring `fleche.toml` via tomlkit (comments survive;
+  the config loader records which file each top-level table came from to support this), and `db --cache NAME` records the server into config (refusing in-memory values;
+  stacks with persistent layers, pools and SSH caches).
+- #1020 (opened 2026-10-23) — fixes the numeric digest collisions (see **Bugs**): `_digest_bytes`'s `Number` arm stops routing through lossy `hash()` and instead digests each number as the first type on an explicit downcast tree (`int → float → {complex, Fraction → Decimal}`) that holds its exact value, so non-NaN numbers digest equal **iff** they are the same exact value (`1 == 1.0 == 1+0j` as `int`;
+  `0.5 == Fraction(1, 2) == Decimal("0.5")` as `float`), with converters deciding exactness themselves (`as_integer_ratio`, `math.trunc`) rather than trusting numpy's NEP-50 `==`;
+  a `Number` nothing on its path holds exactly raises `Indigestible`, never `hash()`.
+  All NaNs share one salt and are told apart by bits only;
+  timedeltas (`datetime.timedelta`, `pd.Timedelta`, `np.timedelta64`) now raise `Indigestible` until one digest can honour cross-type equality without unit loss (`total_seconds()` collided distinct `pd.Timedelta`s);
+  `datetime.timezone` digests its offset as exact microseconds.
+  Also moves the number arm into a private `fleche._numbers` module (the `_pandas` pattern) and extracts a shared `fleche._hashing` module (`new_hash(salt)` + a `running_hash` context manager) that `_numbers` and `_pandas` both use.
+  Persisted keys involving non-integral numbers, `±inf`, complex, huge ints, NaNs or timezones change (`Cache.redigest()` migrates;
+  plain `int` keys are unchanged).
+  Supersedes #990;
+  overlaps #1000's NaN-arm pins, so one of the two needs a rebase.
 - #786 (draft) — a process-wide cache of read-only `h5py.File` handles for multi-bag files (bounded MRU of 32, `(inode, mtime_ns, size)` invalidation, `locking=False`, writers close the cached handle under the per-bag lock);
   multi-bag `contains` drops from ~240 µs to ~29 µs.
   `evict` deliberately untouched;
@@ -944,24 +960,21 @@ Git history is the changelog.
     Needs a rebase onto `tldr.rst`/`helpers.rst` as they are on `main`.
   - #934 — SSH config + destructuring list.
     Needs a rebase onto `ssh_cache.rst` as #993 left it.
-  - #965 — usage: scope the lazy-return claim to `load()`/`query()`.
-  - #989 — parallel_execution: an MPI-decorated call runs once per rank cold and serves one rank's record warm.
   - #990 — digests: the numeric-digest mechanism explanation;
-    superseded by its own review — the maintainer judged the rewrite the wrong level ("warrants deeper investigation") and the follow-up investigation on the PR found the digest *code* at fault (see the numeric-digest bullet under **Bugs**), so expect it to close in favour of a code fix rather than merge.
+    superseded — its review investigation found the digest *code* at fault, and PR #1020 (above) now carries the code fix plus the docs promise, so expect #990 to close unmerged.
 
-  #932 and #989 both edit `parallel_execution.rst`;
-  whichever lands second needs a rebase.
+  #932 needs a rebase: #989 (merged 2026-10-22) changed `parallel_execution.rst` under it.
 - Test-only coverage sweeps: #939 (pins the `Intent.READ` no-op fast path in both lock mixins;
-  drops 11 tests strictly weaker than a sibling;
+  drops tests strictly weaker than a sibling — rebased 2026-10-23, where three of its eight digest-smoke removals turned out to have already landed via the merged #980 and are now no-ops;
   converts `test_local_function_digests_same_as_module_level` into `test_nesting_changes_a_function_digest` — `CO_NESTED` is in `co_flags`, so lifting a helper out of an enclosing function invalidates its cached calls under `hash_code=True`;
   pinned as observed, flip it there if ruled a bug), #955 (pins the deferred-future abandon arm in `wrapper.py`;
-  collapses five single-property tests in `test_dehydrate.py`), #980 (covers the `storage/sql.py` PRAGMA guards and fixes the dead in-memory journal-mode short-circuit — SQLAlchemy percent-encodes `:memory:`, so the check becomes `engine.url.database in (None, ":memory:")`;
-  drops 11 vacuous digest smokes), #1000 (pins the NaN `struct.pack` arm deterministically — two *simultaneously live* same-value NaNs must share a digest, which `hash()`-routing would break since CPython's NaN hash is address-derived;
+  collapses five single-property tests in `test_dehydrate.py`), #1000 (pins the NaN `struct.pack` arm deterministically — two *simultaneously live* same-value NaNs must share a digest, which `hash()`-routing would break since CPython's NaN hash is address-derived;
   covers the `<d` `Decimal`-NaN sub-arm and the `np.bool_` → builtin-`bool` delegation;
   narrows the Hypothesis float/complex pair tests to `allow_nan=False`, killing their self-fulfilling NaN oracle branches;
   drops four digest tests subsumed *in assertion* by siblings, after a per-test-arc ablation confirmed 89% of tests have zero unique arcs — reaffirming the collective-redundancy lesson below;
   also `.gitignore`s `pytest --cov`'s `.coverage` litter;
-  the PR body flags the next deterministic-coverage picks, led by `bagofholding_file.py`'s seed-dependent `SaveError` arm).
+  the PR body flags the next deterministic-coverage picks, led by `bagofholding_file.py`'s seed-dependent `SaveError` arm;
+  rebased 2026-10-23 and re-measured — note PR #1020 replaces the NaN arm it pins, so one of the two needs a rebase).
 
 **Lessons and standing decisions**
 
@@ -987,7 +1000,7 @@ Git history is the changelog.
   Branch `claude/fleche-mpi-executor-caching-zxjazw` keeps the helper, 13 subprocess-isolated integration tests, and `docs/mpi_execution.rst`.
   Findings that stand regardless: lookup keys carry no rank, so all ranks contend for one record — warm runs flip the `[result, None]` return shape, and divergent per-rank hit/miss decisions make some ranks skip the body's collectives (silently wrong, or a hang).
   What works today: decorate the *submission site*, not the MPI kernel.
-  `wrap_executor`'s cold/warm return-shape asymmetry is still undocumented in `docs/parallel_execution.rst` (#989 adds the per-rank warning).
+  The per-rank cold/warm caveat (an MPI-decorated call runs once per rank cold and serves one rank's record warm) is now documented in `docs/parallel_execution.rst` (#989, merged 2026-10-22).
 - Optional skip-saving of input arguments (#170), corruption-tolerant loads (#93), method-state restoration (#99), metadata-into-value-storage (#82) — parked for milestone 2.0.
 - Refactors flagged `backburner`: `_digest` dispatch registry (#333), `DigestedCall`/`LazyCall` consolidation (#404).
 - Terminology shift "cache" → "stash" and unifying "hash"/"digest" on "digest" (#350) — targeted for 1.0, not started.
