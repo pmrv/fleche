@@ -130,7 +130,9 @@ Values and calls are stored separately so call records are queryable without des
   `Hook`, `add_hook`, `get_hooks`, `load_entry_points`;
   `Indigestible`;
   `DIGEST_LENGTH=64`.
-  Built-in types are inline `match` cases in `_digest_bytes`, ordered roughly hot-path first: `int` (`bool ⊂ int`) → `Digest` (returns `value.encode()` so `digest(Digest("abc")) == "abc"`) → `str` → `None` → `np.timedelta64` (must precede `Number`, as numpy registers it `Integral`; handed to `_numpy.digest_timedelta64`, see `_numpy.py` below, `Indigestible` when it returns `None`) → `Number` (`float`, `complex`, `Decimal`, `Fraction`, plus `np.integer`/`np.floating` which satisfy `numbers.Number` automatically;
+  Built-in types are inline `match` cases in `_digest_bytes`, ordered roughly hot-path first: `int` (`bool ⊂ int`) → `Digest` (returns `value.encode()` so `digest(Digest("abc")) == "abc"`) → `str` → `None` → `np.timedelta64` (must precede `Number`, as numpy registers it `Integral`;
+  handed to `_numpy.digest_timedelta64`, see `_numpy.py` below,
+  `Indigestible` when it returns `None`) → `Number` (`float`, `complex`, `Decimal`, `Fraction`, plus `np.integer`/`np.floating` which satisfy `numbers.Number` automatically;
   handed to `_numbers.digest_number(value, _digest_bytes)`, see `_numbers.py` below, and `Indigestible` when it returns `None`;
   This replaced `hash(value)`, a lossy encoding under which distinct numbers collided) → `bytes` → numpy (`case _ if _numpy.is_numpy(value)`, which returns `_numpy.digest_numpy(value, _digest_bytes)`: `np.ndarray` and `np.bool_`, see `_numpy.py` below) → pandas (`case _ if _pandas.is_pandas(value)`, which returns `_pandas.digest_pandas(value, _digest_bytes)`: `pd.DataFrame` / `pd.Series` / `pd.Index` / `pd.NA`;
   must precede `Iterable` — DataFrame iterates over column names only, so the `Iterable` arm collides any two DataFrames with the same columns regardless of values;
@@ -170,10 +172,12 @@ Values and calls are stored separately so call records are queryable without des
   it hashes through `_hashing.running_hash` (`_salted`), never `hashlib` directly.
   `digest_number` walks `NUMBER_TREE` (`int` → {`numbers.Integral`, `float` → {`complex` → `numbers.Complex`, `Fraction` → {`Decimal`, `numbers.Real`}}};
   a complex with zero imaginary part first drops to its real part) from the root down to the value's own node and digests it as the first type whose converter holds it exactly, so equal values digest alike unless they sit on different branches below that type (none do in the current tree).
-  A value's node is the most derived tree type its type subclasses (`_path`, cached per type), registered ABCs included: a type in another's MRO is always its superclass, so one `issubclass` rule covers real subclasses and numpy scalars, which are only *registered* with the `numbers` ABCs — `np.int64` lands on `Integral`, `np.float32`/`np.longdouble` on `Real` (below `float` and `Fraction`), `np.complex64` on `Complex`, while `np.float64`/`np.complex128` subclass `float`/`complex`.
-  `_hold(value)` returns the node that holds a value and the converted value; `test_branch_choice_is_machine_stable` checks its choice against exact arithmetic for every float width the machine has, since the converters go through numpy for numpy scalars.
+  A value's node is the most derived tree type its type subclasses (`_path`, cached per type), registered ABCs included: a type in another's MRO is always its superclass, so one `issubclass` rule covers real subclasses and numpy scalars, which are only *registered* with the `numbers` ABCs — `np.int64` lands on `Integral`,
   `np.float32`/`np.longdouble` on `Real` (below `float` and `Fraction`),
   `np.complex64` on `Complex`, while `np.float64`/`np.complex128` subclass `float`/`complex`.
+  `_hold(value)` returns the node that holds a value and the converted value;
+  `test_branch_choice_is_machine_stable` checks its choice against exact arithmetic for every float width the machine has, since the converters go through numpy for numpy scalars.
+  `np.float32`/`np.longdouble` on `Real` (below `float` and `Fraction`), `np.complex64` on `Complex`, while `np.float64`/`np.complex128` subclass `float`/`complex`.
   ABC nodes have no converter or encoder: they only place what sits under them, and `Decimal` never holds a value either (every finite `Decimal` is an exact `Fraction`).
   A value nothing on its path holds gets `None`, which `digest.py` raises as `Indigestible`.
   Converters must refuse inexact conversions themselves rather than rely on a trailing `==`: numpy compares `Fraction` to `np.longdouble` by rounding the `Fraction` to double, and an `np.longdouble` to an `int` through `str` (subject to `sys.int_max_str_digits`).
@@ -190,13 +194,17 @@ Values and calls are stored separately so call records are queryable without des
   Equal-value results of different numeric types share one value-storage entry, and whichever saved last wins the return type — intended, not a bug.
 - `_attrs.py` — Internal `is_attrs_instance` / `field_items` helpers gating optional `attrs` support;
   safe to import without `attrs` installed.
-- `_numpy.py` — the `np.ndarray`, `np.bool_` and `np.timedelta64` digest arms (`is_numpy` / `digest_numpy(value, digest_bytes)`, `is_timedelta64` / `digest_timedelta64(value, digest_bytes)`), so `digest.py` no longer imports numpy;
+- `_numpy.py` — the `np.ndarray`,
+  `np.bool_` and `np.timedelta64` digest arms (`is_numpy` / `digest_numpy(value, digest_bytes)`, `is_timedelta64` / `digest_timedelta64(value, digest_bytes)`), so `digest.py` no longer imports numpy;
   arrays digest dtype + shape + `tobytes`, structured dtypes each field name + field view recursively (`dtype.str` is only `|V<itemsize>` and padding bytes are uninitialised), other `dtype.hasobject` arrays every element of `ravel().tolist()` (their bytes are PyObject pointers);
   `np.bool_` delegates to the builtin `bool` (`np.bool_ ∉ Number` since numpy 1.20).
   numpy *number* scalars are not handled here but by `_numbers`.
   Timedeltas stay apart per library (`datetime.timedelta`, `pd.Timedelta` and `np.timedelta64` of one length are three digests, by maintainer decision), each by its exact length.
-  A fixed-unit `np.timedelta64` digests its length in attoseconds (numpy's finest unit; a Python int, so `W` × int64 cannot overflow) salted `timedelta64`, so units never matter and numpy's int64 cross-unit `==`, which can wrap, is not the reference;
-  `Y`/`M` as months (`timedelta64[M]`; numpy compares them only with each other), the generic unit as its bare count (`timedelta64[generic]`; numpy's `5 == 5 s == 5 ms` is not transitive), NaT (int64 min, any unit) as one constant (`timedelta64[NaT]`).
+  A fixed-unit `np.timedelta64` digests its length in attoseconds (numpy's finest unit;
+  a Python int, so `W` × int64 cannot overflow) salted `timedelta64`, so units never matter and numpy's int64 cross-unit `==`, which can wrap, is not the reference;
+  `Y`/`M` as months (`timedelta64[M]`;
+  numpy compares them only with each other), the generic unit as its bare count (`timedelta64[generic]`;
+  numpy's `5 == 5 s == 5 ms` is not transitive), NaT (int64 min, any unit) as one constant (`timedelta64[NaT]`).
   The count comes from `view(int64)` and the unit from `np.datetime_data`, looked up by unit string (hashing a dtype costs twice `datetime_data`).
 - `_pandas.py` — Internal digest arms for pandas objects: `is_pandas` gates the one pandas case in `_digest_bytes`,
   `digest_pandas` digests DataFrame / Series / Index / MultiIndex / `pd.Timedelta` / `pd.NA` with the same bare-type-name salt as `_digest_bytes`, through `_hashing.running_hash`, and `needs_element_digests` / `element_digests` handle object columns (#1004);
