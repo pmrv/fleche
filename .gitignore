@@ -11,3 +11,7 @@ notebooks/*.db-shm
 notebooks/*.db-wal
 docs/_build
 src/fleche/_version.py
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
