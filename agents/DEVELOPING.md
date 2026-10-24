@@ -172,10 +172,12 @@ Values and calls are stored separately so call records are queryable without des
   it hashes through `_hashing.running_hash` (`_salted`), never `hashlib` directly.
   `digest_number` walks `NUMBER_TREE` (`int` → {`numbers.Integral`, `float` → {`complex` → `numbers.Complex`, `Fraction` → {`Decimal`, `numbers.Real`}}};
   a complex with zero imaginary part first drops to its real part) from the root down to the value's own node and digests it as the first type whose converter holds it exactly, so equal values digest alike unless they sit on different branches below that type (none do in the current tree).
-  A value's node is the most derived tree type its type subclasses (`_path`, cached per type), registered ABCs included: a type in another's MRO is always its superclass, so one `issubclass` rule covers real subclasses and numpy scalars, which are only *registered* with the `numbers` ABCs — `np.int64` lands on `Integral`, `np.float32`/`np.longdouble` on `Real` (below `float` and `Fraction`), `np.complex64` on `Complex`, while `np.float64`/`np.complex128` subclass `float`/`complex`.
-  `_hold(value)` returns the node that holds a value and the converted value; `test_branch_choice_is_machine_stable` checks its choice against exact arithmetic for every float width the machine has, since the converters go through numpy for numpy scalars.
+  A value's node is the most derived tree type its type subclasses (`_path`, cached per type), registered ABCs included: a type in another's MRO is always its superclass, so one `issubclass` rule covers real subclasses and numpy scalars, which are only *registered* with the `numbers` ABCs — `np.int64` lands on `Integral`,
   `np.float32`/`np.longdouble` on `Real` (below `float` and `Fraction`),
   `np.complex64` on `Complex`, while `np.float64`/`np.complex128` subclass `float`/`complex`.
+  `_hold(value)` returns the node that holds a value and the converted value;
+  `test_branch_choice_is_machine_stable` checks its choice against exact arithmetic for every float width the machine has, since the converters go through numpy for numpy scalars.
+  `np.float32`/`np.longdouble` on `Real` (below `float` and `Fraction`), `np.complex64` on `Complex`, while `np.float64`/`np.complex128` subclass `float`/`complex`.
   ABC nodes have no converter or encoder: they only place what sits under them, and `Decimal` never holds a value either (every finite `Decimal` is an exact `Fraction`).
   A value nothing on its path holds gets `None`, which `digest.py` raises as `Indigestible`.
   Converters must refuse inexact conversions themselves rather than rely on a trailing `==`: numpy compares `Fraction` to `np.longdouble` by rounding the `Fraction` to double, and an `np.longdouble` to an `int` through `str` (subject to `sys.int_max_str_digits`).
