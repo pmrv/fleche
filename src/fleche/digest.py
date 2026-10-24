@@ -319,14 +319,13 @@ def _digest_bytes(value: Any) -> bytes:
             m.update(value.encode())
         case None:
             m.update(b"__None__")
-        case _ if isinstance(value, datetime.timedelta) or _numpy.is_timedelta64(value):
-            # Must precede Number: numpy registers timedelta64 as Integral.
-            # Refused until there is a digest under which every timedelta
-            # type digests equal to those it compares equal to
-            # (datetime.timedelta, its subclass pd.Timedelta, np.timedelta64
-            # in any unit).  The old total_seconds() float merged unequal
-            # pd.Timedelta nanoseconds.  A hook can supply one meanwhile.
-            raise Indigestible(value)
+        case _ if _numpy.is_timedelta64(value):
+            # Must precede Number: numpy registers timedelta64 as Integral,
+            # and a duration must not digest as its bare count.
+            digested = _numpy.digest_timedelta64(value, _digest_bytes)
+            if digested is None:
+                raise Indigestible(value)
+            return digested
         case Number():
             # Must follow int (int ⊂ Number), so int and its subclasses can be treated separately
             digested = _numbers.digest_number(value, _digest_bytes)
@@ -375,10 +374,14 @@ def _digest_bytes(value: Any) -> bytes:
                 props.append(value.co_exceptiontable)
             m.update(_digest_bytes(tuple(props)))
         case datetime.timezone():
-            # The offset is a timedelta, which is refused (see that arm), so
-            # take it as an exact count of microseconds.
-            offset = value.utcoffset(None)
-            m.update(_digest_bytes(offset // datetime.timedelta(microseconds=1)))
+            # The offset, as the duration it is; timezone == compares the
+            # offset only, so the name is left out.
+            m.update(_digest_bytes(value.utcoffset(None)))
+        case datetime.timedelta():
+            # Its exact length in microseconds.  pd.Timedelta, a subclass, is
+            # taken by the pandas arm above and digests apart.
+            micro = (value.days * 86400 + value.seconds) * 1_000_000 + value.microseconds
+            m.update(_digest_bytes(micro))
         case datetime.datetime():  # datetime subclasses date; must precede date case
             m.update(value.isoformat().encode())
         case datetime.date():

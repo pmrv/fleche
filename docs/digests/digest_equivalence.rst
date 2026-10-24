@@ -48,10 +48,8 @@ Three kinds of value are not digested as numbers:
   as their own type, so ``digest(True) != digest(1)``.
 * NaNs equal nothing, so they digest by their bit pattern: NaNs with the same
   bits digest alike whatever their type.
-* Timedeltas (``datetime.timedelta``, ``pd.Timedelta`` and ``np.timedelta64``)
-  are refused with :exc:`~fleche.digest.Indigestible` for now, although numpy
-  counts ``np.timedelta64`` as a ``numbers.Integral``.  A hook registered with
-  :func:`~fleche.digest.add_hook` can digest them meanwhile.
+* Timedeltas are durations, not numbers, although numpy counts
+  ``np.timedelta64`` as a ``numbers.Integral``; see `Timedeltas`_ below.
 
 For example:
 
@@ -67,6 +65,30 @@ For example:
 The exact value is what a number really stores, which is not always what
 numpy's ``==`` reports: ``np.float32(0.1)`` stores 0.100000001490116…, so it
 digests apart from ``0.1`` although numpy calls the two equal.
+
+Timedeltas
+----------
+
+Each library's timedeltas digest by their exact length, and apart from every
+other library's: ``datetime.timedelta(seconds=5)``, ``pd.Timedelta("5s")`` and
+``np.timedelta64(5, "s")`` are three different digests, although they compare
+equal.  Within a library, the unit does not matter:
+
+* A ``datetime.timedelta`` digests by its length in microseconds, so
+  ``timedelta(hours=1)`` digests like ``timedelta(minutes=60)``.
+* A ``pd.Timedelta`` digests by its length in nanoseconds, whatever unit it
+  stores, so ``pd.Timedelta("5s")`` digests like ``pd.Timedelta(5000, "ms")``.
+* An ``np.timedelta64`` digests by its length down to numpy's finest unit, the
+  attosecond, so ``np.timedelta64(5, "s")``, ``np.timedelta64(5000, "ms")`` and
+  ``np.timedelta64(500, "10ms")`` digest alike.  Three kinds have no fixed
+  length and digest apart from every fixed one: years and months (``Y``, ``M``)
+  by their number of months, so ``np.timedelta64(1, "Y")`` digests like
+  ``np.timedelta64(12, "M")``; a unitless ``np.timedelta64(5)`` by its count;
+  and ``NaT`` alike in every unit.
+
+A timedelta never digests like a number, although numpy calls
+``np.timedelta64(5, "s") == 5``.  ``pd.NaT`` is not a timedelta (it also stands
+for missing datetimes) and keeps a digest of its own.
 
 Other types
 -----------
