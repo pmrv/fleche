@@ -35,6 +35,9 @@ else:
 
 from ._hashing import running_hash
 
+# Nanoseconds in one of each unit a pd.Timedelta can store.
+_NS_PER_UNIT = {"s": 10**9, "ms": 10**6, "us": 10**3, "ns": 1}
+
 # What ``infer_dtype`` calls the object columns pandas hashes faithfully.
 SAFE_OBJECT = frozenset({"string", "empty"})
 
@@ -61,7 +64,7 @@ def element_digests(values, digest_bytes: Callable[[Any], bytes]) -> np.ndarray:
 
 def is_pandas(value: Any) -> bool:
     """Whether :func:`digest_pandas` digests *value*."""
-    return isinstance(value, (pd.DataFrame, pd.Series, pd.Index)) or value is pd.NA
+    return isinstance(value, (pd.DataFrame, pd.Series, pd.Index, pd.Timedelta)) or value is pd.NA
 
 
 def digest_pandas(value, digest_bytes: Callable[[Any], bytes]) -> bytes:
@@ -109,6 +112,13 @@ def digest_pandas(value, digest_bytes: Callable[[Any], bytes]) -> bytes:
                 if needs_element_digests(value):
                     value = pd.Index(element_digests(value, digest_bytes), dtype=object)
                 m.update(hash_pandas_object(value).values.tobytes())
+            case pd.Timedelta():
+                # Its exact length in nanoseconds, whatever unit it stores; .value
+                # would overflow for a second-unit Timedelta beyond int64 ns.
+                td = value.to_timedelta64()
+                unit, multiple = np.datetime_data(td.dtype)
+                count = int(td.view(np.int64)) * multiple
+                m.update(digest_bytes(count * _NS_PER_UNIT[unit]))
             case _ if value is pd.NA:
                 # A singleton like None; it turns up in object columns, which the
                 # arms above digest element by element.
