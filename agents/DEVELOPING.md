@@ -130,7 +130,9 @@ Values and calls are stored separately so call records are queryable without des
   `Hook`, `add_hook`, `get_hooks`, `load_entry_points`;
   `Indigestible`;
   `DIGEST_LENGTH=64`.
-  Built-in types are inline `match` cases in `_digest_bytes`, ordered roughly hot-path first: `int` (`bool ⊂ int`) → `Digest` (returns `value.encode()` so `digest(Digest("abc")) == "abc"`) → `str` → `None` → `datetime.timedelta` / `np.timedelta64` (must precede `Number`, as numpy registers `timedelta64` `Integral`; handed to `_timedelta.digest_timedelta(value)`, see `_timedelta.py` below, `Indigestible` when it returns `None`; the old `total_seconds()` float had merged unequal `pd.Timedelta` nanoseconds) → `Number` (`float`, `complex`, `Decimal`, `Fraction`, plus `np.integer`/`np.floating` which satisfy `numbers.Number` automatically;
+  Built-in types are inline `match` cases in `_digest_bytes`, ordered roughly hot-path first: `int` (`bool ⊂ int`) → `Digest` (returns `value.encode()` so `digest(Digest("abc")) == "abc"`) → `str` → `None` → `datetime.timedelta` / `np.timedelta64` (must precede `Number`, as numpy registers `timedelta64` `Integral`;
+  handed to `_timedelta.digest_timedelta(value)`, see `_timedelta.py` below, `Indigestible` when it returns `None`;
+  the old `total_seconds()` float had merged unequal `pd.Timedelta` nanoseconds) → `Number` (`float`, `complex`, `Decimal`, `Fraction`, plus `np.integer`/`np.floating` which satisfy `numbers.Number` automatically;
   handed to `_numbers.digest_number(value, _digest_bytes)`, see `_numbers.py` below, and `Indigestible` when it returns `None`;
   This replaced `hash(value)`, a lossy encoding under which distinct numbers collided) → `bytes` → numpy (`case _ if _numpy.is_numpy(value)`, which returns `_numpy.digest_numpy(value, _digest_bytes)`: `np.ndarray` and `np.bool_`, see `_numpy.py` below) → pandas (`case _ if _pandas.is_pandas(value)`, which returns `_pandas.digest_pandas(value, _digest_bytes)`: `pd.DataFrame` / `pd.Series` / `pd.Index` / `pd.NA`;
   must precede `Iterable` — DataFrame iterates over column names only, so the `Iterable` arm collides any two DataFrames with the same columns regardless of values;
@@ -170,22 +172,28 @@ Values and calls are stored separately so call records are queryable without des
   it hashes through `_hashing.running_hash` (`_salted`), never `hashlib` directly.
   `digest_number` walks `NUMBER_TREE` (`int` → {`numbers.Integral`, `float` → {`complex` → `numbers.Complex`, `Fraction` → {`Decimal`, `numbers.Real`}}};
   a complex with zero imaginary part first drops to its real part) from the root down to the value's own node and digests it as the first type whose converter holds it exactly, so equal values digest alike unless they sit on different branches below that type (none do in the current tree).
-  A value's node is the first class in its MRO the tree names, else the most specific ABC node it is an instance of (`_ABC_PATHS`): numpy scalars are only *registered* with the `numbers` ABCs, so `np.int64` lands on `Integral`, `np.float32`/`np.longdouble` on `Real` (below `float` and `Fraction`), `np.complex64` on `Complex`, while `np.float64`/`np.complex128` subclass `float`/`complex`.
+  A value's node is the first class in its MRO the tree names, else the most specific ABC node it is an instance of (`_ABC_PATHS`): numpy scalars are only *registered* with the `numbers` ABCs, so `np.int64` lands on `Integral`,
+  `np.float32`/`np.longdouble` on `Real` (below `float` and `Fraction`),
+  `np.complex64` on `Complex`, while `np.float64`/`np.complex128` subclass `float`/`complex`.
   ABC nodes have no converter or encoder: they only place what sits under them, and `Decimal` never holds a value either (every finite `Decimal` is an exact `Fraction`).
   A value nothing on its path holds gets `None`, which `digest.py` raises as `Indigestible`.
   Converters must refuse inexact conversions themselves rather than rely on a trailing `==`: numpy compares `Fraction` to `np.longdouble` by rounding the `Fraction` to double, and an `np.longdouble` to an `int` through `str` (subject to `sys.int_max_str_digits`).
   So `_as_int` decides on `as_integer_ratio` / `numerator`+`denominator` (also avoiding a quadratic `int()` round trip for `Decimal("1e1000000")`), falling back to `math.trunc` for a foreign `Real`, which promises `__trunc__` but neither `__int__` nor `as_integer_ratio`;
-  Encoders salt with the bare type name of the node (`_salted(float, …)`), like every generic arm; a user type sharing the name and feeding the same bytes would collide, which is accepted as for all other types.
+  Encoders salt with the bare type name of the node (`_salted(float, …)`), like every generic arm;
+  a user type sharing the name and feeding the same bytes would collide, which is accepted as for all other types.
   `_is_nan` skips `Rational`s and treats `OverflowError` as not-NaN, since `cmath.isnan` converts to float and `Fraction(10**400)` overflows it.
   The promise, worded in `digest_equivalence.rst`: non-NaN numbers digest equal iff they hold the same exact value — numpy's `==` (NEP 50 down-casts, `Fraction` rounding) is not the reference.
   `int` subclasses (`bool`, `IntEnum`) never reach the tree: the `int` arm catches them under their own type name, unlike `float` subclasses, which downcast.
   The tree is drawn in the code comment and in `docs/digests/digest_equivalence.rst`;
   `test_number_tree_matches_its_drawings` keeps all three in sync.
-  A NaN is digested by its bits exactly as the `float` (or, with an imaginary part, `complex`) node would encode them, whatever its type, so `np.float64("nan")` meets `float("nan")` and the sign survives; `Decimal` NaNs (including `sNaN`, which `cmath.isnan` rejects) by `str()` under the `Decimal` salt.
+  A NaN is digested by its bits exactly as the `float` (or, with an imaginary part, `complex`) node would encode them, whatever its type, so `np.float64("nan")` meets `float("nan")` and the sign survives;
+  `Decimal` NaNs (including `sNaN`, which `cmath.isnan` rejects) by `str()` under the `Decimal` salt.
   Equal-value results of different numeric types share one value-storage entry, and whichever saved last wins the return type — intended, not a bug.
 - `_timedelta.py` — the duration digest arm (`datetime.timedelta`, `pd.Timedelta`, `np.timedelta64`), kept out of `digest.py` and hashing through `_hashing.running_hash`;
   needs no `digest_bytes`, since nothing in a duration recurses.
-  A fixed-length duration digests as its exact length in attoseconds (numpy's finest unit; a Python int, so `W` × int64 cannot overflow) salted `timedelta`, encoded like the `int` arm, so durations digest equal iff they are the same exact length across types and units (`10ms` multiples included) — numpy's `==` (int64 common-divisor casts that wrap or raise; pandas ignoring unit multipliers) is not the reference.
+  A fixed-length duration digests as its exact length in attoseconds (numpy's finest unit;
+  a Python int, so `W` × int64 cannot overflow) salted `timedelta`, encoded like the `int` arm, so durations digest equal iff they are the same exact length across types and units (`10ms` multiples included) — numpy's `==` (int64 common-divisor casts that wrap or raise;
+  pandas ignoring unit multipliers) is not the reference.
   `pd.Timedelta` goes through `to_timedelta64()` (its own unit, s/ms/us/ns), not `.value`, which overflows beyond int64 nanoseconds;
   other `datetime.timedelta` subclasses digest as `(days, seconds, microseconds)`.
   `np.timedelta64`'s count comes from `view(int64)` and its unit from `np.datetime_data`, looked up by unit string (hashing a dtype costs twice `datetime_data`);
