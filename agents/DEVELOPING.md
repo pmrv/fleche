@@ -905,10 +905,6 @@ Git history is the changelog.
   Composes with #883/#905 and #333.
 - #883 — `DestructuringMixin._raw_sub_digests` hardcodes a `match` over the three built-in `Digested` types, so a subclass registered via `register_destructurer` reports zero children: `Cache.gc()` can evict values reachable only through it (silent data loss) and `count_reuses()` under-counts.
   Fix in flight as PR #905 (below).
-- `ty` is red on `main` since 2026-10-23 with no repo change: pandas 3.1.0 annotated `pandas/util/__init__.py`'s module-level `__getattr__` as `-> object`, so `pd.util.hash_pandas_object` in `_pandas.py` type-checks as a non-callable `object` (three `call-non-callable` diagnostics).
-  The `ty` job pins `ty` but installs pandas unpinned, and its green runs on docs/release commits are paths-filter *skips*, not passes — so any `src/`-touching PR sees a red `ty` check that is not its own.
-  A verified fix (bind the function once behind an annotated alias with a single boundary `# ty: ignore`) is written up in a comment on PR #1000 but not pushed;
-  no issue filed yet.
 
 **Feature requests**
 
