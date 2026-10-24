@@ -16,7 +16,7 @@ ty check src/                                          # type check (CI: .github
 python benchmarks/run_benchmarks.py                    # benchmarks (writes benchmarks/results.csv)
 ```
 
-Python `>=3.11,<3.15`.
+Python `>=3.11,<3.16`.
 No committed lint config;
 `pyproject.toml` has no `[tool.ruff]`/`[tool.flake8]`.
 
@@ -684,7 +684,7 @@ Shared fixtures (in `fixtures.py`):
   its digest outputs match the figure labels by content-addressing.
   Running `python docs/figures/gen_diagrams.py` regenerates the SVGs **and** refreshes the notebook's embedded PNGs (`refresh_notebook_attachments`, rasterizing via `rsvg-convert` or `cairosvg`);
   each SVG carries a generated-by comment pointing back at the script.
-- `.github/workflows/` — CI: `tests.yml` (PR sweep across 3.11–3.14, persisting the Hypothesis example database as a GitHub artifact so shrunk counter-examples survive across runs, + `sql-backends` job that boots Postgres 16 + MariaDB 11 service containers and sets `FLECHE_TEST_{POSTGRES,MYSQL}_URL`),
+- `.github/workflows/` — CI: `tests.yml` (PR sweep across 3.11–3.15, persisting the Hypothesis example database as a GitHub artifact so shrunk counter-examples survive across runs, + `sql-backends` job that boots Postgres 16 + MariaDB 11 service containers and sets `FLECHE_TEST_{POSTGRES,MYSQL}_URL`),
   `ty.yml`,
   `test-minimum-deps.yml` (installs every direct dep at its declared floor via `uv pip install --resolution lowest-direct -e ".[tests]"` and runs the suite — `uv pip install` rather than `uv sync` because the universal lock floats deps up through cross-extra constraints and would mask the real minimums),
   `benchmarks.yml`/`benchmarks-main.yml`/`updatebenchmarks.yml`,

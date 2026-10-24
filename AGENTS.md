@@ -29,5 +29,5 @@ pytest tests/                 # run tests
 ty check src/                 # type check
 ```
 
-Python `>=3.11,<3.15`.
+Python `>=3.11,<3.16`.
 Conventional Commits are required on every commit message (`feat:`/`fix:`/`docs:`/`test:`/`chore:`/`refactor:`) — see [agents/DEVELOPING.md](agents/DEVELOPING.md#commit-messages) for why and how.
