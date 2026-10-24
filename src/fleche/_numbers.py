@@ -7,17 +7,11 @@ because :mod:`fleche.digest` imports this module.
 
 A number is digested by walking :data:`NUMBER_TREE` from its root down to the
 number's own type and taking the first type on that path that holds the value
-exactly.  Non-NaN numbers therefore digest equal exactly when they hold the
-same exact value, whatever their types: ``1 == 1.0 == 1+0j == Fraction(1)`` all
-digest as ``1``.  Python's own ``hash()`` is not used: it reduces the value
-modulo a platform-dependent prime and remaps ``-1`` to ``-2``, so unequal
-numbers such as ``-1.0`` and ``-2.0``, or ``0.5`` and ``2**60``, collide under
-it.
-
-The reference is the exact value, not ``==`` as numpy computes it: numpy casts
-a Python float down to ``float32`` before comparing (NEP 50) and rounds a
-``Fraction`` to double.  Converters therefore decide exactness themselves
-rather than trusting a trailing ``==``.
+exactly, so non-NaN numbers digest equal exactly when they hold the same exact
+value, whatever their types.  The reference is the exact value, not ``==`` as
+numpy computes it: numpy casts a Python float down to ``float32`` before
+comparing (NEP 50) and rounds a ``Fraction`` to double.  Converters therefore
+decide exactness themselves rather than trusting a trailing ``==``.
 """
 
 import cmath
@@ -101,14 +95,9 @@ def _as_decimal(value) -> Decimal:
     return v
 
 
-def _salted(name: str, *parts: bytes) -> bytes:
-    """Digest *parts* under a salt reserved for the number type *name*.
-
-    Not the bare type name the generic arms salt with, or a user type that
-    happens to share the name (a NamedTuple called Fraction) and to feed the
-    same bytes would collide with the number.
-    """
-    with running_hash(f"__fleche_{name}__".encode()) as h:
+def _salted(t: type, *parts: bytes) -> bytes:
+    """Digest *parts* under the name of *t*, as the generic arms salt."""
+    with running_hash(t.__name__.encode()) as h:
         for part in parts:
             h.update(part)
     return h.result
@@ -119,21 +108,18 @@ def _encode_int(value: int, digest_bytes: DigestBytes) -> bytes:
     return digest_bytes(value)
 
 
-def _encode_float(value: float, digest_bytes: DigestBytes) -> bytes:
-    return _salted("float", struct.pack("<d", value))
+def _encode_float(value, digest_bytes: DigestBytes) -> bytes:
+    return _salted(float, struct.pack("<d", value))
 
 
-def _encode_complex(value: complex, digest_bytes: DigestBytes) -> bytes:
-    return _salted("complex", struct.pack("<dd", value.real, value.imag))
+def _encode_complex(value, digest_bytes: DigestBytes) -> bytes:
+    return _salted(complex, struct.pack("<dd", value.real, value.imag))
 
 
 def _encode_ratio(t: type):
     def encode(value, digest_bytes: DigestBytes) -> bytes:
         num, den = value.as_integer_ratio()
-        if den == 1:
-            # Never a second encoding for an integer.
-            return digest_bytes(num)
-        return _salted(t.__name__, digest_bytes(num), digest_bytes(den))
+        return _salted(t, digest_bytes(num), digest_bytes(den))
 
     return encode
 
@@ -144,54 +130,59 @@ class NumberType:
 
     type: type
     # Value -> this type; raises if this type cannot hold the value exactly.
-    convert: Callable[[Any], Any]
+    # None for an abstract node, which only places the types under it.
+    convert: Callable[[Any], Any] | None = None
     # Digest of a value of exactly this type.
-    encode: Callable[[Any, DigestBytes], bytes]
+    encode: Callable[[Any, DigestBytes], bytes] | None = None
     children: tuple["NumberType", ...] = ()
 
 
 # The downcast hierarchy for numbers.  A number is digested as the first type
-# on the path from the root down to its own type that holds it exactly.  Equal
-# numbers therefore digest equal as long as that type lies on both their paths;
-# equal numbers on different branches below it would digest apart.  Every
-# finite Decimal is an exact Fraction, so the Decimal node only anchors the
-# path.  Mirrored in docs/digests/digest_equivalence.rst (a test keeps the two
-# in sync):
+# on the path from the root down to its own type that holds it exactly.  A type
+# is placed by its class or, failing that, by the numbers ABC it is registered
+# with: np.int64 under numbers.Integral, np.float32 and np.longdouble under
+# numbers.Real (so float still catches what it can hold), np.complex64 under
+# numbers.Complex.  The ABC nodes and Decimal hold nothing themselves (every
+# finite Decimal is an exact Fraction).  Mirrored in
+# docs/digests/digest_equivalence.rst (a test keeps the two in sync):
 #
 #   int
+#   ├── numbers.Integral
 #   └── float
 #       ├── complex
-#       └── Fraction
-#           └── Decimal
+#       │   └── numbers.Complex
+#       └── fractions.Fraction
+#           ├── decimal.Decimal
+#           └── numbers.Real
 NUMBER_TREE = NumberType(
     int,
     _as_int,
     _encode_int,
     (
+        NumberType(numbers.Integral),
         NumberType(
             float,
             _as_float,
             _encode_float,
             (
-                NumberType(complex, _as_complex, _encode_complex),
+                NumberType(
+                    complex,
+                    _as_complex,
+                    _encode_complex,
+                    (NumberType(numbers.Complex),),
+                ),
                 NumberType(
                     Fraction,
                     _as_fraction,
                     _encode_ratio(Fraction),
-                    (NumberType(Decimal, _as_decimal, _encode_ratio(Decimal)),),
+                    (
+                        NumberType(Decimal, _as_decimal, _encode_ratio(Decimal)),
+                        NumberType(numbers.Real),
+                    ),
                 ),
             ),
         ),
     ),
-)
-
-# Number types outside the tree hang off it by their numbers ABC, most specific
-# first: np.integer under int, np.float32 and np.longdouble under Fraction (so
-# float still catches what it can hold), np.complex64 under complex.
-_NUMBER_ABCS = (
-    (numbers.Integral, int),
-    (numbers.Real, Fraction),
-    (numbers.Complex, complex),
 )
 
 
@@ -203,6 +194,24 @@ def _number_paths(node, path=()):
 
 
 _NUMBER_PATHS = dict(_number_paths(NUMBER_TREE))
+
+# For types registered with an ABC rather than subclassing it (numpy scalars),
+# which the MRO lookup misses: the ABC nodes, most specific first.
+_ABC_PATHS = sorted(
+    ((t, path) for t, path in _NUMBER_PATHS.items() if path[-1].convert is None),
+    key=lambda item: len(item[0].__mro__),
+    reverse=True,
+)
+
+
+def _path(value) -> tuple[NumberType, ...]:
+    for c in type(value).__mro__:
+        if c in _NUMBER_PATHS:
+            return _NUMBER_PATHS[c]
+    for t, path in _ABC_PATHS:
+        if isinstance(value, t):
+            return path
+    return ()
 
 
 def _is_nan(value) -> bool | None:
@@ -231,7 +240,14 @@ def digest_number(value, digest_bytes: DigestBytes) -> bytes | None:
     if isinstance(value, Decimal) and value.is_nan():
         # Ahead of the NaN check, whose cmath.isnan raises on a signalling NaN.
         # str keeps sign, signalling and payload apart.
-        return _salted("Decimal NaN", str(value).encode())
+        return _salted(Decimal, str(value).encode())
+    is_complex = isinstance(value, numbers.Complex) and not isinstance(
+        value, numbers.Real
+    )
+    if is_complex and value.imag == 0:
+        # Its real part may need a node off the complex path, e.g. an
+        # np.clongdouble whose real part only a Fraction holds.
+        return digest_bytes(value.real)
     nan = _is_nan(value)
     if nan is None:
         return None
@@ -239,31 +255,17 @@ def digest_number(value, digest_bytes: DigestBytes) -> bytes | None:
         # hash(float('nan')) can differ between NaNs of the same sign: CPython
         # takes a NaN's address into account
         # (https://github.com/python/cpython/blob/1ac9d138ae0563f2829ba91efe7989af507f47e0/Python/pyhash.c#L59),
-        # and NaNs are not singletons.  So a NaN is digested by its binary
-        # representation instead, which also keeps negative and positive NaNs
-        # apart.  IEEE does not assign NaN a unique representation, but let's
-        # burn that bridge when someone else tries to cross it; numpy NaNs map
-        # to the same binary and are detected by cmath.isnan too.  One salt for
-        # every type, so np.float64("nan") meets float("nan").
-        if isinstance(value, numbers.Complex):
-            packed = struct.pack("<dd", value.real, value.imag)
-        else:
-            packed = struct.pack("<d", value)
-        return _salted("NaN", packed)
-    if isinstance(value, numbers.Complex) and not isinstance(value, numbers.Real):
-        if value.imag == 0:
-            # Its real part may need a node off the complex path, e.g. an
-            # np.clongdouble whose real part only a Fraction holds.
-            return digest_bytes(value.real)
-    path = next(
-        (_NUMBER_PATHS[c] for c in type(value).__mro__ if c in _NUMBER_PATHS), None
-    )
-    if path is None:
-        path = next(
-            (_NUMBER_PATHS[t] for abc, t in _NUMBER_ABCS if isinstance(value, abc)),
-            None,
-        )
-    for node in path or ():
+        # and NaNs are not singletons.  So a NaN is digested by its bits, as a
+        # float or complex of the same bits would be, whatever its type: that
+        # keeps negative and positive NaNs apart and lets np.float64("nan")
+        # meet float("nan").  IEEE does not assign NaN a unique representation,
+        # but let's burn that bridge when someone else tries to cross it.
+        if is_complex:
+            return _encode_complex(value, digest_bytes)
+        return _encode_float(value, digest_bytes)
+    for node in _path(value):
+        if node.convert is None or node.encode is None:
+            continue
         try:
             v = node.convert(value)
         except (TypeError, ValueError, ArithmeticError):

@@ -60,8 +60,6 @@ def is_pandas(value: Any) -> bool:
 
 def digest_pandas(value, digest_bytes: Callable[[Any], bytes]) -> bytes:
     """Return the digest of the pandas *value*, in the format of *digest_bytes*."""
-    # Salted with the bare type name, as the generic arms in digest.py are, so
-    # these digests are the ones the arms had there.
     with running_hash(type(value).__name__.encode()) as m:
         match value:
             case pd.DataFrame():

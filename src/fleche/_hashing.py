@@ -1,10 +1,10 @@
 """The salted running hash every digest is built from.
 
-Kept apart from :mod:`fleche.digest` so that the arm modules it imports,
-:mod:`fleche._numbers` and :mod:`fleche._pandas`, hash the same way without
-importing it back.  The hash primitive lives only here; the encoding of a
-finished digest lives here and in :mod:`fleche.digest`'s ``hexdigest()``
-returns, never in an arm module.
+Kept apart from :mod:`fleche.digest` so that the arm modules it imports
+(:mod:`fleche._numbers`, :mod:`fleche._numpy`, :mod:`fleche._pandas`) hash the
+same way without importing it back.  The hash primitive lives only here; the
+encoding of a finished digest lives here and in :mod:`fleche.digest`'s
+``hexdigest()`` returns, never in an arm module.
 """
 
 import hashlib
@@ -32,8 +32,9 @@ class running_hash:
         return h.result
 
     ``result`` is the hex digest as bytes, the form ``_digest_bytes`` returns
-    and parent hashes are fed.  Reading it before the block has exited
-    normally raises :exc:`RuntimeError`.
+    and parent hashes are fed.  It is only set when the block finishes without
+    raising: reading it inside the block, or after the block raised, raises
+    :exc:`RuntimeError`.
     """
 
     __slots__ = ("_m", "_result")

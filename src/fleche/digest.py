@@ -7,9 +7,8 @@ import types
 import importlib.metadata
 from collections.abc import Iterable, Mapping
 from typing import Any, TypeVar, Callable, Type, Generic
-import numpy as np
 
-from . import _attrs, _numbers, _pandas
+from . import _attrs, _numbers, _numpy, _pandas
 from ._hashing import new_hash as _new_hash
 
 logger = logging.getLogger("fleche.digest")
@@ -320,7 +319,7 @@ def _digest_bytes(value: Any) -> bytes:
             m.update(value.encode())
         case None:
             m.update(b"__None__")
-        case datetime.timedelta() | np.timedelta64():
+        case _ if isinstance(value, datetime.timedelta) or _numpy.is_timedelta64(value):
             # Must precede Number: numpy registers timedelta64 as Integral.
             # Refused until there is a digest under which every timedelta
             # type digests equal to those it compares equal to
@@ -329,31 +328,15 @@ def _digest_bytes(value: Any) -> bytes:
             # pd.Timedelta nanoseconds.  A hook can supply one meanwhile.
             raise Indigestible(value)
         case Number():
-            # Must follow int (int ⊂ Number), so int and its subclasses (bool,
-            # IntEnum) keep their own type name rather than downcasting.
+            # Must follow int (int ⊂ Number), so int and its subclasses can be treated separately
             digested = _numbers.digest_number(value, _digest_bytes)
             if digested is None:
                 raise Indigestible(value)
             return digested
         case bytes():
             m.update(value)
-        case np.ndarray():
-            m.update(_digest_bytes(value.dtype.str))
-            m.update(_digest_bytes(value.shape))
-            if value.dtype.names is not None:
-                for name in value.dtype.names:
-                    m.update(_digest_bytes(name))
-                    m.update(_digest_bytes(value[name]))  # recurses into the ndarray arm
-            elif value.dtype.hasobject:
-                # tobytes() of an object array yields memory addresses, digest
-                # all elements by value instead
-                for element in value.ravel().tolist():
-                    m.update(_digest_bytes(element))
-            else:
-                m.update(value.tobytes())
-        case np.bool_():
-            # np.bool_ ∉ Number so this arm is reachable
-            return _digest_bytes(bool(value))
+        case _ if _numpy.is_numpy(value):
+            return _numpy.digest_numpy(value, _digest_bytes)
         case _ if _pandas.is_pandas(value):
             # Must precede Iterable: a DataFrame iterates over its column names
             # only, so the Iterable arm would collide any two frames sharing them.

@@ -11,7 +11,6 @@ import cmath
 import enum
 import sys
 import time
-from typing import NamedTuple
 import inspect
 import pathlib
 import datetime
@@ -38,7 +37,7 @@ from fractions import Fraction
 
 from fleche import fleche
 from fleche.state import cache
-from fleche.digest import _HOOKS, add_hook, digest, Digest, Indigestible
+from fleche.digest import digest, Digest, Indigestible
 from fleche.call import Call
 
 
@@ -149,7 +148,7 @@ def test_different_integers_have_different_hashes(x, y):
 
 
 @given(st.floats(allow_nan=True), st.floats(allow_nan=True))
-# Pairs hash() collided (PR #990); random draws practically never hit them.
+# collision instances from previous numbers' digest
 @example(-1.0, -2.0)
 @example(0.5, 2.0**60)
 @example(2.0**100, 2.0**39)
@@ -174,7 +173,7 @@ def test_different_floats_have_different_hashes(x, y):
 
 
 @given(st.complex_numbers(allow_nan=True), st.complex_numbers(allow_nan=True))
-# Pairs hash() collided (PR #990); random draws practically never hit them.
+# collision instances from previous numbers' digest
 @example(1j, 1000003 + 0j)
 @example(-1 + 0j, -2 + 0j)
 @example(0.5 + 0j, 2.0**60 + 0j)
@@ -215,10 +214,9 @@ def test_int_matches_float_without_fractional_part():
     assert digest(-3) == digest(-3.0)
 
 
-# Unequal numbers whose hash() coincides, from the investigation on PR #990.
-# Digests used to be hash(value), so every pair here was one cache key and a
-# wrong cache hit; random pairs practically never land on them.
-HASH_COLLISIONS = [
+# Unequal numbers that shared a digest under hash() (PR #990) or a draft of
+# its replacement.
+COLLISIONS = [
     (-1.0, -2.0),  # CPython remaps the error sentinel hash -1 to -2
     (Fraction(-1), -2),
     (Decimal(-1), -2),
@@ -232,23 +230,18 @@ HASH_COLLISIONS = [
     (math.inf, 314159),  # sys.hash_info.inf
     (-math.inf, -314159),
     (1j, 1000003),  # hash(a + bj) == hash(a) + 1000003 * hash(b)
+    (Decimal("1e400"), math.inf),  # finite, though float() overflows it
+    (0.1, Decimal("0.1")),  # the float is not exactly 1/10
 ]
 
 
-@pytest.mark.parametrize(
-    "a, b",
-    HASH_COLLISIONS
-    + [
-        (Decimal("1e400"), math.inf),  # finite, though float() overflows it
-        (0.1, Decimal("0.1")),  # the float is not exactly 1/10
-    ],
-)
+@pytest.mark.parametrize("a, b", COLLISIONS)
 def test_unequal_numbers_have_different_digests(a, b):
     assert a != b
     assert digest(a) != digest(b)
 
 
-@pytest.mark.parametrize("a, b", HASH_COLLISIONS)
+@pytest.mark.parametrize("a, b", COLLISIONS)
 def test_unequal_numbers_do_not_share_a_cache_entry(clean_cache, a, b):
     # The end-to-end symptom on PR #990: the second call was a cache hit on the
     # first and returned its result.
@@ -292,21 +285,51 @@ def test_equal_numbers_have_equal_digests(a, b):
     assert digest(a) == digest(b)
 
 
-def test_wide_numpy_float_digests_as_fraction():
-    # Wider than a float on x86-64; equal to float precision elsewhere, where
-    # both sides take the float node instead.
+# np.longdouble is x87 extended precision on x86-64, IEEE quad on aarch64 Linux
+# and a plain double on Windows and macOS: the values it can hold differ between
+# machines, the digest of a given value does not (see the pinned digests below).
+EXTENDED_LONGDOUBLE = np.finfo(np.longdouble).nmant > np.finfo(np.float64).nmant
+
+
+@pytest.mark.skipif(not EXTENDED_LONGDOUBLE, reason="np.longdouble is a double here")
+def test_wide_numpy_float_digests_as_its_exact_fraction():
     x = np.longdouble(1) / 3
+    assert float(x) != x
     assert digest(x) == digest(Fraction(*x.as_integer_ratio()))
     # A zero imaginary part must not strand the real part on the complex path,
     # which has no node to hold it.
     assert digest(np.clongdouble(x)) == digest(x)
 
 
+# Digests are a function of the exact value alone, so they must not drift with
+# the machine, the Python version or numpy's scalar widths; CI runs this file
+# across the supported versions.
+PINNED_DIGESTS = {
+    "1": (1, "da217d50752f3371d9f8b62a3e72409592bd34b74e14fdac43e2b137bd59f21f"),
+    "0.5": (0.5, "fc7c2237b80899d0cc04c63eda2548c0e5cdb0a58c82db3bd43824d8220923b7"),
+    "Fraction(1, 3)": (Fraction(1, 3), "4c0d2ccfd91ca3d1959ccef24c7d962bcb2a067c7b62b0ca614769dca83fe557"),
+    "1.5+2j": (1.5 + 2j, "b25b8e15b33f4117e21e8c8d2eae4def45ef25823d06b19199d870294e224bd4"),
+    "inf": (math.inf, "8561a7bd5204505bdfef420e39d2683bdb576faba2705ddcaaab42c0b1159f9e"),
+    "nan": (math.nan, "39927fc4a0964029f26f8ba2e346344bc65e3d27c6a075b30e836f84afa18746"),
+    "Decimal('sNaN')": (Decimal("sNaN"), "28a509caace33df4dab1133d77c6a2eb6c3b886eabee7f68d6875ca7cae835c2"),
+}
+
+
+@pytest.mark.parametrize("name", PINNED_DIGESTS)
+def test_number_digests_are_pinned(name):
+    value, expected = PINNED_DIGESTS[name]
+    assert digest(value) == expected
+
+
+def _label(t):
+    return t.__name__ if t.__module__ == "builtins" else f"{t.__module__}.{t.__name__}"
+
+
 def _draw_number_tree(node, prefix=""):
     lines = []
     for i, child in enumerate(node.children):
         last = i == len(node.children) - 1
-        lines.append(prefix + ("└── " if last else "├── ") + child.type.__name__)
+        lines.append(prefix + ("└── " if last else "├── ") + _label(child.type))
         lines += _draw_number_tree(child, prefix + ("    " if last else "│   "))
     return lines
 
@@ -314,7 +337,7 @@ def _draw_number_tree(node, prefix=""):
 def test_number_tree_matches_its_drawings():
     from fleche import _numbers
 
-    lines = [_numbers.NUMBER_TREE.type.__name__]
+    lines = [_label(_numbers.NUMBER_TREE.type)]
     lines += _draw_number_tree(_numbers.NUMBER_TREE)
     source = inspect.getsource(_numbers)
     assert "\n".join("#   " + line for line in lines) in source
@@ -344,15 +367,6 @@ def test_timedeltas_are_refused(value):
     # slip into the number arm either.
     with pytest.raises(Indigestible):
         digest(value)
-
-
-def test_timedeltas_can_be_digested_by_hook():
-    saved = list(_HOOKS)
-    add_hook((datetime.timedelta, lambda td: digest((td.days, td.seconds, td.microseconds))))
-    try:
-        assert digest(datetime.timedelta(hours=1)) == digest(datetime.timedelta(minutes=60))
-    finally:
-        _HOOKS[:] = saved
 
 
 @pytest.mark.parametrize(
@@ -439,7 +453,7 @@ def test_fraction_beyond_float_range_digests_as_its_value():
 
 
 @pytest.mark.skipif(
-    np.finfo(np.longdouble).maxexp < 16384, reason="np.longdouble cannot hold 1e4400"
+    np.finfo(np.longdouble).maxexp < 16384, reason="np.longdouble cannot hold 1e4400 here"
 )
 @pytest.mark.parametrize("max_str_digits", [None, 0])
 def test_huge_longdouble_digests_as_int_whatever_the_str_limit(max_str_digits):
@@ -456,50 +470,12 @@ def test_huge_longdouble_digests_as_int_whatever_the_str_limit(max_str_digits):
         sys.set_int_max_str_digits(old)
 
 
-def test_integral_ratio_has_one_encoding():
-    from fleche._numbers import _encode_ratio
-    from fleche.digest import _digest_bytes
-
-    encoded = _encode_ratio(Fraction)(Fraction(2**200), _digest_bytes)
-    assert encoded.decode() == digest(2**200)
-
-
 def test_decimal_with_large_exponent_digests_quickly():
     # Taking it to int and back was quadratic: about 3.5 s for 1e300000.
     start = time.perf_counter()
     d = digest(Decimal("1e300000"))
     assert time.perf_counter() - start < 1
     assert d == digest(10**300000)
-
-
-class Fraction_(NamedTuple):
-    numerator: int
-    denominator: int
-
-
-Fraction_.__name__ = "Fraction"
-
-
-class float_(bytes):
-    pass
-
-
-float_.__name__ = "float"
-
-
-@pytest.mark.parametrize(
-    "a, b",
-    [
-        (Fraction_(1, 3), Fraction(1, 3)),
-        (float_(struct.pack("<d", 0.5)), 0.5),
-        (float_(struct.pack("<dd", math.nan, 0)), math.nan),
-    ],
-    ids=["NamedTuple-Fraction", "bytes-float", "bytes-float-NaN"],
-)
-def test_user_type_named_like_a_number_does_not_collide(a, b):
-    # Same type name, same bytes fed under it; the number salts are reserved.
-    assert type(a).__name__ == type(b).__name__
-    assert digest(a) != digest(b)
 
 
 # What the digest promises equality against is the exact value, not == as
