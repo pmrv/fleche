@@ -1,10 +1,10 @@
 """The salted running hash every digest is built from.
 
 Kept apart from :mod:`fleche.digest` so that the arm modules it imports
-(:mod:`fleche._numbers`, :mod:`fleche._numpy`, :mod:`fleche._pandas`) hash the
-same way without importing it back.  The hash primitive lives only here; the
-encoding of a finished digest lives here and in :mod:`fleche.digest`'s
-``hexdigest()`` returns, never in an arm module.
+(:mod:`fleche._numbers`, :mod:`fleche._numpy`, :mod:`fleche._pandas`,
+:mod:`fleche._timedelta`) hash the same way without importing it back.  The
+hash primitive lives only here; the encoding of a finished digest lives here
+and in :mod:`fleche.digest`'s ``hexdigest()`` returns, never in an arm module.
 """
 
 import hashlib
