@@ -112,9 +112,9 @@ Values and calls are stored separately so call records are queryable without des
   Precedence: hooks and entry points first (for third-party types;
   skipped when both hook lists are empty), then a class-level `__digest__` (still before the built-in `match` arms so dict/list subclasses can override;
   negatives cached in `_TYPES_WITHOUT_DIGEST`), then the `_digest_bytes` match.
-  Order-sensitive arms: `timedelta`/`np.timedelta64` are refused before `Number` (numpy registers `timedelta64` as `Integral`;
-  refused until a digest honours their cross-unit `==`);
-  pandas comes before `Iterable` (a DataFrame iterates its column names).
+  Order-sensitive arms: `np.timedelta64` goes to `_numpy.digest_timedelta64` before `Number` (numpy registers it as `Integral`);
+  pandas comes before `Iterable` (a DataFrame iterates its column names) and before the `datetime.timedelta` arm (`pd.Timedelta` subclasses it).
+  A `datetime.timedelta` digests its exact length in microseconds, not the old `total_seconds()` float, which merged unequal values past about 285 years.
   Built-in `type` objects digest by name, user classes are `Indigestible` as values;
   dataclass and `attrs` instances share one flat field-dict layout.
   Functions digest code plus captured cells and defaults, so closures from one factory differ (a function with neither digests as its code object);
@@ -128,7 +128,12 @@ Values and calls are stored separately so call records are queryable without des
   Equal values of different numeric types share one stored value, and the last save wins the return type — intended.
   `_numpy.py` digests dtype + shape + bytes, except structured dtypes (per field;
   padding is uninitialised) and object dtypes (per element).
+  Timedeltas stay apart per library (`datetime.timedelta`, `pd.Timedelta` and `np.timedelta64` of one length are three digests, by maintainer decision), each by its exact length.
+  A fixed-unit `np.timedelta64` digests its length in attoseconds (numpy's finest unit, as a Python int), so the unit never matters and numpy's int64 cross-unit `==`, which can wrap, is not the reference;
+  `Y`/`M` digest as months, the generic unit as its bare count (numpy's `5 == 5 s == 5 ms` is not transitive), and NaT as one constant.
   `_pandas.py` folds name/dtype/index in by hand (`hash_pandas_object` ignores them) and digests non-string object columns element-wise with fleche's own hash (pandas would `str()` them).
+  A `pd.Timedelta` digests its exact length in nanoseconds through `to_timedelta64()`, not `.value`, which overflows beyond int64 ns;
+  `pd.NaT` is a `datetime.datetime` subclass and keeps its datetime-arm digest.
   `_attrs.py` is import-safe without `attrs`.
 - `caches.py` — every `BaseCache` has `prepare(call) → PreparedCall` and `save(PreparedCall | Call)`.
   `Cache.prepare` stashes argument values at once, and `save` only resolves the result;
