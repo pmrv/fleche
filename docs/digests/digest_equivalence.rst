@@ -51,10 +51,8 @@ value are not digested as numbers:
   as their own type, so ``digest(True) != digest(1)``.
 * NaNs equal nothing, so they digest by their bit pattern: NaNs with the same
   bits digest alike whatever their type.
-* Timedeltas (``datetime.timedelta``, ``pd.Timedelta`` and ``np.timedelta64``)
-  are refused with :exc:`~fleche.digest.Indigestible` for now, although numpy
-  counts ``np.timedelta64`` as a ``numbers.Integral``.  A hook registered with
-  :func:`~fleche.digest.add_hook` can digest them meanwhile.
+* Timedeltas are durations, not numbers, although numpy counts
+  ``np.timedelta64`` as a ``numbers.Integral``; see `Timedeltas`_ below.
 
 For example:
 
@@ -66,6 +64,28 @@ For example:
    digest(-1.0) != digest(-2.0)
    digest(0.1) != digest(Decimal("0.1"))   # the float is not exactly 1/10
    digest(True) != digest(1)
+
+Timedeltas
+----------
+
+Timedeltas digest by their length, not by their type or unit:
+``datetime.timedelta(seconds=5)``, ``pd.Timedelta("5s")``,
+``np.timedelta64(5000, "ms")`` and ``np.timedelta64(500, "10ms")`` all digest
+alike, while ``np.timedelta64(5, "s")`` and ``np.timedelta64(5, "ms")`` do not.
+The length is exact, down to numpy's finest unit, the attosecond.  It is not
+always what ``==`` reports: numpy can wrap around when it compares durations
+in different units, and pandas misreads multiplied units such as ``"10ms"``.  A
+timedelta never digests like a number, although numpy calls
+``np.timedelta64(5, "s") == 5``.
+
+Three kinds of ``np.timedelta64`` have no fixed length, and each digests apart
+from every fixed duration:
+
+* Years and months (``Y``, ``M``) digest by their number of months, so
+  ``np.timedelta64(1, "Y")`` digests like ``np.timedelta64(12, "M")``.
+* A unitless ``np.timedelta64(5)`` digests by its count alone.
+* ``NaT`` digests alike in every unit.  ``pd.NaT`` keeps a digest of its own,
+  because it also stands for missing datetimes.
 
 Other types
 -----------

@@ -130,9 +130,7 @@ Values and calls are stored separately so call records are queryable without des
   `Hook`, `add_hook`, `get_hooks`, `load_entry_points`;
   `Indigestible`;
   `DIGEST_LENGTH=64`.
-  Built-in types are inline `match` cases in `_digest_bytes`, ordered roughly hot-path first: `int` (`bool ⊂ int`) → `Digest` (returns `value.encode()` so `digest(Digest("abc")) == "abc"`) → `str` → `None` → `datetime.timedelta` / `np.timedelta64` (must precede `Number`, as numpy registers `timedelta64` `Integral`;
-  refused with `Indigestible` until a digest honours their cross-type, cross-unit `==` — the old `total_seconds()` float merged unequal `pd.Timedelta` nanoseconds;
-  `datetime.timezone` digests its offset as exact microseconds instead) → `Number` (`float`, `complex`, `Decimal`, `Fraction`, plus `np.integer`/`np.floating` which satisfy `numbers.Number` automatically;
+  Built-in types are inline `match` cases in `_digest_bytes`, ordered roughly hot-path first: `int` (`bool ⊂ int`) → `Digest` (returns `value.encode()` so `digest(Digest("abc")) == "abc"`) → `str` → `None` → `datetime.timedelta` / `np.timedelta64` (must precede `Number`, as numpy registers `timedelta64` `Integral`; handed to `_timedelta.digest_timedelta(value)`, see `_timedelta.py` below, `Indigestible` when it returns `None`; the old `total_seconds()` float had merged unequal `pd.Timedelta` nanoseconds) → `Number` (`float`, `complex`, `Decimal`, `Fraction`, plus `np.integer`/`np.floating` which satisfy `numbers.Number` automatically;
   handed to `_numbers.digest_number(value, _digest_bytes)`, see `_numbers.py` below, and `Indigestible` when it returns `None`;
   This replaced `hash(value)`, a lossy encoding under which distinct numbers collided) → `bytes` → numpy (`case _ if _numpy.is_numpy(value)`, which returns `_numpy.digest_numpy(value, _digest_bytes)`: `np.ndarray` and `np.bool_`, see `_numpy.py` below) → pandas (`case _ if _pandas.is_pandas(value)`, which returns `_pandas.digest_pandas(value, _digest_bytes)`: `pd.DataFrame` / `pd.Series` / `pd.Index` / `pd.NA`;
   must precede `Iterable` — DataFrame iterates over column names only, so the `Iterable` arm collides any two DataFrames with the same columns regardless of values;
@@ -151,7 +149,7 @@ Values and calls are stored separately so call records are queryable without des
   an empty cell folds in its own marker;
   the compiler-inserted `__class__` cell (every method mentioning `super()` has one) is folded in via `digest_class` as `module.QualName` rather than as a value, since user classes are `Indigestible` and digesting it would refuse every such method;
   any other indigestible capture or default raises.
-  `__digest__` is honoured **per instance** here — all functions share one type, so a class-level lookup could never distinguish them — which is the escape hatch for a closure over something unhashable and how `make_wrapper` gives each wrapper the digest of the function it wraps) / `CodeType` → `datetime.{timezone,timedelta,datetime,date,time}` → `staticmethod` / `classmethod` / `property` → built-in `type` objects (qualified-name digest of `int`/`str`/… via the shared `digest_class`, restricted to `value.__module__ == 'builtins'`;
+  `__digest__` is honoured **per instance** here — all functions share one type, so a class-level lookup could never distinguish them — which is the escape hatch for a closure over something unhashable and how `make_wrapper` gives each wrapper the digest of the function it wraps) / `CodeType` → `datetime.{timezone,datetime,date,time}` (a `timezone` folds in its `utcoffset` through the timedelta arm, the name left out because `timezone.__eq__` ignores it) → `staticmethod` / `classmethod` / `property` → built-in `type` objects (qualified-name digest of `int`/`str`/… via the shared `digest_class`, restricted to `value.__module__ == 'builtins'`;
   user-defined classes raise `Indigestible` as *values*) → `dataclasses` and `attrs` instances (flat field-dict, so the two layouts hash identically;
   both arms guard `not isinstance(value, type)` so a dataclass *class* falls through to `Indigestible` rather than crashing on missing field defaults) → `types.ModuleType` (digests `__all__` if defined else `dir()`) → `Mapping` → `Iterable`.
   User types opt in by defining `__digest__` on the class — checked before the built-in cases so dict/list subclasses can override (negative answers are cached in `_TYPES_WITHOUT_DIGEST` so the hot path is one set lookup).
@@ -162,7 +160,7 @@ Values and calls are stored separately so call records are queryable without des
   a class receiver is named via `digest_class`), so there is no second entry point — `call._code_digest` reduces a bound method to `__func__` (the receiver already arrives as a call argument) and goes through `digest`;
   `digest_class(cls)` names a class `module.QualName` and is shared by the built-in-`type` arm and the `__class__` cell.
   `_new_hash(salt)` (imported from `_hashing.new_hash`) starts every salted running hash.
-- `_hashing.py` — the hash primitive, kept out of `digest.py` so the arm modules it imports (`_numbers`, `_numpy`, `_pandas`) can share it without importing it back.
+- `_hashing.py` — the hash primitive, kept out of `digest.py` so the arm modules it imports (`_numbers`, `_numpy`, `_pandas`, `_timedelta`) can share it without importing it back.
   `new_hash(salt)` starts a salted SHA256;
   `running_hash(salt)` is a context manager over it whose `.result` is the finished digest in `_digest_bytes`'s wire format (hex as bytes) once the block exits, and raises `RuntimeError` if read earlier, so an arm module never spells out `hexdigest().encode()` itself.
   The primitive lives only here and the encoding only here and in `digest.py`'s own `hexdigest()` returns, never in an arm module: the #440 raw-bytes switch touches those, and patching `_hashing.hashlib` swaps every digest's hash (`test_redigest`, `test_hashing`).
@@ -185,6 +183,16 @@ Values and calls are stored separately so call records are queryable without des
   `test_number_tree_matches_its_drawings` keeps all three in sync.
   A NaN is digested by its bits exactly as the `float` (or, with an imaginary part, `complex`) node would encode them, whatever its type, so `np.float64("nan")` meets `float("nan")` and the sign survives; `Decimal` NaNs (including `sNaN`, which `cmath.isnan` rejects) by `str()` under the `Decimal` salt.
   Equal-value results of different numeric types share one value-storage entry, and whichever saved last wins the return type — intended, not a bug.
+- `_timedelta.py` — the duration digest arm (`datetime.timedelta`, `pd.Timedelta`, `np.timedelta64`), kept out of `digest.py` and hashing through `_hashing.running_hash`;
+  needs no `digest_bytes`, since nothing in a duration recurses.
+  A fixed-length duration digests as its exact length in attoseconds (numpy's finest unit; a Python int, so `W` × int64 cannot overflow) salted `timedelta`, encoded like the `int` arm, so durations digest equal iff they are the same exact length across types and units (`10ms` multiples included) — numpy's `==` (int64 common-divisor casts that wrap or raise; pandas ignoring unit multipliers) is not the reference.
+  `pd.Timedelta` goes through `to_timedelta64()` (its own unit, s/ms/us/ns), not `.value`, which overflows beyond int64 nanoseconds;
+  other `datetime.timedelta` subclasses digest as `(days, seconds, microseconds)`.
+  `np.timedelta64`'s count comes from `view(int64)` and its unit from `np.datetime_data`, looked up by unit string (hashing a dtype costs twice `datetime_data`);
+  `Y`/`M` digest as an exact month count (salt `timedelta64[M]`, numpy compares them only with each other), the generic unit as its bare count (salt `timedelta64`, numpy's `5 == 5 s == 5 ms` is not transitive), and NaT (int64 min, any unit) as one constant (salt `NaT`, apart from `pd.NaT`'s `NaTType`), as NaNs meet across types.
+  `pd.NaT` is a `datetime.datetime` subclass, not a timedelta, and keeps its datetime-arm digest.
+  About 1.4 µs (`datetime.timedelta`) to 2.2 µs (`pd.Timedelta`, `np.timedelta64`) per digest.
+  Tests: `tests/unit/digest/test_timedelta.py`, against an attosecond reference computed independently of the module.
 - `_attrs.py` — Internal `is_attrs_instance` / `field_items` helpers gating optional `attrs` support;
   safe to import without `attrs` installed.
 - `_numpy.py` — the `np.ndarray` and `np.bool_` digest arm (`is_numpy` / `digest_numpy(value, digest_bytes)`), plus `is_timedelta64` for `digest.py`'s timedelta refusal, so `digest.py` no longer imports numpy;
