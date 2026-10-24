@@ -44,9 +44,11 @@ class _PicklableLock:
     independent lock that shares no state with locks in other processes.
     """
 
-    # staticmethod: on 3.15 threading.RLock is a plain Python function and
-    # would otherwise bind as a method.
-    _factory = staticmethod(threading.Lock)
+    # A real staticmethod rather than ``_factory = threading.Lock``: on 3.15
+    # threading.RLock is a plain Python function and would bind as a method.
+    @staticmethod
+    def _factory():
+        return threading.Lock()
 
     def __init__(self):
         self._lock = self._factory()
@@ -68,7 +70,9 @@ class _PicklableRLock(_PicklableLock):
     that nested acquisitions (e.g. ``expand`` inside ``load``) do not deadlock.
     """
 
-    _factory = staticmethod(threading.RLock)
+    @staticmethod
+    def _factory():
+        return threading.RLock()
 
 
 @dataclass(frozen=True)
