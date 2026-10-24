@@ -172,18 +172,22 @@ Values and calls are stored separately so call records are queryable without des
   it hashes through `_hashing.running_hash` (`_salted`), never `hashlib` directly.
   `digest_number` walks `NUMBER_TREE` (`int` → {`numbers.Integral`, `float` → {`complex` → `numbers.Complex`, `Fraction` → {`Decimal`, `numbers.Real`}}};
   a complex with zero imaginary part first drops to its real part) from the root down to the value's own node and digests it as the first type whose converter holds it exactly, so equal values digest alike unless they sit on different branches below that type (none do in the current tree).
-  A value's node is the first class in its MRO the tree names, else the most specific ABC node it is an instance of (`_ABC_PATHS`): numpy scalars are only *registered* with the `numbers` ABCs, so `np.int64` lands on `Integral`, `np.float32`/`np.longdouble` on `Real` (below `float` and `Fraction`), `np.complex64` on `Complex`, while `np.float64`/`np.complex128` subclass `float`/`complex`.
+  A value's node is the first class in its MRO the tree names, else the most specific ABC node it is an instance of (`_ABC_PATHS`): numpy scalars are only *registered* with the `numbers` ABCs, so `np.int64` lands on `Integral`,
+  `np.float32`/`np.longdouble` on `Real` (below `float` and `Fraction`),
+  `np.complex64` on `Complex`, while `np.float64`/`np.complex128` subclass `float`/`complex`.
   ABC nodes have no converter or encoder: they only place what sits under them, and `Decimal` never holds a value either (every finite `Decimal` is an exact `Fraction`).
   A value nothing on its path holds gets `None`, which `digest.py` raises as `Indigestible`.
   Converters must refuse inexact conversions themselves rather than rely on a trailing `==`: numpy compares `Fraction` to `np.longdouble` by rounding the `Fraction` to double, and an `np.longdouble` to an `int` through `str` (subject to `sys.int_max_str_digits`).
   So `_as_int` decides on `as_integer_ratio` / `numerator`+`denominator` (also avoiding a quadratic `int()` round trip for `Decimal("1e1000000")`), falling back to `math.trunc` for a foreign `Real`, which promises `__trunc__` but neither `__int__` nor `as_integer_ratio`;
-  Encoders salt with the bare type name of the node (`_salted(float, …)`), like every generic arm; a user type sharing the name and feeding the same bytes would collide, which is accepted as for all other types.
+  Encoders salt with the bare type name of the node (`_salted(float, …)`), like every generic arm;
+  a user type sharing the name and feeding the same bytes would collide, which is accepted as for all other types.
   `_is_nan` skips `Rational`s and treats `OverflowError` as not-NaN, since `cmath.isnan` converts to float and `Fraction(10**400)` overflows it.
   The promise, worded in `digest_equivalence.rst`: non-NaN numbers digest equal iff they hold the same exact value — numpy's `==` (NEP 50 down-casts, `Fraction` rounding) is not the reference.
   `int` subclasses (`bool`, `IntEnum`) never reach the tree: the `int` arm catches them under their own type name, unlike `float` subclasses, which downcast.
   The tree is drawn in the code comment and in `docs/digests/digest_equivalence.rst`;
   `test_number_tree_matches_its_drawings` keeps all three in sync.
-  A NaN is digested by its bits exactly as the `float` (or, with an imaginary part, `complex`) node would encode them, whatever its type, so `np.float64("nan")` meets `float("nan")` and the sign survives; `Decimal` NaNs (including `sNaN`, which `cmath.isnan` rejects) by `str()` under the `Decimal` salt.
+  A NaN is digested by its bits exactly as the `float` (or, with an imaginary part, `complex`) node would encode them, whatever its type, so `np.float64("nan")` meets `float("nan")` and the sign survives;
+  `Decimal` NaNs (including `sNaN`, which `cmath.isnan` rejects) by `str()` under the `Decimal` salt.
   Equal-value results of different numeric types share one value-storage entry, and whichever saved last wins the return type — intended, not a bug.
 - `_attrs.py` — Internal `is_attrs_instance` / `field_items` helpers gating optional `attrs` support;
   safe to import without `attrs` installed.
