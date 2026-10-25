@@ -757,6 +757,18 @@ Git history is the changelog.
   Planned refactor moves built-in type handlers into an internal dispatch registry that mirrors the user `Hook` list;
   composes with #834.
 
+- **Enum digests** (#1022, survey filed 2026-10-24 — nothing decided;
+  probed on the #1020 branch).
+  Current behaviour: plain `Enum` members are `Indigestible`;
+  `IntEnum`/`StrEnum`/mixin members digest through their mixin's arm under the bare class `__name__` (two same-named classes sharing a value collide;
+  float/`Decimal` mixins go through the number logic).
+  Two bugs the survey found: `Flag` members — and `Flag` classes passed as values — raise `RecursionError` through the `Iterable` arm on 3.11+ (a Flag member iterates and yields itself;
+  `wrapper.py` only falls back on `Indigestible`, so a decorated `f(Perm.R)` *raises* instead of running uncached), and destructuring storage mishandles mixin enums (a `tuple`-mixin member fails `ValueMemory.save` with `ValueError`;
+  a dataclass-mixin member loads back as a bogus non-member).
+  Designs surveyed: digesting the full `{member_name: value}` mapping makes every member's digest depend on the whole class (drifts across Python versions — `http.HTTPStatus` has 62 members on 3.11, 66 on 3.13 — one indigestible sibling poisons all members, ~50× cost);
+  the leaner alternative digests class `__name__` + canonical member name (`None` for Flag pseudo-members) + `_value_` under one enum salt, placed before the whole `match` (float/tuple/date/dataclass mixins), trading away rename-relocatability.
+  Any enum arm changes `IntEnum`/`IntFlag`/`StrEnum`/mixin digests, and relocation only ever helps arguments — a stored result still unpickles through the old module path.
+
 **Open refactor proposals** (small, well-scoped, no PRs yet)
 
 *Source:*
@@ -878,8 +890,8 @@ Git history is the changelog.
   Fix in flight as PR #905 (below).
 - `ty` is red on `main` since 2026-10-23 with no repo change: pandas 3.1.0 annotated `pandas/util/__init__.py`'s module-level `__getattr__` as `-> object`, so `pd.util.hash_pandas_object` in `_pandas.py` type-checks as a non-callable `object` (three `call-non-callable` diagnostics).
   The `ty` job pins `ty` but installs pandas unpinned, and its green runs on docs/release commits are paths-filter *skips*, not passes — so any `src/`-touching PR sees a red `ty` check that is not its own.
-  A verified fix (bind the function once behind an annotated alias with a single boundary `# ty: ignore`) is written up in a comment on PR #1000 but not pushed;
-  no issue filed yet.
+  The fix is in flight as a standalone commit on PR #1024 (below): `_pandas.py` imports `hash_pandas_object` from `pandas.core.util.hashing`, its defining module — the same function, so digests are unchanged (the earlier alias-plus-boundary-`# ty: ignore` sketch stays in a comment on PR #1000).
+  No issue filed yet.
 
 - Numeric digest collisions — no issue filed yet;
   the full investigation (2026-10-06) lives in a comment on PR #990.
@@ -938,13 +950,30 @@ Git history is the changelog.
   `0.5 == Fraction(1, 2) == Decimal("0.5")` as `float`), with converters deciding exactness themselves (`as_integer_ratio`, `math.trunc`) rather than trusting numpy's NEP-50 `==`;
   a `Number` nothing on its path holds exactly raises `Indigestible`, never `hash()`.
   All NaNs share one salt and are told apart by bits only;
-  timedeltas (`datetime.timedelta`, `pd.Timedelta`, `np.timedelta64`) now raise `Indigestible` until one digest can honour cross-type equality without unit loss (`total_seconds()` collided distinct `pd.Timedelta`s);
+  timedeltas (`datetime.timedelta`, `pd.Timedelta`, `np.timedelta64`) now raise `Indigestible` until one digest can honour cross-type equality without unit loss (`total_seconds()` collided distinct `pd.Timedelta`s) — PR #1023 (below), stacked on this one, carries that digest;
   `datetime.timezone` digests its offset as exact microseconds.
   Also moves the number arm into a private `fleche._numbers` module (the `_pandas` pattern) and extracts a shared `fleche._hashing` module (`new_hash(salt)` + a `running_hash` context manager) that `_numbers` and `_pandas` both use.
   Persisted keys involving non-integral numbers, `±inf`, complex, huge ints, NaNs or timezones change (`Cache.redigest()` migrates;
   plain `int` keys are unchanged).
-  Supersedes #990;
+  Supersedes #990 (closed unmerged 2026-10-24;
+  the numeric-digest investigation referenced under **Bugs** stays readable in its review comments);
   overlaps #1000's NaN-arm pins, so one of the two needs a rebase.
+- #1023 (opened 2026-10-24, stacked on #1020 — retargets to `main` once that merges) — digests each library's timedeltas by **exact length**, lifting #1020's `Indigestible` refusal: `datetime.timedelta` as exact microseconds (beside the other datetime arms in `digest.py`),
+  `pd.Timedelta` as exact nanoseconds via `to_timedelta64()` (`.value` would overflow;
+  the arm sits in `_pandas` ahead of the `datetime.timedelta` arm it subclasses),
+  `np.timedelta64` as exact attoseconds for every fixed unit,
+  `W` to `as` (in `_numpy`, ahead of `Number` — numpy registers it as `Integral`).
+  Libraries deliberately digest apart even where they compare equal (merging would force a unit-lossy common denominator), units within one library merge, and a timedelta never digests like a number;
+  `Y`/`M` digest as months, the unitless `np.timedelta64(5)` as its count, NaT alike in every unit — numpy's cross-unit `==` can wrap int64, so it is not the reference.
+  `datetime.timezone` digests its offset through the `datetime.timedelta` arm;
+  timedelta64 *arrays*/Series are unchanged (dtype + bytes).
+  `np.datetime64` stays `Indigestible`.
+- #1024 (opened 2026-10-24) — Python 3.15 support: `requires-python` → `>=3.11,<3.16`, 3.15 in the `tests.yml` matrix with `allow-prereleases: true`.
+  The one real breakage: on 3.15 `threading.RLock` is a plain function, so `_factory = threading.RLock` bound as a method and `_PicklableRLock()` raised `TypeError` — took down every `SerializingMixin` storage and `SizeLimitedCache` (~36 failures);
+  the lock factories are now real `@staticmethod`s.
+  The 3.15 job builds h5py from source (no cp315 wheels yet;
+  drop that step once wheels publish) and is **blocked**: `pyiron-snippets` and `bagofholding` both declare `Requires-Python <3.15` on every release, so pip refuses them on 3.15 (options in a PR comment).
+  Also carries the `ty` fix for the pandas-3.1 `pd.util` regression (see **Bugs**) as its own commit, and moves `test_fleche_with_version` off `__module__ = "test"` (only resolves when the stdlib `test` package is installed — uv's standalone builds leave it out).
 - #786 (draft) — a process-wide cache of read-only `h5py.File` handles for multi-bag files (bounded MRU of 32, `(inode, mtime_ns, size)` invalidation, `locking=False`, writers close the cached handle under the per-bag lock);
   multi-bag `contains` drops from ~240 µs to ~29 µs.
   `evict` deliberately untouched;
@@ -960,9 +989,8 @@ Git history is the changelog.
     Needs a rebase onto `tldr.rst`/`helpers.rst` as they are on `main`.
   - #934 — SSH config + destructuring list.
     Needs a rebase onto `ssh_cache.rst` as #993 left it.
-  - #990 — digests: the numeric-digest mechanism explanation;
-    superseded — its review investigation found the digest *code* at fault, and PR #1020 (above) now carries the code fix plus the docs promise, so expect #990 to close unmerged.
 
+  #990 (digests: the numeric-digest mechanism explanation) closed unmerged 2026-10-24 as superseded — its review investigation found the digest *code* at fault, and PR #1020 (above) carries the code fix plus the docs promise.
   #932 needs a rebase: #989 (merged 2026-10-22) changed `parallel_execution.rst` under it.
 - Test-only coverage sweeps: #939 (pins the `Intent.READ` no-op fast path in both lock mixins;
   drops tests strictly weaker than a sibling — rebased 2026-10-23, where three of its eight digest-smoke removals turned out to have already landed via the merged #980 and are now no-ops;
