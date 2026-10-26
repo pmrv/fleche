@@ -893,6 +893,11 @@ Git history is the changelog.
   The fix is in flight as a standalone commit on PR #1024 (below): `_pandas.py` imports `hash_pandas_object` from `pandas.core.util.hashing`, its defining module — the same function, so digests are unchanged (the earlier alias-plus-boundary-`# ty: ignore` sketch stays in a comment on PR #1000).
   No issue filed yet.
 
+- `test-minimum-deps` is red on every run since 2026-10-23, also with no repo change: `ubuntu-latest` moved from ubuntu-24.04 (Python 3.12) to ubuntu-26.04 (Python 3.14, gcc 15), the job's bare `uv venv` uses that system Python, and `--resolution lowest-direct` selects pandas 2.2.0, which has no cp314 wheel and whose Cython 3.0.5 output does not compile under gcc 15.
+  The fix is in flight as PR #1026 (below): `uv venv --python 3.11`, the `requires-python` floor, so the job tests the dependency floors on the oldest supported Python and stops drifting with the runner image.
+  No issue filed yet.
+  Until it merges, a red `test-minimum-deps` on a `src/`-touching PR is likewise not that PR's failure.
+
 - Numeric digest collisions — no issue filed yet;
   the full investigation (2026-10-06) lives in a comment on PR #990.
   The `Number` arm digests via `hash(value)`, a lossy 61-bit residue, so distinct numbers share cache keys and produce wrong hits end to end: `digest(-1.0) == digest(-2.0)` (CPython reserves `-1` as an error sentinel),
@@ -974,6 +979,10 @@ Git history is the changelog.
   The 3.15 job builds h5py from source (no cp315 wheels yet;
   drop that step once wheels publish) and is **blocked**: `pyiron-snippets` and `bagofholding` both declare `Requires-Python <3.15` on every release, so pip refuses them on 3.15 (options in a PR comment).
   Also carries the `ty` fix for the pandas-3.1 `pd.util` regression (see **Bugs**) as its own commit, and moves `test_fleche_with_version` off `__module__ = "test"` (only resolves when the stdlib `test` package is installed — uv's standalone builds leave it out).
+- #1026 (opened 2026-10-25) — pins `test-minimum-deps`'s venv to Python 3.11 via `uv venv --python 3.11` (see **Bugs**: the job is red since the runner image moved to ubuntu-26.04, whose system Python 3.14 has no pandas 2.2.0 wheel and fails its source build under gcc 15);
+  keep the pin in sync with the `requires-python` floor.
+  The rejected alternative was raising the numpy/pandas floors for every user just to get cp314 wheels;
+  the 3.12–3.14 interpreters stay covered with current deps by the `tests.yml` matrix.
 - #786 (draft) — a process-wide cache of read-only `h5py.File` handles for multi-bag files (bounded MRU of 32, `(inode, mtime_ns, size)` invalidation, `locking=False`, writers close the cached handle under the per-bag lock);
   multi-bag `contains` drops from ~240 µs to ~29 µs.
   `evict` deliberately untouched;
