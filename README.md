@@ -148,6 +148,7 @@ def my_function(x):
 - **Call storage only** — stores call records (function name, arguments, metadata) in a SQL database; a separate value backend (file or memory) is still required for results
 - SQLite, PostgreSQL, and MySQL/MariaDB are exercised in CI; any other SQLAlchemy-supported database should work
 - Enables efficient server-side filtering when querying cached calls
+- For many parallel writers, `python -m fleche db postgres DATADIR` (or `mariadb`) hosts a server from your installed binaries; point caches at it with `calls.type = "postgres"` and `calls.datadir = "DATADIR"`
 
 ### SSH (remote) Cache
 - **Requires `cloudpickle`** (`pip install fleche[ssh]`) — used as the wire protocol between client and remote server; not optional

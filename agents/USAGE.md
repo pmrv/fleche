@@ -106,6 +106,24 @@ Full worked examples for every shape (stack, pool, read-only, size-limited, SSH-
 | `"bagofholding_hdf"` | HDF5 file(s) via `bagofholding` | `root` | optional `version_validator`, `prefix_length` (multiplex keys sharing an N-char digest prefix into one shared `.h5` file instead of one file per key; default `2`, `0` for one file per key, `None` infers from existing files; validated against existing files in `root` at construction — `refix(n)` migrates and returns the re-sharded storage, the `consolidate(root, n)` classmethod repairs a mixed root) |
 | `"sql"` | SQLAlchemy | — | **calls only** — pair with a value backend above; `url` is optional and defaults to non-persistent in-memory SQLite (`sqlite:///:memory:`), so set it for anything that should survive the process |
 | `"ssh"` | forwards to a remote `python -m fleche remote --serve` process | `host` | whole-cache forwarding, not a per-key backend |
+| `"postgres"` / `"mariadb"` | `"sql"` on a server fleche hosts itself | `datadir` | **calls only**; connects to the server `python -m fleche db` runs for `datadir` — see below |
+
+For many processes or nodes sharing one call store, a Postgres/MariaDB server beats sqlite's file locking.
+`python -m fleche db {postgres,mariadb} DATADIR [--host 0.0.0.0] [--port N] [--bindir DIR]` runs one in the foreground until Ctrl-C/SIGTERM (`python -m fleche db stop DATADIR` stops it from elsewhere);
+the first run initializes `DATADIR` (database and user `fleche`, random password, free port, all kept in `DATADIR/fleche.url`, mode `0600`).
+Point caches at it by data directory, so the password never has to be copied:
+
+```toml
+[shared]
+values.type = "pickle"
+values.root = "values"
+calls.type = "postgres"      # or "mariadb"
+calls.datadir = "db"         # relative to this file, like `root`
+# calls.url = "..."          # only for clients that cannot read `datadir`
+```
+
+The server binaries are not bundled — install `postgresql`/`mariadb` (apt, conda-forge, ...);
+`pip install fleche[postgres]` / `fleche[mariadb]` brings sqlalchemy and the driver.
 
 `values` and `calls` are stored separately on purpose: call records (arguments, metadata) are queryable without deserializing the (potentially heavy) result values.
 

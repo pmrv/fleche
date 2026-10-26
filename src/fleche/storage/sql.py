@@ -3,6 +3,7 @@ import json
 import logging
 import sys
 import threading
+import time
 from typing import Iterable, Any, List
 from pathlib import Path
 from dataclasses import dataclass, field
@@ -31,6 +32,7 @@ with ImportAlarm(
         delete,
     )
     from sqlalchemy import event
+    from sqlalchemy.exc import DBAPIError, OperationalError
     from sqlalchemy.orm import (
         declarative_base,
         sessionmaker,
@@ -230,6 +232,39 @@ def _configure_sqlite_pragmas(engine, db_path: Path | None) -> None:
         conn.exec_driver_sql(f"PRAGMA journal_mode={'WAL' if use_wal else 'DELETE'}")
 
 
+def _create_schema(engine, attempts: int = 5) -> None:
+    """Run ``create_all``, retrying when concurrent initializers collide.
+
+    ``create_all`` checks for each table and then creates the missing ones,
+    so processes opening the same empty server database at once race and
+    the losers fail on ``CREATE TABLE`` ("already exists" on MariaDB, a
+    unique violation on Postgres' catalog).  A retry sees the winner's
+    tables and skips them.
+    """
+    for attempt in range(1, attempts):
+        try:
+            Base.metadata.create_all(engine)
+            return
+        except DBAPIError:
+            time.sleep(0.05 * attempt)
+    Base.metadata.create_all(engine)
+
+
+_DEADLOCK_ATTEMPTS = 5
+
+
+def _is_deadlock(error: "OperationalError") -> bool:
+    """Whether *error* is the server aborting our transaction as a deadlock
+    victim (InnoDB 1213; Postgres SQLSTATE 40P01/40001), which is safe to
+    retry from the start."""
+    orig = error.orig
+    state = getattr(orig, "pgcode", None) or getattr(orig, "sqlstate", None)
+    if state in ("40P01", "40001"):
+        return True
+    args = getattr(orig, "args", ())
+    return bool(args) and args[0] == 1213
+
+
 @dataclass(frozen=True)
 class Sql(PerKeyLockMixin, CallStorage):
     """SQLAlchemy-backed CallStorage with JSON metadata and DB-backed expand()."""
@@ -257,7 +292,7 @@ class Sql(PerKeyLockMixin, CallStorage):
             if raw_path and raw_path != ":memory:":
                 db_path = Path(raw_path)
         _configure_sqlite_pragmas(engine, db_path)
-        Base.metadata.create_all(engine)
+        _create_schema(engine)
         object.__setattr__(self, "engine", engine)
         object.__setattr__(self, "session", sessionmaker(
             bind=engine, expire_on_commit=False, future=True
@@ -397,7 +432,18 @@ class Sql(PerKeyLockMixin, CallStorage):
             # ``contains`` / ``evict`` pre-check would be a redundant SELECT plus
             # an extra DELETE+COMMIT round-trip on collisions. Per-key locking via
             # ``PerKeyLockMixin`` keeps concurrent saves serialised (see
-            # ``test_sql_concurrent_save.py``).
+            # ``test_sql_concurrent_save.py``).  That lock is per process;
+            # across processes InnoDB may still pick concurrent inserts as
+            # deadlock victims, and the documented remedy is to retry.
+            for attempt in range(1, _DEADLOCK_ATTEMPTS):
+                try:
+                    return self._persist_call(call, key)
+                except OperationalError as e:
+                    if not _is_deadlock(e):
+                        raise
+                    logger.debug("Deadlock saving call %s, retrying", key)
+                    self._local.session.rollback()
+                    time.sleep(0.01 * attempt)
             return self._persist_call(call, key)
 
     def load(self, key: Digest | str) -> DigestedCall:
@@ -550,3 +596,17 @@ class Sql(PerKeyLockMixin, CallStorage):
 
 
 register_storage("sql", kind="call")(Sql)
+
+
+def _hosted_sql(backend: str):
+    """Config factory for ``type = "postgres"`` / ``"mariadb"``: a plain
+    :class:`Sql` on the server :mod:`fleche.dbserver` hosts for ``datadir``."""
+    def build(datadir: str | None = None, url: str | None = None, echo: bool = False) -> Sql:
+        from ..dbserver import resolve_url
+
+        return Sql(resolve_url(backend, datadir, url=url), echo=echo)
+    return build
+
+
+for _backend in ("postgres", "mariadb"):
+    register_storage(_backend, kind="call", factory=_hosted_sql(_backend))(Sql)
