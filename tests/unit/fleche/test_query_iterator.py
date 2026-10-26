@@ -97,21 +97,23 @@ def test_query_iterator_results_empty():
 # .table() — basic structure
 # ---------------------------------------------------------------------------
 
-def test_query_iterator_table_returns_dataframe(test_cache):
-    """table() returns a pandas DataFrame."""
-    test_cache.save(Call(name="f", arguments={"x": 1}, result=10))
-    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
-    df = test_cache.query(tpl).table()
-    assert isinstance(df, pd.DataFrame)
+def test_query_iterator_table_default_columns_are_name_and_module(test_cache):
+    """table() returns a DataFrame whose only default columns are name and module.
 
-
-def test_query_iterator_table_basic_columns(test_cache):
-    """table() always has 'name' and 'module' columns."""
-    test_cache.save(Call(name="my_func", arguments={"a": 1}, result=42, module="mymod"))
+    The exact column set pins in one assertion what four separate tests over
+    the same code path used to pin one at a time: it is a DataFrame, ``name``
+    and ``module`` are always there, a call carrying no metadata contributes
+    no extra columns, and ``result`` stays out unless ``results=True``.
+    """
+    test_cache.save(
+        Call(name="my_func", arguments={"a": 1}, result=42, module="mymod", metadata={})
+    )
     tpl = QueryCall(name="my_func", arguments=None, metadata=None, module=None, version=None, result=None)
+
     df = test_cache.query(tpl).table()
-    assert "name" in df.columns
-    assert "module" in df.columns
+
+    assert isinstance(df, pd.DataFrame)
+    assert set(df.columns) == {"name", "module"}
 
 
 def test_query_iterator_table_index_is_lookup_key(test_cache):
@@ -152,14 +154,6 @@ def test_query_iterator_table_shrink_keys_false_keeps_full_digest(test_cache):
     tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
     df = test_cache.query(tpl).table(shrink_keys=False)
     assert all(len(k) == DIGEST_LENGTH for k in df.index)
-
-
-def test_query_iterator_table_no_result_by_default(test_cache):
-    """result column is not present unless results=True is passed."""
-    test_cache.save(Call(name="f", arguments={"x": 1}, result=99))
-    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
-    df = test_cache.query(tpl).table()
-    assert "result" not in df.columns
 
 
 def test_query_iterator_table_empty():
@@ -279,15 +273,6 @@ def test_query_iterator_table_metadata_flattened(test_cache):
     assert df["elapsed"].iloc[0] == 1.5
     assert "unit" in df.columns
     assert df["unit"].iloc[0] == "s"
-
-
-def test_query_iterator_table_no_metadata(test_cache):
-    """Calls without metadata produce no extra columns."""
-    test_cache.save(Call(name="f", arguments={"x": 1}, result=10, metadata={}))
-    tpl = QueryCall(name="f", arguments=None, metadata=None, module=None, version=None, result=None)
-    df = test_cache.query(tpl).table()
-    # Only standard columns expected
-    assert set(df.columns) == {"name", "module"}
 
 
 # ---------------------------------------------------------------------------
