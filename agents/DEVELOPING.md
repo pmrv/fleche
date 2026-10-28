@@ -897,6 +897,9 @@ Git history is the changelog.
   The fix is in flight as PR #1026 (below): `uv venv --python 3.11`, the `requires-python` floor, so the job tests the dependency floors on the oldest supported Python and stops drifting with the runner image.
   No issue filed yet.
   Until it merges, a red `test-minimum-deps` on a `src/`-touching PR is likewise not that PR's failure.
+  Running the job on uv's managed 3.11 exposed a real cache-correctness bug, fixed in flight as PR #1028 (below): when `VersionInfo.of` raises `ModuleNotFoundError`,
+  `FunctionProfile.of`'s fallback set `version = None`, dropping the function's own `__version__` (the one `fleche(version=...)` sets) — so two versions of a function from an unimportable module shared one cache key and the second was served the first one's result.
+  Merge order: #1028 first, then rebase #1026 (its `test_fleche_with_version` failure under uv's Python — whose standalone builds ship no stdlib `test` package, so the test's `__module__ = "test"` import genuinely fails — needs the fix).
 
 - Numeric digest collisions — no issue filed yet;
   the full investigation (2026-10-06) lives in a comment on PR #990.
@@ -983,6 +986,11 @@ Git history is the changelog.
   keep the pin in sync with the `requires-python` floor.
   The rejected alternative was raising the numpy/pandas floors for every user just to get cp314 wheels;
   the 3.12–3.14 interpreters stay covered with current deps by the `tests.yml` matrix.
+  Blocked on #1028 (below) — merge that first, then rebase.
+- #1028 (opened 2026-10-28) — `FunctionProfile.of` keeps an explicit `__version__` when the function's module cannot be imported: the `ModuleNotFoundError` fallback in `src/fleche/call.py` set `version = None` instead of `getattr(func, "__version__", None)`, so two versions of a function from an unimportable module shared one cache key (see **Bugs**).
+  Surfaced by #1026's uv-managed Python, where `test_fleche_with_version`'s mock module name `"test"` stops resolving (uv's standalone CPython ships no stdlib `test` package) and the fallback actually runs.
+  New regression test uses a module name that never exists, so it covers the fallback on every interpreter.
+  Its own `test-minimum-deps` check stays red until #1026's pin lands — the two merge in that order: #1028, then #1026 rebased.
 - #786 (draft) — a process-wide cache of read-only `h5py.File` handles for multi-bag files (bounded MRU of 32, `(inode, mtime_ns, size)` invalidation, `locking=False`, writers close the cached handle under the per-bag lock);
   multi-bag `contains` drops from ~240 µs to ~29 µs.
   `evict` deliberately untouched;
