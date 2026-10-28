@@ -101,9 +101,11 @@ class FunctionProfile:
             module = info.module
             version = getattr(func, "__version__", info.version)
         except ModuleNotFoundError:
+            # The module cannot be imported to scrape a version from, but an
+            # explicit __version__ (set by fleche(version=...)) still counts.
             module = get_module(func)
             qualname = get_qualname(func) or module
-            version = None
+            version = getattr(func, "__version__", None)
 
         code_digest = _code_digest(func) if hasattr(func, "__code__") else None
 

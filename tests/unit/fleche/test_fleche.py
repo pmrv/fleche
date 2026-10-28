@@ -98,6 +98,28 @@ def test_fleche_with_version_argument():
         assert mock_function.call_count == 2
 
 
+def test_fleche_version_counts_when_the_module_cannot_be_imported():
+    # VersionInfo.of imports the function's module to scrape a version; when
+    # that fails, an explicit __version__ must still tell versions apart, or
+    # version 2 is served version 1's result.  (A module named "test" is
+    # unimportable on Pythons shipped without CPython's test package, such as
+    # uv's managed builds.)
+    def make_mock(version):
+        m = Mock(return_value=42)
+        m.__name__ = "mock_function"
+        m.__qualname__ = "mock_function"
+        m.__module__ = "fleche_no_such_module"
+        m.__version__ = version
+        return m
+
+    with cache(Cache(ValueMemory({}), CallMemory({}))):
+        m1, m2 = make_mock(1), make_mock(2)
+        assert fleche(m1)(2) == 42
+        assert fleche(m2)(2) == 42
+        m1.assert_called_once_with(2)
+        m2.assert_called_once_with(2)
+
+
 def test_fleche_with_version():
     # Two independent callables, each with its own version — exercises the
     # "different version → different cache key" path.  We don't reuse one
