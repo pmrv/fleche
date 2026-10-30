@@ -891,6 +891,7 @@ Git history is the changelog.
 - `ty` is red on `main` since 2026-10-23 with no repo change: pandas 3.1.0 annotated `pandas/util/__init__.py`'s module-level `__getattr__` as `-> object`, so `pd.util.hash_pandas_object` in `_pandas.py` type-checks as a non-callable `object` (three `call-non-callable` diagnostics).
   The `ty` job pins `ty` but installs pandas unpinned, and its green runs on docs/release commits are paths-filter *skips*, not passes — so any `src/`-touching PR sees a red `ty` check that is not its own.
   The fix is in flight as a standalone commit on PR #1024 (below): `_pandas.py` imports `hash_pandas_object` from `pandas.core.util.hashing`, its defining module — the same function, so digests are unchanged (the earlier alias-plus-boundary-`# ty: ignore` sketch stays in a comment on PR #1000).
+  The diagnostics are independent of the `ty` version — dependabot's pin bump to 0.0.91 (PR #1030, below) reproduces the same three.
   No issue filed yet.
 
 - `test-minimum-deps` is red on every run since 2026-10-23, also with no repo change: `ubuntu-latest` moved from ubuntu-24.04 (Python 3.12) to ubuntu-26.04 (Python 3.14, gcc 15), the job's bare `uv venv` uses that system Python, and `--resolution lowest-direct` selects pandas 2.2.0, which has no cp314 wheel and whose Cython 3.0.5 output does not compile under gcc 15.
@@ -991,6 +992,9 @@ Git history is the changelog.
   Surfaced by #1026's uv-managed Python, where `test_fleche_with_version`'s mock module name `"test"` stops resolving (uv's standalone CPython ships no stdlib `test` package) and the fallback actually runs.
   New regression test uses a module name that never exists, so it covers the fallback on every interpreter.
   Its own `test-minimum-deps` check stays red until #1026's pin lands — the two merge in that order: #1028, then #1026 rebased.
+- #1030 (dependabot, opened 2026-10-28) — bumps the pinned `ty` type-checker (the `ty` extra, which the CI job installs) 0.0.89 → 0.0.91.
+  Its `ty` run fails with the same three pandas-3.1 `call-non-callable` diagnostics as `main` (see **Bugs**), so the bump neither causes nor clears the known red;
+  `test-minimum-deps` is red as on every PR until #1026 lands, and the 3.11–3.14 test matrix is green.
 - #786 (draft) — a process-wide cache of read-only `h5py.File` handles for multi-bag files (bounded MRU of 32, `(inode, mtime_ns, size)` invalidation, `locking=False`, writers close the cached handle under the per-bag lock);
   multi-bag `contains` drops from ~240 µs to ~29 µs.
   `evict` deliberately untouched;
