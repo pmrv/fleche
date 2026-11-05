@@ -358,15 +358,15 @@ payload:
    ...         fleche.wrap_executor(executor)
    ...         future = executor.submit(
    ...             heavy_computation, 5,
-   ...             resource_dict={"cores": 1},   # goes to SingleNodeExecutor.submit
+   ...             resource_dict={"cores": 4},   # goes to SingleNodeExecutor.submit
    ...         )
    ...         assert future.result() == 125
 
 .. note::
 
-   ``resource_dict={"cores": N}`` with ``N > 1`` routes through executorlib's
-   MPI spawner, which requires ``mpi4py`` plus a system MPI runtime
-   (``mpiexec``) installed separately — neither is pulled in by the
+   ``resource_dict={"cores": N}`` with ``N > 1`` (as above) routes through
+   executorlib's MPI spawner, which requires ``mpi4py`` plus a system MPI
+   runtime (``mpiexec``) installed separately — neither is pulled in by the
    ``fleche[executorlib]`` extra. Without them, this path fails with a
    ``FileNotFoundError: mpiexec`` raised inside a background thread, where it
    is swallowed rather than propagated to ``future.result()`` — the call
