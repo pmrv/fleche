@@ -360,7 +360,7 @@ payload:
    ...             heavy_computation, 5,
    ...             resource_dict={"cores": 4},   # goes to SingleNodeExecutor.submit
    ...         )
-   ...         assert future.result() == 125
+   ...         assert future.result() == [125, 125, 125, 125]   # one per MPI rank
 
 .. note::
 
@@ -371,6 +371,13 @@ payload:
    ``FileNotFoundError: mpiexec`` raised inside a background thread, where it
    is swallowed rather than propagated to ``future.result()`` — the call
    hangs indefinitely instead of raising.
+
+   With MPI available, executorlib runs the callable on every rank and a cache
+   miss resolves to a list with one result per rank, as above.  The cache,
+   however, holds the plain result under the call's key, so a later cache hit —
+   served by :func:`~fleche.wrap_executor` without touching the executor —
+   resolves to ``125``, not the list.  Code consuming the future must handle
+   both shapes.
 
 .. note::
 
