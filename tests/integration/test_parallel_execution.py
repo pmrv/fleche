@@ -31,6 +31,7 @@ completely invisible to workers.
 
 import concurrent.futures
 import contextvars
+import shutil
 import tempfile
 import pytest
 
@@ -48,6 +49,20 @@ except ImportError:
 
 _skip_no_executorlib = pytest.mark.skipif(
     not _executorlib_available, reason="executorlib not installed"
+)
+
+try:
+    import mpi4py  # noqa: F401
+    _mpi_available = shutil.which("mpiexec") is not None
+except ImportError:
+    _mpi_available = False
+
+# executorlib's ``cores > 1`` path spawns workers with ``mpiexec``; without it
+# the FileNotFoundError is swallowed in a background thread and the future
+# never resolves, so skip rather than hang.
+_skip_no_mpi = pytest.mark.skipif(
+    not (_executorlib_available and _mpi_available),
+    reason="executorlib, mpi4py and mpiexec are required",
 )
 
 
@@ -194,6 +209,39 @@ def test_executorlib_file_backed_cache_shared():
             "With file-backed storage, results written by the worker process are "
             "visible to the parent via the shared filesystem path."
         )
+
+
+@_skip_no_mpi
+def test_executorlib_wrap_executor_multiple_cores(tmp_path):
+    """
+    ``resource_dict={"cores": N}`` reaches executorlib through
+    ``wrap_executor`` and runs the call under MPI on N ranks.
+
+    Pins the shape mismatch documented in docs/parallel_execution.rst: a
+    miss resolves to one result per rank, while the cache holds the plain
+    result, so a later hit resolves to that plain result.
+    """
+    from executorlib import SingleNodeExecutor
+
+    cores = 2
+    file_cache = Cache(
+        ValuePickleFile.with_pickle(root=str(tmp_path / "values")),
+        CallPickleFile.with_pickle(root=str(tmp_path / "calls")),
+    )
+
+    with fleche.cache(file_cache):
+        with SingleNodeExecutor() as executor:
+            fleche.wrap_executor(executor)
+            miss = executor.submit(double, 21, resource_dict={"cores": cores})
+            assert miss.result(timeout=120) == [42] * cores
+
+        assert double.load(21) == 42
+
+        with SingleNodeExecutor() as executor:
+            fleche.wrap_executor(executor)
+            hit = executor.submit(double, 21, resource_dict={"cores": cores})
+            assert hit.done()
+            assert hit.result() == 42
 
 
 # ---------------------------------------------------------------------------

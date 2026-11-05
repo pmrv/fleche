@@ -62,6 +62,36 @@ jobs:
         if-no-files-found: ignore
         retention-days: 90
 
+  executorlib-mpi:
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v5
+    - name: Set up MPI
+      uses: mpi4py/setup-mpi@v1
+      with:
+        mpi: openmpi
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.12"
+        cache: pip
+    - name: Setup
+      shell: bash -l {0}
+      run: |
+        # mpi4py builds against the MPI installed above; kept out of the
+        # project extras so it stays a CI-only dependency.
+        pip install -e .[tests,executorlib] mpi4py
+    - name: Run executorlib tests
+      shell: bash -l {0}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Without the steps above every executorlib test in the main build
+        # job is skipped; this job runs them, including cores > 1 under MPI.
+        pytest tests/integration/test_parallel_execution.py -k executorlib -v -rs
+
   sql-backends:
     needs: changes
     if: needs.changes.outputs.run == 'true'
