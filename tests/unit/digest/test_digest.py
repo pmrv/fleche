@@ -154,19 +154,6 @@ def _exact(x):
     return part(x.real), part(x.imag)
 
 
-def _scalars(draw_float):
-    """Python floats and numpy float/complex scalars built from them."""
-    return st.one_of(
-        draw_float,
-        draw_float.map(np.float16),
-        draw_float.map(np.float32),
-        draw_float.map(np.float64),
-        draw_float.map(np.longdouble),
-        st.builds(complex, draw_float, draw_float),
-        st.builds(lambda a, b: np.complex64(complex(a, b)), draw_float, draw_float),
-    )
-
-
 @given(st.floats(allow_nan=True), st.floats(allow_nan=True))
 def test_different_floats_have_different_hashes(x, y):
     if math.isnan(x) or math.isnan(y):
@@ -176,26 +163,26 @@ def test_different_floats_have_different_hashes(x, y):
         assert (digest(x) == digest(y)) == (_exact(x) == _exact(y))
 
 
-@given(_scalars(st.floats(allow_nan=False, width=16)), _scalars(st.floats(allow_nan=False, width=16)))
-def test_numbers_digest_equal_iff_exactly_equal(x, y):
-    # width=16 draws values every scalar type holds, so independent draws
-    # often land on equal values of different types.
+_REAL_TYPES = [float, np.float16, np.float32, np.float64, np.longdouble]
+_COMPLEX_TYPES = [complex, np.complex64, np.complex128, np.clongdouble]
+
+
+@given(
+    st.floats(allow_nan=False),
+    st.floats(allow_nan=False),
+    st.sampled_from(_REAL_TYPES + _COMPLEX_TYPES),
+    st.sampled_from(_REAL_TYPES + _COMPLEX_TYPES),
+)
+def test_one_value_through_two_types_digests_by_what_each_holds(re, im, a, b):
+    # Each type rounds the value its own way (a real type keeps only re), so
+    # x and y are equal exactly when they hold the same value; numpy's ==
+    # would instead call np.float32(0.1) and 0.1 equal.
+    def build(t):
+        return t(re) if t in _REAL_TYPES else t(complex(re, im))
+
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore", RuntimeWarning)  # float16 overflow to inf
-        assert (digest(x) == digest(y)) == (_exact(x) == _exact(y))
-
-
-_TYPES = [float, np.float16, np.float32, np.float64, np.longdouble, complex, np.complex64]
-
-
-@given(st.floats(allow_nan=False), st.sampled_from(_TYPES), st.sampled_from(_TYPES))
-def test_one_value_through_two_types_digests_by_what_each_holds(v, a, b):
-    # Each type rounds v its own way, so x and y are equal exactly when both
-    # hold v (or round it alike); numpy's == would instead call
-    # np.float32(0.1) and 0.1 equal.
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", RuntimeWarning)  # float16 overflow to inf
-        x, y = a(v), b(v)
+        warnings.simplefilter("ignore", RuntimeWarning)  # overflow to inf
+        x, y = build(a), build(b)
     assert (digest(x) == digest(y)) == (_exact(x) == _exact(y))
 
 
@@ -327,10 +314,6 @@ def test_equal_numbers_have_equal_digests(a, b):
     assert digest(a) == digest(b)
 
 
-# np.longdouble is x87 extended precision on x86-64, IEEE quad on aarch64 Linux
-# and a plain double on Windows and macOS: the values it can hold differ between
-# machines; which tree type holds a given value does not
-# (test_branch_choice_is_machine_stable).
 EXTENDED_LONGDOUBLE = np.finfo(np.longdouble).nmant > np.finfo(np.float64).nmant
 
 
@@ -346,8 +329,7 @@ def test_wide_numpy_float_digests_as_its_exact_fraction():
 
 def _expected_branch(x):
     """The tree type that must hold the real number *x*, from its exact value
-    alone: int if integral, float if a binary64 holds it, else Fraction.  Pure
-    Python, so it is the same on every machine."""
+    alone: int if integral, float if a binary64 holds it, else Fraction."""
     if math.isinf(x):
         return float
     q = Fraction(*x.as_integer_ratio())
@@ -368,12 +350,9 @@ _FLOAT_TYPES = [float, np.float16, np.float32, np.float64, np.longdouble]
     st.integers(-(2**70), 2**70),
     st.integers(1, 2**70),
 )
-def test_branch_choice_is_machine_stable(t, num, den):
-    # The branch a number digests on is decided by the converters, which go
-    # through numpy for numpy scalars.  Whatever the machine's float widths,
-    # that decision must match exact arithmetic on the value the scalar holds;
-    # a quotient of two scalars needs np.longdouble's extra precision where the
-    # machine has it.
+def test_branch_choice_follows_exact_value(t, num, den):
+    # The converters go through numpy for numpy scalars; the branch they pick
+    # must match exact arithmetic on the value the scalar holds.
     from fleche._numbers import _hold
 
     with warnings.catch_warnings():

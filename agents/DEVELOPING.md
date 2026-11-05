@@ -176,7 +176,7 @@ Values and calls are stored separately so call records are queryable without des
   `np.float32`/`np.longdouble` on `Real` (below `float` and `Fraction`),
   `np.complex64` on `Complex`, while `np.float64`/`np.complex128` subclass `float`/`complex`.
   `_hold(value)` returns the node that holds a value and the converted value;
-  `test_branch_choice_is_machine_stable` checks its choice against exact arithmetic for every float width the machine has, since the converters go through numpy for numpy scalars.
+  `test_branch_choice_follows_exact_value` checks its choice against exact arithmetic, since the converters go through numpy for numpy scalars.
   `np.float32`/`np.longdouble` on `Real` (below `float` and `Fraction`), `np.complex64` on `Complex`, while `np.float64`/`np.complex128` subclass `float`/`complex`.
   ABC nodes have no converter or encoder: they only place what sits under them, and `Decimal` never holds a value either (every finite `Decimal` is an exact `Fraction`).
   A value nothing on its path holds gets `None`, which `digest.py` raises as `Indigestible`.
