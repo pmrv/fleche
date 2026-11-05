@@ -34,3 +34,8 @@ correctly without special-casing at call sites.
 ``FunctionProfile`` and populate it inside ``FunctionProfile.of``.  Downstream
 code then reads it from the profile instead of calling introspection APIs
 directly.
+
+See :doc:`/usage/helpers` ("Per-Function Static Caching") for the
+user-facing behavior and caveats — including the "mutating ``func`` after
+the first call isn't picked up" gotcha and how to clear the cache via
+``_profile.cache_clear()``.
