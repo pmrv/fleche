@@ -2,7 +2,7 @@
 
 [![docs](https://app.readthedocs.org/projects/fleche/badge/?version=latest)](https://fleche.readthedocs.io/en/latest/?badge=latest)
 
-Requires Python 3.11–3.14.
+Requires Python 3.11–3.15.
 
 A persistent caching solution for arbitrary Python functions - like `lru_cache` on steroids.
 

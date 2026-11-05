@@ -107,7 +107,7 @@ def test_fleche_with_version():
         m = Mock(return_value=42)
         m.__name__ = "mock_function"
         m.__qualname__ = "mock_function"
-        m.__module__ = "test"
+        m.__module__ = __name__
         m.__version__ = version
         return m
 
