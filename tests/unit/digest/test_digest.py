@@ -178,12 +178,62 @@ def test_different_floats_have_different_hashes(x, y):
 
 @given(_scalars(st.floats(allow_nan=False, width=16)), _scalars(st.floats(allow_nan=False, width=16)))
 def test_numbers_digest_equal_iff_exactly_equal(x, y):
-    # width=16 draws values every scalar type holds, so equal pairs across
-    # types come up; numpy's == would wrongly call np.float32(0.1) and 0.1
-    # equal, the exact value does not.
+    # width=16 draws values every scalar type holds, so independent draws
+    # often land on equal values of different types.
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)  # float16 overflow to inf
         assert (digest(x) == digest(y)) == (_exact(x) == _exact(y))
+
+
+_TYPES = [float, np.float16, np.float32, np.float64, np.longdouble, complex, np.complex64]
+
+
+@given(st.floats(allow_nan=False), st.sampled_from(_TYPES), st.sampled_from(_TYPES))
+def test_one_value_through_two_types_digests_by_what_each_holds(v, a, b):
+    # Each type rounds v its own way, so x and y are equal exactly when both
+    # hold v (or round it alike); numpy's == would instead call
+    # np.float32(0.1) and 0.1 equal.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)  # float16 overflow to inf
+        x, y = a(v), b(v)
+    assert (digest(x) == digest(y)) == (_exact(x) == _exact(y))
+
+
+def _complex_nan_bits(x):
+    # A complex with no imaginary part digests as its real part.
+    if x.imag == 0:
+        return struct.pack("<d", x.real)
+    return struct.pack("<dd", x.real, x.imag)
+
+
+# Every float NaN: either sign, any nonzero payload.
+_nans = st.builds(
+    lambda sign, payload: struct.unpack("<d", struct.pack("<Q", sign << 63 | 0x7FF << 52 | payload))[0],
+    st.integers(0, 1),
+    st.integers(1, 2**52 - 1),
+)
+_complex_nans = st.one_of(
+    st.builds(complex, _nans, st.floats(allow_nan=True)),
+    st.builds(complex, st.floats(allow_nan=True), _nans),
+)
+
+
+@given(_complex_nans, st.one_of(_complex_nans, st.complex_numbers(allow_nan=True)))
+def test_complex_nans_digest_by_their_bits(x, y):
+    assert (digest(x) == digest(y)) == (_complex_nan_bits(x) == _complex_nan_bits(y))
+
+
+@pytest.mark.parametrize(
+    "a, b",
+    [
+        (complex(math.nan, 1), complex(math.nan, 2)),
+        (complex(1, math.nan), complex(2, math.nan)),
+        (complex(math.nan, 1), complex(1, math.nan)),
+        (complex(math.nan, 1), complex(-math.nan, 1)),
+    ],
+)
+def test_complex_nans_with_different_bits_digest_apart(a, b):
+    assert digest(a) != digest(b)
 
 
 @given(st.complex_numbers(allow_nan=True))
@@ -193,14 +243,14 @@ def test_complex_numbers_can_be_digested(x):
 
 
 def test_complex_matches_real_without_imaginary_part():
-    """Test that digest(1) == digest(1+0j) per standard Python hash semantics."""
+    """A complex with no imaginary part digests as its real part."""
     assert digest(1) == digest(1 + 0j)
     assert digest(1.0) == digest(1 + 0j)
     assert digest(2) == digest(2 + 0j)
 
 
 def test_int_matches_float_without_fractional_part():
-    """Test that digest(1) == digest(1.0) per standard Python hash semantics."""
+    """An integral float digests as its int."""
     assert digest(1) == digest(1.0)
     assert digest(2) == digest(2.0)
     assert digest(-3) == digest(-3.0)
@@ -279,7 +329,8 @@ def test_equal_numbers_have_equal_digests(a, b):
 
 # np.longdouble is x87 extended precision on x86-64, IEEE quad on aarch64 Linux
 # and a plain double on Windows and macOS: the values it can hold differ between
-# machines, the digest of a given value does not (see the pinned digests below).
+# machines; which tree type holds a given value does not
+# (test_branch_choice_is_machine_stable).
 EXTENDED_LONGDOUBLE = np.finfo(np.longdouble).nmant > np.finfo(np.float64).nmant
 
 
@@ -398,7 +449,11 @@ class SubReal(numbers_module.Real):
         return self.a
 
     def __trunc__(self):
-        return math.trunc(self.a)
+        t = math.trunc(self.a)
+        if t == self.a and self.b != 0 and (self.a > 0) != (self.b > 0) and self.a != 0:
+            # a ± ε just inside an integer a truncates one step toward zero.
+            return t - 1 if self.a > 0 else t + 1
+        return t
 
     def __eq__(self, other):
         if isinstance(other, SubReal):
@@ -505,9 +560,9 @@ def test_int_subclasses_keep_their_type_name_unlike_float_subclasses():
     assert digest(MyFloat(5.0)) == digest(5)
 
 
-def test_number_without_exact_value_is_indigestible():
-    # Convertible to float, so it gets past the NaN check, but with no exact
-    # value to offer: neither numerator/denominator nor as_integer_ratio.
+def test_number_outside_the_tree_is_indigestible():
+    # A bare numbers.Number belongs to no ABC the tree names, so it has no
+    # path to walk, although float() takes it past the NaN check.
     class Opaque(numbers_module.Number):
         def __float__(self):
             return 0.5
