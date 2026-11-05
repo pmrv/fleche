@@ -144,7 +144,7 @@ class NumberType:
 # np.longdouble under numbers.Real (so float still catches what it can hold),
 # np.complex64 under numbers.Complex.  The ABC nodes and Decimal hold nothing themselves (every
 # finite Decimal is an exact Fraction).  Mirrored in
-# docs/digests/digest_equivalence.rst (a test keeps the two in sync):
+# docs/digests/digest_equivalence.rst; keep the two in sync by hand:
 #
 #   int
 #   ├── numbers.Integral
@@ -247,8 +247,7 @@ def digest_number(value, digest_bytes: DigestBytes) -> bytes | None:
     """Digest of the number *value*, or None if it has no exact value to digest.
 
     A None is for the caller to raise :exc:`~fleche.digest.Indigestible` on (a
-    hook can supply a digest); falling back to ``hash()`` would bring back the
-    collisions this module exists to avoid.
+    hook can supply a digest).
     """
     if isinstance(value, Decimal) and value.is_nan():
         # Ahead of the NaN check, whose cmath.isnan raises on a signalling NaN.

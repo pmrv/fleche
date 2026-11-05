@@ -64,9 +64,15 @@ For example:
    digest(0.1) != digest(Decimal("0.1"))   # the float is not exactly 1/10
    digest(True) != digest(1)
 
-The exact value is what a number really stores, which is not always what
-numpy's ``==`` reports: ``np.float32(0.1)`` stores 0.100000001490116…, so it
-digests apart from ``0.1`` although numpy calls the two equal.
+A number is converted to a lower type only when the conversion is lossless, so
+``digest(a) == digest(b)`` exactly when ``a`` and ``b`` are numerically equal.
+For standard library types this agrees with ``==``, but third party types do not
+always: numpy casts a Python float down to the precision of a numpy scalar
+before comparing (so ``np.float32(0.1) == 0.1``), rounds a ``Fraction`` to
+double, and compares a huge ``np.longdouble`` with an ``int`` through their
+string forms.  Following that ``==`` would let unequal values share a cache
+entry, so ``fleche`` goes by the exact value instead: ``np.float32(0.1)``
+stores 0.100000001490116…, and digests apart from ``0.1``.
 
 Other types
 -----------

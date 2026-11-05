@@ -188,7 +188,7 @@ Values and calls are stored separately so call records are queryable without des
   The promise, worded in `digest_equivalence.rst`: non-NaN numbers digest equal iff they hold the same exact value — numpy's `==` (NEP 50 down-casts, `Fraction` rounding) is not the reference.
   `int` subclasses (`bool`, `IntEnum`) never reach the tree: the `int` arm catches them under their own type name, unlike `float` subclasses, which downcast.
   The tree is drawn in the code comment and in `docs/digests/digest_equivalence.rst`;
-  `test_number_tree_matches_its_drawings` keeps all three in sync.
+  no test checks the drawings, so update both by hand whenever `NUMBER_TREE` changes.
   A NaN is digested by its bits exactly as the `float` (or, with an imaginary part, `complex`) node would encode them, whatever its type, so `np.float64("nan")` meets `float("nan")` and the sign survives;
   `Decimal` NaNs (including `sNaN`, which `cmath.isnan` rejects) by `str()` under the `Decimal` salt.
   Equal-value results of different numeric types share one value-storage entry, and whichever saved last wins the return type — intended, not a bug.

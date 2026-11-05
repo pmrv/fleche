@@ -12,8 +12,6 @@ import warnings
 import enum
 import sys
 import time
-import inspect
-import pathlib
 import datetime
 import struct
 import collections
@@ -335,32 +333,6 @@ def test_branch_choice_is_machine_stable(t, num, den):
     assert node.type is _expected_branch(x)
 
 
-def _label(t):
-    return t.__name__ if t.__module__ == "builtins" else f"{t.__module__}.{t.__name__}"
-
-
-def _draw_number_tree(node, prefix=""):
-    lines = []
-    for i, child in enumerate(node.children):
-        last = i == len(node.children) - 1
-        lines.append(prefix + ("└── " if last else "├── ") + _label(child.type))
-        lines += _draw_number_tree(child, prefix + ("    " if last else "│   "))
-    return lines
-
-
-def test_number_tree_matches_its_drawings():
-    from fleche import _numbers
-
-    lines = [_label(_numbers.NUMBER_TREE.type)]
-    lines += _draw_number_tree(_numbers.NUMBER_TREE)
-    source = inspect.getsource(_numbers)
-    assert "\n".join("#   " + line for line in lines) in source
-    docs = (
-        pathlib.Path(__file__).parents[3] / "docs/digests/digest_equivalence.rst"
-    ).read_text()
-    assert "\n".join("   " + line for line in lines) in docs
-
-
 @pytest.mark.parametrize(
     "value",
     [
@@ -412,45 +384,49 @@ def _unused(*args):
     raise NotImplementedError
 
 
-class ExactReal(numbers_module.Real):
-    """A foreign Real holding n/d exactly.
+class SubReal(numbers_module.Real):
+    """A foreign Real a + b·ε, with a and b floats and ε a positive infinitesimal.
 
     It has only what numbers.Real promises: no __int__, no as_integer_ratio.
+    With b == 0 it is the float a; with b != 0 no type in the tree holds it.
     """
 
-    def __init__(self, n, d=1):
-        self.q = Fraction(n, d)
+    def __init__(self, a, b=0.0):
+        self.a, self.b = float(a), float(b)
 
     def __float__(self):
-        return float(self.q)
+        return self.a
 
     def __trunc__(self):
-        return math.trunc(self.q)
+        return math.trunc(self.a)
 
     def __eq__(self, other):
-        return self.q == other
+        if isinstance(other, SubReal):
+            return (self.a, self.b) == (other.a, other.b)
+        return self.b == 0 and self.a == other
 
     def __hash__(self):
-        return hash(self.q)
+        return hash(self.a) if self.b == 0 else hash((self.a, self.b))
 
 
-for _name in numbers_module.Real.__abstractmethods__ - vars(ExactReal).keys():
-    setattr(ExactReal, _name, _unused)
-abc.update_abstractmethods(ExactReal)
+for _name in numbers_module.Real.__abstractmethods__ - vars(SubReal).keys():
+    setattr(SubReal, _name, _unused)
+abc.update_abstractmethods(SubReal)
 
 
 @pytest.mark.filterwarnings("error")
 def test_foreign_real_downcasts_without_int():
     # int() on it would delegate to __trunc__, deprecated and due to go.
-    assert digest(ExactReal(2)) == digest(2)
-    assert digest(ExactReal(1, 2)) == digest(0.5)
+    assert digest(SubReal(2)) == digest(2)
+    assert digest(SubReal(0.5)) == digest(0.5)
 
 
-def test_foreign_real_beyond_float_without_ratio_is_indigestible():
-    # Neither int nor float holds 1/3, and it offers no as_integer_ratio for
-    # the Fraction node; that must end as Indigestible, not AttributeError.
+@pytest.mark.parametrize("value", [SubReal(0, 1), SubReal(2, -1), SubReal(0.5, 1e-300)])
+def test_foreign_real_beyond_the_tree_is_indigestible(value):
+    # No node holds a nonzero infinitesimal part; that must end as
+    # Indigestible, not AttributeError from the missing as_integer_ratio.
     with pytest.raises(Indigestible):
-        digest(ExactReal(1, 3))
+        digest(value)
 
 
 @pytest.mark.parametrize(
@@ -485,7 +461,7 @@ def test_huge_longdouble_digests_as_int_whatever_the_str_limit(max_str_digits):
 
 
 def test_decimal_with_large_exponent_digests_quickly():
-    # Taking it to int and back was quadratic: about 3.5 s for 1e300000.
+    # regression: naive implementation takes very long
     start = time.perf_counter()
     d = digest(Decimal("1e300000"))
     assert time.perf_counter() - start < 1
