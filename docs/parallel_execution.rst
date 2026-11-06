@@ -211,19 +211,6 @@ processes, the same rules as ``ProcessPoolExecutor`` apply:
 - In-memory caches are **not** shared with workers.
 - Use **file-** or **SQL-backed** storage with :class:`~fleche.BoundWrapper`.
 
-.. warning::
-
-   A fleche cache key has no concept of MPI rank. If a fleche-decorated
-   function wraps a collective MPI call, every rank computes the same
-   lookup key for the same arguments, so a cold run executes the
-   function **once per rank** rather than once overall, and a warm
-   cache serves every rank the *same* cached record — the one whichever
-   rank happened to save it — instead of each rank running its own
-   collective. Don't decorate MPI-collective code directly; cache above
-   or below the collective instead, at a point where each rank's
-   arguments (or the absence of a cache call at all) make this a
-   non-issue.
-
 .. code-block:: pycon
 
    >>> # file_cache and heavy_computation as set up in the ProcessPoolExecutor example above
@@ -361,14 +348,6 @@ payload:
    ...             resource_dict={"threads_per_core": 2},   # goes to SingleNodeExecutor.submit
    ...         )
    ...         assert future.result() == 125
-
-.. note::
-
-   Parallelise independent calls with ``max_workers`` (or ``max_cores``) on
-   the executor, as above.  ``resource_dict={"cores": N}`` is something else:
-   it runs *one* call as an MPI program on ``N`` ranks and returns one result
-   per rank.  fleche does not support MPI-native functions, so don't set
-   ``cores`` above 1 for fleche-decorated callables.
 
 .. note::
 

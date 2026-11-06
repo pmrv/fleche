@@ -1048,8 +1048,7 @@ Git history is the changelog.
   an addon package (`fleche-mpi` or similar) is the preferred home, and the close-out comment on #870 is its reference.
   Branch `claude/fleche-mpi-executor-caching-zxjazw` keeps the helper, 13 subprocess-isolated integration tests, and `docs/mpi_execution.rst`.
   Findings that stand regardless: lookup keys carry no rank, so all ranks contend for one record — warm runs flip the `[result, None]` return shape, and divergent per-rank hit/miss decisions make some ranks skip the body's collectives (silently wrong, or a hang).
-  What works today: decorate the *submission site*, not the MPI kernel.
-  The per-rank cold/warm caveat (an MPI-decorated call runs once per rank cold and serves one rank's record warm) is now documented in `docs/parallel_execution.rst` (#989, merged 2026-10-22).
+  User docs stay silent on MPI-native functions: fleche makes no promises either way, so #1037 removed the per-rank caveat #989 had added to `docs/parallel_execution.rst`, and the executorlib example uses task parallelism (`max_workers`) rather than `resource_dict={"cores": N}`.
 - Optional skip-saving of input arguments (#170), corruption-tolerant loads (#93), method-state restoration (#99), metadata-into-value-storage (#82) — parked for milestone 2.0.
 - Refactors flagged `backburner`: `_digest` dispatch registry (#333), `DigestedCall`/`LazyCall` consolidation (#404).
 - Terminology shift "cache" → "stash" and unifying "hash"/"digest" on "digest" (#350) — targeted for 1.0, not started.
