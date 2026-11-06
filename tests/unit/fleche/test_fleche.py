@@ -101,9 +101,7 @@ def test_fleche_with_version_argument():
 def test_fleche_version_counts_when_the_module_cannot_be_imported():
     # VersionInfo.of imports the function's module to scrape a version; when
     # that fails, an explicit __version__ must still tell versions apart, or
-    # version 2 is served version 1's result.  (A module named "test" is
-    # unimportable on Pythons shipped without CPython's test package, such as
-    # uv's managed builds.)
+    # version 2 is served version 1's result.
     def make_mock(version):
         m = Mock(return_value=42)
         m.__name__ = "mock_function"
@@ -129,7 +127,10 @@ def test_fleche_with_version():
         m = Mock(return_value=42)
         m.__name__ = "mock_function"
         m.__qualname__ = "mock_function"
-        m.__module__ = "test"
+        # This test module itself: always importable, so VersionInfo.of takes
+        # its normal path.  Never "test": that is CPython's own test package,
+        # importable only on interpreters that ship it.
+        m.__module__ = __name__
         m.__version__ = version
         return m
 
