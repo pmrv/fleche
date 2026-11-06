@@ -354,30 +354,28 @@ payload:
    >>> from executorlib import SingleNodeExecutor
 
    >>> with fleche.cache(file_cache):
-   ...     with SingleNodeExecutor() as executor:
+   ...     with SingleNodeExecutor(max_workers=4) as executor:   # 4 tasks at once
    ...         fleche.wrap_executor(executor)
    ...         future = executor.submit(
    ...             heavy_computation, 5,
-   ...             resource_dict={"cores": 4},   # goes to SingleNodeExecutor.submit
+   ...             resource_dict={"threads_per_core": 2},   # goes to SingleNodeExecutor.submit
    ...         )
-   ...         assert future.result() == [125, 125, 125, 125]   # one per MPI rank
+   ...         assert future.result() == 125
 
 .. note::
 
-   ``resource_dict={"cores": N}`` with ``N > 1`` (as above) routes through
-   executorlib's MPI spawner, which requires ``mpi4py`` plus a system MPI
-   runtime (``mpiexec``) installed separately — neither is pulled in by the
-   ``fleche[executorlib]`` extra. Without them, this path fails with a
-   ``FileNotFoundError: mpiexec`` raised inside a background thread, where it
-   is swallowed rather than propagated to ``future.result()`` — the call
-   hangs indefinitely instead of raising.
-
-   With MPI available, executorlib runs the callable on every rank and a cache
-   miss resolves to a list with one result per rank, as above.  The cache,
-   however, holds the plain result under the call's key, so a later cache hit —
-   served by :func:`~fleche.wrap_executor` without touching the executor —
-   resolves to ``125``, not the list.  Code consuming the future must handle
-   both shapes.
+   Parallelise independent calls with ``max_workers`` (or ``max_cores``) on
+   the executor, as above.  ``resource_dict={"cores": N}`` is something else:
+   it runs *one* call as an MPI program on ``N`` ranks, for functions that
+   use MPI themselves (e.g. via ``mpi4py``).  executorlib then returns one
+   result per rank, so a plain function submitted that way resolves to a
+   list of ``N`` identical results on a cache miss, while a later cache hit,
+   served by :func:`~fleche.wrap_executor` from the stored plain result,
+   resolves to a single value.  ``cores > 1`` also needs ``mpi4py`` and a
+   system MPI runtime (``mpiexec``), neither of which the
+   ``fleche[executorlib]`` extra installs; without them executorlib swallows
+   the ``FileNotFoundError`` in a background thread and the future never
+   resolves.
 
 .. note::
 
