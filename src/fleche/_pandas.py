@@ -20,18 +20,16 @@ a list, a column digests the same as the column of its elements' digests.
 """
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import infer_dtype
 
-if TYPE_CHECKING:
-    # pandas.util hands it out through a module __getattr__ annotated as
-    # returning object (pandas 3.1), which type checkers cannot call.
-    from pandas.core.util.hashing import hash_pandas_object
-else:
-    from pandas.util import hash_pandas_object
+# The defining module of pd.util.hash_pandas_object, the very same function.
+# pandas 3.1 reaches pd.util's names through a module __getattr__ annotated
+# ``-> object``, which leaves type checkers nothing callable to check.
+from pandas.core.util.hashing import hash_pandas_object
 
 from ._hashing import running_hash
 
