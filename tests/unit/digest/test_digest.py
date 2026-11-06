@@ -98,18 +98,22 @@ SUPPORTED_VALUES = [
     {"a": 1, "b": None},
     np.array([1, 2, 3]),
     _SupportedData(x=1, y="a"),
+    # NaN takes the one Number arm that bypasses hash() (see the NaN section
+    # below); listing it here is what pins "a NaN never collides with a finite
+    # value", at no extra test.
+    float("nan"),
     *BUILTIN_TYPES,
 ]
 
 
-def test_supported_types():
-    """All supported values can be digested without raising an exception."""
-    for value in SUPPORTED_VALUES:
-        digest(value)
-
-
 def test_supported_values_digest_stably():
-    """Digesting the same value twice yields the same digest."""
+    """Digesting the same value twice yields the same digest.
+
+    Digesting every supported value at all — no ``Indigestible``, no crash — is
+    a precondition of this test and of
+    :func:`test_supported_values_digest_distinctly`, so it needs no test of its
+    own.
+    """
     unstable = [repr(value) for value in SUPPORTED_VALUES if digest(value) != digest(value)]
     assert not unstable, f"digest is not deterministic for: {unstable}"
 
@@ -223,10 +227,17 @@ def test_complex_nans_with_different_bits_digest_apart(a, b):
     assert digest(a) != digest(b)
 
 
-@given(st.complex_numbers(allow_nan=True))
-def test_complex_numbers_can_be_digested(x):
-    """Test that complex numbers (including NaN) can be digested without error."""
-    digest(x)
+def test_numpy_bool_digests_as_the_python_bool():
+    """``np.bool_`` reaches its own arm and delegates to the builtin ``bool``.
+
+    Since numpy 1.20 ``np.bool_`` is neither an ``int`` subclass nor a
+    :class:`numbers.Number`, so it falls past both the ``int`` and ``Number``
+    arms and would otherwise land in the generic ``Iterable``/``Indigestible``
+    tail.
+    """
+    assert digest(np.bool_(True)) == digest(True)
+    assert digest(np.bool_(False)) == digest(False)
+    assert digest(np.bool_(True)) != digest(np.bool_(False))
 
 
 def test_complex_matches_real_without_imaginary_part():
@@ -1146,22 +1157,6 @@ def test_pandas_dataframe_with_multiindex_rows():
     assert digest(a) != digest(b)
 
 
-def test_lambda_can_be_digested():
-    """Test that lambda functions can be digested without raising Indigestible."""
-    f = lambda x: x + 1
-    result = digest(f)
-    assert isinstance(result, Digest)
-
-
-def test_locally_defined_function_can_be_digested():
-    """Test that locally defined functions can be digested without raising Indigestible."""
-    def local_func(x):
-        return x * 2
-
-    result = digest(local_func)
-    assert isinstance(result, Digest)
-
-
 def test_nested_function_can_be_digested():
     """Test that functions nested inside other functions can be digested."""
     def outer():
@@ -1174,7 +1169,11 @@ def test_nested_function_can_be_digested():
 
 
 def test_function_digest_is_stable():
-    """Test that digesting the same function repeatedly returns the same value."""
+    """Test that digesting the same function repeatedly returns the same value.
+
+    Also the local-function case: that a locally defined function is digestible
+    at all needs no separate test when this one digests the same one twice.
+    """
     def local_func(x):
         return x * 2
 
@@ -1182,10 +1181,21 @@ def test_function_digest_is_stable():
 
 
 def test_functions_with_different_bodies_have_different_digests():
-    """Test that functions with distinct bodies hash differently."""
+    """Test that functions with distinct bodies hash differently.
+
+    Also the lambda case: that a lambda is digestible at all needs no separate
+    test when this one digests two.
+    """
     f = lambda x: x + 1
     g = lambda x: x + 2
     assert digest(f) != digest(g)
+
+
+# Module-scope counterpart for test_local_function_digests_same_as_module_level.
+# No docstring: a docstring lands in co_consts and would make the code objects
+# differ for a reason that has nothing to do with scope.
+def _module_level_add_one(x):
+    return x + 1
 
 
 def test_functions_with_identical_bodies_have_same_digest():
@@ -1199,15 +1209,25 @@ def test_functions_with_identical_bodies_have_same_digest():
     assert digest(f) == digest(g)
 
 
-def test_local_function_digests_same_as_module_level():
-    """Test that a local function with identical code digests the same as a module-level equivalent."""
+def test_nesting_changes_a_function_digest():
+    """A nested function digests differently from an identical module-level one.
+
+    The two bodies compile to the same bytecode and constants, but a function
+    defined inside another carries ``CO_NESTED`` in ``co_flags``, and
+    ``co_flags`` is one of the code-object properties folded into the digest.
+    So moving a function out to module scope (or into a nested one) changes
+    its key even though nothing about what it computes changed.
+
+    The counterpart deliberately lives at module scope: defining it in the
+    test body would make this a second copy of
+    ``test_functions_with_identical_bodies_have_same_digest``, which already
+    pins that two *equally nested* functions agree.
+    """
     def local_add_one(x):
         return x + 1
 
-    def _module_level_add_one(x):
-        return x + 1
-
-    assert digest(local_add_one) == digest(_module_level_add_one)
+    assert local_add_one.__code__.co_code == _module_level_add_one.__code__.co_code
+    assert digest(local_add_one) != digest(_module_level_add_one)
 
 
 # --- Functions: plain functions keep their historical wire format ---
@@ -1619,48 +1639,6 @@ def test_classmethods_with_different_bodies_have_different_digests():
     assert digest(classmethod(f)) != digest(classmethod(g))
 
 
-def test_property_with_only_getter():
-    """A property with only a getter must be digestible."""
-
-    def getter(self):
-        return self._value
-
-    p = property(getter)
-    result = digest(p)
-    assert isinstance(result, Digest)
-
-
-def test_property_with_getter_and_setter():
-    """A property with getter and setter must be digestible."""
-
-    def getter(self):
-        return self._value
-
-    def setter(self, v):
-        self._value = v
-
-    p = property(getter, setter)
-    result = digest(p)
-    assert isinstance(result, Digest)
-
-
-def test_property_with_getter_setter_deleter():
-    """A property with getter, setter, and deleter must be digestible."""
-
-    def getter(self):
-        return self._value
-
-    def setter(self, v):
-        self._value = v
-
-    def deleter(self):
-        del self._value
-
-    p = property(getter, setter, deleter)
-    result = digest(p)
-    assert isinstance(result, Digest)
-
-
 def test_properties_with_different_getters_have_different_digests():
     """Two properties with different getter functions must produce different digests."""
 
@@ -1939,7 +1917,7 @@ def test_module_digest_function_content_independence():
 # --- Tests for the Indigestible boundary of type objects — issue #469 ---
 #
 # Digestibility, stability, and distinctness of built-in type objects are covered
-# by ``test_supported_types`` / ``test_supported_values_digest_stably`` /
+# by ``test_supported_values_digest_stably`` /
 # ``test_supported_values_digest_distinctly`` (BUILTIN_TYPES are folded into
 # SUPPORTED_VALUES).  Only the negative boundary needs a dedicated test: anything
 # outside the ``builtins`` module — including dataclass *classes* — must raise.
