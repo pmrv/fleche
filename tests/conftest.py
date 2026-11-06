@@ -1,4 +1,5 @@
 import os
+import sys
 
 from hypothesis import settings
 from hypothesis.database import (
@@ -9,6 +10,12 @@ from hypothesis.database import (
 )
 
 pytest_plugins = ["tests.fixtures"]
+
+# Make CPython's own `test` package unimportable on every interpreter, as it
+# already is on builds that leave it out (uv's managed Pythons).  Tests must
+# never name `test` as a module: where the package exists, an import of it
+# succeeds and silently takes a different code path than in CI.
+sys.modules["test"] = None  # type: ignore[assignment]
 
 if os.environ.get("GITHUB_ACTIONS") == "true":
     _local = DirectoryBasedExampleDatabase(".hypothesis/examples")
