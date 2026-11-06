@@ -211,19 +211,6 @@ processes, the same rules as ``ProcessPoolExecutor`` apply:
 - In-memory caches are **not** shared with workers.
 - Use **file-** or **SQL-backed** storage with :class:`~fleche.BoundWrapper`.
 
-.. warning::
-
-   A fleche cache key has no concept of MPI rank. If a fleche-decorated
-   function wraps a collective MPI call, every rank computes the same
-   lookup key for the same arguments, so a cold run executes the
-   function **once per rank** rather than once overall, and a warm
-   cache serves every rank the *same* cached record — the one whichever
-   rank happened to save it — instead of each rank running its own
-   collective. Don't decorate MPI-collective code directly; cache above
-   or below the collective instead, at a point where each rank's
-   arguments (or the absence of a cache call at all) make this a
-   non-issue.
-
 .. code-block:: pycon
 
    >>> # file_cache and heavy_computation as set up in the ProcessPoolExecutor example above
@@ -354,30 +341,13 @@ payload:
    >>> from executorlib import SingleNodeExecutor
 
    >>> with fleche.cache(file_cache):
-   ...     with SingleNodeExecutor() as executor:
+   ...     with SingleNodeExecutor(max_workers=4) as executor:   # 4 tasks at once
    ...         fleche.wrap_executor(executor)
    ...         future = executor.submit(
    ...             heavy_computation, 5,
-   ...             resource_dict={"cores": 4},   # goes to SingleNodeExecutor.submit
+   ...             resource_dict={"threads_per_core": 2},   # goes to SingleNodeExecutor.submit
    ...         )
-   ...         assert future.result() == [125, 125, 125, 125]   # one per MPI rank
-
-.. note::
-
-   ``resource_dict={"cores": N}`` with ``N > 1`` (as above) routes through
-   executorlib's MPI spawner, which requires ``mpi4py`` plus a system MPI
-   runtime (``mpiexec``) installed separately — neither is pulled in by the
-   ``fleche[executorlib]`` extra. Without them, this path fails with a
-   ``FileNotFoundError: mpiexec`` raised inside a background thread, where it
-   is swallowed rather than propagated to ``future.result()`` — the call
-   hangs indefinitely instead of raising.
-
-   With MPI available, executorlib runs the callable on every rank and a cache
-   miss resolves to a list with one result per rank, as above.  The cache,
-   however, holds the plain result under the call's key, so a later cache hit —
-   served by :func:`~fleche.wrap_executor` without touching the executor —
-   resolves to ``125``, not the list.  Code consuming the future must handle
-   both shapes.
+   ...         assert future.result() == 125
 
 .. note::
 
