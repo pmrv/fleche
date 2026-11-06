@@ -366,16 +366,9 @@ payload:
 
    Parallelise independent calls with ``max_workers`` (or ``max_cores``) on
    the executor, as above.  ``resource_dict={"cores": N}`` is something else:
-   it runs *one* call as an MPI program on ``N`` ranks, for functions that
-   use MPI themselves (e.g. via ``mpi4py``).  executorlib then returns one
-   result per rank, so a plain function submitted that way resolves to a
-   list of ``N`` identical results on a cache miss, while a later cache hit,
-   served by :func:`~fleche.wrap_executor` from the stored plain result,
-   resolves to a single value.  ``cores > 1`` also needs ``mpi4py`` and a
-   system MPI runtime (``mpiexec``), neither of which the
-   ``fleche[executorlib]`` extra installs; without them executorlib swallows
-   the ``FileNotFoundError`` in a background thread and the future never
-   resolves.
+   it runs *one* call as an MPI program on ``N`` ranks and returns one result
+   per rank.  fleche does not support MPI-native functions, so don't set
+   ``cores`` above 1 for fleche-decorated callables.
 
 .. note::
 
