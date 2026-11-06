@@ -891,12 +891,16 @@ Git history is the changelog.
 - `ty` is red on `main` since 2026-10-23 with no repo change: pandas 3.1.0 annotated `pandas/util/__init__.py`'s module-level `__getattr__` as `-> object`, so `pd.util.hash_pandas_object` in `_pandas.py` type-checks as a non-callable `object` (three `call-non-callable` diagnostics).
   The `ty` job pins `ty` but installs pandas unpinned, and its green runs on docs/release commits are paths-filter *skips*, not passes — so any `src/`-touching PR sees a red `ty` check that is not its own.
   The fix is in flight as a standalone commit on PR #1024 (below): `_pandas.py` imports `hash_pandas_object` from `pandas.core.util.hashing`, its defining module — the same function, so digests are unchanged (the earlier alias-plus-boundary-`# ty: ignore` sketch stays in a comment on PR #1000).
+  The diagnostics are independent of the `ty` version — dependabot's pin bumps (0.0.91 in the closed #1030, 0.0.95 in PR #1032, below) reproduce the same three.
   No issue filed yet.
 
 - `test-minimum-deps` is red on every run since 2026-10-23, also with no repo change: `ubuntu-latest` moved from ubuntu-24.04 (Python 3.12) to ubuntu-26.04 (Python 3.14, gcc 15), the job's bare `uv venv` uses that system Python, and `--resolution lowest-direct` selects pandas 2.2.0, which has no cp314 wheel and whose Cython 3.0.5 output does not compile under gcc 15.
   The fix is in flight as PR #1026 (below): `uv venv --python 3.11`, the `requires-python` floor, so the job tests the dependency floors on the oldest supported Python and stops drifting with the runner image.
   No issue filed yet.
   Until it merges, a red `test-minimum-deps` on a `src/`-touching PR is likewise not that PR's failure.
+  Running the job on uv's managed 3.11 exposed a real cache-correctness bug, fixed in flight as PR #1028 (below): when `VersionInfo.of` raises `ModuleNotFoundError`,
+  `FunctionProfile.of`'s fallback set `version = None`, dropping the function's own `__version__` (the one `fleche(version=...)` sets) — so two versions of a function from an unimportable module shared one cache key and the second was served the first one's result.
+  Merge order: #1028 first, then rebase #1026 (its `test_fleche_with_version` failure under uv's Python — whose standalone builds ship no stdlib `test` package, so the test's `__module__ = "test"` import genuinely fails — needs the fix).
 
 - Numeric digest collisions — no issue filed yet;
   the full investigation (2026-10-06) lives in a comment on PR #990.
@@ -983,6 +987,14 @@ Git history is the changelog.
   keep the pin in sync with the `requires-python` floor.
   The rejected alternative was raising the numpy/pandas floors for every user just to get cp314 wheels;
   the 3.12–3.14 interpreters stay covered with current deps by the `tests.yml` matrix.
+  Blocked on #1028 (below) — merge that first, then rebase.
+- #1028 (opened 2026-10-28) — `FunctionProfile.of` keeps an explicit `__version__` when the function's module cannot be imported: the `ModuleNotFoundError` fallback in `src/fleche/call.py` set `version = None` instead of `getattr(func, "__version__", None)`, so two versions of a function from an unimportable module shared one cache key (see **Bugs**).
+  Surfaced by #1026's uv-managed Python, where `test_fleche_with_version`'s mock module name `"test"` stops resolving (uv's standalone CPython ships no stdlib `test` package) and the fallback actually runs.
+  New regression test uses a module name that never exists, so it covers the fallback on every interpreter.
+  Its own `test-minimum-deps` check stays red until #1026's pin lands — the two merge in that order: #1028, then #1026 rebased.
+- #1032 (dependabot, opened 2026-11-04, replacing #1030, closed unmerged the same day) — bumps the pinned `ty` type-checker (the `ty` extra, which the CI job installs) 0.0.89 → 0.0.95.
+  Its `ty` run fails with the same three pandas-3.1 `call-non-callable` diagnostics as `main` (see **Bugs**), so the bump neither causes nor clears the known red;
+  `test-minimum-deps` is red as on every PR until #1026 lands, and the 3.11–3.14 test matrix is green.
 - #786 (draft) — a process-wide cache of read-only `h5py.File` handles for multi-bag files (bounded MRU of 32, `(inode, mtime_ns, size)` invalidation, `locking=False`, writers close the cached handle under the per-bag lock);
   multi-bag `contains` drops from ~240 µs to ~29 µs.
   `evict` deliberately untouched;

@@ -8,6 +8,15 @@ Helper Methods
 
 The following methods are added to the decorated function:
 
+Every helper below is also mirrored under a ``.fleche`` :class:`types.SimpleNamespace`
+attached to the wrapped function — ``expensive.fleche.query(1, 2)`` is
+equivalent to ``expensive.query(1, 2)``, and likewise for ``.call``,
+``.digest``, ``.load``, ``.contains``, ``.rerun``, and ``.bind``. This
+mirrored namespace exists to avoid a naming conflict between fleche's helper
+names and an attribute the wrapped function already carries under the same
+name (e.g. a function object that already has a ``.query`` attribute) — reach
+for ``expensive.fleche.*`` whenever the direct name is shadowed.
+
 ``.call(*args, **kwargs)``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -201,7 +210,7 @@ Usage with Decorated Methods
    pre-applied; you must pass the instance explicitly as the first positional argument.
 
    For ``fleche`` to cache calls that include ``self``, the class must be
-   *digestible* --- i.e. it must implement a ``__digest__`` method
+   *digestible* — i.e. it must implement a ``__digest__`` method
    (see :doc:`/dev/custom_digests`).
 
    .. code-block:: pycon
