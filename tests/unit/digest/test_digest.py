@@ -6,26 +6,36 @@ is ``tests/unit/call/test_code_digest.py``; whether the decorator carries it
 into the key is ``tests/unit/fleche/test_hash_code.py``.
 """
 
+import abc
+import cmath
+import warnings
+import enum
+import sys
+import time
 import datetime
 import struct
 import collections
+import numbers as numbers_module
 import collections.abc
 import types as types_module
 
 import pytest
-from hypothesis import given
+from hypothesis import assume, given
 from hypothesis import strategies as st
 from hypothesis.extra import numpy as hnp
 from tests.strategies import st_nested_values
 import numpy as np
+import pandas as pd
 from dataclasses import dataclass, make_dataclass, is_dataclass, fields
 import math
 import string
 import keyword
 from decimal import Decimal
+from fractions import Fraction
 
 
 from fleche import fleche
+from fleche.state import cache
 from fleche.digest import digest, Digest, Indigestible
 from fleche.call import Call
 
@@ -140,111 +150,81 @@ def test_different_integers_have_different_hashes(x, y):
         assert digest(x) != digest(y)
 
 
-@given(st.floats(allow_nan=False), st.floats(allow_nan=False))
+def _exact(x):
+    """The exact value of the non-NaN real or complex *x*, as a pair of
+    Fractions (or infinities), independent of numpy's lossy ``==``."""
+    def part(v):
+        return v if math.isinf(v) else Fraction(*v.as_integer_ratio())
+    return part(x.real), part(x.imag)
+
+
+@given(st.floats(allow_nan=True), st.floats(allow_nan=True))
 def test_different_floats_have_different_hashes(x, y):
-    """Test that two different floats have different hashes.
-
-    NaN is excluded on purpose: it takes a different arm, pinned by the
-    deterministic tests in the NaN section below.  Drawing it here only
-    duplicated those — with ``struct.pack`` as its own oracle — and made
-    coverage of that arm depend on the draw.
-    """
-    if x == y:
-        assert digest(x) == digest(y)
+    if math.isnan(x) or math.isnan(y):
+        # NaN case: digest is based on raw binary packing
+        assert (digest(x) == digest(y)) == (struct.pack("<d", x) == struct.pack("<d", y))
     else:
-        assert digest(x) != digest(y)
+        assert (digest(x) == digest(y)) == (_exact(x) == _exact(y))
 
 
-@given(st.complex_numbers(allow_nan=False), st.complex_numbers(allow_nan=False))
-def test_different_complex_numbers_have_different_digests(x, y):
-    """Test that two different complex numbers have different digests.
-
-    Follows Python hash semantics (``hash(1) == hash(1+0j)``).  NaN is excluded
-    for the same reason as in the float pair test above.
-    """
-    if hash(x) == hash(y):
-        assert digest(x) == digest(y)
-    else:
-        assert digest(x) != digest(y)
+_REAL_TYPES = [float, np.float16, np.float32, np.float64, np.longdouble]
+_COMPLEX_TYPES = [complex, np.complex64, np.complex128, np.clongdouble]
 
 
-# ---------------------------------------------------------------------------
-# NaN: the one Number arm that bypasses hash()
-#
-# ``hash()`` of a NaN is derived from the object's *address* (CPython special
-# cases NaN in ``pyhash.c``), so two NaNs that are bit-identical hash
-# differently while both are alive.  Routing NaN through ``hash()`` would
-# therefore hand the same value a fresh cache key on every call — and a
-# different one in every process.  ``_digest_bytes`` packs NaN with
-# ``struct.pack`` instead, which is what the tests below pin.  These own the arm
-# outright: the Hypothesis pair tests above draw finite values only, so none of
-# this depends on a draw.
-# ---------------------------------------------------------------------------
+@given(
+    st.floats(allow_nan=False),
+    st.floats(allow_nan=False),
+    st.sampled_from(_REAL_TYPES + _COMPLEX_TYPES),
+    st.sampled_from(_REAL_TYPES + _COMPLEX_TYPES),
+)
+def test_one_value_through_two_types_digests_by_what_each_holds(re, im, a, b):
+    # Each type rounds the value its own way (a real type keeps only re), so
+    # x and y are equal exactly when they hold the same value; numpy's ==
+    # would instead call np.float32(0.1) and 0.1 equal.
+    def build(t):
+        return t(re) if t in _REAL_TYPES else t(complex(re, im))
 
-def _nan_from_bits(bits: int) -> float:
-    """A float NaN with an exact binary representation, independent of strtod."""
-    return struct.unpack("<d", struct.pack("<Q", bits))[0]
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)  # overflow to inf
+        x, y = build(a), build(b)
+    assert (digest(x) == digest(y)) == (_exact(x) == _exact(y))
 
 
-QUIET_NAN_BITS = 0x7FF8000000000000
-NEGATIVE_NAN_BITS = 0xFFF8000000000000
+def _complex_nan_bits(x):
+    # A complex with no imaginary part digests as its real part.
+    if x.imag == 0:
+        return struct.pack("<d", x.real)
+    return struct.pack("<dd", x.real, x.imag)
+
+
+# Every float NaN: either sign, any nonzero payload.
+_nans = st.builds(
+    lambda sign, payload: struct.unpack("<d", struct.pack("<Q", sign << 63 | 0x7FF << 52 | payload))[0],
+    st.integers(0, 1),
+    st.integers(1, 2**52 - 1),
+)
+_complex_nans = st.one_of(
+    st.builds(complex, _nans, st.floats(allow_nan=True)),
+    st.builds(complex, st.floats(allow_nan=True), _nans),
+)
+
+
+@given(_complex_nans, st.one_of(_complex_nans, st.complex_numbers(allow_nan=True)))
+def test_complex_nans_digest_by_their_bits(x, y):
+    assert (digest(x) == digest(y)) == (_complex_nan_bits(x) == _complex_nan_bits(y))
 
 
 @pytest.mark.parametrize(
-    "make_nan",
+    "a, b",
     [
-        pytest.param(lambda: _nan_from_bits(QUIET_NAN_BITS), id="float"),
-        pytest.param(lambda: complex(_nan_from_bits(QUIET_NAN_BITS), 0.0), id="complex"),
-        pytest.param(lambda: Decimal("nan"), id="decimal"),
-        pytest.param(lambda: np.float64(_nan_from_bits(QUIET_NAN_BITS)), id="numpy"),
+        (complex(math.nan, 1), complex(math.nan, 2)),
+        (complex(1, math.nan), complex(2, math.nan)),
+        (complex(math.nan, 1), complex(1, math.nan)),
+        (complex(math.nan, 1), complex(-math.nan, 1)),
     ],
 )
-def test_nan_digest_is_stable_across_distinct_objects(make_nan):
-    """Two separately constructed NaNs of one type share a digest.
-
-    Both objects are kept alive on purpose: ``hash()`` of a live NaN is
-    address-derived, so ``hash(first) != hash(second)`` here and a digest built
-    on it would not be reproducible.  ``Decimal`` matters as its own case
-    because it is a :class:`numbers.Number` but *not* a
-    :class:`numbers.Complex`, so it packs ``<d`` rather than ``<dd``.
-    """
-    first, second = make_nan(), make_nan()
-    assert first is not second
-    assert digest(first) == digest(second)
-
-
-@pytest.mark.parametrize(
-    "positive, negative",
-    [
-        pytest.param(
-            _nan_from_bits(QUIET_NAN_BITS), _nan_from_bits(NEGATIVE_NAN_BITS), id="float"
-        ),
-        pytest.param(Decimal("nan"), Decimal("-nan"), id="decimal"),
-    ],
-)
-def test_nan_digest_preserves_sign(positive, negative):
-    """A negative NaN digests differently from a positive one.
-
-    Both are ``float('nan')`` to ``==`` and to ``hash()``; only their packed
-    bytes differ, so this is the sign half of the ``struct.pack`` contract.
-    """
-    assert math.isnan(float(positive)) and math.isnan(float(negative))
-    assert digest(positive) != digest(negative)
-
-
-def test_complex_nan_digest_distinguishes_real_and_imaginary_parts():
-    """Complex NaNs pack both components, so a NaN's position is visible.
-
-    ``complex`` goes through ``struct.pack("<dd", real, imag)``; packing only
-    the real part would collide ``nan+0j`` with ``0+nanj``.
-    """
-    nan = _nan_from_bits(QUIET_NAN_BITS)
-    digests = {
-        digest(complex(nan, 0.0)),
-        digest(complex(0.0, nan)),
-        digest(complex(nan, nan)),
-    }
-    assert len(digests) == 3
+def test_complex_nans_with_different_bits_digest_apart(a, b):
+    assert digest(a) != digest(b)
 
 
 def test_numpy_bool_digests_as_the_python_bool():
@@ -261,17 +241,324 @@ def test_numpy_bool_digests_as_the_python_bool():
 
 
 def test_complex_matches_real_without_imaginary_part():
-    """Test that digest(1) == digest(1+0j) per standard Python hash semantics."""
+    """A complex with no imaginary part digests as its real part."""
     assert digest(1) == digest(1 + 0j)
     assert digest(1.0) == digest(1 + 0j)
     assert digest(2) == digest(2 + 0j)
 
 
 def test_int_matches_float_without_fractional_part():
-    """Test that digest(1) == digest(1.0) per standard Python hash semantics."""
+    """An integral float digests as its int."""
     assert digest(1) == digest(1.0)
     assert digest(2) == digest(2.0)
     assert digest(-3) == digest(-3.0)
+
+
+# Unequal numbers that shared a digest under hash() (PR #990) or a draft of
+# its replacement.
+COLLISIONS = [
+    (-1.0, -2.0),  # CPython remaps the error sentinel hash -1 to -2
+    (Fraction(-1), -2),
+    (Decimal(-1), -2),
+    (np.float32(-1), -2),
+    (-1 + 0j, -2),
+    (0.5, 2**60),  # a fraction hashes to num * den**-1 mod 2**61 - 1
+    (Fraction(1, 3), 1537228672809129301),
+    (2.0**100, 2.0**39),  # reduction mod 2**61 - 1
+    (2.0**61, 1),
+    (np.uint64(2**63), 4),  # np.integer used to take the hash() path
+    (math.inf, 314159),  # sys.hash_info.inf
+    (-math.inf, -314159),
+    (1j, 1000003),  # hash(a + bj) == hash(a) + 1000003 * hash(b)
+    (Decimal("1e400"), math.inf),  # finite, though float() overflows it
+    (0.1, Decimal("0.1")),  # the float is not exactly 1/10
+]
+
+
+@pytest.mark.parametrize("a, b", COLLISIONS)
+def test_unequal_numbers_have_different_digests(a, b):
+    assert a != b
+    assert digest(a) != digest(b)
+
+
+@pytest.mark.parametrize("a, b", COLLISIONS)
+def test_unequal_numbers_do_not_share_a_cache_entry(clean_cache, a, b):
+    # The end-to-end symptom on PR #990: the second call was a cache hit on the
+    # first and returned its result.
+    @fleche
+    def identity(x):
+        return x
+
+    with cache(clean_cache):
+        assert identity(a) == a
+        assert identity(b) == b
+
+
+@pytest.mark.parametrize(
+    "a, b",
+    [
+        (-1.0, -1),  # hash(-1.0) was -2, while the int path never hashed
+        (np.float32(-1), -1),
+        (-1 + 0j, -1),
+        (float(2**70), 2**70),
+        (Fraction(-1), -1),
+        (Decimal(-1), -1),
+        (0.5, Fraction(1, 2)),
+        (0.5, Decimal("0.5")),
+        (0.5, np.float32(0.5)),
+        (0.5, 0.5 + 0j),
+        (np.float16(0.75), Fraction(3, 4)),
+        (np.longdouble(0.25), 0.25),
+        (-0.0, 0),
+        (-0.0, 0.0),
+        (math.inf, Decimal("Infinity")),
+        (-math.inf, np.float32("-inf")),
+        (np.uint64(2**63), 2**63),
+        (1.5 + 2j, np.complex64(1.5 + 2j)),
+        (Decimal("1e400"), 10**400),  # float() would overflow, int() does not
+        (Decimal("0.10"), Decimal("0.1")),  # same value, different exponent
+        (Fraction(1, 10), Decimal("0.1")),  # neither fits in a float
+    ],
+)
+def test_equal_numbers_have_equal_digests(a, b):
+    assert a == b
+    assert digest(a) == digest(b)
+
+
+EXTENDED_LONGDOUBLE = np.finfo(np.longdouble).nmant > np.finfo(np.float64).nmant
+
+
+@pytest.mark.skipif(not EXTENDED_LONGDOUBLE, reason="np.longdouble is a double here")
+def test_wide_numpy_float_digests_as_its_exact_fraction():
+    x = np.longdouble(1) / 3
+    assert float(x) != x
+    assert digest(x) == digest(Fraction(*x.as_integer_ratio()))
+    # A zero imaginary part must not strand the real part on the complex path,
+    # which has no node to hold it.
+    assert digest(np.clongdouble(x)) == digest(x)
+
+
+def _expected_branch(x):
+    """The tree type that must hold the real number *x*, from its exact value
+    alone: int if integral, float if a binary64 holds it, else Fraction."""
+    if math.isinf(x):
+        return float
+    q = Fraction(*x.as_integer_ratio())
+    if q.denominator == 1:
+        return int
+    try:
+        f = float(q)  # correctly rounded
+    except OverflowError:
+        return Fraction
+    return float if Fraction(f) == q else Fraction
+
+
+_FLOAT_TYPES = [float, np.float16, np.float32, np.float64, np.longdouble]
+
+
+@given(
+    st.sampled_from(_FLOAT_TYPES),
+    st.integers(-(2**70), 2**70),
+    st.integers(1, 2**70),
+)
+def test_branch_choice_follows_exact_value(t, num, den):
+    # The converters go through numpy for numpy scalars; the branch they pick
+    # must match exact arithmetic on the value the scalar holds.
+    from fleche._numbers import _hold
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)  # float16 overflow
+        x = t(num) / t(den)
+    assume(not math.isnan(x))  # float16 inf / inf; NaNs never reach the tree
+    node, _ = _hold(x)
+    assert node.type is _expected_branch(x)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        datetime.timedelta(seconds=5),
+        pd.Timedelta("5s"),
+        np.timedelta64(5, "s"),
+        np.timedelta64(5),
+        np.timedelta64("NaT", "s"),
+        datetime.timedelta.resolution,
+        [np.timedelta64(1, "D")],
+    ],
+    ids=repr,
+)
+def test_timedeltas_are_refused(value):
+    # No digest yet under which the timedelta types that compare equal digest
+    # equal; total_seconds() merged pd.Timedelta(days=50, nanoseconds=1) and
+    # nanoseconds=2.  np.timedelta64 is registered as Integral, so it must not
+    # slip into the number arm either.
+    with pytest.raises(Indigestible):
+        digest(value)
+
+
+@pytest.mark.parametrize(
+    "a, b",
+    [
+        (np.float64("nan"), float("nan")),
+        (np.float32("nan"), float("nan")),
+        (np.longdouble("nan"), float("nan")),
+        (complex(math.nan, 0), math.nan),
+    ],
+)
+def test_nans_with_the_same_bits_digest_equal_across_types(a, b):
+    assert digest(a) == digest(b)
+
+
+@pytest.mark.parametrize("nan", ["NaN", "-NaN", "sNaN", "NaN123"])
+def test_decimal_nans_are_digestible(nan):
+    # A signalling NaN raised ValueError from cmath.isnan (PR #990).
+    assert digest(Decimal(nan)) == digest(Decimal(nan))
+    assert digest(Decimal(nan)) != digest(float("nan"))
+
+
+def test_decimal_nans_digest_apart():
+    digests = {digest(Decimal(nan)) for nan in ["NaN", "-NaN", "sNaN", "NaN123"]}
+    assert len(digests) == 4
+
+
+def _unused(*args):
+    raise NotImplementedError
+
+
+class SubReal(numbers_module.Real):
+    """A foreign Real a + b·ε, with a and b floats and ε a positive infinitesimal.
+
+    It has only what numbers.Real promises: no __int__, no as_integer_ratio.
+    With b == 0 it is the float a; with b != 0 no type in the tree holds it.
+    """
+
+    def __init__(self, a, b=0.0):
+        self.a, self.b = float(a), float(b)
+
+    def __float__(self):
+        return self.a
+
+    def __trunc__(self):
+        t = math.trunc(self.a)
+        if t == self.a and self.b != 0 and (self.a > 0) != (self.b > 0) and self.a != 0:
+            # a ± ε just inside an integer a truncates one step toward zero.
+            return t - 1 if self.a > 0 else t + 1
+        return t
+
+    def __eq__(self, other):
+        if isinstance(other, SubReal):
+            return (self.a, self.b) == (other.a, other.b)
+        return self.b == 0 and self.a == other
+
+    def __hash__(self):
+        return hash(self.a) if self.b == 0 else hash((self.a, self.b))
+
+
+for _name in numbers_module.Real.__abstractmethods__ - vars(SubReal).keys():
+    setattr(SubReal, _name, _unused)
+abc.update_abstractmethods(SubReal)
+
+
+@pytest.mark.filterwarnings("error")
+def test_foreign_real_downcasts_without_int():
+    # int() on it would delegate to __trunc__, deprecated and due to go.
+    assert digest(SubReal(2)) == digest(2)
+    assert digest(SubReal(0.5)) == digest(0.5)
+
+
+@pytest.mark.parametrize("value", [SubReal(0, 1), SubReal(2, -1), SubReal(0.5, 1e-300)])
+def test_foreign_real_beyond_the_tree_is_indigestible(value):
+    # No node holds a nonzero infinitesimal part; that must end as
+    # Indigestible, not AttributeError from the missing as_integer_ratio.
+    with pytest.raises(Indigestible):
+        digest(value)
+
+
+@pytest.mark.parametrize(
+    "value", [Fraction(10**400), Fraction(-(10**400), 7), [Fraction(2**1024)]]
+)
+def test_fraction_beyond_float_range_is_digestible(value):
+    # The NaN check converted to float, which overflowed.
+    digest(value)
+
+
+def test_fraction_beyond_float_range_digests_as_its_value():
+    assert digest(Fraction(10**400)) == digest(10**400)
+    assert digest(Fraction(10**400)) == digest(Decimal("1e400"))
+
+
+@pytest.mark.skipif(
+    np.finfo(np.longdouble).maxexp < 16384, reason="np.longdouble cannot hold 1e4400 here"
+)
+@pytest.mark.parametrize("max_str_digits", [None, 0])
+def test_huge_longdouble_digests_as_int_whatever_the_str_limit(max_str_digits):
+    # numpy compares a longdouble with an int through str, so an int() == check
+    # failed under the default sys.int_max_str_digits and passed without it.
+    x = np.longdouble("1e4400")
+    n = int(x)
+    old = sys.get_int_max_str_digits()
+    if max_str_digits is not None:
+        sys.set_int_max_str_digits(max_str_digits)
+    try:
+        assert digest(x) == digest(n)
+    finally:
+        sys.set_int_max_str_digits(old)
+
+
+def test_decimal_with_large_exponent_digests_quickly():
+    # regression: naive implementation takes very long
+    start = time.perf_counter()
+    d = digest(Decimal("1e300000"))
+    assert time.perf_counter() - start < 1
+    assert d == digest(10**300000)
+
+
+# What the digest promises equality against is the exact value, not == as
+# numpy computes it: numpy casts a Python float down to float32 (NEP 50) and
+# rounds a Fraction to double before comparing.
+@pytest.mark.parametrize(
+    "a, b, equal",
+    [
+        (np.float32(0.1), 0.1, False),
+        (np.complex64(0.1 + 0.1j), complex(0.1, 0.1), False),
+        (np.longdouble(1) / 3, Fraction(*(np.longdouble(1) / 3).as_integer_ratio()), True),
+        (Decimal("Infinity"), np.longdouble("inf"), True),
+        (complex(1.5, -0.0), 1.5, True),
+    ],
+)
+def test_digest_follows_exact_value_not_numpy_equality(a, b, equal):
+    assert (digest(a) == digest(b)) is equal
+
+
+class MyInt(int):
+    pass
+
+
+class MyFloat(float):
+    pass
+
+
+class Colour(enum.IntEnum):
+    RED = 1
+
+
+def test_int_subclasses_keep_their_type_name_unlike_float_subclasses():
+    # Pinned as observed: the int arm catches every int subclass and salts it
+    # with its own name, like bool, while float subclasses downcast.
+    assert digest(MyInt(5)) != digest(5)
+    assert digest(Colour.RED) != digest(1)
+    assert digest(MyFloat(5.0)) == digest(5)
+
+
+def test_number_outside_the_tree_is_indigestible():
+    # A bare numbers.Number belongs to no ABC the tree names, so it has no
+    # path to walk, although float() takes it past the NaN check.
+    class Opaque(numbers_module.Number):
+        def __float__(self):
+            return 0.5
+
+    with pytest.raises(Indigestible):
+        digest(Opaque())
 
 
 @given(
@@ -1477,17 +1764,16 @@ def test_different_times_have_different_digests():
     assert digest(datetime.time(12, 0, 0)) != digest(datetime.time(13, 0, 0))
 
 
-def test_different_timedeltas_have_different_digests():
-    assert digest(datetime.timedelta(days=1)) != digest(datetime.timedelta(days=2))
-    assert digest(datetime.timedelta(seconds=1)) != digest(datetime.timedelta(seconds=2))
-
-
 def test_different_timezones_have_different_digests():
     tz_utc = datetime.timezone.utc
     tz_plus5 = datetime.timezone(datetime.timedelta(hours=5))
     tz_minus3 = datetime.timezone(datetime.timedelta(hours=-3))
     assert digest(tz_utc) != digest(tz_plus5)
     assert digest(tz_plus5) != digest(tz_minus3)
+    tz_plus5_us = datetime.timezone(datetime.timedelta(hours=5, microseconds=1))
+    assert digest(tz_plus5) != digest(tz_plus5_us)
+    # timezone == compares the offset only, so the name must not split them.
+    assert digest(tz_plus5) == digest(datetime.timezone(datetime.timedelta(hours=5), "X"))
 
 
 def test_datetime_subclass_matches_before_date():
@@ -1501,7 +1787,6 @@ def test_datetime_same_value_same_digest():
     assert digest(datetime.date(2024, 3, 10)) == digest(datetime.date(2024, 3, 10))
     assert digest(datetime.datetime(2024, 3, 10, 8, 0)) == digest(datetime.datetime(2024, 3, 10, 8, 0))
     assert digest(datetime.time(8, 30)) == digest(datetime.time(8, 30))
-    assert digest(datetime.timedelta(hours=2)) == digest(datetime.timedelta(hours=2))
     assert digest(datetime.timezone.utc) == digest(datetime.timezone.utc)
 
 
@@ -1519,14 +1804,10 @@ def test_datetime_stdlib_class_constants_digestible():
     """
     assert digest(datetime.date.min) is not None
     assert digest(datetime.date.max) is not None
-    assert digest(datetime.date.resolution) is not None
     assert digest(datetime.datetime.min) is not None
     assert digest(datetime.datetime.max) is not None
     assert digest(datetime.time.min) is not None
     assert digest(datetime.time.max) is not None
-    assert digest(datetime.timedelta.min) is not None
-    assert digest(datetime.timedelta.max) is not None
-    assert digest(datetime.timedelta.resolution) is not None
     assert digest(datetime.timezone.utc) is not None
 
 

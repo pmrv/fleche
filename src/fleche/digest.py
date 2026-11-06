@@ -1,19 +1,15 @@
-import cmath
 import datetime
-import hashlib
 import logging
 import dataclasses
-import numbers
 from numbers import Number
-import struct
 import threading
 import types
 import importlib.metadata
 from collections.abc import Iterable, Mapping
 from typing import Any, TypeVar, Callable, Type, Generic
-import numpy as np
 
-from . import _attrs, _pandas
+from . import _attrs, _numbers, _numpy, _pandas
+from ._hashing import new_hash as _new_hash
 
 logger = logging.getLogger("fleche.digest")
 
@@ -131,18 +127,6 @@ def load_entry_points():
                 seen_types[hook.type] = ep.value
         except Exception as e:
             logger.error("Failed to load entry point %s: %s", ep.name, e, exc_info=True)
-
-
-def _new_hash(salt: bytes):
-    """Start a running SHA256 under *salt*.
-
-    Every digest in this module is a salted accumulation: the salt discriminates
-    what kind of thing is being hashed (a type name, a section of a function's
-    captured state) before any content goes in.
-    """
-    m = hashlib.sha256()
-    m.update(salt)
-    return m
 
 
 def digest_class(cls: type) -> Digest:
@@ -293,12 +277,12 @@ def _digest_bytes(value: Any) -> bytes:
     **Wire-format note**: currently returns ``m.hexdigest().encode()`` (64 UTF-8
     hex bytes) so the bytes fed into parent hashes are identical to the previous
     ``digest(v).encode()`` calls — no backwards-incompatible change.  To gain
-    the raw-bytes speedup (Issue #440), change **only** the final ``return``
-    here and in ``_pandas.digest_pandas`` to ``m.digest()`` (32 bytes), update ``digest()`` to call ``.hex()``
-    instead of ``.decode()``, and change the ``encode()`` calls on the
-    early-return paths (Digest pass-through, hooks, ``__digest__``) to
-    ``bytes.fromhex(...)``.  That must be coordinated with a ``hash_version``
-    bump and a ``Cache.redigest`` migration.
+    the raw-bytes speedup (Issue #440), change the final ``return`` here and
+    ``_hashing.running_hash.__exit__`` to ``m.digest()`` (32 bytes), update
+    ``digest()`` to call ``.hex()`` instead of ``.decode()``, and change the
+    ``encode()`` calls on the early-return paths (Digest pass-through, hooks,
+    ``__digest__``) to ``bytes.fromhex(...)``.  That must be coordinated with
+    a ``hash_version`` bump and a ``Cache.redigest`` migration.
     """
     # Fast-path: in the common case both hook lists are empty, so skip the
     # ``get_hooks()`` call which would otherwise allocate a fresh combined list
@@ -335,48 +319,24 @@ def _digest_bytes(value: Any) -> bytes:
             m.update(value.encode())
         case None:
             m.update(b"__None__")
+        case _ if isinstance(value, datetime.timedelta) or _numpy.is_timedelta64(value):
+            # Must precede Number: numpy registers timedelta64 as Integral.
+            # Refused until there is a digest under which every timedelta
+            # type digests equal to those it compares equal to
+            # (datetime.timedelta, its subclass pd.Timedelta, np.timedelta64
+            # in any unit).  The old total_seconds() float merged unequal
+            # pd.Timedelta nanoseconds.  A hook can supply one meanwhile.
+            raise Indigestible(value)
         case Number():
-            # Must follow int (int ⊂ Number).
-            # lest we have nice things
-            if cmath.isnan(value):
-                # somehow hash(float('nan')) can yield different values even if having the same sign, because the
-                # bespoke python hash special cases nan such that their location in memory is taken into account
-                # apparently this is useful:
-                # https://github.com/python/cpython/blob/1ac9d138ae0563f2829ba91efe7989af507f47e0/Python/pyhash.c#L59
-                # because nans are not singletons this causes the code below to potentially assign different digests to
-                # the same nan!  So in this case we revert back to just packing it into binary rep, because negative and
-                # positive nans have different binary rep
-                if isinstance(value, numbers.Complex):
-                    m.update(struct.pack("<dd", value.real, value.imag))
-                else:
-                    m.update(struct.pack("<d", value))
-                # on the other hand the IEEE standard does *not* assign a unique binary representation to NaN, but let's
-                # burn that bridge when someone else tries to cross it.
-                # the good news is that numpy nans seem to map to the same binary and are also detected by cmath.isnan
-            else:
-                # rely on python's 'generic' hash semantics for all numbers to translate all of them to an integer
-                value = hash(value)
-                # then digest its bytes
-                return _digest_bytes(value)
+            # Must follow int (int ⊂ Number), so int and its subclasses can be treated separately
+            digested = _numbers.digest_number(value, _digest_bytes)
+            if digested is None:
+                raise Indigestible(value)
+            return digested
         case bytes():
             m.update(value)
-        case np.ndarray():
-            m.update(_digest_bytes(value.dtype.str))
-            m.update(_digest_bytes(value.shape))
-            if value.dtype.names is not None:
-                for name in value.dtype.names:
-                    m.update(_digest_bytes(name))
-                    m.update(_digest_bytes(value[name]))  # recurses into the ndarray arm
-            elif value.dtype.hasobject:
-                # tobytes() of an object array yields memory addresses, digest
-                # all elements by value instead
-                for element in value.ravel().tolist():
-                    m.update(_digest_bytes(element))
-            else:
-                m.update(value.tobytes())
-        case np.bool_():
-            # np.bool_ ∉ Number so this arm is reachable
-            return _digest_bytes(bool(value))
+        case _ if _numpy.is_numpy(value):
+            return _numpy.digest_numpy(value, _digest_bytes)
         case _ if _pandas.is_pandas(value):
             # Must precede Iterable: a DataFrame iterates over its column names
             # only, so the Iterable arm would collide any two frames sharing them.
@@ -415,9 +375,10 @@ def _digest_bytes(value: Any) -> bytes:
                 props.append(value.co_exceptiontable)
             m.update(_digest_bytes(tuple(props)))
         case datetime.timezone():
-            m.update(_digest_bytes(value.utcoffset(None)))
-        case datetime.timedelta():
-            m.update(_digest_bytes(value.total_seconds()))
+            # The offset is a timedelta, which is refused (see that arm), so
+            # take it as an exact count of microseconds.
+            offset = value.utcoffset(None)
+            m.update(_digest_bytes(offset // datetime.timedelta(microseconds=1)))
         case datetime.datetime():  # datetime subclasses date; must precede date case
             m.update(value.isoformat().encode())
         case datetime.date():

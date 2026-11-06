@@ -11,7 +11,7 @@ def make_slcache(max_size: int) -> SizeLimitedCache:
 
 
 def make_call(name: str, x: int, result: int) -> Call:
-    return Call(name=name, arguments={"x": x}, result=result, module="test", version=1, metadata={})
+    return Call(name=name, arguments={"x": x}, result=result, module="example_module", version=1, metadata={})
 
 
 def test_size_limit_enforced():

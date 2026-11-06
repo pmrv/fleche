@@ -35,7 +35,12 @@ jobs:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@v5
         if: needs.changes.outputs.run == 'true'
-      - run: uv venv
+      # Pin the interpreter to the oldest Python allowed by requires-python
+      # (keep in sync with pyproject.toml). Without it, uv picks the runner's
+      # system Python, which drifts with the image (ubuntu-26.04 ships 3.14),
+      # and the floors may have no wheels there, so they get built from source.
+      # uv downloads a managed 3.11 if the image lacks one.
+      - run: uv venv --python 3.11
         if: needs.changes.outputs.run == 'true'
       # --resolution lowest-direct pins every direct dependency to the lowest
       # version its bound allows, exercising the floors declared in pyproject.
