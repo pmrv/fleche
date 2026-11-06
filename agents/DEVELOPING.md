@@ -224,6 +224,8 @@ Values and calls are stored separately so call records are queryable without des
   `Ignored`/`Required` marker classes live here (re-exported via `wrapper.py` for the public API).
   All static per-function metadata (signature, qualname, module, version, `code_digest`, ignored/required arg sets) is consolidated in the frozen `FunctionProfile` dataclass;
   `FunctionProfile.of(func)` performs every introspection step;
+  when `VersionInfo.of` raises `ModuleNotFoundError` (unimportable module), its fallback keeps the function's own `__version__` rather than `None`, so `fleche(version=...)` still tells versions apart — the old `version = None` served one version the other's result (#1028;
+  the regression test uses a module name that never exists, and `tests/conftest.py` makes `import test` fail on every interpreter so no test leans on CPython's optional `test` package);
   `_profile` is a single `lru_cache(maxsize=1000)` backing `_get_profile()`, which falls back to `_profile.__wrapped__` for unhashable callables (the `TypeError` from `lru_cache`).
 - `caches.py` — `BaseCache`, `Cache`, `CacheStack`, `CachePool`, `ReadOnlyCache`, `FilteredCache`, `RefreshingCache`, `SizeLimitedMixin`/`SizeLimitedCache`;
   `Rejected` exception.
@@ -716,9 +718,10 @@ Shared fixtures (in `fixtures.py`):
   its digest outputs match the figure labels by content-addressing.
   Running `python docs/figures/gen_diagrams.py` regenerates the SVGs **and** refreshes the notebook's embedded PNGs (`refresh_notebook_attachments`, rasterizing via `rsvg-convert` or `cairosvg`);
   each SVG carries a generated-by comment pointing back at the script.
-- `.github/workflows/` — CI: `tests.yml` (PR sweep across 3.11–3.14, persisting the Hypothesis example database as a GitHub artifact so shrunk counter-examples survive across runs, + `sql-backends` job that boots Postgres 16 + MariaDB 11 service containers and sets `FLECHE_TEST_{POSTGRES,MYSQL}_URL`),
+- `.github/workflows/` — CI: `tests.yml` (PR sweep across 3.11–3.14, persisting the Hypothesis example database as a GitHub artifact so shrunk counter-examples survive across runs, + `sql-backends` job that boots Postgres 16 + MariaDB 11 service containers and sets `FLECHE_TEST_{POSTGRES,MYSQL}_URL`, + an `executorlib` job that installs `.[tests,executorlib]` and runs the executorlib-marked `test_parallel_execution.py` tests, which the plain sweep skips — #1035),
   `ty.yml`,
-  `test-minimum-deps.yml` (installs every direct dep at its declared floor via `uv pip install --resolution lowest-direct -e ".[tests]"` and runs the suite — `uv pip install` rather than `uv sync` because the universal lock floats deps up through cross-extra constraints and would mask the real minimums),
+  `test-minimum-deps.yml` (installs every direct dep at its declared floor via `uv pip install --resolution lowest-direct -e ".[tests]"` and runs the suite — `uv pip install` rather than `uv sync` because the universal lock floats deps up through cross-extra constraints and would mask the real minimums;
+  its venv is pinned to the `requires-python` floor via `uv venv --python 3.11` (#1028, formerly PR #1026) because on ubuntu-26.04 a bare `uv venv` lands on system Python 3.14, where pandas 2.2.0 has no wheel and its source build fails under gcc 15 — keep the pin in sync with the floor),
   `benchmarks.yml`/`benchmarks-main.yml`/`updatebenchmarks.yml`,
   `perf-triage.yml` (Haiku reads the PR diff/description and adds the `benchmark` label when the change touches a hot path — that label is the existing `benchmarks.yml` trigger),
   `rendernb.yml` (re-executes `notebooks/*.ipynb` on PRs labelled `rendernb`),
@@ -790,7 +793,7 @@ Git history is the changelog.
   composes with #834.
 
 - **Enum digests** (#1022, survey filed 2026-10-24 — nothing decided;
-  probed on the #1020 branch).
+  probed on PR #1020's branch, merged 2026-11-06).
   Current behaviour: plain `Enum` members are `Indigestible`;
   `IntEnum`/`StrEnum`/mixin members digest through their mixin's arm under the bare class `__name__` (two same-named classes sharing a value collide;
   float/`Decimal` mixins go through the number logic).
@@ -913,21 +916,14 @@ Git history is the changelog.
   Same-key contention there comes from content-addressed dedup funnelling every worker sharing a byte-identical sub-object onto one value key's lock — unrelated calls then report the same lock path, which looks like a digest collision but isn't.
 - #916 — `.query()` ignores `hash_version=False` / `hash_module=False`: `make_get_call` nulls `version`/`module` out of the lookup key, but `make_query` builds its template with the profile's real values, so it silently matches nothing (`hash_code` is unaffected — the query-side `None` code digest is a wildcard).
   `docs/usage/helpers.rst` warns about it.
-  The fix (thread both flags into `make_query` + a parametrized regression test in `tests/unit/fleche/test_decorator_attributes.py` + removal of the docs warnings, including USAGE.md's "Known trap") is on branch `fix/query-hash-flags-916`, no PR yet.
-  It is branched off #933's branch, so merge #933 first, then retarget onto `main`.
+  The fix (thread both flags into `make_query` + a parametrized regression test in `tests/unit/fleche/test_decorator_attributes.py` + removal of the docs warnings, including USAGE.md's "Known trap" and the second copy #1034 added to `docs/usage/query.rst`'s "Behavior details") is on branch `fix/query-hash-flags-916`, no PR yet.
+  It was branched off #933's branch;
+  #933 closed unmerged after its content landed via the #1034 consolidation, so rebase the branch onto `main` first.
 - #918 — destructuring storage ignores digest hooks, breaking *digestible ⇒ storable*: `digest()` consults `get_hooks()` before any structural walk, but `DestructuringMixin._intern_rec` picks a destructurer purely from `_DESTRUCTURERS` predicates, so a hooked dataclass is torn into its fields and the opaque field the hook avoided raises `Indigestible` on save — naming a type the caller never mentioned.
   Suggested fix: treat hook-covered (or `__digest__`-bearing) values as opaque leaves in `_intern_rec`.
   Composes with #883/#905 and #333.
 - #883 — `DestructuringMixin._raw_sub_digests` hardcodes a `match` over the three built-in `Digested` types, so a subclass registered via `register_destructurer` reports zero children: `Cache.gc()` can evict values reachable only through it (silent data loss) and `count_reuses()` under-counts.
   Fix in flight as PR #905 (below).
-- `test-minimum-deps` is red on every run since 2026-10-23, also with no repo change: `ubuntu-latest` moved from ubuntu-24.04 (Python 3.12) to ubuntu-26.04 (Python 3.14, gcc 15), the job's bare `uv venv` uses that system Python, and `--resolution lowest-direct` selects pandas 2.2.0, which has no cp314 wheel and whose Cython 3.0.5 output does not compile under gcc 15.
-  The fix is in flight as PR #1026 (below): `uv venv --python 3.11`, the `requires-python` floor, so the job tests the dependency floors on the oldest supported Python and stops drifting with the runner image.
-  No issue filed yet.
-  Until it merges, a red `test-minimum-deps` on a `src/`-touching PR is likewise not that PR's failure.
-  Running the job on uv's managed 3.11 exposed a real cache-correctness bug, fixed in flight as PR #1028 (below): when `VersionInfo.of` raises `ModuleNotFoundError`,
-  `FunctionProfile.of`'s fallback set `version = None`, dropping the function's own `__version__` (the one `fleche(version=...)` sets) — so two versions of a function from an unimportable module shared one cache key and the second was served the first one's result.
-  Merge order: #1028 first, then rebase #1026 (its `test_fleche_with_version` failure under uv's Python — whose standalone builds ship no stdlib `test` package, so the test's `__module__ = "test"` import genuinely fails — needs the fix).
-
 
 **Feature requests**
 
@@ -970,19 +966,8 @@ Git history is the changelog.
   **#1018** (on #1017): the URL is written back as `url` into the declaring `fleche.toml` via tomlkit (comments survive;
   the config loader records which file each top-level table came from to support this), and `db --cache NAME` records the server into config (refusing in-memory values;
   stacks with persistent layers, pools and SSH caches).
-- #1020 (opened 2026-10-23) — fixes the numeric digest collisions found on PR #990 (`hash()` made `digest(-1.0) == digest(-2.0)` and `digest(0.5) == digest(2**60)`): `_digest_bytes`'s `Number` arm stops routing through lossy `hash()` and instead digests each number as the first type on an explicit downcast tree (`int → float → {complex, Fraction → Decimal}`) that holds its exact value, so non-NaN numbers digest equal **iff** they are the same exact value (`1 == 1.0 == 1+0j` as `int`;
-  `0.5 == Fraction(1, 2) == Decimal("0.5")` as `float`), with converters deciding exactness themselves (`as_integer_ratio`, `math.trunc`) rather than trusting numpy's NEP-50 `==`;
-  a `Number` nothing on its path holds exactly raises `Indigestible`, never `hash()`.
-  NaNs digest by their bits, whatever their type;
-  timedeltas (`datetime.timedelta`, `pd.Timedelta`, `np.timedelta64`) now raise `Indigestible` until one digest can honour cross-type equality without unit loss (`total_seconds()` collided distinct `pd.Timedelta`s) — PR #1023 (below), stacked on this one, carries that digest;
-  `datetime.timezone` digests its offset as exact microseconds.
-  Also moves the number arm into a private `fleche._numbers` module and the numpy arms into `fleche._numpy` (the `_pandas` pattern), and extracts a shared `fleche._hashing` module (`new_hash(salt)` + a `running_hash` context manager) that all three use.
-  Persisted keys involving non-integral numbers, `±inf`, complex, huge ints, NaNs or timezones change (`Cache.redigest()` migrates;
-  plain `int` keys are unchanged).
-  Supersedes #990 (closed unmerged 2026-10-24;
-  the numeric-digest investigation referenced under **Bugs** stays readable in its review comments);
-  overlaps #1000's NaN-arm pins, so one of the two needs a rebase.
-- #1023 (opened 2026-10-24, stacked on #1020 — retargets to `main` once that merges) — digests each library's timedeltas by **exact length**, lifting #1020's `Indigestible` refusal: `datetime.timedelta` as exact microseconds (beside the other datetime arms in `digest.py`),
+- #1023 (opened 2026-10-24, stacked on #1020 until that merged 2026-11-06 — now targets `main`;
+  check it rebased cleanly before building on it) — digests each library's timedeltas by **exact length**, lifting #1020's `Indigestible` refusal: `datetime.timedelta` as exact microseconds (beside the other datetime arms in `digest.py`),
   `pd.Timedelta` as exact nanoseconds via `to_timedelta64()` (`.value` would overflow;
   the arm sits in `_pandas` ahead of the `datetime.timedelta` arm it subclasses),
   `np.timedelta64` as exact attoseconds for every fixed unit,
@@ -997,19 +982,7 @@ Git history is the changelog.
   the lock factories are now real `@staticmethod`s.
   The 3.15 job builds h5py from source (no cp315 wheels yet;
   drop that step once wheels publish) and is **blocked**: `pyiron-snippets` and `bagofholding` both declare `Requires-Python <3.15` on every release, so pip refuses them on 3.15 (options in a PR comment).
-  Also carries the `ty` fix for the pandas-3.1 `pd.util` regression (fixed by #1020) as its own commit, and moves `test_fleche_with_version` off `__module__ = "test"` (only resolves when the stdlib `test` package is installed — uv's standalone builds leave it out).
-- #1026 (opened 2026-10-25) — pins `test-minimum-deps`'s venv to Python 3.11 via `uv venv --python 3.11` (see **Bugs**: the job is red since the runner image moved to ubuntu-26.04, whose system Python 3.14 has no pandas 2.2.0 wheel and fails its source build under gcc 15);
-  keep the pin in sync with the `requires-python` floor.
-  The rejected alternative was raising the numpy/pandas floors for every user just to get cp314 wheels;
-  the 3.12–3.14 interpreters stay covered with current deps by the `tests.yml` matrix.
-  Blocked on #1028 (below) — merge that first, then rebase.
-- #1028 (opened 2026-10-28) — `FunctionProfile.of` keeps an explicit `__version__` when the function's module cannot be imported: the `ModuleNotFoundError` fallback in `src/fleche/call.py` set `version = None` instead of `getattr(func, "__version__", None)`, so two versions of a function from an unimportable module shared one cache key (see **Bugs**).
-  Surfaced by #1026's uv-managed Python, where `test_fleche_with_version`'s mock module name `"test"` stops resolving (uv's standalone CPython ships no stdlib `test` package) and the fallback actually runs.
-  New regression test uses a module name that never exists, so it covers the fallback on every interpreter.
-  Its own `test-minimum-deps` check stays red until #1026's pin lands — the two merge in that order: #1028, then #1026 rebased.
-- #1032 (dependabot, opened 2026-11-04, replacing #1030, closed unmerged the same day) — bumps the pinned `ty` type-checker (the `ty` extra, which the CI job installs) 0.0.89 → 0.0.95.
-  Its `ty` run fails with the same three pandas-3.1 `call-non-callable` diagnostics as `main` before #1020, so the bump neither causes nor clears the known red;
-  `test-minimum-deps` is red as on every PR until #1026 lands, and the 3.11–3.14 test matrix is green.
+  Needs a rebase: the standalone `ty`-fix commit it carried landed via #1020, and #1028 reworked the `test_fleche_with_version` area (`tests/conftest.py` now makes `import test` fail everywhere), so both of those commits are superseded.
 - #786 (draft) — a process-wide cache of read-only `h5py.File` handles for multi-bag files (bounded MRU of 32, `(inode, mtime_ns, size)` invalidation, `locking=False`, writers close the cached handle under the per-bag lock);
   multi-bag `contains` drops from ~240 µs to ~29 µs.
   `evict` deliberately untouched;
@@ -1019,35 +992,20 @@ Git history is the changelog.
   ships the differential gc test with a custom destructurer;
   `mend` deliberately does not route through `child_items`, ~70% slower for no gain;
   targets the `temppath` branch, closes #883) under the path-handling theme.
-- Single-page docs PRs over `docs/`, each mergeable alone:
-  - #932 — parallel_execution: MPI example.
-  - #933 — usage: `.fleche` namespace, #916, groupby staleness.
-    Needs a rebase onto `tldr.rst`/`helpers.rst` as they are on `main`.
-  - #934 — SSH config + destructuring list.
-    Needs a rebase onto `ssh_cache.rst` as #993 left it.
-
-  #990 (digests: the numeric-digest mechanism explanation) closed unmerged 2026-10-24 as superseded — its review investigation found the digest *code* at fault, and PR #1020 (above) carries the code fix plus the docs promise.
-  #932 needs a rebase: #989 (merged 2026-10-22) changed `parallel_execution.rst` under it.
-- Test-only coverage sweeps: #939 (pins the `Intent.READ` no-op fast path in both lock mixins;
-  drops tests strictly weaker than a sibling — rebased 2026-10-23, where three of its eight digest-smoke removals turned out to have already landed via the merged #980 and are now no-ops;
-  converts `test_local_function_digests_same_as_module_level` into `test_nesting_changes_a_function_digest` — `CO_NESTED` is in `co_flags`, so lifting a helper out of an enclosing function invalidates its cached calls under `hash_code=True`;
-  pinned as observed, flip it there if ruled a bug), #955 (pins the deferred-future abandon arm in `wrapper.py`;
-  collapses five single-property tests in `test_dehydrate.py`), #1000 (pins the NaN `struct.pack` arm deterministically — two *simultaneously live* same-value NaNs must share a digest, which `hash()`-routing would break since CPython's NaN hash is address-derived;
-  covers the `<d` `Decimal`-NaN sub-arm and the `np.bool_` → builtin-`bool` delegation;
-  narrows the Hypothesis float/complex pair tests to `allow_nan=False`, killing their self-fulfilling NaN oracle branches;
-  drops four digest tests subsumed *in assertion* by siblings, after a per-test-arc ablation confirmed 89% of tests have zero unique arcs — reaffirming the collective-redundancy lesson below;
-  also `.gitignore`s `pytest --cov`'s `.coverage` litter;
-  the PR body flags the next deterministic-coverage picks, led by `bagofholding_file.py`'s seed-dependent `SaveError` arm;
-  rebased 2026-10-23 and re-measured — note PR #1020 replaces the NaN arm it pins, so one of the two needs a rebase).
 
 **Lessons and standing decisions**
 
 - `hash_code=False` stays the default, so a plain `@fleche()` on two closures from one factory still shares a cache entry;
   documented rather than changed, since flipping it invalidates every cache.
   Use `hash_code=True` (which folds captures and defaults into the key) when that matters.
-- Cache-key-invalidating changes so far have shipped without a `hash_version` bump (e.g. pandas content digests);
+- Cache-key-invalidating changes so far have shipped without a `hash_version` bump (e.g. pandas content digests;
+  latest: #1020's exact-value number digests, released in 0.22.3 — keys involving non-integral numbers, `±inf`, complex, huge ints, NaNs or timezones changed, plain `int` keys did not);
   old entries are simply unreachable until `Cache.redigest()` runs.
   Say so in the commit body.
+- Nesting is part of a function's digest: `CO_NESTED` is in `co_flags`, so lifting a helper out of an enclosing function invalidates its cached calls under `hash_code=True`.
+  Pinned as observed by `test_nesting_changes_a_function_digest` (landed via #1036, the consolidation of the coverage-sweep PRs #939/#955/#1000) — flip it there if ruled a bug.
+- Long-open docs and test-only PRs were landed by consolidation PRs rather than serial rebases: #1034 carries #932/#933/#934, #1036 carries #939/#955/#1000 (all six closed unmerged).
+  Their close-out comments point at the consolidation that landed them.
 - Test removal: suite-wide ablation showed redundancy is *collective* — most tests contribute no unique coverage individually, yet deleting them together loses coverage.
   "Covers nothing uniquely" is not a deletion criterion;
   remove only tests strictly weaker than a same-file sibling, and check per-file coverage stays identical.
