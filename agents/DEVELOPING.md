@@ -130,11 +130,11 @@ Values and calls are stored separately so call records are queryable without des
   `Hook`, `add_hook`, `get_hooks`, `load_entry_points`;
   `Indigestible`;
   `DIGEST_LENGTH=64`.
-  Built-in types are inline `match` cases in `_digest_bytes`, ordered roughly hot-path first: `int` (`bool ⊂ int`) → `Digest` (returns `value.encode()` so `digest(Digest("abc")) == "abc"`) → `str` → `None` → `Number` (`float`, `complex`, `Decimal`, `Fraction`, plus `np.integer`/`np.floating` which satisfy `numbers.Number` automatically;
-  routed through `hash(value)` then recursed as int — a lossy encoding under which distinct numbers collide;
-  see the numeric-digest bullet under **Bugs** below) → `bytes` → `np.ndarray` (dtype + shape + `tobytes`;
-  structured dtypes instead digest each field name + field view recursively, because `dtype.str` is only `|V<itemsize>` and padding bytes are uninitialised;
-  other `dtype.hasobject` arrays digest every element of `ravel().tolist()` because their bytes are PyObject pointers) → `np.bool_` (delegates to `digest(bool(value))`, because `np.bool_ ∉ Number` since numpy 1.20) → pandas (`case _ if _pandas.is_pandas(value)`, which returns `_pandas.digest_pandas(value, _digest_bytes)`: `pd.DataFrame` / `pd.Series` / `pd.Index` / `pd.NA`;
+  Built-in types are inline `match` cases in `_digest_bytes`, ordered roughly hot-path first: `int` (`bool ⊂ int`) → `Digest` (returns `value.encode()` so `digest(Digest("abc")) == "abc"`) → `str` → `None` → `datetime.timedelta` / `np.timedelta64` (must precede `Number`, as numpy registers `timedelta64` `Integral`;
+  refused with `Indigestible` until a digest honours their cross-type, cross-unit `==` — the old `total_seconds()` float merged unequal `pd.Timedelta` nanoseconds;
+  `datetime.timezone` digests its offset as exact microseconds instead) → `Number` (`float`, `complex`, `Decimal`, `Fraction`, plus `np.integer`/`np.floating` which satisfy `numbers.Number` automatically;
+  handed to `_numbers.digest_number(value, _digest_bytes)`, see `_numbers.py` below, and `Indigestible` when it returns `None`;
+  This replaced `hash(value)`, a lossy encoding under which distinct numbers collided) → `bytes` → numpy (`case _ if _numpy.is_numpy(value)`, which returns `_numpy.digest_numpy(value, _digest_bytes)`: `np.ndarray` and `np.bool_`, see `_numpy.py` below) → pandas (`case _ if _pandas.is_pandas(value)`, which returns `_pandas.digest_pandas(value, _digest_bytes)`: `pd.DataFrame` / `pd.Series` / `pd.Index` / `pd.NA`;
   must precede `Iterable` — DataFrame iterates over column names only, so the `Iterable` arm collides any two DataFrames with the same columns regardless of values;
   DataFrame folds in columns + per-column dtype + index, Series folds in name + dtype + index, Index folds in name + dtype;
   values are mixed via `pd.util.hash_pandas_object(...).values.tobytes()` — `index=False` on the DataFrame/Series arms (the Index arm passes no kwarg since Index has no index) because `hash_pandas_object` only mixes per-element value bytes and ignores name/dtype/index metadata, so we hand-roll those.
@@ -161,13 +161,45 @@ Values and calls are stored separately so call records are queryable without des
   bound methods are their own arm (`types.MethodType`: receiver + underlying function, so `obj1.m` and `obj2.m` differ;
   a class receiver is named via `digest_class`), so there is no second entry point — `call._code_digest` reduces a bound method to `__func__` (the receiver already arrives as a call argument) and goes through `digest`;
   `digest_class(cls)` names a class `module.QualName` and is shared by the built-in-`type` arm and the `__class__` cell.
-  `_new_hash(salt)` is the one place a salted running hash is started, apart from `_pandas.digest_pandas`, which mirrors it.
-  NaN floats are packed via `struct.pack` (sign-preserving) instead of going through `hash()`;
-  complex NaNs use `<dd`.
+  `_new_hash(salt)` (imported from `_hashing.new_hash`) starts every salted running hash.
+- `_hashing.py` — the hash primitive, kept out of `digest.py` so the arm modules it imports (`_numbers`, `_numpy`, `_pandas`) can share it without importing it back.
+  `new_hash(salt)` starts a salted SHA256;
+  `running_hash(salt)` is a context manager over it whose `.result` is the finished digest in `_digest_bytes`'s wire format (hex as bytes) once the block exits, and raises `RuntimeError` if read earlier, so an arm module never spells out `hexdigest().encode()` itself.
+  The primitive lives only here and the encoding only here and in `digest.py`'s own `hexdigest()` returns, never in an arm module: the #440 raw-bytes switch touches those, and patching `_hashing.hashlib` swaps every digest's hash (`test_redigest`, `test_hashing`).
+  `running_hash` costs about 0.3 µs per use, so `digest.py`'s own hot path keeps the bare `_new_hash` + `hexdigest()`.
+- `_numbers.py` — the number digest arm, kept out of `digest.py`;
+  `digest_bytes` is passed in because `digest.py` imports it;
+  it hashes through `_hashing.running_hash` (`_salted`), never `hashlib` directly.
+  `digest_number` walks `NUMBER_TREE` (`int` → {`numbers.Integral`, `float` → {`complex` → `numbers.Complex`, `Fraction` → {`Decimal`, `numbers.Real`}}};
+  a complex with zero imaginary part first drops to its real part) from the root down to the value's own node and digests it as the first type whose converter holds it exactly, so equal values digest alike unless they sit on different branches below that type (none do in the current tree).
+  A value's node is the most derived tree type its type subclasses (`_path`, cached per type), registered ABCs included: a type in another's MRO is always its superclass, so one `issubclass` rule covers real subclasses and numpy scalars, which are only *registered* with the `numbers` ABCs — `np.int64` lands on `Integral`,
+  `np.float32`/`np.longdouble` on `Real` (below `float` and `Fraction`),
+  `np.complex64` on `Complex`, while `np.float64`/`np.complex128` subclass `float`/`complex`.
+  `_hold(value)` returns the node that holds a value and the converted value;
+  `test_branch_choice_follows_exact_value` checks its choice against exact arithmetic, since the converters go through numpy for numpy scalars.
+  `np.float32`/`np.longdouble` on `Real` (below `float` and `Fraction`), `np.complex64` on `Complex`, while `np.float64`/`np.complex128` subclass `float`/`complex`.
+  ABC nodes have no converter or encoder: they only place what sits under them, and `Decimal` never holds a value either (every finite `Decimal` is an exact `Fraction`).
+  A value nothing on its path holds gets `None`, which `digest.py` raises as `Indigestible`.
+  Converters must refuse inexact conversions themselves rather than rely on a trailing `==`: numpy compares `Fraction` to `np.longdouble` by rounding the `Fraction` to double, and an `np.longdouble` to an `int` through `str` (subject to `sys.int_max_str_digits`).
+  So `_as_int` decides on `as_integer_ratio` / `numerator`+`denominator` (also avoiding a quadratic `int()` round trip for `Decimal("1e1000000")`), falling back to `math.trunc` for a foreign `Real`, which promises `__trunc__` but neither `__int__` nor `as_integer_ratio`;
+  Encoders salt with the bare type name of the node (`_salted(float, …)`), like every generic arm;
+  a user type sharing the name and feeding the same bytes would collide, which is accepted as for all other types.
+  `_is_nan` skips `Rational`s and treats `OverflowError` as not-NaN, since `cmath.isnan` converts to float and `Fraction(10**400)` overflows it.
+  The promise, worded in `digest_equivalence.rst`: non-NaN numbers digest equal iff they hold the same exact value — numpy's `==` (NEP 50 down-casts, `Fraction` rounding) is not the reference.
+  `int` subclasses (`bool`, `IntEnum`) never reach the tree: the `int` arm catches them under their own type name, unlike `float` subclasses, which downcast.
+  The tree is drawn in the code comment and in `docs/digests/digest_equivalence.rst`;
+  no test checks the drawings, so update both by hand whenever `NUMBER_TREE` changes.
+  A NaN is digested by its bits exactly as the `float` (or, with an imaginary part, `complex`) node would encode them, whatever its type, so `np.float64("nan")` meets `float("nan")` and the sign survives;
+  `Decimal` NaNs (including `sNaN`, which `cmath.isnan` rejects) by `str()` under the `Decimal` salt.
+  Equal-value results of different numeric types share one value-storage entry, and whichever saved last wins the return type — intended, not a bug.
 - `_attrs.py` — Internal `is_attrs_instance` / `field_items` helpers gating optional `attrs` support;
   safe to import without `attrs` installed.
+- `_numpy.py` — the `np.ndarray` and `np.bool_` digest arm (`is_numpy` / `digest_numpy(value, digest_bytes)`), plus `is_timedelta64` for `digest.py`'s timedelta refusal, so `digest.py` no longer imports numpy;
+  arrays digest dtype + shape + `tobytes`, structured dtypes each field name + field view recursively (`dtype.str` is only `|V<itemsize>` and padding bytes are uninitialised), other `dtype.hasobject` arrays every element of `ravel().tolist()` (their bytes are PyObject pointers);
+  `np.bool_` delegates to the builtin `bool` (`np.bool_ ∉ Number` since numpy 1.20).
+  numpy *number* scalars are not handled here but by `_numbers`.
 - `_pandas.py` — Internal digest arms for pandas objects: `is_pandas` gates the one pandas case in `_digest_bytes`,
-  `digest_pandas` digests DataFrame / Series / Index / MultiIndex / `pd.NA` with the same salt and hex return as `_digest_bytes`, and `needs_element_digests` / `element_digests` handle object columns (#1004);
+  `digest_pandas` digests DataFrame / Series / Index / MultiIndex / `pd.NA` with the same bare-type-name salt as `_digest_bytes`, through `_hashing.running_hash`, and `needs_element_digests` / `element_digests` handle object columns (#1004);
   `digest_pandas` and `element_digests` take `digest._digest_bytes` as an argument, since `digest.py` imports the module.
 - `call.py` — `Call` dataclass (`from_call`, `to_lookup_key`, `.stash(values)→DigestedCall` writes args+result to value storage / `.digest()→DigestedCall` digests without saving);
   `DigestedCall` (storage representation: arguments and result are `Digest` keys;
@@ -888,12 +920,6 @@ Git history is the changelog.
   Composes with #883/#905 and #333.
 - #883 — `DestructuringMixin._raw_sub_digests` hardcodes a `match` over the three built-in `Digested` types, so a subclass registered via `register_destructurer` reports zero children: `Cache.gc()` can evict values reachable only through it (silent data loss) and `count_reuses()` under-counts.
   Fix in flight as PR #905 (below).
-- `ty` is red on `main` since 2026-10-23 with no repo change: pandas 3.1.0 annotated `pandas/util/__init__.py`'s module-level `__getattr__` as `-> object`, so `pd.util.hash_pandas_object` in `_pandas.py` type-checks as a non-callable `object` (three `call-non-callable` diagnostics).
-  The `ty` job pins `ty` but installs pandas unpinned, and its green runs on docs/release commits are paths-filter *skips*, not passes — so any `src/`-touching PR sees a red `ty` check that is not its own.
-  The fix is in flight as a standalone commit on PR #1024 (below): `_pandas.py` imports `hash_pandas_object` from `pandas.core.util.hashing`, its defining module — the same function, so digests are unchanged (the earlier alias-plus-boundary-`# ty: ignore` sketch stays in a comment on PR #1000).
-  The diagnostics are independent of the `ty` version — dependabot's pin bumps (0.0.91 in the closed #1030, 0.0.95 in PR #1032, below) reproduce the same three.
-  No issue filed yet.
-
 - `test-minimum-deps` is red on every run since 2026-10-23, also with no repo change: `ubuntu-latest` moved from ubuntu-24.04 (Python 3.12) to ubuntu-26.04 (Python 3.14, gcc 15), the job's bare `uv venv` uses that system Python, and `--resolution lowest-direct` selects pandas 2.2.0, which has no cp314 wheel and whose Cython 3.0.5 output does not compile under gcc 15.
   The fix is in flight as PR #1026 (below): `uv venv --python 3.11`, the `requires-python` floor, so the job tests the dependency floors on the oldest supported Python and stops drifting with the runner image.
   No issue filed yet.
@@ -902,17 +928,6 @@ Git history is the changelog.
   `FunctionProfile.of`'s fallback set `version = None`, dropping the function's own `__version__` (the one `fleche(version=...)` sets) — so two versions of a function from an unimportable module shared one cache key and the second was served the first one's result.
   Merge order: #1028 first, then rebase #1026 (its `test_fleche_with_version` failure under uv's Python — whose standalone builds ship no stdlib `test` package, so the test's `__module__ = "test"` import genuinely fails — needs the fix).
 
-- Numeric digest collisions — no issue filed yet;
-  the full investigation (2026-10-06) lives in a comment on PR #990.
-  The `Number` arm digests via `hash(value)`, a lossy 61-bit residue, so distinct numbers share cache keys and produce wrong hits end to end: `digest(-1.0) == digest(-2.0)` (CPython reserves `-1` as an error sentinel),
-  `digest(0.5) == digest(2**60)` (rational hashing mod `2**61 - 1`),
-  `inf` vs `314159`,
-  `np.uint64(2**63)` vs `4`, complex via the `hash(a) + 1000003*hash(b)` formula;
-  digests are also platform-dependent (32-bit builds hash mod `2**31 - 1`).
-  The Hypothesis pair tests in `digest/test_digest.py` can't draw these coincidences, and the complex test's oracle restates the bug (`hash(x) == hash(y)` ⇒ equal digests) — regression tests need explicit `@example`s.
-  A second, separable finding: `digest(3) == digest(3.0)` by design, so equal-value different-type *results* share one value-storage entry and whichever saved last wins the return type.
-  The fix is in flight as PR #1020 (below), which digests numbers by exact value through a downcast tree.
-  It invalidates number-bearing keys — pre-1.0 that is a `fix:` per [Commit messages](#commit-messages), and it is worth coordinating with the blake2b switchover #615, which invalidates every key anyway.
 
 **Feature requests**
 
@@ -955,13 +970,13 @@ Git history is the changelog.
   **#1018** (on #1017): the URL is written back as `url` into the declaring `fleche.toml` via tomlkit (comments survive;
   the config loader records which file each top-level table came from to support this), and `db --cache NAME` records the server into config (refusing in-memory values;
   stacks with persistent layers, pools and SSH caches).
-- #1020 (opened 2026-10-23) — fixes the numeric digest collisions (see **Bugs**): `_digest_bytes`'s `Number` arm stops routing through lossy `hash()` and instead digests each number as the first type on an explicit downcast tree (`int → float → {complex, Fraction → Decimal}`) that holds its exact value, so non-NaN numbers digest equal **iff** they are the same exact value (`1 == 1.0 == 1+0j` as `int`;
+- #1020 (opened 2026-10-23) — fixes the numeric digest collisions found on PR #990 (`hash()` made `digest(-1.0) == digest(-2.0)` and `digest(0.5) == digest(2**60)`): `_digest_bytes`'s `Number` arm stops routing through lossy `hash()` and instead digests each number as the first type on an explicit downcast tree (`int → float → {complex, Fraction → Decimal}`) that holds its exact value, so non-NaN numbers digest equal **iff** they are the same exact value (`1 == 1.0 == 1+0j` as `int`;
   `0.5 == Fraction(1, 2) == Decimal("0.5")` as `float`), with converters deciding exactness themselves (`as_integer_ratio`, `math.trunc`) rather than trusting numpy's NEP-50 `==`;
   a `Number` nothing on its path holds exactly raises `Indigestible`, never `hash()`.
-  All NaNs share one salt and are told apart by bits only;
+  NaNs digest by their bits, whatever their type;
   timedeltas (`datetime.timedelta`, `pd.Timedelta`, `np.timedelta64`) now raise `Indigestible` until one digest can honour cross-type equality without unit loss (`total_seconds()` collided distinct `pd.Timedelta`s) — PR #1023 (below), stacked on this one, carries that digest;
   `datetime.timezone` digests its offset as exact microseconds.
-  Also moves the number arm into a private `fleche._numbers` module (the `_pandas` pattern) and extracts a shared `fleche._hashing` module (`new_hash(salt)` + a `running_hash` context manager) that `_numbers` and `_pandas` both use.
+  Also moves the number arm into a private `fleche._numbers` module and the numpy arms into `fleche._numpy` (the `_pandas` pattern), and extracts a shared `fleche._hashing` module (`new_hash(salt)` + a `running_hash` context manager) that all three use.
   Persisted keys involving non-integral numbers, `±inf`, complex, huge ints, NaNs or timezones change (`Cache.redigest()` migrates;
   plain `int` keys are unchanged).
   Supersedes #990 (closed unmerged 2026-10-24;
@@ -982,7 +997,7 @@ Git history is the changelog.
   the lock factories are now real `@staticmethod`s.
   The 3.15 job builds h5py from source (no cp315 wheels yet;
   drop that step once wheels publish) and is **blocked**: `pyiron-snippets` and `bagofholding` both declare `Requires-Python <3.15` on every release, so pip refuses them on 3.15 (options in a PR comment).
-  Also carries the `ty` fix for the pandas-3.1 `pd.util` regression (see **Bugs**) as its own commit, and moves `test_fleche_with_version` off `__module__ = "test"` (only resolves when the stdlib `test` package is installed — uv's standalone builds leave it out).
+  Also carries the `ty` fix for the pandas-3.1 `pd.util` regression (fixed by #1020) as its own commit, and moves `test_fleche_with_version` off `__module__ = "test"` (only resolves when the stdlib `test` package is installed — uv's standalone builds leave it out).
 - #1026 (opened 2026-10-25) — pins `test-minimum-deps`'s venv to Python 3.11 via `uv venv --python 3.11` (see **Bugs**: the job is red since the runner image moved to ubuntu-26.04, whose system Python 3.14 has no pandas 2.2.0 wheel and fails its source build under gcc 15);
   keep the pin in sync with the `requires-python` floor.
   The rejected alternative was raising the numpy/pandas floors for every user just to get cp314 wheels;
@@ -993,7 +1008,7 @@ Git history is the changelog.
   New regression test uses a module name that never exists, so it covers the fallback on every interpreter.
   Its own `test-minimum-deps` check stays red until #1026's pin lands — the two merge in that order: #1028, then #1026 rebased.
 - #1032 (dependabot, opened 2026-11-04, replacing #1030, closed unmerged the same day) — bumps the pinned `ty` type-checker (the `ty` extra, which the CI job installs) 0.0.89 → 0.0.95.
-  Its `ty` run fails with the same three pandas-3.1 `call-non-callable` diagnostics as `main` (see **Bugs**), so the bump neither causes nor clears the known red;
+  Its `ty` run fails with the same three pandas-3.1 `call-non-callable` diagnostics as `main` before #1020, so the bump neither causes nor clears the known red;
   `test-minimum-deps` is red as on every PR until #1026 lands, and the 3.11–3.14 test matrix is green.
 - #786 (draft) — a process-wide cache of read-only `h5py.File` handles for multi-bag files (bounded MRU of 32, `(inode, mtime_ns, size)` invalidation, `locking=False`, writers close the cached handle under the per-bag lock);
   multi-bag `contains` drops from ~240 µs to ~29 µs.

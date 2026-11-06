@@ -2,6 +2,7 @@
 import pytest
 from fleche.call import Call
 from fleche.digest import Digest
+import fleche._hashing as _hashing
 import fleche.digest as _fd
 from fleche.caches import Cache
 
@@ -212,7 +213,8 @@ def test_redigest_orphans_all_value_keys_when_entire_hash_changes(monkeypatch, c
     key_before = clean_cache.save(original)
     values_before = set(clean_cache.values.list())
 
-    # Replace the hash primitive inside digest.py with blake2b(digest_size=32).
+    # Replace the hash primitive every digest starts from with
+    # blake2b(digest_size=32).
     # blake2b produces 32-byte (64 hex-char) digests, so the output format is
     # identical to sha256 and all downstream code continues to work.  This is a
     # clean simulation of "the entire hash function was swapped": every digest
@@ -223,7 +225,7 @@ def test_redigest_orphans_all_value_keys_when_entire_hash_changes(monkeypatch, c
         def sha256():
             return hashlib.blake2b(digest_size=32)
 
-    monkeypatch.setattr(_fd, "hashlib", _Blake2bHashlib)
+    monkeypatch.setattr(_hashing, "hashlib", _Blake2bHashlib)
 
     clean_cache.redigest()
 
