@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.3](https://github.com/pmrv/fleche/compare/0.22.2...0.22.3) (2026-11-06)
+
+
+### Bug Fixes
+
+* **digest:** digest numbers by exact value through a downcast tree ([#1020](https://github.com/pmrv/fleche/issues/1020)) ([4daccb3](https://github.com/pmrv/fleche/commit/4daccb3f34bf9f6b87620105a1f7e8bfde11155f))
+
 ## [0.22.2](https://github.com/pmrv/fleche/compare/0.22.1...0.22.2) (2026-10-23)
 
 
