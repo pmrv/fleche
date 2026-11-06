@@ -16,7 +16,7 @@ from tests.fixtures import run_workers
 
 
 def make_call(name: str, x: int, result: int) -> Call:
-    return Call(name=name, arguments={"x": x}, result=result, module="test", version=1, metadata={})
+    return Call(name=name, arguments={"x": x}, result=result, module="example_module", version=1, metadata={})
 
 
 # ---------------------------------------------------------------------------

@@ -7,6 +7,14 @@ Fleche avoids this by returning **lazy call objects** from ``cache().load()`` an
 
 This does *not* apply to the decorator's ``func.load(*args, **kwargs)`` helper (see :doc:`helpers`).
 
+.. note::
+
+   ``load`` is overloaded across fleche's API and returns two different
+   things: ``cache().load(key)`` (described below) returns a ``LazyCall``,
+   while the decorator helper ``myfunc.load(*args, **kwargs)`` (see
+   :doc:`helpers`) returns the resolved result value directly and raises
+   ``KeyError`` on a miss.
+
 What is a LazyCall?
 -------------------
 
