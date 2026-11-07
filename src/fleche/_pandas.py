@@ -1,8 +1,11 @@
-"""Digest arms for pandas objects: ``DataFrame``, ``Series``, ``Index`` and ``pd.NA``.
+"""Digest arms for pandas objects: ``DataFrame``, ``Series``, ``Index``,
+``pd.Timedelta`` and ``pd.NA``.
 
 :func:`fleche.digest._digest_bytes` returns :func:`digest_pandas` for any value
 :func:`is_pandas` accepts.  The digest function is passed in because
-:mod:`fleche.digest` imports this module.
+:mod:`fleche.digest` imports this module.  ``pd.Timedelta`` subclasses
+``datetime.timedelta``; the pandas arm precedes that one, so a ``pd.Timedelta``
+digests here, by its length in nanoseconds, and apart from ``datetime.timedelta``.
 
 Object columns need care (#1004).  ``pd.util.hash_pandas_object`` hashes a
 column of strings by their encoded bytes, and every missing value by one shared
@@ -31,6 +34,7 @@ from pandas.api.types import infer_dtype
 # ``-> object``, which leaves type checkers nothing callable to check.
 from pandas.core.util.hashing import hash_pandas_object
 
+from . import _numpy
 from ._hashing import running_hash
 
 # What ``infer_dtype`` calls the object columns pandas hashes faithfully.
@@ -59,7 +63,7 @@ def element_digests(values, digest_bytes: Callable[[Any], bytes]) -> np.ndarray:
 
 def is_pandas(value: Any) -> bool:
     """Whether :func:`digest_pandas` digests *value*."""
-    return isinstance(value, (pd.DataFrame, pd.Series, pd.Index)) or value is pd.NA
+    return isinstance(value, (pd.DataFrame, pd.Series, pd.Index, pd.Timedelta)) or value is pd.NA
 
 
 def digest_pandas(value, digest_bytes: Callable[[Any], bytes]) -> bytes:
@@ -107,6 +111,12 @@ def digest_pandas(value, digest_bytes: Callable[[Any], bytes]) -> bytes:
                 if needs_element_digests(value):
                     value = pd.Index(element_digests(value, digest_bytes), dtype=object)
                 m.update(hash_pandas_object(value).values.tobytes())
+            case pd.Timedelta():
+                # Its exact length in nanoseconds, whatever unit it stores; .value
+                # would overflow for a second-unit Timedelta beyond int64 ns.
+                length = _numpy.timedelta64_length(value.to_timedelta64())
+                assert length is not None  # pandas stores s, ms, us or ns
+                m.update(digest_bytes(length[1] // 10**9))
             case _ if value is pd.NA:
                 # A singleton like None; it turns up in object columns, which the
                 # arms above digest element by element.

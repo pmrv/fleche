@@ -43,6 +43,8 @@ Welcome to the **Fleche** library documentation.
 
    digests/digests_as_args
    digests/digest_equivalence
+   digests/numpy
+   digests/pandas
    digests/entry_points
 
 .. toctree::
