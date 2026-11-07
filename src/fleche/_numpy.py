@@ -83,16 +83,29 @@ def digest_timedelta64(value, digest_bytes: Callable[[Any], bytes]) -> bytes | N
     two units in int64 after casting both to the finer one, which can wrap.
     NaT, which equals nothing, is one digest in every unit.
     """
-    count = int(value.view(np.int64))
-    if count == _NAT:
+    if int(value.view(np.int64)) == _NAT:
         with running_hash(b"timedelta64[NaT]") as m:
             pass
         return m.result
+    length = timedelta64_length(value)
+    if length is None:
+        return None
+    salt, n = length
+    with running_hash(salt) as m:
+        m.update(digest_bytes(n))
+    return m.result
+
+
+def timedelta64_length(value) -> tuple[bytes, int] | None:
+    """``(salt, length)`` of the non-NaT ``np.timedelta64`` *value*, or None if
+    its unit is not known.
+
+    The length is in attoseconds for a fixed unit (salt ``timedelta64``), in
+    months for ``Y``/``M`` and the bare count for the generic unit.
+    """
     unit, multiple = np.datetime_data(value.dtype)
     scale = _TIMEDELTA64_SCALES.get(unit)
     if scale is None:
         return None
     salt, per_unit = scale
-    with running_hash(salt) as m:
-        m.update(digest_bytes(count * multiple * per_unit))
-    return m.result
+    return salt, int(value.view(np.int64)) * multiple * per_unit
