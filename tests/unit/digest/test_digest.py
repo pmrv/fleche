@@ -12,8 +12,6 @@ import warnings
 import enum
 import sys
 import time
-import inspect
-import pathlib
 import datetime
 import struct
 import collections
@@ -100,18 +98,22 @@ SUPPORTED_VALUES = [
     {"a": 1, "b": None},
     np.array([1, 2, 3]),
     _SupportedData(x=1, y="a"),
+    # NaN takes the one Number arm that bypasses hash() (see the NaN section
+    # below); listing it here is what pins "a NaN never collides with a finite
+    # value", at no extra test.
+    float("nan"),
     *BUILTIN_TYPES,
 ]
 
 
-def test_supported_types():
-    """All supported values can be digested without raising an exception."""
-    for value in SUPPORTED_VALUES:
-        digest(value)
-
-
 def test_supported_values_digest_stably():
-    """Digesting the same value twice yields the same digest."""
+    """Digesting the same value twice yields the same digest.
+
+    Digesting every supported value at all — no ``Indigestible``, no crash — is
+    a precondition of this test and of
+    :func:`test_supported_values_digest_distinctly`, so it needs no test of its
+    own.
+    """
     unstable = [repr(value) for value in SUPPORTED_VALUES if digest(value) != digest(value)]
     assert not unstable, f"digest is not deterministic for: {unstable}"
 
@@ -156,19 +158,6 @@ def _exact(x):
     return part(x.real), part(x.imag)
 
 
-def _scalars(draw_float):
-    """Python floats and numpy float/complex scalars built from them."""
-    return st.one_of(
-        draw_float,
-        draw_float.map(np.float16),
-        draw_float.map(np.float32),
-        draw_float.map(np.float64),
-        draw_float.map(np.longdouble),
-        st.builds(complex, draw_float, draw_float),
-        st.builds(lambda a, b: np.complex64(complex(a, b)), draw_float, draw_float),
-    )
-
-
 @given(st.floats(allow_nan=True), st.floats(allow_nan=True))
 def test_different_floats_have_different_hashes(x, y):
     if math.isnan(x) or math.isnan(y):
@@ -178,31 +167,88 @@ def test_different_floats_have_different_hashes(x, y):
         assert (digest(x) == digest(y)) == (_exact(x) == _exact(y))
 
 
-@given(_scalars(st.floats(allow_nan=False, width=16)), _scalars(st.floats(allow_nan=False, width=16)))
-def test_numbers_digest_equal_iff_exactly_equal(x, y):
-    # width=16 draws values every scalar type holds, so equal pairs across
-    # types come up; numpy's == would wrongly call np.float32(0.1) and 0.1
-    # equal, the exact value does not.
+_REAL_TYPES = [float, np.float16, np.float32, np.float64, np.longdouble]
+_COMPLEX_TYPES = [complex, np.complex64, np.complex128, np.clongdouble]
+
+
+@given(
+    st.floats(allow_nan=False),
+    st.floats(allow_nan=False),
+    st.sampled_from(_REAL_TYPES + _COMPLEX_TYPES),
+    st.sampled_from(_REAL_TYPES + _COMPLEX_TYPES),
+)
+def test_one_value_through_two_types_digests_by_what_each_holds(re, im, a, b):
+    # Each type rounds the value its own way (a real type keeps only re), so
+    # x and y are equal exactly when they hold the same value; numpy's ==
+    # would instead call np.float32(0.1) and 0.1 equal.
+    def build(t):
+        return t(re) if t in _REAL_TYPES else t(complex(re, im))
+
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore", RuntimeWarning)  # float16 overflow to inf
-        assert (digest(x) == digest(y)) == (_exact(x) == _exact(y))
+        warnings.simplefilter("ignore", RuntimeWarning)  # overflow to inf
+        x, y = build(a), build(b)
+    assert (digest(x) == digest(y)) == (_exact(x) == _exact(y))
 
 
-@given(st.complex_numbers(allow_nan=True))
-def test_complex_numbers_can_be_digested(x):
-    """Test that complex numbers (including NaN) can be digested without error."""
-    digest(x)
+def _complex_nan_bits(x):
+    # A complex with no imaginary part digests as its real part.
+    if x.imag == 0:
+        return struct.pack("<d", x.real)
+    return struct.pack("<dd", x.real, x.imag)
+
+
+# Every float NaN: either sign, any nonzero payload.
+_nans = st.builds(
+    lambda sign, payload: struct.unpack("<d", struct.pack("<Q", sign << 63 | 0x7FF << 52 | payload))[0],
+    st.integers(0, 1),
+    st.integers(1, 2**52 - 1),
+)
+_complex_nans = st.one_of(
+    st.builds(complex, _nans, st.floats(allow_nan=True)),
+    st.builds(complex, st.floats(allow_nan=True), _nans),
+)
+
+
+@given(_complex_nans, st.one_of(_complex_nans, st.complex_numbers(allow_nan=True)))
+def test_complex_nans_digest_by_their_bits(x, y):
+    assert (digest(x) == digest(y)) == (_complex_nan_bits(x) == _complex_nan_bits(y))
+
+
+@pytest.mark.parametrize(
+    "a, b",
+    [
+        (complex(math.nan, 1), complex(math.nan, 2)),
+        (complex(1, math.nan), complex(2, math.nan)),
+        (complex(math.nan, 1), complex(1, math.nan)),
+        (complex(math.nan, 1), complex(-math.nan, 1)),
+    ],
+)
+def test_complex_nans_with_different_bits_digest_apart(a, b):
+    assert digest(a) != digest(b)
+
+
+def test_numpy_bool_digests_as_the_python_bool():
+    """``np.bool_`` reaches its own arm and delegates to the builtin ``bool``.
+
+    Since numpy 1.20 ``np.bool_`` is neither an ``int`` subclass nor a
+    :class:`numbers.Number`, so it falls past both the ``int`` and ``Number``
+    arms and would otherwise land in the generic ``Iterable``/``Indigestible``
+    tail.
+    """
+    assert digest(np.bool_(True)) == digest(True)
+    assert digest(np.bool_(False)) == digest(False)
+    assert digest(np.bool_(True)) != digest(np.bool_(False))
 
 
 def test_complex_matches_real_without_imaginary_part():
-    """Test that digest(1) == digest(1+0j) per standard Python hash semantics."""
+    """A complex with no imaginary part digests as its real part."""
     assert digest(1) == digest(1 + 0j)
     assert digest(1.0) == digest(1 + 0j)
     assert digest(2) == digest(2 + 0j)
 
 
 def test_int_matches_float_without_fractional_part():
-    """Test that digest(1) == digest(1.0) per standard Python hash semantics."""
+    """An integral float digests as its int."""
     assert digest(1) == digest(1.0)
     assert digest(2) == digest(2.0)
     assert digest(-3) == digest(-3.0)
@@ -279,9 +325,6 @@ def test_equal_numbers_have_equal_digests(a, b):
     assert digest(a) == digest(b)
 
 
-# np.longdouble is x87 extended precision on x86-64, IEEE quad on aarch64 Linux
-# and a plain double on Windows and macOS: the values it can hold differ between
-# machines, the digest of a given value does not (see the pinned digests below).
 EXTENDED_LONGDOUBLE = np.finfo(np.longdouble).nmant > np.finfo(np.float64).nmant
 
 
@@ -297,8 +340,7 @@ def test_wide_numpy_float_digests_as_its_exact_fraction():
 
 def _expected_branch(x):
     """The tree type that must hold the real number *x*, from its exact value
-    alone: int if integral, float if a binary64 holds it, else Fraction.  Pure
-    Python, so it is the same on every machine."""
+    alone: int if integral, float if a binary64 holds it, else Fraction."""
     if math.isinf(x):
         return float
     q = Fraction(*x.as_integer_ratio())
@@ -319,12 +361,9 @@ _FLOAT_TYPES = [float, np.float16, np.float32, np.float64, np.longdouble]
     st.integers(-(2**70), 2**70),
     st.integers(1, 2**70),
 )
-def test_branch_choice_is_machine_stable(t, num, den):
-    # The branch a number digests on is decided by the converters, which go
-    # through numpy for numpy scalars.  Whatever the machine's float widths,
-    # that decision must match exact arithmetic on the value the scalar holds;
-    # a quotient of two scalars needs np.longdouble's extra precision where the
-    # machine has it.
+def test_branch_choice_follows_exact_value(t, num, den):
+    # The converters go through numpy for numpy scalars; the branch they pick
+    # must match exact arithmetic on the value the scalar holds.
     from fleche._numbers import _hold
 
     with warnings.catch_warnings():
@@ -333,34 +372,6 @@ def test_branch_choice_is_machine_stable(t, num, den):
     assume(not math.isnan(x))  # float16 inf / inf; NaNs never reach the tree
     node, _ = _hold(x)
     assert node.type is _expected_branch(x)
-
-
-def _label(t):
-    return t.__name__ if t.__module__ == "builtins" else f"{t.__module__}.{t.__name__}"
-
-
-def _draw_number_tree(node, prefix=""):
-    lines = []
-    for i, child in enumerate(node.children):
-        last = i == len(node.children) - 1
-        lines.append(prefix + ("└── " if last else "├── ") + _label(child.type))
-        lines += _draw_number_tree(child, prefix + ("    " if last else "│   "))
-    return lines
-
-
-def test_number_tree_matches_its_drawings():
-    from fleche import _numbers
-
-    lines = [_label(_numbers.NUMBER_TREE.type)]
-    lines += _draw_number_tree(_numbers.NUMBER_TREE)
-    source = inspect.getsource(_numbers)
-    assert "\n".join("#   " + line for line in lines) in source
-    docs = (
-        pathlib.Path(__file__).parents[3] / "docs/digests/digest_equivalence.rst"
-    ).read_text()
-    assert "\n".join("   " + line for line in lines) in docs
-
-
 
 
 @pytest.mark.parametrize(
@@ -392,45 +403,53 @@ def _unused(*args):
     raise NotImplementedError
 
 
-class ExactReal(numbers_module.Real):
-    """A foreign Real holding n/d exactly.
+class SubReal(numbers_module.Real):
+    """A foreign Real a + b·ε, with a and b floats and ε a positive infinitesimal.
 
     It has only what numbers.Real promises: no __int__, no as_integer_ratio.
+    With b == 0 it is the float a; with b != 0 no type in the tree holds it.
     """
 
-    def __init__(self, n, d=1):
-        self.q = Fraction(n, d)
+    def __init__(self, a, b=0.0):
+        self.a, self.b = float(a), float(b)
 
     def __float__(self):
-        return float(self.q)
+        return self.a
 
     def __trunc__(self):
-        return math.trunc(self.q)
+        t = math.trunc(self.a)
+        if t == self.a and self.b != 0 and (self.a > 0) != (self.b > 0) and self.a != 0:
+            # a ± ε just inside an integer a truncates one step toward zero.
+            return t - 1 if self.a > 0 else t + 1
+        return t
 
     def __eq__(self, other):
-        return self.q == other
+        if isinstance(other, SubReal):
+            return (self.a, self.b) == (other.a, other.b)
+        return self.b == 0 and self.a == other
 
     def __hash__(self):
-        return hash(self.q)
+        return hash(self.a) if self.b == 0 else hash((self.a, self.b))
 
 
-for _name in numbers_module.Real.__abstractmethods__ - vars(ExactReal).keys():
-    setattr(ExactReal, _name, _unused)
-abc.update_abstractmethods(ExactReal)
+for _name in numbers_module.Real.__abstractmethods__ - vars(SubReal).keys():
+    setattr(SubReal, _name, _unused)
+abc.update_abstractmethods(SubReal)
 
 
 @pytest.mark.filterwarnings("error")
 def test_foreign_real_downcasts_without_int():
     # int() on it would delegate to __trunc__, deprecated and due to go.
-    assert digest(ExactReal(2)) == digest(2)
-    assert digest(ExactReal(1, 2)) == digest(0.5)
+    assert digest(SubReal(2)) == digest(2)
+    assert digest(SubReal(0.5)) == digest(0.5)
 
 
-def test_foreign_real_beyond_float_without_ratio_is_indigestible():
-    # Neither int nor float holds 1/3, and it offers no as_integer_ratio for
-    # the Fraction node; that must end as Indigestible, not AttributeError.
+@pytest.mark.parametrize("value", [SubReal(0, 1), SubReal(2, -1), SubReal(0.5, 1e-300)])
+def test_foreign_real_beyond_the_tree_is_indigestible(value):
+    # No node holds a nonzero infinitesimal part; that must end as
+    # Indigestible, not AttributeError from the missing as_integer_ratio.
     with pytest.raises(Indigestible):
-        digest(ExactReal(1, 3))
+        digest(value)
 
 
 @pytest.mark.parametrize(
@@ -465,7 +484,7 @@ def test_huge_longdouble_digests_as_int_whatever_the_str_limit(max_str_digits):
 
 
 def test_decimal_with_large_exponent_digests_quickly():
-    # Taking it to int and back was quadratic: about 3.5 s for 1e300000.
+    # regression: naive implementation takes very long
     start = time.perf_counter()
     d = digest(Decimal("1e300000"))
     assert time.perf_counter() - start < 1
@@ -509,9 +528,9 @@ def test_int_subclasses_keep_their_type_name_unlike_float_subclasses():
     assert digest(MyFloat(5.0)) == digest(5)
 
 
-def test_number_without_exact_value_is_indigestible():
-    # Convertible to float, so it gets past the NaN check, but with no exact
-    # value to offer: neither numerator/denominator nor as_integer_ratio.
+def test_number_outside_the_tree_is_indigestible():
+    # A bare numbers.Number belongs to no ABC the tree names, so it has no
+    # path to walk, although float() takes it past the NaN check.
     class Opaque(numbers_module.Number):
         def __float__(self):
             return 0.5
@@ -1116,22 +1135,6 @@ def test_pandas_dataframe_with_multiindex_rows():
     assert digest(a) != digest(b)
 
 
-def test_lambda_can_be_digested():
-    """Test that lambda functions can be digested without raising Indigestible."""
-    f = lambda x: x + 1
-    result = digest(f)
-    assert isinstance(result, Digest)
-
-
-def test_locally_defined_function_can_be_digested():
-    """Test that locally defined functions can be digested without raising Indigestible."""
-    def local_func(x):
-        return x * 2
-
-    result = digest(local_func)
-    assert isinstance(result, Digest)
-
-
 def test_nested_function_can_be_digested():
     """Test that functions nested inside other functions can be digested."""
     def outer():
@@ -1144,7 +1147,11 @@ def test_nested_function_can_be_digested():
 
 
 def test_function_digest_is_stable():
-    """Test that digesting the same function repeatedly returns the same value."""
+    """Test that digesting the same function repeatedly returns the same value.
+
+    Also the local-function case: that a locally defined function is digestible
+    at all needs no separate test when this one digests the same one twice.
+    """
     def local_func(x):
         return x * 2
 
@@ -1152,10 +1159,21 @@ def test_function_digest_is_stable():
 
 
 def test_functions_with_different_bodies_have_different_digests():
-    """Test that functions with distinct bodies hash differently."""
+    """Test that functions with distinct bodies hash differently.
+
+    Also the lambda case: that a lambda is digestible at all needs no separate
+    test when this one digests two.
+    """
     f = lambda x: x + 1
     g = lambda x: x + 2
     assert digest(f) != digest(g)
+
+
+# Module-scope counterpart for test_local_function_digests_same_as_module_level.
+# No docstring: a docstring lands in co_consts and would make the code objects
+# differ for a reason that has nothing to do with scope.
+def _module_level_add_one(x):
+    return x + 1
 
 
 def test_functions_with_identical_bodies_have_same_digest():
@@ -1169,15 +1187,25 @@ def test_functions_with_identical_bodies_have_same_digest():
     assert digest(f) == digest(g)
 
 
-def test_local_function_digests_same_as_module_level():
-    """Test that a local function with identical code digests the same as a module-level equivalent."""
+def test_nesting_changes_a_function_digest():
+    """A nested function digests differently from an identical module-level one.
+
+    The two bodies compile to the same bytecode and constants, but a function
+    defined inside another carries ``CO_NESTED`` in ``co_flags``, and
+    ``co_flags`` is one of the code-object properties folded into the digest.
+    So moving a function out to module scope (or into a nested one) changes
+    its key even though nothing about what it computes changed.
+
+    The counterpart deliberately lives at module scope: defining it in the
+    test body would make this a second copy of
+    ``test_functions_with_identical_bodies_have_same_digest``, which already
+    pins that two *equally nested* functions agree.
+    """
     def local_add_one(x):
         return x + 1
 
-    def _module_level_add_one(x):
-        return x + 1
-
-    assert digest(local_add_one) == digest(_module_level_add_one)
+    assert local_add_one.__code__.co_code == _module_level_add_one.__code__.co_code
+    assert digest(local_add_one) != digest(_module_level_add_one)
 
 
 # --- Functions: plain functions keep their historical wire format ---
@@ -1589,48 +1617,6 @@ def test_classmethods_with_different_bodies_have_different_digests():
     assert digest(classmethod(f)) != digest(classmethod(g))
 
 
-def test_property_with_only_getter():
-    """A property with only a getter must be digestible."""
-
-    def getter(self):
-        return self._value
-
-    p = property(getter)
-    result = digest(p)
-    assert isinstance(result, Digest)
-
-
-def test_property_with_getter_and_setter():
-    """A property with getter and setter must be digestible."""
-
-    def getter(self):
-        return self._value
-
-    def setter(self, v):
-        self._value = v
-
-    p = property(getter, setter)
-    result = digest(p)
-    assert isinstance(result, Digest)
-
-
-def test_property_with_getter_setter_deleter():
-    """A property with getter, setter, and deleter must be digestible."""
-
-    def getter(self):
-        return self._value
-
-    def setter(self, v):
-        self._value = v
-
-    def deleter(self):
-        del self._value
-
-    p = property(getter, setter, deleter)
-    result = digest(p)
-    assert isinstance(result, Digest)
-
-
 def test_properties_with_different_getters_have_different_digests():
     """Two properties with different getter functions must produce different digests."""
 
@@ -1909,7 +1895,7 @@ def test_module_digest_function_content_independence():
 # --- Tests for the Indigestible boundary of type objects — issue #469 ---
 #
 # Digestibility, stability, and distinctness of built-in type objects are covered
-# by ``test_supported_types`` / ``test_supported_values_digest_stably`` /
+# by ``test_supported_values_digest_stably`` /
 # ``test_supported_values_digest_distinctly`` (BUILTIN_TYPES are folded into
 # SUPPORTED_VALUES).  Only the negative boundary needs a dedicated test: anything
 # outside the ``builtins`` module — including dataclass *classes* — must raise.

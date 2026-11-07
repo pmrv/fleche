@@ -296,7 +296,8 @@ Key descriptions
     Path to the storage directory (string; ``~`` is expanded).
 
 ``compress``
-    (bool, default ``false``) — gzip-compress each stored file.
+    (bool, default ``false``) — *pickle-family only.*  gzip-compress each
+    stored file.
 
 ``lock_timeout``
     (float, default ``1.0``) — maximum seconds to wait to acquire a file lock
@@ -315,17 +316,17 @@ Key descriptions
     ``FLECHE_SECRET_KEY`` environment variable.
 
 ``url``
-    (str, default ``"sqlite:///:memory:"``) — SQLAlchemy connection URL, e.g.
-    ``"sqlite:///~/.cache/fleche/calls.db"``. Leading ``~`` is expanded to the
-    home directory in ``sqlite:///`` URLs. This default is **not** persistent
+    (str, default ``"sqlite:///:memory:"``) — *sql only.*  SQLAlchemy
+    connection URL, e.g. ``"sqlite:///~/.cache/fleche/calls.db"``. Leading
+    ``~`` is expanded to the home directory in ``sqlite:///`` URLs. This default is **not** persistent
     — history vanishes when the process exits. It only applies to a bare
     ``calls.type = "sql"`` block; the ``sql`` :ref:`template <cache-templates>`
     below defaults ``url`` to the persistent ``sqlite:///root/calls.db``
     instead.
 
 ``echo``
-    (bool, default ``false``) — log all SQL statements to stderr (useful for
-    debugging).
+    (bool, default ``false``) — *sql only.*  Log all SQL statements to
+    stderr (useful for debugging).
 
 ``version_validator``
     (str, default omitted) — version validation strategy passed to
@@ -520,7 +521,8 @@ A cache section (or a ``[[stack]]``/``pool`` element) with a top-level
 ``type = "ssh"`` key is not a normal ``values``/``calls`` cache: it proxies
 every operation to another machine's configured cache over SSH, via
 :class:`~fleche.remote.SshCache`.  The remote runs
-``python -m fleche remote --serve``.
+``python -m fleche remote --serve``.  The remote loads its own ``fleche.toml``, so it keeps full freedom over
+its own backend.
 
 .. list-table::
    :header-rows: 1
@@ -531,24 +533,26 @@ every operation to another machine's configured cache over SSH, via
      - Meaning
    * - ``host``
      - yes
-     - SSH target, e.g. ``"user@host"`` or any alias from ``~/.ssh/config``.
+     - SSH target, e.g. ``"user@host"`` or an alias from ``~/.ssh/config``.
    * - ``cache_name``
      - no
-     - Named cache to select on the remote (default: the remote's own
-       default cache).
+     - Named cache to activate on the remote; defaults to the remote's own
+       default cache.
    * - ``python``
      - no
      - Remote Python executable, default ``"python3"``.
    * - ``ssh_options``
      - no
-     - Extra arguments inserted between ``ssh`` and *host*, e.g. for
-       connection multiplexing.
+     - Extra arguments inserted between ``ssh`` and *host*, e.g. to enable
+       ``ControlMaster``/``ControlPersist`` so 2FA is only prompted once.
    * - ``setup_commands``
      - no
-     - Shell snippets run on the remote before the server starts.
+     - Shell snippets run on the remote before the server starts (module
+       loads, activating a virtualenv, etc.).
    * - ``workdir``
      - no
-     - Remote directory to ``cd`` into before launching the server.
+     - Remote directory to ``cd`` into before launching the server, so it
+       can import project-local modules.
 
 An ``ssh`` entry is typically the fallback layer of a ``[[stack]]``, with a
 local, writable layer in front (saves go to the local layer; the remote is
@@ -565,8 +569,17 @@ read-through):
    [[shared]]                          # remote layer (read-through)
    type = "ssh"
    host = "user@bigpc.example.com"
+   cache_name = "shared"               # optional: named cache on remote
+   python = "python3"                  # optional
+   ssh_options = ["-o", "ControlMaster=auto",
+                  "-o", "ControlPath=~/.ssh/cm-%r@%h:%p",
+                  "-o", "ControlPersist=10m"]
+   setup_commands = ["module load python/3.11",
+                     "source ~/.venv/bin/activate"]    # optional
+   workdir = "~/project"               # optional: cd before launching server
 
-See :doc:`/dev/ssh_cache` for the wire protocol, trust model, and internals.
+See :doc:`/dev/ssh_cache` for the wire protocol, security model, and
+lifecycle details (reconnecting, ``info()``, credential redaction).
 
 Full Configuration Example
 --------------------------

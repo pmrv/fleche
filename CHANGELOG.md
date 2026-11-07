@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.22.4](https://github.com/pmrv/fleche/compare/0.22.3...0.22.4) (2026-11-06)
+
+
+### Bug Fixes
+
+* **call:** keep an explicit __version__ when the module cannot be imported ([#1028](https://github.com/pmrv/fleche/issues/1028)) ([f47005c](https://github.com/pmrv/fleche/commit/f47005c572d6c5eed65f6a28fab96b58bebef815))
+
+## [0.22.3](https://github.com/pmrv/fleche/compare/0.22.2...0.22.3) (2026-11-06)
+
+
+### Bug Fixes
+
+* **digest:** digest numbers by exact value through a downcast tree ([#1020](https://github.com/pmrv/fleche/issues/1020)) ([4daccb3](https://github.com/pmrv/fleche/commit/4daccb3f34bf9f6b87620105a1f7e8bfde11155f))
+
 ## [0.22.2](https://github.com/pmrv/fleche/compare/0.22.1...0.22.2) (2026-10-23)
 
 

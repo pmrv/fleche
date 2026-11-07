@@ -102,7 +102,7 @@ def test_base_cache_transfer():
         name="f1",
         arguments={"a": 1},
         result=2,
-        module="test",
+        module="example_module",
         version="1.0",
         metadata={},
     )
@@ -110,7 +110,7 @@ def test_base_cache_transfer():
         name="f2",
         arguments={"b": 3},
         result=4,
-        module="test",
+        module="example_module",
         version="1.0",
         metadata={},
     )
@@ -134,7 +134,7 @@ def test_base_cache_transfer_overwrite():
         name="f1",
         arguments={"a": 1},
         result=2,
-        module="test",
+        module="example_module",
         version="1.0",
         metadata={},
     )
@@ -143,7 +143,7 @@ def test_base_cache_transfer_overwrite():
         name="f1",
         arguments={"a": 1},
         result="conflict",
-        module="test",
+        module="example_module",
         version="1.0",
         metadata={},
     )
@@ -172,7 +172,7 @@ def test_base_cache_transfer_pop():
         name="f1",
         arguments={"a": 1},
         result=2,
-        module="test",
+        module="example_module",
         version="1.0",
         metadata={},
     )
@@ -180,7 +180,7 @@ def test_base_cache_transfer_pop():
         name="f2",
         arguments={"b": 3},
         result=4,
-        module="test",
+        module="example_module",
         version="1.0",
         metadata={},
     )
@@ -208,7 +208,7 @@ def test_base_cache_transfer_no_overwrite_and_pop(caplog):
         name="f1",
         arguments={"a": 1},
         result=2,
-        module="test",
+        module="example_module",
         version="1.0",
         metadata={},
     )
@@ -216,7 +216,7 @@ def test_base_cache_transfer_no_overwrite_and_pop(caplog):
         name="f2",
         arguments={"b": 3},
         result=4,
-        module="test",
+        module="example_module",
         version="1.0",
         metadata={},
     )
@@ -225,7 +225,7 @@ def test_base_cache_transfer_no_overwrite_and_pop(caplog):
         name="f1",
         arguments={"a": 1},
         result="existing",
-        module="test",
+        module="example_module",
         version="1.0",
         metadata={},
     )

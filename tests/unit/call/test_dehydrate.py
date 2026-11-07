@@ -128,23 +128,19 @@ class TestDigestedCallFetch:
 # ---------------------------------------------------------------------------
 
 class TestCallStash:
-    def test_returns_digested_call(self):
-        values = _mem()
-        call = _call()
-        result = call.stash(values)
-        assert isinstance(result, DigestedCall)
+    def test_returns_a_digested_call_of_digests(self):
+        """stash() returns a DigestedCall whose every value is a Digest.
 
-    def test_arguments_are_digests(self):
+        One shape, three properties: three tests asserting one property each
+        of the very same return value were three runs of one code path.
+        """
         values = _mem()
         call = _call()
-        digested = call.stash(values)
-        for v in digested.arguments.values():
-            assert isinstance(v, Digest)
 
-    def test_result_is_digest(self):
-        values = _mem()
-        call = _call()
         digested = call.stash(values)
+
+        assert isinstance(digested, DigestedCall)
+        assert all(isinstance(v, Digest) for v in digested.arguments.values())
         assert isinstance(digested.result, Digest)
 
     def test_already_digest_argument_preserved(self):
@@ -192,15 +188,17 @@ class TestCallStash:
 # ---------------------------------------------------------------------------
 
 class TestCallDigest:
-    def test_returns_digested_call(self):
-        assert isinstance(_call().digest(), DigestedCall)
+    def test_returns_a_digested_call_of_digests(self):
+        """digest() produces the same record shape as stash(), without storing.
 
-    def test_arguments_are_digests(self):
-        for v in _call().digest().arguments.values():
-            assert isinstance(v, Digest)
+        The stash-side twin is
+        ``TestCallStash::test_returns_a_digested_call_of_digests``.
+        """
+        digested = _call().digest()
 
-    def test_result_is_digest(self):
-        assert isinstance(_call().digest().result, Digest)
+        assert isinstance(digested, DigestedCall)
+        assert all(isinstance(v, Digest) for v in digested.arguments.values())
+        assert isinstance(digested.result, Digest)
 
     def test_same_lookup_key_as_stash(self):
         values = _mem()
@@ -240,15 +238,12 @@ class TestDigestedCallDigestEquivalence:
         dc = call.digest()
         assert digest(dc) == digest(call)
 
-    def test_stash_digest_matches_original_call(self):
-        """digest(stash) == digest(call) — stash stores values but same hash as original."""
-        values = _mem()
-        call = _call(arguments={"x": 10, "y": 20}, result=99)
-        stashed = call.stash(values)
-        assert digest(stashed) == digest(call)
-
     def test_digested_call_digest_matches_lazy_call(self):
-        """digest(DigestedCall) == digest(LazyCall) — three-way equivalence."""
+        """digest(DigestedCall) == digest(LazyCall) — three-way equivalence.
+
+        Its two assertions chain to ``digest(stashed) == digest(call)``, which
+        is why the stash-vs-call leg needs no test of its own.
+        """
         values = _mem()
         cache = _cache(values)
         call = _call(arguments={"x": 10, "y": 20}, result=99)

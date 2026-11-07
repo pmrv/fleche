@@ -62,6 +62,29 @@ jobs:
         if-no-files-found: ignore
         retention-days: 90
 
+  executorlib:
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v5
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.12"
+        cache: pip
+    - name: Setup
+      shell: bash -l {0}
+      run: |
+        pip install -e .[tests,executorlib]
+    - name: Run executorlib tests
+      shell: bash -l {0}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # The main build job doesn't install executorlib, so it skips these.
+        pytest tests/integration/test_parallel_execution.py -k executorlib -v -rs
+
   sql-backends:
     needs: changes
     if: needs.changes.outputs.run == 'true'
