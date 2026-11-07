@@ -704,7 +704,10 @@ Shared fixtures (in `fixtures.py`):
   `results.csv`.
 - `docs/` — Sphinx sources, grouped by topic: root holds `index`, `installation`, `parallel_execution`;
   `usage/` holds `tldr`, `helpers`, `lazy_call`, `query` (`tldr` first);
-  `digests/` holds `digests_as_args`, `digest_equivalence` (stdlib types), `numpy` and `pandas` (one standalone page per third-party library, so each can move into its own package later), `entry_points` (the third-party plug-in page);
+  `digests/` holds `digests_as_args`,
+  `digest_equivalence` (stdlib types),
+  `numpy` and `pandas` (one standalone page per third-party library, so each can move into its own package later),
+  `entry_points` (the third-party plug-in page);
   `storage/` holds `configuration`, `destructuring` (figures + prose on destructuring/dedup/`remaining_depth`), `cache_stack`, `security`;
   `dev/` holds `call_lifecycle` (the two-phase `prepare`/`commit`/`abandon` save protocol and the miss/hit sequences behind a decorated call),
   `custom_digests`,
