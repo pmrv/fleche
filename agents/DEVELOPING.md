@@ -983,6 +983,9 @@ Git history is the changelog.
   The 3.15 job builds h5py from source (no cp315 wheels yet;
   drop that step once wheels publish) and is **blocked**: `pyiron-snippets` and `bagofholding` both declare `Requires-Python <3.15` on every release, so pip refuses them on 3.15 (options in a PR comment).
   Needs a rebase: the standalone `ty`-fix commit it carried landed via #1020, and #1028 reworked the `test_fleche_with_version` area (`tests/conftest.py` now makes `import test` fail everywhere), so both of those commits are superseded.
+- #1041 (opened 2026-11-07) — cuts this file to a ~25 KB current-state reference (commands, conventions, module map, architecture notes, test layout, open issues by number);
+  PR history, in-flight lists and release trains are dropped, and the daily audit prompt is being retargeted alongside to keep current state only.
+  Until it lands, keep history additions here minimal — they will not survive the cut.
 - #786 (draft) — a process-wide cache of read-only `h5py.File` handles for multi-bag files (bounded MRU of 32, `(inode, mtime_ns, size)` invalidation, `locking=False`, writers close the cached handle under the per-bag lock);
   multi-bag `contains` drops from ~240 µs to ~29 µs.
   `evict` deliberately untouched;
