@@ -270,6 +270,8 @@ discovery and merge rules are in [USAGE.md](USAGE.md#config-files--where-fleche-
 - `.github/workflows/` — `test-minimum-deps.yml` uses `uv pip install --resolution lowest-direct` (not `uv sync`, whose lock floats deps up) in a venv pinned to the `requires-python` floor — keep the pin in sync.
   `perf-triage.yml` adds the `benchmark` label that triggers `benchmarks.yml`;
   `rendernb.yml` re-executes notebooks on the `rendernb` label.
+  `ci-failure-summary.yml` has Claude post a triage comment on every failed or timed-out run of the non-Claude workflows, bot-triggered runs included;
+  it is shared with landau and assyst, and only its `workflows:` list may differ between the repos — keep the rest portable.
   The in-PR Claude app can't push under `.github/workflows/`;
   those edits need a maintainer.
 
