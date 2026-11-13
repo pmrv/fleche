@@ -241,3 +241,50 @@ def test_rewrite_all_skips_missing_files(tmp_path):
     called = []
     storage._rewrite_all(lambda c: called.append(c) or None)
     assert called == []
+
+
+# --- values the serializer refuses ---
+
+
+class Unserialisable:
+    """Stands in for a C extension object: pickling it raises, as ``ACEBEvaluator`` does."""
+
+    def __reduce__(self):
+        raise TypeError("cannot pickle 'Unserialisable' object")
+
+
+@pytest.mark.parametrize("serializer", ["pickle", "cloudpickle", "dill"])
+def test_unserialisable_value_raises_save_error(tmp_path, serializer):
+    """Every serializer in the family reports a refusal as ``SaveError``.
+
+    ``SaveError`` is the contract the callers check: ``Call._to_digested`` degrades such an
+    argument to a digest-only reference and keeps the call cached, and ``BaseCache.file``
+    turns a refused result into ``Rejected``. A raw ``TypeError`` reaches neither branch, so
+    one unpicklable argument used to take the whole call out of the cache.
+    """
+    pytest.importorskip(serializer)
+    from fleche.storage import SaveError
+
+    storage = PickleFile.with_serializer(serializer, root=tmp_path)
+    with pytest.raises(SaveError):
+        storage.put(Unserialisable(), Digest("a" * 64))
+
+
+def test_unserialisable_value_leaves_nothing_behind(tmp_path):
+    """A refused write leaves neither an entry nor an atomic-write temp file."""
+    from fleche.storage import SaveError
+
+    storage = PickleFile.with_pickle(root=tmp_path)
+    with pytest.raises(SaveError):
+        storage.put(Unserialisable(), Digest("b" * 64))
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_save_error_chains_the_original_exception(tmp_path):
+    """The serializer's own exception stays reachable as ``__cause__`` for diagnosis."""
+    from fleche.storage import SaveError
+
+    storage = PickleFile.with_pickle(root=tmp_path)
+    with pytest.raises(SaveError) as excinfo:
+        storage.put(Unserialisable(), Digest("c" * 64))
+    assert isinstance(excinfo.value.__cause__, TypeError)

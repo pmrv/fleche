@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .file import FileStorage, _atomic_write
-from .base import ValueMixin, CallMixin, register_storage
+from .base import SaveError, ValueMixin, CallMixin, register_storage
 from .thread_safe import PerKeyLockMixin
 from .destructuring import DestructuringMixin
 from ..security import get_secret_key, normalize_secret_key, SignedBytes, SignatureError
@@ -114,7 +114,25 @@ class PickleFileBackend(FileStorage):
 
     def _to_file(self, value: Any, path: Path) -> None:
         signer = SignedBytes(self.secret_key)
-        data = signer.dumps(self.dumps(value))
+        try:
+            payload = self.dumps(value)
+        except Exception as e:
+            # A value the serializer refuses is a SaveError, not a crash: that is the
+            # contract the rest of fleche checks for.  `Call._to_digested` degrades such
+            # an ARGUMENT to a digest-only reference and keeps the call cached;
+            # `BaseCache.file` turns a refused RESULT into `Rejected`.  Neither branch is
+            # reachable unless the backend raises `SaveError`, so without this a single
+            # unpicklable argument -- an ASE calculator holding a C++ evaluator, say --
+            # aborts `prepare` and the call runs uncached behind one logged warning.
+            # `bagofholding_file` already raises `SaveError` for the same reason.
+            #
+            # The catch is broad on purpose: pickle, cloudpickle and dill all re-raise
+            # whatever the offending object's `__reduce__` raised, which is a `TypeError`
+            # for a C extension object, an `AttributeError` for a local class, a
+            # `RecursionError` for a deep graph, and anything at all for a third-party
+            # `__reduce__`.  There is no exception set that means "unserialisable".
+            raise SaveError(value) from e
+        data = signer.dumps(payload)
         if self.compress:
             data = gzip.compress(data)
         path.write_bytes(data)
