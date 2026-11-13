@@ -109,9 +109,9 @@ Values and calls are stored separately so call records are queryable without des
   for an unimportable module, `version` falls back to the function's own `__version__`, not `None`.
 - `digest.py` — `digest()` is the single public entry point;
   on `Indigestible` it loads entry points and retries once.
-  Precedence: a class-level `__digest__` (checked before built-ins so dict/list subclasses can override;
-  negatives cached in `_TYPES_WITHOUT_DIGEST`), then hooks and entry points (for third-party types;
-  skipped when both are empty), then the `_digest_bytes` match.
+  Precedence: hooks and entry points first (for third-party types;
+  skipped when both hook lists are empty), then a class-level `__digest__` (still before the built-in `match` arms so dict/list subclasses can override;
+  negatives cached in `_TYPES_WITHOUT_DIGEST`), then the `_digest_bytes` match.
   Order-sensitive arms: `timedelta`/`np.timedelta64` are refused before `Number` (numpy registers `timedelta64` as `Integral`;
   refused until a digest honours their cross-unit `==`);
   pandas comes before `Iterable` (a DataFrame iterates its column names).
@@ -136,6 +136,8 @@ Values and calls are stored separately so call records are queryable without des
   read-only caches admit digest-only and reject at `save`.
   Wrappers are `CacheWrapper` (forwards everything) plus behaviour mixins;
   `ReadOnlyMixin` is field-free and base-free, goes **first** in the bases, and is the marker `remote._is_read_only` checks.
+  `FilteringMixin` filters `load`/`_query` by a predicate;
+  `FilteredCache(ReadOnlyMixin, FilteringMixin)` is its read-only combination.
   `_MultiCache` owns fan-out via `_first_hit`/`_collect`/`_foreach` — write new multi-cache methods over these.
   `CacheStack` writes to `stack[0]` (the "lowest"), back-fills read hits into it, and cannot nest;
   `CachePool` is read-only, first-hit-wins, and never back-fills.
@@ -255,7 +257,8 @@ discovery and merge rules are in [USAGE.md](USAGE.md#config-files--where-fleche-
   `smoke/` is one round-trip per optional dep (`pytest -m smoke`).
 - `tests/conftest.py` makes `import test` fail on every interpreter, so no test may rely on CPython's optional `test` package.
 - Gate optional deps with `pytest.importorskip` or a `skipif` on an import flag — never a bare `try/except ImportError`.
-- `tests/fixtures.py`: `call_storage` / `value_storage` / `storage_backend` are parametrised over every backend — add a new backend there (currently in two places, #791).
+- `tests/fixtures.py`: `call_storage` / `value_storage` / `storage_backend` are parametrised over every backend — add a new backend there (three spots: `_build_value_storage`, `_build_call_storage` and `storage_backend` itself, #791).
+  `paired_storages` sweeps `(value_storage, call_storage)` pairs diagonally rather than crosswise.
   `FLECHE_TEST_POSTGRES_URL` / `FLECHE_TEST_MYSQL_URL` add real-server `Sql` cases.
   `clean_cache` is not activated — use `with cache(clean_cache):`.
   Concurrency tests share `run_workers()`.
@@ -270,7 +273,8 @@ discovery and merge rules are in [USAGE.md](USAGE.md#config-files--where-fleche-
 - `.github/workflows/` — `test-minimum-deps.yml` uses `uv pip install --resolution lowest-direct` (not `uv sync`, whose lock floats deps up) in a venv pinned to the `requires-python` floor — keep the pin in sync.
   `perf-triage.yml` adds the `benchmark` label that triggers `benchmarks.yml`;
   `rendernb.yml` re-executes notebooks on the `rendernb` label.
-  `ci-failure-summary.yml` has Claude post a triage comment on every failed or timed-out run of the non-Claude workflows, bot-triggered runs included;
+  `ci-failure-summary.yml` triages every failed or timed-out run of the workflows in its `workflows:` list, bot-triggered runs included;
+  the workflow downloads the failed-job logs, a Claude confined to Read/Grep/Glob inside that directory (no shell, no network, no GitHub token) writes the summary, and the workflow posts it — a PR comment, or an issue when no PR is found;
   it is shared with landau and assyst, and only its `workflows:` list may differ between the repos — keep the rest portable.
   The in-PR Claude app can't push under `.github/workflows/`;
   those edits need a maintainer.
