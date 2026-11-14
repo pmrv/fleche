@@ -301,6 +301,8 @@ Git history is the changelog — no PR numbers, dates or release versions here.
   digest dispatch registry (#333, #834);
   enum digests (#1022, `Flag` members currently raise `RecursionError`).
 - Re-keying after a module rename (#942 has a tested recipe).
+- Central SQL call index on HPC (#1047 is the field report and entry point): no compute fallback when the server is down, hosted-server tooling and its config write-back,
+  `autostart` on shared cluster nodes.
 
 **Known bugs**: #826 gc vs `PreparedCall`;
 #840 `BoundWrapper` needs `fork`;
@@ -308,7 +310,8 @@ Git history is the changelog — no PR numbers, dates or release versions here.
 #895 cache hits return a plain `Future` (accepted);
 #916 `.query()` with `hash_version=False`/`hash_module=False` (fix on branch `fix/query-hash-flags-916`);
 #918 destructuring ignores digest hooks;
-#883 custom destructurers hide children from `gc`.
+#883 custom destructurers hide children from `gc`;
+#1047 concurrent workers computing the same call on the `sql` backend can raise `IntegrityError` out of the decorated function (a duplicate insert should count as a hit; also #790, #218).
 
 **Feature requests**: #829, #854, #855.
 
