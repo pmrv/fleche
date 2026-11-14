@@ -50,3 +50,14 @@ itself, as a classmethod).  Study
 :class:`~fleche.storage.destructuring.DigestedIterable` or
 :class:`~fleche.storage.destructuring.DigestedDict` as the canonical
 reference implementations before writing your own.
+
+**Children must be visible in** ``underlying()``
+
+:meth:`~fleche.caches.Cache.gc` and
+:meth:`~fleche.storage.destructuring.DestructuringMixin.count_reuses` find a
+wrapper's children by scanning ``underlying()`` one level deep: a mapping
+contributes its keys and values, a ``list`` / ``tuple`` / ``set`` /
+``frozenset`` its elements, anything else itself.  Every
+:class:`~fleche.digest.Digest` your wrapper holds must appear there.  One
+nested any deeper (for example a ``Digest`` inside a list inside a tuple) is
+not followed, and ``gc`` evicts it as an orphan.

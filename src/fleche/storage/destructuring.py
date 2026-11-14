@@ -396,22 +396,25 @@ class DestructuringMixin(base.ValueStorage):
         into their parent container.  Only :class:`~fleche.storage.destructuring.Digested` wrappers carry
         child references; scalars and plain (non-destructured) containers
         return an empty set.
+
+        Generic over every :class:`~fleche.storage.destructuring.Digested`
+        subclass, including ones registered via :func:`register_destructurer`:
+        children are read off :meth:`~fleche.storage.destructuring.Digested.underlying`
+        by one shallow rule — a mapping contributes its keys and values, a
+        ``list`` / ``tuple`` / ``set`` / ``frozenset`` its elements, anything
+        else itself.  A ``Digest`` nested deeper than that is not seen.
         """
-        match raw:
-            case DigestedIterable():
-                return {i for i in raw.items if isinstance(i, digest.Digest)}
-            case DigestedMapping():
-                return {
-                    x
-                    for pair in raw.items.items()
-                    for x in pair
-                    if isinstance(x, digest.Digest)
-                }
-            case DigestedFields():
-                return {v for v in raw.fields.values() if isinstance(v, digest.Digest)}
-            case _:
-                # Not one of ours — a layer below may still claim it.
-                return super()._raw_sub_digests(raw)
+        if not isinstance(raw, Digested):
+            # Not one of ours — a layer below may still claim it.
+            return super()._raw_sub_digests(raw)
+        under = raw.underlying()
+        if isinstance(under, Mapping):
+            children = [*under.keys(), *under.values()]
+        elif isinstance(under, (list, tuple, set, frozenset)):
+            children = under
+        else:
+            children = (under,)
+        return {c for c in children if isinstance(c, digest.Digest)}
 
     def child_digests(self, key: digest.Digest | str) -> set[digest.Digest]:
         """Direct digest children of the raw entry stored at *key*.
