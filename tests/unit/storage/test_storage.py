@@ -54,38 +54,47 @@ def test_backend_short_prefix_expand(storage_backend, value):
     assert storage_backend.expand(key[:8]) == key
 
 
+class Refusal(Exception):
+    """No backend could list this in advance: the reason the catch has to be broad."""
+
+
 class Unserialisable:
     """Stands in for a C extension object: copying or pickling it raises, as ``ACEBEvaluator`` does."""
 
+    def __init__(self, error=None):
+        self.error = error or TypeError("cannot pickle 'Unserialisable' object")
+
     def __reduce__(self):
-        raise TypeError("cannot pickle 'Unserialisable' object")
+        raise self.error
 
 
-@pytest.mark.parametrize("error", [TypeError, AttributeError, RecursionError])
-def test_backend_refusal_is_a_save_error(storage_backend, error):
-    """Whatever ``__reduce__`` raises, the backend reports ``SaveError``: it is what callers catch."""
-
-    class Refuses:
-        def __reduce__(self):
-            raise error("refused")
-
+def test_backend_refusal_is_a_save_error(storage_backend):
+    """Whatever ``__reduce__`` raises arrives as ``SaveError``, the exception callers catch, with the original chained."""
+    error = Refusal("refused")
     with pytest.raises(SaveError) as excinfo:
-        storage_backend.put(Refuses(), Digest("ab" * 32))
-    assert excinfo.value.__cause__ is not None, "the original stays reachable for diagnosis"
+        storage_backend.put(Unserialisable(error), Digest("ab" * 32))
+    assert excinfo.value.__cause__ is error
 
 
-def test_backend_refusal_leaves_nothing_behind(storage_backend):
-    """A refused put stores no entry, partial or temporary, and spares a neighbour sharing its file."""
+def _files(storage):
+    root = getattr(storage, "root", None)
+    return set(root.rglob("*")) if root is not None and root.exists() else set()
+
+
+@pytest.mark.parametrize("shared", [False, True], ids=["alone", "shared_bag"])
+def test_backend_refusal_leaves_nothing_behind(storage_backend, shared):
+    """A refused put leaves no entry and no file, temporary or partial, and spares a neighbour in the same bag."""
     neighbour, refused = Digest("ab" * 32), Digest("ab" + "cd" * 31)
-    storage_backend.put("kept", neighbour)
+    if shared:
+        storage_backend.put("kept", neighbour)
+    before = _files(storage_backend)
     with pytest.raises(SaveError):
         storage_backend.put(Unserialisable(), refused)
     assert not storage_backend.contains(refused)
-    assert list(storage_backend.list()) == [neighbour]
-    assert storage_backend.get(neighbour) == "kept"
-    root = getattr(storage_backend, "root", None)
-    if root is not None:
-        assert not [p for p in root.rglob(".*") if p.suffix == ".tmp"]
+    assert list(storage_backend.list()) == ([neighbour] if shared else [])
+    assert _files(storage_backend) == before
+    if shared:
+        assert storage_backend.get(neighbour) == "kept"
 
 
 def test_callstorages_evict():

@@ -186,21 +186,29 @@ class Opaque:
 
 
 def test_unserialisable_argument_is_still_cached(paired_storages):
-    """An argument the value store refuses degrades to a digest-only reference; the call stays cached.
-
-    Pickle-family and memory backends used to let the serializer's own exception escape,
-    so ``prepare`` failed and every such call ran uncached behind one warning.
-    """
+    """An argument the value store refuses degrades to a digest-only reference; the call stays cached and keyed by it."""
     calls = []
 
     @fleche
-    def work(handle, n):
-        calls.append((handle.tag, n))
-        return n * 2
+    def work(handle):
+        calls.append(handle.tag)
+        return handle.tag.upper()
 
     with cache(Cache(*paired_storages)):
-        assert work(Opaque("a"), 3) == 6
-        assert work(Opaque("a"), 3) == 6
-        assert work(Opaque("b"), 3) == 6
-        assert work(Opaque("b"), 3) == 6
-    assert calls == [("a", 3), ("b", 3)], "one entry per handle, and both hit on the repeat"
+        assert [work(Opaque(t)) for t in "abab"] == ["A", "B", "A", "B"]
+    assert calls == ["a", "b"], "one entry per handle, and both hit on the repeat"
+
+
+def test_unserialisable_result_is_returned_uncached(paired_storages):
+    """A result the value store refuses is rejected: the caller still gets it, nothing is filed."""
+    calls = []
+
+    @fleche
+    def make(tag):
+        calls.append(tag)
+        return Opaque(tag)
+
+    with cache(Cache(*paired_storages)):
+        assert [make("a").tag, make("a").tag] == ["a", "a"]
+        assert not make.contains("a")
+    assert calls == ["a", "a"]
