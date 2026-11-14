@@ -9,7 +9,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from fleche.digest import digest
+from fleche.digest import Indigestible, digest
 
 # Attoseconds per fixed numpy unit, written out independently of fleche._numpy.
 AS_PER_UNIT = {
@@ -143,6 +143,18 @@ def test_second_unit_pandas_timedelta_beyond_int64_nanoseconds():
     # .value would overflow; the digest goes through the stored unit.
     big = pd.Timedelta(np.timedelta64(10**12, "s"))
     assert digest(big) != digest(pd.Timedelta(np.timedelta64(10**12 - 1, "s")))
+
+
+def test_pandas_timedelta_in_an_unknown_unit_is_indigestible(monkeypatch):
+    # pandas stores s, ms, us or ns; should it ever store a unit fleche has no
+    # length for, the Timedelta is refused rather than leaking a KeyError.
+    from fleche import _numpy
+
+    scales = dict(_numpy._TIMEDELTA64_SCALES)
+    del scales["ns"]
+    monkeypatch.setattr(_numpy, "_TIMEDELTA64_SCALES", scales)
+    with pytest.raises(Indigestible):
+        digest(pd.Timedelta("1ns"))
 
 
 def test_pandas_nat_keeps_its_own_digest():

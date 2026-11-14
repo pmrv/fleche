@@ -87,25 +87,22 @@ def digest_timedelta64(value, digest_bytes: Callable[[Any], bytes]) -> bytes | N
         with running_hash(b"timedelta64[NaT]") as m:
             pass
         return m.result
-    length = timedelta64_length(value)
-    if length is None:
+    try:
+        salt, n = timedelta64_length(value)
+    except KeyError:
         return None
-    salt, n = length
     with running_hash(salt) as m:
         m.update(digest_bytes(n))
     return m.result
 
 
-def timedelta64_length(value) -> tuple[bytes, int] | None:
-    """``(salt, length)`` of the non-NaT ``np.timedelta64`` *value*, or None if
-    its unit is not known.
+def timedelta64_length(value) -> tuple[bytes, int]:
+    """``(salt, length)`` of the non-NaT ``np.timedelta64`` *value*.
 
     The length is in attoseconds for a fixed unit (salt ``timedelta64``), in
-    months for ``Y``/``M`` and the bare count for the generic unit.
+    months for ``Y``/``M`` and the bare count for the generic unit.  Raises
+    KeyError if the unit is not known.
     """
     unit, multiple = np.datetime_data(value.dtype)
-    scale = _TIMEDELTA64_SCALES.get(unit)
-    if scale is None:
-        return None
-    salt, per_unit = scale
+    salt, per_unit = _TIMEDELTA64_SCALES[unit]
     return salt, int(value.view(np.int64)) * multiple * per_unit

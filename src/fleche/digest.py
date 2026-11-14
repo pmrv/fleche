@@ -339,7 +339,11 @@ def _digest_bytes(value: Any) -> bytes:
         case _ if _pandas.is_pandas(value):
             # Must precede Iterable: a DataFrame iterates over its column names
             # only, so the Iterable arm would collide any two frames sharing them.
-            return _pandas.digest_pandas(value, _digest_bytes)
+            try:
+                return _pandas.digest_pandas(value, _digest_bytes)
+            except KeyError as err:
+                # A pd.Timedelta in a unit without a known length.
+                raise Indigestible(value) from err
         case types.MethodType():
             # A bound method is its function plus the receiver it is bound to.
             # Leaving __self__ out would collide obj1.method with obj2.method —

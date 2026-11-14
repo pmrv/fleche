@@ -67,7 +67,10 @@ def is_pandas(value: Any) -> bool:
 
 
 def digest_pandas(value, digest_bytes: Callable[[Any], bytes]) -> bytes:
-    """Return the digest of the pandas *value*, in the format of *digest_bytes*."""
+    """Return the digest of the pandas *value*, in the format of *digest_bytes*.
+
+    Raises KeyError for a ``pd.Timedelta`` in a unit without a known length.
+    """
     with running_hash(type(value).__name__.encode()) as m:
         match value:
             case pd.DataFrame():
@@ -114,9 +117,10 @@ def digest_pandas(value, digest_bytes: Callable[[Any], bytes]) -> bytes:
             case pd.Timedelta():
                 # Its exact length in nanoseconds, whatever unit it stores; .value
                 # would overflow for a second-unit Timedelta beyond int64 ns.
-                length = _numpy.timedelta64_length(value.to_timedelta64())
-                assert length is not None  # pandas stores s, ms, us or ns
-                m.update(digest_bytes(length[1] // 10**9))
+                # KeyError for a unit without a known length, which digest.py
+                # raises as Indigestible; pandas only stores s, ms, us or ns.
+                _, attoseconds = _numpy.timedelta64_length(value.to_timedelta64())
+                m.update(digest_bytes(attoseconds // 10**9))
             case _ if value is pd.NA:
                 # A singleton like None; it turns up in object columns, which the
                 # arms above digest element by element.
