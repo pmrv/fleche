@@ -5,7 +5,7 @@ import numpy as np
 from fleche.storage import SaveError, CallMemory
 from fleche.storage.sql import Sql
 from fleche.call import Call
-from fleche.digest import digest
+from fleche.digest import Digest, digest
 
 from tests.strategies import st_data, st_digested_calls
 
@@ -52,6 +52,40 @@ def test_backend_short_prefix_expand(storage_backend, value):
     except SaveError:
         return
     assert storage_backend.expand(key[:8]) == key
+
+
+class Unserialisable:
+    """Stands in for a C extension object: copying or pickling it raises, as ``ACEBEvaluator`` does."""
+
+    def __reduce__(self):
+        raise TypeError("cannot pickle 'Unserialisable' object")
+
+
+@pytest.mark.parametrize("error", [TypeError, AttributeError, RecursionError])
+def test_backend_refusal_is_a_save_error(storage_backend, error):
+    """Whatever ``__reduce__`` raises, the backend reports ``SaveError``: it is what callers catch."""
+
+    class Refuses:
+        def __reduce__(self):
+            raise error("refused")
+
+    with pytest.raises(SaveError) as excinfo:
+        storage_backend.put(Refuses(), Digest("ab" * 32))
+    assert excinfo.value.__cause__ is not None, "the original stays reachable for diagnosis"
+
+
+def test_backend_refusal_leaves_nothing_behind(storage_backend):
+    """A refused put stores no entry, partial or temporary, and spares a neighbour sharing its file."""
+    neighbour, refused = Digest("ab" * 32), Digest("ab" + "cd" * 31)
+    storage_backend.put("kept", neighbour)
+    with pytest.raises(SaveError):
+        storage_backend.put(Unserialisable(), refused)
+    assert not storage_backend.contains(refused)
+    assert list(storage_backend.list()) == [neighbour]
+    assert storage_backend.get(neighbour) == "kept"
+    root = getattr(storage_backend, "root", None)
+    if root is not None:
+        assert not [p for p in root.rglob(".*") if p.suffix == ".tmp"]
 
 
 def test_callstorages_evict():

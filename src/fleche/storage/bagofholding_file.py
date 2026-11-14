@@ -246,8 +246,9 @@ class BagOfHoldingH5FileBackend(FileStorage):
     def _to_file(self, value: Any, path: Path) -> None:
         try:
             H5Bag.save(value, path)
-        except (ValueError, TypeError):  # h5py choked on something, pass it along
-            raise SaveError(value) from None
+        except Exception as e:
+            # Callers catch SaveError to degrade or reject the value; see PickleFileBackend._to_file.
+            raise SaveError(value) from e
 
     def _from_file(self, path: Path) -> Any:
         try:
@@ -290,7 +291,13 @@ class BagOfHoldingH5FileBackend(FileStorage):
         if self.prefix_length == 0:
             return super().put(value, key)
         with filelock.FileLock(self._lock_path(key), timeout=self.lock_timeout):
-            self._to_file(value, self._path(key))
+            try:
+                self._to_file(value, self._path(key))
+            except SaveError:
+                # H5Bag has already created (and, on overwrite, emptied) the group;
+                # left behind, it would make `contains` report a value never stored.
+                self._drop_group(key)
+                raise
         return key
 
     def get(self, key: Digest) -> Any:
@@ -314,18 +321,21 @@ class BagOfHoldingH5FileBackend(FileStorage):
     def _evict(self, key: Digest) -> None:
         if self.prefix_length == 0:
             return super()._evict(key)
+        with filelock.FileLock(self._lock_path(key), timeout=self.lock_timeout):
+            self._drop_group(key)
+
+    def _drop_group(self, key: Digest) -> None:
+        """Delete *key*'s group from its bag, and the bag once empty; the caller holds the lock."""
         file_path = self._bag_file(key)
-        lock_path = self._lock_path(key)
-        with filelock.FileLock(lock_path, timeout=self.lock_timeout):
-            if not file_path.is_file():
-                return
-            with h5py.File(file_path, "a") as f:
-                if key in f:
-                    del f[key]
-                remaining = len(f)
-            if remaining == 0:
-                file_path.unlink(missing_ok=True)
-                lock_path.unlink(missing_ok=True)
+        if not file_path.is_file():
+            return
+        with h5py.File(file_path, "a") as f:
+            if key in f:
+                del f[key]
+            remaining = len(f)
+        if remaining == 0:
+            file_path.unlink(missing_ok=True)
+            self._lock_path(key).unlink(missing_ok=True)
 
     def list(self) -> Iterable[Digest]:
         # Only files of exactly this instance's prefix length are considered,

@@ -117,20 +117,8 @@ class PickleFileBackend(FileStorage):
         try:
             payload = self.dumps(value)
         except Exception as e:
-            # A value the serializer refuses is a SaveError, not a crash: that is the
-            # contract the rest of fleche checks for.  `Call._to_digested` degrades such
-            # an ARGUMENT to a digest-only reference and keeps the call cached;
-            # `BaseCache.file` turns a refused RESULT into `Rejected`.  Neither branch is
-            # reachable unless the backend raises `SaveError`, so without this a single
-            # unpicklable argument -- an ASE calculator holding a C++ evaluator, say --
-            # aborts `prepare` and the call runs uncached behind one logged warning.
-            # `bagofholding_file` already raises `SaveError` for the same reason.
-            #
-            # The catch is broad on purpose: pickle, cloudpickle and dill all re-raise
-            # whatever the offending object's `__reduce__` raised, which is a `TypeError`
-            # for a C extension object, an `AttributeError` for a local class, a
-            # `RecursionError` for a deep graph, and anything at all for a third-party
-            # `__reduce__`.  There is no exception set that means "unserialisable".
+            # Callers catch SaveError to degrade or reject the value; serializers re-raise
+            # whatever `__reduce__` raised, so no narrower exception set means "unserialisable".
             raise SaveError(value) from e
         data = signer.dumps(payload)
         if self.compress:

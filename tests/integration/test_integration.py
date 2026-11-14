@@ -170,3 +170,37 @@ def test_cache_hit_returns_materialized_value(backend):
         r2 = twice(5)
         assert r2 == 10
         assert r2 != digest(10)
+
+
+class Opaque:
+    """Digestible by tag, unserialisable by every backend -- like a wrapped C++ handle."""
+
+    def __init__(self, tag):
+        self.tag = tag
+
+    def __digest__(self):
+        return digest(("Opaque", self.tag))
+
+    def __reduce__(self):
+        raise TypeError("cannot pickle 'Opaque' object")
+
+
+def test_unserialisable_argument_is_still_cached(paired_storages):
+    """An argument the value store refuses degrades to a digest-only reference; the call stays cached.
+
+    Pickle-family and memory backends used to let the serializer's own exception escape,
+    so ``prepare`` failed and every such call ran uncached behind one warning.
+    """
+    calls = []
+
+    @fleche
+    def work(handle, n):
+        calls.append((handle.tag, n))
+        return n * 2
+
+    with cache(Cache(*paired_storages)):
+        assert work(Opaque("a"), 3) == 6
+        assert work(Opaque("a"), 3) == 6
+        assert work(Opaque("b"), 3) == 6
+        assert work(Opaque("b"), 3) == 6
+    assert calls == [("a", 3), ("b", 3)], "one entry per handle, and both hit on the repeat"

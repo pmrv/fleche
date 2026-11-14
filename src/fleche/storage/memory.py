@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-from .base import ValueMixin, CallMixin, StorageBackend, register_storage
+from .base import SaveError, ValueMixin, CallMixin, StorageBackend, register_storage
 from .destructuring import DestructuringMixin
 from .thread_safe import PerKeyLockMixin
 from ..digest import Digest
@@ -36,7 +36,12 @@ class MemoryBackend(StorageBackend):
         return tuple(self.storage.keys())
 
     def put(self, value: Any, key: Digest) -> Digest:
-        self.storage[key] = deepcopy(value)
+        try:
+            copied = deepcopy(value)
+        except Exception as e:
+            # Callers catch SaveError to degrade or reject the value; see PickleFileBackend._to_file.
+            raise SaveError(value) from e
+        self.storage[key] = copied
         return key
 
     def get(self, key: Digest) -> Any:
