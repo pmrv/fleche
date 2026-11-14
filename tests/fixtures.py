@@ -178,6 +178,8 @@ def _call_storage_params():
 
 
 def _build_value_storage(param, tmp_path):
+    # Own subtree, so a test holding both halves never sees one's files in the other's list().
+    tmp_path = tmp_path / "values"
     if param == "memory":
         return ValueMemory({})
     elif param == "cloudpickle":
@@ -200,6 +202,7 @@ def _build_value_storage(param, tmp_path):
 def _build_call_storage(param, tmp_path):
     """Yield one call storage; a context manager because the external-SQL
     params own a database that has to be dropped again."""
+    tmp_path = tmp_path / "calls"  # see _build_value_storage
     if param == "memory":
         yield CallMemory({})
     elif param == "cloudpickle":
