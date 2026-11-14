@@ -375,28 +375,6 @@ def test_branch_choice_follows_exact_value(t, num, den):
 
 
 @pytest.mark.parametrize(
-    "value",
-    [
-        datetime.timedelta(seconds=5),
-        pd.Timedelta("5s"),
-        np.timedelta64(5, "s"),
-        np.timedelta64(5),
-        np.timedelta64("NaT", "s"),
-        datetime.timedelta.resolution,
-        [np.timedelta64(1, "D")],
-    ],
-    ids=repr,
-)
-def test_timedeltas_are_refused(value):
-    # No digest yet under which the timedelta types that compare equal digest
-    # equal; total_seconds() merged pd.Timedelta(days=50, nanoseconds=1) and
-    # nanoseconds=2.  np.timedelta64 is registered as Integral, so it must not
-    # slip into the number arm either.
-    with pytest.raises(Indigestible):
-        digest(value)
-
-
-@pytest.mark.parametrize(
     "a, b",
     [
         (np.float64("nan"), float("nan")),

@@ -48,10 +48,7 @@ Three kinds of value are not digested as numbers:
   as their own type, so ``digest(True) != digest(1)``.
 * NaNs equal nothing, so they digest by their bit pattern: NaNs with the same
   bits digest alike whatever their type.
-* Timedeltas (``datetime.timedelta``, ``pd.Timedelta`` and ``np.timedelta64``)
-  are refused with :exc:`~fleche.digest.Indigestible` for now, although numpy
-  counts ``np.timedelta64`` as a ``numbers.Integral``.  A hook registered with
-  :func:`~fleche.digest.add_hook` can digest them meanwhile.
+* ``datetime.timedelta`` is a duration, not a number; see `Timedeltas`_ below.
 
 For example:
 
@@ -73,6 +70,17 @@ double, and compares a huge ``np.longdouble`` with an ``int`` through their
 string forms.  Following that ``==`` would let unequal values share a cache
 entry, so ``fleche`` goes by the exact value instead: ``np.float32(0.1)``
 stores 0.100000001490116…, and digests apart from ``0.1``.
+
+Timedeltas
+----------
+
+A ``datetime.timedelta`` digests by its exact length in microseconds, so
+``timedelta(hours=1)`` digests like ``timedelta(minutes=60)``.  It never
+digests like a number, and a subclass digests by its own type name, apart from
+``datetime.timedelta``.
+
+Third-party libraries' values, timedeltas included, follow their own rules:
+see :doc:`numpy` and :doc:`pandas`.
 
 Other types
 -----------
