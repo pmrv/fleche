@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.23.0](https://github.com/pmrv/fleche/compare/0.22.4...0.23.0) (2026-11-14)
+
+
+### Features
+
+* **digest:** digest timedeltas by exact duration ([#1023](https://github.com/pmrv/fleche/issues/1023)) ([a2b9b88](https://github.com/pmrv/fleche/commit/a2b9b888d06a94fbb58596c260d3b9c61024a99c))
+
+
+### Bug Fixes
+
+* **storage:** report an unserialisable value as SaveError, not the serializer's exception ([#1049](https://github.com/pmrv/fleche/issues/1049)) ([a97d4dc](https://github.com/pmrv/fleche/commit/a97d4dc897ed1e1bf9705f589c0b81e1ef37ad46))
+
 ## [0.22.4](https://github.com/pmrv/fleche/compare/0.22.3...0.22.4) (2026-11-06)
 
 
