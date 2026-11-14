@@ -1,12 +1,16 @@
 """Tests for Cache.gc() — brute-force reachability-based value eviction."""
 
+from dataclasses import dataclass
+
 import pytest
 
 from fleche import call
 from fleche.call import Call, PreparedCall
 from fleche.caches import Cache
-from fleche.digest import digest
+from fleche.digest import Digest, digest
+from fleche.storage import destructuring
 from fleche.storage.base import ValueMixin
+from fleche.storage.destructuring import Digested
 from fleche.storage.memory import CallMemory, MemoryBackend, ValueMemory
 
 
@@ -147,6 +151,75 @@ def test_gc_evicts_deeply_unreachable_structure(split_cache):
     assert reachable_before.issubset(set(split_cache.values.list()))
 
 
+@dataclass
+class Rec:
+    """A record with one slot small enough to inline and one big enough to store."""
+
+    small: int
+    big: list
+
+
+def test_gc_keeps_a_mapping_key_that_was_stored_separately():
+    """A dict key written out under its own digest is an edge like any other.
+
+    At the default ``remaining_depth`` a scalar key is inlined, but a
+    non-scalar one is stored separately and comes back as a ``Digest`` — so a
+    record's only children may be its *keys*.  A sweep that walked values
+    alone would reclaim them, and the next load would raise ``KeyError``,
+    which the caller sees as an ordinary cache miss.
+    """
+    cache = Cache(values=ValueMemory({}), calls=CallMemory({}))
+    result = {("a", "b"): 1, ("c", "d"): 2}
+
+    key = cache.save(Call(name="f", arguments={"x": 1}, result=result))
+
+    result_key = cache.calls.load(key).result
+    assert cache.values.child_digests(result_key) == {
+        digest(("a", "b")),
+        digest(("c", "d")),
+    }, "the keys were inlined, not stored — the test proves nothing"
+
+    reclaimed = cache.gc()
+
+    assert reclaimed == set()
+    assert cache.load(key).result == result
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        pytest.param([[1, 2, 3], []], id="iterable"),
+        pytest.param(Rec(small=7, big=[1, 2, 3]), id="dataclass"),
+    ],
+)
+def test_gc_walks_a_record_holding_one_stored_and_one_inlined_slot(result):
+    """A record declares *every* slot, so a reader must tolerate plain children.
+
+    ``child_items`` reports inlined children — a ``[]`` or a ``7`` that was
+    small enough to live in the wrapper — beside the ``Digest`` back-references,
+    and only :meth:`ChildItems.child_digests` narrows to the latter.  Walking
+    the slots without that filter is not a silent miss but a crash: a plain
+    ``list`` child is unhashable, so the sweep raises ``TypeError`` instead of
+    returning a set.
+    """
+    cache = Cache(values=ValueMemory({}), calls=CallMemory({}))
+
+    key = cache.save(Call(name="f", arguments={"x": 1}, result=result))
+
+    result_key = cache.calls.load(key).result
+    slots = cache.values.load_raw(result_key).child_items()
+    assert [isinstance(child, Digest) for _, child in slots].count(False) == 1, (
+        f"no slot was inlined in {slots} — the mixed shape this test exists for "
+        "was not built"
+    )
+    assert len(cache.values.child_digests(result_key)) == 1
+
+    reclaimed = cache.gc()
+
+    assert reclaimed == set()
+    assert cache.load(key).result == result
+
+
 # ---- Path values: blob records reference their content, and gc must see it ----
 
 
@@ -235,6 +308,129 @@ def test_reachability_walk_does_not_materialize_paths(path_cache, a_file, monkey
     path_cache.gc()
     path_cache.values.count_reuses()
     assert calls == [], f"walk materialized {len(calls)} temp tree(s)"
+
+
+def test_gc_keeps_the_content_behind_a_path_used_as_a_mapping_key(path_cache, a_file):
+    """``{input_file: answer}`` — the natural result shape for a file-keyed job.
+
+    The key digests to a ``FileBlob``, which references its content bytes in
+    turn, so two entries hang off the key alone.  Nothing else in the record
+    points at them: the values here are inlined scalars.
+    """
+    key = path_cache.save(Call(name="f", arguments={"x": 1}, result={a_file: 7}))
+
+    reclaimed = path_cache.gc()
+
+    assert reclaimed == set()
+    ((loaded_path, value),) = path_cache.load(key).result.items()
+    assert value == 7
+    assert loaded_path.read_text() == "file content"
+
+
+# ---- A record type outside the built-ins joins the graph by declaring itself ----
+
+
+class Pair:
+    """A two-slot container fleche ships no destructurer for.
+
+    Deliberately not a dataclass: the built-in dataclass entry in
+    ``_DESTRUCTURERS`` is matched before any registered one, so a dataclass
+    here would exercise ``DigestedDataclass`` instead of the custom wrapper.
+    """
+
+    def __init__(self, first, second):
+        self.first = first
+        self.second = second
+
+    def __eq__(self, other):
+        return isinstance(other, Pair) and (self.first, self.second) == (
+            other.first,
+            other.second,
+        )
+
+    __hash__ = None
+
+    def __digest__(self):
+        return digest(("Pair", self.first, self.second))
+
+
+@dataclass
+class DigestedPair(Digested):
+    """A third-party wrapper: everything a ``register_destructurer`` user writes."""
+
+    pair: Pair
+
+    def underlying(self):
+        # Same shape Pair.__digest__ hashes, so the wrapper is digest-equal to
+        # the value it stands in for (Digests are transparent to ``digest``).
+        return ("Pair", self.pair.first, self.pair.second)
+
+    def child_items(self):
+        return [("first", self.pair.first), ("second", self.pair.second)]
+
+    def mend(self, storage):
+        return Pair(*(self.get(storage, c) for _, c in self.child_items()))
+
+    @classmethod
+    def _slots(cls, value):
+        return [("first", value.first), ("second", value.second)]
+
+    @classmethod
+    def _rebuild_plain(cls, value, labels, children):
+        return Pair(*children)
+
+    @classmethod
+    def _rebuild_digest(cls, value, labels, children):
+        return cls(Pair(*children))
+
+
+@pytest.fixture
+def pair_destructurer():
+    """Register ``Pair`` for the test, then take it back out of the global table."""
+    sunder = DigestedPair.sunder
+    destructuring.register_destructurer(lambda v: type(v) is Pair, sunder)
+    try:
+        yield
+    finally:
+        destructuring._DESTRUCTURERS[:] = [
+            entry for entry in destructuring._DESTRUCTURERS if entry[1] is not sunder
+        ]
+
+
+def test_gc_follows_a_custom_destructurer_s_wrapper(pair_destructurer):
+    """A registered wrapper is reachable through the interface it implements.
+
+    The sweep used to match the three built-in wrapper types by name, so a
+    wrapper registered from outside reported *no* children whatever it held:
+    ``gc`` reclaimed its sub-values as orphans and the next load of the entry
+    raised ``KeyError`` — the same silent loss the path blobs hit, one layer
+    over.  Reading the record's own declaration instead, there is nothing left
+    for a new record type to forget to tell the sweep.
+    """
+    cache = Cache(values=ValueMemory({}), calls=CallMemory({}))
+    value = Pair([1, 2], [3, 4])
+
+    key = cache.save(Call(name="f", arguments={"x": 1}, result=value))
+
+    result_key = cache.values.save(value)
+    assert isinstance(cache.values.load_raw(result_key), DigestedPair), (
+        "the custom destructurer did not run — the test proves nothing"
+    )
+    # Identity, not cardinality: a wrapper reporting the right *number* of wrong
+    # children (its own digest twice, say) would satisfy a length check.
+    assert cache.values.child_digests(result_key) == {digest([1, 2]), digest([3, 4])}
+    # The other half of the same bug: #883 is "gc evicts reachable values *and*
+    # count_reuses permanently under-counts".  Both read _raw_sub_digests.
+    reuses = cache.values.count_reuses()
+    assert reuses[digest([1, 2])] == 1
+    assert reuses[digest([3, 4])] == 1
+
+    # Keep the sweep on its own line: the load below only means something
+    # because gc() ran, and a reader who deletes an inlined assert loses that.
+    reclaimed = cache.gc()
+
+    assert reclaimed == set()
+    assert cache.load(key).result == value
 
 
 # ---- Calls in flight: prepared arguments are roots until commit or abandon ----

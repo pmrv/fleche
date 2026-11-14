@@ -2,9 +2,14 @@ import pytest
 from collections import namedtuple, Counter, defaultdict, OrderedDict
 from dataclasses import dataclass
 from hypothesis import given, settings, HealthCheck, strategies as st
-from fleche.storage import ValueMixin, DestructuringMixin
+from fleche.storage import ChildItems, ValueMixin, DestructuringMixin
 from fleche.storage.memory import MemoryBackend
-from fleche.storage.destructuring import DigestedIterable, DigestedMapping, Digested
+from fleche.storage.destructuring import (
+    DigestedDataclass,
+    DigestedIterable,
+    DigestedMapping,
+    Digested,
+)
 from fleche.digest import digest, Digest
 
 from tests.strategies import st_base_values, st_nested_values, st_key_values, namedtuples
@@ -434,6 +439,9 @@ def test_count_reuses_dict_keys_and_values_counted():
     hits = ds.count_reuses()
 
     assert hits[inner_key] == 1
+    # The key half.  Without this line, dropping the keys from
+    # DigestedMapping.child_items passes the whole suite.
+    assert hits[digest(1)] == 1
 
 
 def test_count_reuses_inlined_scalars_not_double_counted():
@@ -452,6 +460,63 @@ def test_count_reuses_nonnegative(value):
     ds.save(value)
     hits = ds.count_reuses()
     assert all(v >= 0 for v in hits.values())
+
+
+# ---- child_items: the one declaration every reader walks ----
+
+
+@dataclass
+class Holder:
+    """One slot small enough to inline, one big enough to be stored."""
+
+    small: int
+    big: list
+
+
+def test_child_items_declares_every_slot_with_its_label():
+    """The ``(label, child)`` pairs each built-in wrapper reports.
+
+    Asserted directly rather than through ``child_digests``, which discards the
+    labels and filters the children down to the ``Digest`` ones — the two
+    halves of the declaration most easily got wrong, and the two that no
+    other test reads.
+    ``DigestedFields`` is the built-in whose labels have to map back to
+    attribute names, because its ``mend`` sets them.
+    """
+    ds = make_ds(remaining_depth=0)
+
+    iterable = ds.load_raw(ds.save([1, 2]))
+    assert isinstance(iterable, DigestedIterable)
+    assert iterable.child_items() == [(None, digest(1)), (None, digest(2))]
+
+    # Keys first, then values: a key stored under its own digest is a child too.
+    mapping = ds.load_raw(ds.save({1: [2, 3]}))
+    assert isinstance(mapping, DigestedMapping)
+    assert mapping.child_items() == [(None, digest(1)), (None, digest([2, 3]))]
+
+    # At the default depth a record keeps whichever slots were small enough to
+    # inline, so this also pins "every slot, whether or not it holds a Digest".
+    shallow = make_ds(remaining_depth=1)
+    fields = shallow.load_raw(shallow.save(Holder(small=7, big=[1, 2, 3])))
+    assert isinstance(fields, DigestedDataclass)
+    assert fields.child_items() == [("small", 7), ("big", digest([1, 2, 3]))]
+
+    # Same for a mapping, whose halves inline independently: here the key is
+    # written out and the value is not.
+    mixed = shallow.load_raw(shallow.save({("a", "b"): 1}))
+    assert isinstance(mixed, DigestedMapping)
+    assert mixed.child_items() == [(None, digest(("a", "b"))), (None, 1)]
+
+
+def test_an_incomplete_child_items_subclass_cannot_be_instantiated():
+    """A record type cannot join the reference graph halfway.
+
+    ``child_items`` is abstract so that a record type which forgets it fails at
+    instantiation, rather than reporting no children and having ``gc`` reclaim
+    its sub-values — a ``KeyError`` on the next load, reported as a cache miss.
+    """
+    with pytest.raises(TypeError, match="child_items"):
+        type("Incomplete", (ChildItems,), {})()
 
 
 # ---- Mapping subclass destructuring ----

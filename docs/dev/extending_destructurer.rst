@@ -44,9 +44,28 @@ where:
 
 The ``Digested`` subclass must implement :meth:`~fleche.storage.destructuring.Digested.mend`
 (reconstruction from storage), :meth:`~fleche.storage.destructuring.Digested.underlying`
-(for hashing), and the class-method
+(for hashing), :meth:`~fleche.storage.base.ChildItems.child_items` (see below),
+and the class-method
 :meth:`~fleche.storage.destructuring.Digested.sunder` (the ``sunder_fn``
 itself, as a classmethod).  Study
 :class:`~fleche.storage.destructuring.DigestedIterable` or
 :class:`~fleche.storage.destructuring.DigestedDict` as the canonical
 reference implementations before writing your own.
+
+**Contract for** ``child_items``
+
+``Digested`` inherits :class:`~fleche.storage.base.ChildItems`, the interface
+every record holding other stored entries implements — the path layer's
+``FileBlob`` and ``DirectoryBlob`` are the other implementors.  Return one
+``(label, child)`` pair per slot the wrapper holds, where *child* is either an
+inlined plain value or the :class:`~fleche.digest.Digest` of a separately
+stored one; the *label* is free-form (``DigestedFields`` uses field names,
+``DigestedIterable`` uses ``None``) and only has to mean something to your own
+``mend``.
+
+This is not optional bookkeeping.  It is the only thing that tells
+:meth:`~fleche.caches.Cache.gc` your wrapper's children are still reachable: a
+wrapper that omits a slot reports it as an orphan, and the next sweep evicts a
+value your entry still points at — a ``KeyError`` on the following load, which
+the wrapper reports as an ordinary cache miss.  Return **every** slot, keys of
+a mapping included, whether or not it currently holds a ``Digest``.
