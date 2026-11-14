@@ -1,8 +1,9 @@
 """Retries in the Sql backend for collisions between concurrent processes.
 
 Both races need a shared database server and several processes to show up
-for real (``tests/integration/test_dbserver.py`` exercises them); here the
-failures are injected so the retry logic is covered on plain sqlite.
+for real (``test_concurrent_processes_on_fresh_database`` in
+``tests/regression/test_sql_non_sqlite_backends.py`` exercises them); here
+the failures are injected so the retry logic is covered on plain sqlite.
 """
 
 import pytest
