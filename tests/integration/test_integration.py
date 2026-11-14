@@ -170,3 +170,45 @@ def test_cache_hit_returns_materialized_value(backend):
         r2 = twice(5)
         assert r2 == 10
         assert r2 != digest(10)
+
+
+class Opaque:
+    """Digestible by tag, unserialisable by every backend -- like a wrapped C++ handle."""
+
+    def __init__(self, tag):
+        self.tag = tag
+
+    def __digest__(self):
+        return digest(("Opaque", self.tag))
+
+    def __reduce__(self):
+        raise TypeError("cannot pickle 'Opaque' object")
+
+
+def test_unserialisable_argument_is_still_cached(paired_storages):
+    """An argument the value store refuses degrades to a digest-only reference; the call stays cached and keyed by it."""
+    calls = []
+
+    @fleche
+    def work(handle):
+        calls.append(handle.tag)
+        return handle.tag.upper()
+
+    with cache(Cache(*paired_storages)):
+        assert [work(Opaque(t)) for t in "abab"] == ["A", "B", "A", "B"]
+    assert calls == ["a", "b"], "one entry per handle, and both hit on the repeat"
+
+
+def test_unserialisable_result_is_returned_uncached(paired_storages):
+    """A result the value store refuses is rejected: the caller still gets it, nothing is filed."""
+    calls = []
+
+    @fleche
+    def make(tag):
+        calls.append(tag)
+        return Opaque(tag)
+
+    with cache(Cache(*paired_storages)):
+        assert [make("a").tag, make("a").tag] == ["a", "a"]
+        assert not make.contains("a")
+    assert calls == ["a", "a"]

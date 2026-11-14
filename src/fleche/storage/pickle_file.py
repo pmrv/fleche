@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .file import FileStorage, _atomic_write
-from .base import ValueMixin, CallMixin, register_storage
+from .base import SaveError, ValueMixin, CallMixin, register_storage
 from .thread_safe import PerKeyLockMixin
 from .destructuring import DestructuringMixin
 from ..security import get_secret_key, normalize_secret_key, SignedBytes, SignatureError
@@ -114,7 +114,13 @@ class PickleFileBackend(FileStorage):
 
     def _to_file(self, value: Any, path: Path) -> None:
         signer = SignedBytes(self.secret_key)
-        data = signer.dumps(self.dumps(value))
+        try:
+            payload = self.dumps(value)
+        except Exception as e:
+            # Callers catch SaveError to degrade or reject the value; serializers re-raise
+            # whatever `__reduce__` raised, so no narrower exception set means "unserialisable".
+            raise SaveError(value) from e
+        data = signer.dumps(payload)
         if self.compress:
             data = gzip.compress(data)
         path.write_bytes(data)
