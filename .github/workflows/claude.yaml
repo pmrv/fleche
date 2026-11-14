@@ -51,8 +51,16 @@ jobs:
           echo "model=$model" >> "$GITHUB_OUTPUT"
           echo "Selected model: $model"
       - uses: anthropics/claude-code-action@v1
+        env:
+          # Headless runs exit when the turn ends, so a backgrounded command
+          # (e.g. the full test suite) is killed and its completion notice
+          # never arrives -- the run "succeeds" without committing. Force
+          # foreground execution and give it room to finish.
+          CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1'
+          BASH_DEFAULT_TIMEOUT_MS: '1200000'
+          BASH_MAX_TIMEOUT_MS: '2400000'
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          claude_args: '--model ${{ steps.model.outputs.model }} --effort high --allowedTools WebFetch Bash(pip:*) Bash(python:*) Bash(pytest:*) Bash(ty:*) Bash(uv:*) Bash(jupyter:*) Bash(git:*) Bash(gh pr:*) Bash(gh run:*)'
+          claude_args: '--model ${{ steps.model.outputs.model }} --effort high --allowedTools WebFetch Bash(pip:*) Bash(python:*) Bash(pytest:*) Bash(ty:*) Bash(uv:*) Bash(jupyter:*) Bash(git:*) "Bash(gh pr:*)" "Bash(gh run:*)"'
           additional_permissions: |
             actions: read
