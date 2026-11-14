@@ -7,7 +7,7 @@ import pytest
 from fleche import call
 from fleche.call import Call, PreparedCall
 from fleche.caches import Cache
-from fleche.digest import digest
+from fleche.digest import Digest, digest
 from fleche.storage import destructuring
 from fleche.storage.base import ValueMixin
 from fleche.storage.destructuring import Digested
@@ -151,6 +151,75 @@ def test_gc_evicts_deeply_unreachable_structure(split_cache):
     assert reachable_before.issubset(set(split_cache.values.list()))
 
 
+@dataclass
+class Rec:
+    """A record with one slot small enough to inline and one big enough to store."""
+
+    small: int
+    big: list
+
+
+def test_gc_keeps_a_mapping_key_that_was_stored_separately():
+    """A dict key written out under its own digest is an edge like any other.
+
+    At the default ``remaining_depth`` a scalar key is inlined, but a
+    non-scalar one is stored separately and comes back as a ``Digest`` — so a
+    record's only children may be its *keys*.  A sweep that walked values
+    alone would reclaim them, and the next load would raise ``KeyError``,
+    which the caller sees as an ordinary cache miss.
+    """
+    cache = Cache(values=ValueMemory({}), calls=CallMemory({}))
+    result = {("a", "b"): 1, ("c", "d"): 2}
+
+    key = cache.save(Call(name="f", arguments={"x": 1}, result=result))
+
+    result_key = cache.calls.load(key).result
+    assert cache.values.child_digests(result_key) == {
+        digest(("a", "b")),
+        digest(("c", "d")),
+    }, "the keys were inlined, not stored — the test proves nothing"
+
+    reclaimed = cache.gc()
+
+    assert reclaimed == set()
+    assert cache.load(key).result == result
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        pytest.param([[1, 2, 3], []], id="iterable"),
+        pytest.param(Rec(small=7, big=[1, 2, 3]), id="dataclass"),
+    ],
+)
+def test_gc_walks_a_record_holding_one_stored_and_one_inlined_slot(result):
+    """A record declares *every* slot, so a reader must tolerate plain children.
+
+    ``child_items`` reports inlined children — a ``[]`` or a ``7`` that was
+    small enough to live in the wrapper — beside the ``Digest`` back-references,
+    and only :meth:`ChildItems.child_digests` narrows to the latter.  Walking
+    the slots without that filter is not a silent miss but a crash: a plain
+    ``list`` child is unhashable, so the sweep raises ``TypeError`` instead of
+    returning a set.
+    """
+    cache = Cache(values=ValueMemory({}), calls=CallMemory({}))
+
+    key = cache.save(Call(name="f", arguments={"x": 1}, result=result))
+
+    result_key = cache.calls.load(key).result
+    slots = cache.values.load_raw(result_key).child_items()
+    assert [isinstance(child, Digest) for _, child in slots].count(False) == 1, (
+        f"no slot was inlined in {slots} — the mixed shape this test exists for "
+        "was not built"
+    )
+    assert len(cache.values.child_digests(result_key)) == 1
+
+    reclaimed = cache.gc()
+
+    assert reclaimed == set()
+    assert cache.load(key).result == result
+
+
 # ---- Path values: blob records reference their content, and gc must see it ----
 
 
@@ -239,6 +308,23 @@ def test_reachability_walk_does_not_materialize_paths(path_cache, a_file, monkey
     path_cache.gc()
     path_cache.values.count_reuses()
     assert calls == [], f"walk materialized {len(calls)} temp tree(s)"
+
+
+def test_gc_keeps_the_content_behind_a_path_used_as_a_mapping_key(path_cache, a_file):
+    """``{input_file: answer}`` — the natural result shape for a file-keyed job.
+
+    The key digests to a ``FileBlob``, which references its content bytes in
+    turn, so two entries hang off the key alone.  Nothing else in the record
+    points at them: the values here are inlined scalars.
+    """
+    key = path_cache.save(Call(name="f", arguments={"x": 1}, result={a_file: 7}))
+
+    reclaimed = path_cache.gc()
+
+    assert reclaimed == set()
+    ((loaded_path, value),) = path_cache.load(key).result.items()
+    assert value == 7
+    assert loaded_path.read_text() == "file content"
 
 
 # ---- A record type outside the built-ins joins the graph by declaring itself ----
@@ -330,9 +416,20 @@ def test_gc_follows_a_custom_destructurer_s_wrapper(pair_destructurer):
     assert isinstance(cache.values.load_raw(result_key), DigestedPair), (
         "the custom destructurer did not run — the test proves nothing"
     )
-    assert len(cache.values.child_digests(result_key)) == 2
+    # Identity, not cardinality: a wrapper reporting the right *number* of wrong
+    # children (its own digest twice, say) would satisfy a length check.
+    assert cache.values.child_digests(result_key) == {digest([1, 2]), digest([3, 4])}
+    # The other half of the same bug: #883 is "gc evicts reachable values *and*
+    # count_reuses permanently under-counts".  Both read _raw_sub_digests.
+    reuses = cache.values.count_reuses()
+    assert reuses[digest([1, 2])] == 1
+    assert reuses[digest([3, 4])] == 1
 
-    assert cache.gc() == set()
+    # Keep the sweep on its own line: the load below only means something
+    # because gc() ran, and a reader who deletes an inlined assert loses that.
+    reclaimed = cache.gc()
+
+    assert reclaimed == set()
     assert cache.load(key).result == value
 
 
