@@ -203,6 +203,9 @@ Values and calls are stored separately so call records are queryable without des
   `journal_mode` is set once per database: `WAL`, or `DELETE` on a network filesystem.
   `:memory:` is detected via `engine.url.database`, since the rendered URL percent-encodes it.
   MySQL needs `VARCHAR(255)` on indexed columns.
+  Across processes sharing one server database,
+  `_create_schema` retries `create_all` (concurrent first opens race on `CREATE TABLE`) and `save` retries a transaction aborted as a deadlock victim (InnoDB 1213, Postgres `40P01`/`40001`, up to `_DEADLOCK_ATTEMPTS`);
+  `regression/test_sql_non_sqlite_backends.py::test_concurrent_processes_on_fresh_database` pins both against real servers.
 - `destructuring.py` — `DestructuringMixin` stores containers, dataclasses and attrs instances as separately stored parts (`remaining_depth`), composed **above** `ValueMixin`.
   `Digested*` markers keep digest equivalence via `__digest__` and rebuild fields via `object.__new__` + `__setattr__`, so `init=False`/`InitVar`/frozen/slots round-trip.
   NamedTuples are not destructured.

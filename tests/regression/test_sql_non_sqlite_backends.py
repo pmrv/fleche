@@ -22,7 +22,14 @@ Why these specific assertions:
     against a real driver, which sqlite-only tests cannot do.
   * Query with metadata pushdown: exercises the JSON-extract path against
     each dialect's native JSON column type.
+  * Concurrent processes on a fresh database: regression for the
+    ``create_all`` check-then-create race and for InnoDB picking concurrent
+    inserts as deadlock victims (error 1213), both of which ``Sql`` now
+    retries.
 """
+
+import os
+from concurrent.futures import ProcessPoolExecutor
 
 import pytest
 
@@ -207,3 +214,51 @@ def test_overwrite_same_key(external_sql):
     k2 = external_sql.save(call)
     assert k1 == k2
     assert sum(1 for _ in external_sql.list()) == 1
+
+
+# ---------------------------------------------------------------------------
+# Concurrent processes on one fresh database
+# ---------------------------------------------------------------------------
+@pytest.fixture(params=_external_backends() or ["__skip__"])
+def empty_database_url(request):
+    """URL of a freshly-created database with no tables in it yet.
+
+    ``external_sql`` builds its ``Sql`` (and so its schema) up front, which
+    would hide the schema-creation race this exercises.
+    """
+    from tests.fixtures import MYSQL_URL_ENV, POSTGRES_URL_ENV, _ephemeral_database
+
+    if request.param == "__skip__":
+        pytest.skip(
+            "No non-sqlite database URL configured "
+            "(set FLECHE_TEST_POSTGRES_URL or FLECHE_TEST_MYSQL_URL)"
+        )
+    pytest.importorskip("sqlalchemy")
+    env = POSTGRES_URL_ENV if request.param == "postgres" else MYSQL_URL_ENV
+    with _ephemeral_database(os.environ[env]) as url:
+        yield url
+
+
+def _save_calls(url, worker):
+    sql = Sql(url)
+    try:
+        for i in range(20):
+            sql.save(Call(name="square", arguments={"x": worker * 20 + i}, result=None))
+    finally:
+        sql.engine.dispose()
+
+
+def test_concurrent_processes_on_fresh_database(empty_database_url):
+    """Eight processes open the same empty database at once and write.
+
+    They race on ``CREATE TABLE`` and, on MariaDB, deadlock on concurrent
+    inserts into ``metadata``; without the retries in ``Sql`` this failed on
+    every run.
+    """
+    with ProcessPoolExecutor(8) as pool:
+        list(pool.map(_save_calls, [empty_database_url] * 8, range(8)))
+    sql = Sql(empty_database_url)
+    try:
+        assert len(list(sql.list())) == 160
+    finally:
+        sql.engine.dispose()
