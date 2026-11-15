@@ -36,14 +36,13 @@ classifiers = [
 ]
 license = "BSD-3-Clause"
 dependencies = [
-    'numpy >= 1.26',
-    'pandas >= 2.2, <4',
     'pyiron-snippets >= 1.1',
     'filelock >= 3.4',
 ]
 
 [project.optional-dependencies]
 # Digest hooks for third-party types, released from src/ in this repository.
+# fleche itself needs neither numpy nor pandas; `pandas` also covers table().
 numpy = [
     "fleche-numpy",
 ]
@@ -75,6 +74,10 @@ ssh = [
 ]
 tests = [
     "pytest >= 7.4",
+    # The suite digests arrays and frames throughout; CI installs the sister
+    # packages too (src/fleche-numpy, src/fleche-pandas), which need these.
+    "numpy >= 1.26",
+    "pandas >= 2.2, <4",
     "hypothesis >= 6.100",
     "cloudpickle >= 2",
     "dill >= 0.3",

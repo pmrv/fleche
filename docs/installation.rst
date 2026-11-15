@@ -126,7 +126,7 @@ them, ``fleche`` refuses arrays and frames as
 digest them as plain iterables: a DataFrame iterates over its column names
 only, so that would give any two frames with the same columns the same key.
 numpy number scalars (``np.float64``, ...) need neither; ``fleche`` digests
-them itself.
+them itself.  ``fleche`` itself depends on neither numpy nor pandas.
 
 Installing documentation
 -------------------------

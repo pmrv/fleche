@@ -34,6 +34,7 @@ pip install "fleche[numpy,pandas]"   # same as: pip install fleche fleche-numpy 
 ```
 
 Without them, fleche refuses arrays and frames as `Indigestible` rather than guess at a key.
+fleche itself depends on neither numpy nor pandas; `fleche[pandas]` also enables `table()`.
 
 ### With conda
 
