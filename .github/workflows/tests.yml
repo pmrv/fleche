@@ -34,6 +34,8 @@ jobs:
       run: echo "No src/ or tests/ changes; skipping."
     - uses: actions/checkout@v5
       if: needs.changes.outputs.run == 'true'
+      with:
+        fetch-depth: 0
     - name: Set up Python ${{ matrix.python-version }}
       if: needs.changes.outputs.run == 'true'
       uses: actions/setup-python@v6
@@ -44,7 +46,7 @@ jobs:
       if: needs.changes.outputs.run == 'true'
       shell: bash -l {0}
       run: |
-        pip install -e .[tests]
+        pip install -e .[tests] -e src/fleche-numpy -e src/fleche-pandas
     - name: run tests
       if: needs.changes.outputs.run == 'true'
       shell: bash -l {0}
@@ -68,6 +70,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
     - name: Set up Python
       uses: actions/setup-python@v6
       with:
@@ -76,7 +80,7 @@ jobs:
     - name: Setup
       shell: bash -l {0}
       run: |
-        pip install -e .[tests,executorlib]
+        pip install -e .[tests,executorlib] -e src/fleche-numpy -e src/fleche-pandas
     - name: Run executorlib tests
       shell: bash -l {0}
       env:
@@ -120,6 +124,8 @@ jobs:
       FLECHE_TEST_MYSQL_URL: mysql+pymysql://root:fleche@localhost:3306/mysql
     steps:
     - uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
     - name: Set up Python
       uses: actions/setup-python@v6
       with:
@@ -128,7 +134,7 @@ jobs:
     - name: Setup
       shell: bash -l {0}
       run: |
-        pip install -e .[tests]
+        pip install -e .[tests] -e src/fleche-numpy -e src/fleche-pandas
         # Drivers needed for the non-sqlite backends. Kept out of the project
         # extras so they're a CI-only dependency.
         pip install psycopg2-binary pymysql

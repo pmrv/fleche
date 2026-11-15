@@ -44,7 +44,7 @@ jobs:
         if: needs.changes.outputs.run == 'true'
       # --resolution lowest-direct pins every direct dependency to the lowest
       # version its bound allows, exercising the floors declared in pyproject.
-      - run: uv pip install --resolution lowest-direct -e ".[tests]"
+      - run: uv pip install --resolution lowest-direct -e ".[tests]" -e src/fleche-numpy -e src/fleche-pandas
         if: needs.changes.outputs.run == 'true'
       - run: uv run --no-sync pytest
         if: needs.changes.outputs.run == 'true'

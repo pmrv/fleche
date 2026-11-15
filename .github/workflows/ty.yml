@@ -31,6 +31,8 @@ jobs:
         run: echo "No src/ or tests/ changes; skipping."
       - uses: actions/checkout@v6
         if: needs.changes.outputs.run == 'true'
+        with:
+          fetch-depth: 0
       - name: Set up Python
         if: needs.changes.outputs.run == 'true'
         uses: actions/setup-python@v6
@@ -41,7 +43,7 @@ jobs:
         if: needs.changes.outputs.run == 'true'
         shell: bash -l {0}
         run: |
-          pip install -e .[tests,ty]
+          pip install -e .[tests,ty] -e src/fleche-numpy -e src/fleche-pandas
       - name: Run ty
         if: needs.changes.outputs.run == 'true'
         run: ty check src/

@@ -13,8 +13,9 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     outputs:
-      release_created: ${{ steps.rp.outputs.release_created }}
-      tag_name: ${{ steps.rp.outputs.tag_name }}
+      # JSON list of the package paths released by this run: "." for fleche,
+      # "src/fleche-numpy" etc. for the sister packages (release-please-config.json).
+      paths_released: ${{ steps.rp.outputs.paths_released }}
     steps:
       - uses: googleapis/release-please-action@v4
         id: rp
@@ -24,24 +25,34 @@ jobs:
 
   publish:
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created }}
+    if: ${{ needs.release-please.outputs.paths_released != '[]' && needs.release-please.outputs.paths_released != '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        path: ${{ fromJSON(needs.release-please.outputs.paths_released) }}
     runs-on: ubuntu-latest
+    # Every package publishes from this one workflow and environment, so each
+    # PyPI project needs a trusted publisher for release-please.yml + pypi.
     environment:
       name: pypi
-      url: https://pypi.org/p/fleche
     permissions:
       id-token: write
     steps:
+      # The release commit carries every tag this run created; the full history
+      # lets setuptools-scm find fleche's.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.release-please.outputs.tag_name }}
+          ref: ${{ github.sha }}
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - name: Build
         shell: bash
+        env:
+          PACKAGE_PATH: ${{ matrix.path }}
         run: |
           pip install build
-          python -m build --sdist
+          python -m build --sdist --outdir dist/ "$PACKAGE_PATH"
       - name: pypi-publish
         uses: pypa/gh-action-pypi-publish@v1.13.0

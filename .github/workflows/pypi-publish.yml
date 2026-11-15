@@ -7,19 +7,30 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/fleche
     permissions:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
     steps:
     # retrieve your distributions here
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     - uses: actions/setup-python@v5
       with:
         python-version: '3.12'
     - name: Build
       shell: bash
+      env:
+        TAG: ${{ github.event.release.tag_name }}
       run: |
+        # Sister packages tag as <name>-v<version> and live in src/<name>;
+        # fleche's own tags are bare versions.
+        tag="$TAG"
+        case "$tag" in
+          [0-9]*) path=. ;;
+          *-v[0-9]*) path="src/${tag%-v*}" ;;
+          *) echo "Cannot tell which package $tag releases" >&2; exit 1 ;;
+        esac
         pip install build
-        python -m build --sdist
+        python -m build --sdist --outdir dist/ "$path"
     - name: pypi-publish
       uses: pypa/gh-action-pypi-publish@v1.13.0
