@@ -76,8 +76,8 @@ pip install "fleche[executorlib]"
 # For documentation
 pip install "fleche[docs]"
 
-# For development and testing
-pip install "fleche[tests]"
+# For development and testing, from a checkout (the suite needs the sister packages too)
+pip install -e ".[tests]" -e src/fleche-numpy -e src/fleche-pandas
 ```
 
 See the [Optional dependencies](https://fleche.readthedocs.io/en/latest/installation.html#optional-dependencies)

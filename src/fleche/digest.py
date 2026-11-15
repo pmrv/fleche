@@ -158,6 +158,16 @@ def load_entry_points():
         except Exception as e:
             logger.error("Failed to load entry point %s: %s", ep.name, e, exc_info=True)
 
+    # The first matching hook wins, so subclasses go before their bases: a
+    # plugin's hook for an ndarray subclass must not depend on whether its
+    # distribution happens to be discovered before fleche-numpy's.  The sort is
+    # stable, so unrelated types keep their discovery order.
+    _EP_HOOKS.sort(key=_hook_specificity, reverse=True)
+
+
+def _hook_specificity(hook: Hook) -> int:
+    return len(getattr(hook.type, "__mro__", ()))
+
 
 def digest_class(cls: type) -> Digest:
     """Digest a class by its qualified name, ``module.QualName``.
@@ -314,15 +324,12 @@ def _digest_bytes(value: Any) -> bytes:
     ``__digest__``) to ``bytes.fromhex(...)``.  That must be coordinated with
     a ``hash_version`` bump and a ``Cache.redigest`` migration.
     """
-    # The same order as ``get_hooks()``, without allocating its combined list on
-    # every recursive ``_digest_bytes`` call: hot for large iterables, and the
-    # hook lists are rarely empty, since fleche-numpy and fleche-pandas register
-    # theirs as entry points.
-    if _HOOKS or _EP_HOOKS:
+    # Hooks are iterated in place rather than through ``get_hooks()``, whose list
+    # would be allocated on every recursive ``_digest_bytes`` call: hot for large
+    # iterables, and the entry-point list is rarely empty, since fleche-numpy and
+    # fleche-pandas register theirs there.
+    if _HOOKS:
         for h in reversed(_HOOKS):
-            if isinstance(value, h.type):
-                return h.digest(value).encode()
-        for h in _EP_HOOKS:
             if isinstance(value, h.type):
                 return h.digest(value).encode()
 
@@ -331,10 +338,20 @@ def _digest_bytes(value: Any) -> bytes:
     # per-call ``hasattr`` MRO walk for the overwhelming common case (plain
     # built-ins) by caching the negative answer in ``_TYPES_WITHOUT_DIGEST``.
     t = type(value)
+    if t not in _TYPES_WITHOUT_DIGEST and hasattr(t, "__digest__"):
+        # For raw-bytes speedup (Issue #440): bytes.fromhex(value.__digest__())
+        return value.__digest__().encode()
+
+    # Entry-point hooks come after ``__digest__``, unlike add_hook's: they load
+    # lazily, on the first Indigestible, so were they first an ndarray subclass
+    # defining ``__digest__`` would digest by it until some plain array had
+    # loaded fleche-numpy's hook, and by the hook ever after — one value, two
+    # keys in one process.
+    for h in _EP_HOOKS:
+        if isinstance(value, h.type):
+            return h.digest(value).encode()
+
     if t not in _TYPES_WITHOUT_DIGEST:
-        if hasattr(t, "__digest__"):
-            # For raw-bytes speedup (Issue #440): bytes.fromhex(value.__digest__())
-            return value.__digest__().encode()
         package = _sister_package(t)
         if package is not None:
             # No hook took it, so its sister package is missing (or its entry
