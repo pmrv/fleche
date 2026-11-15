@@ -2,13 +2,19 @@ import sys
 import pytest
 from unittest.mock import patch
 
+from fleche.storage import base
+
 
 def _test_missing_dep(module_name: str, deps_to_mock: dict, test_logic: callable):
     # Save and pop the module so the test loads a completely fresh copy
     original_module = sys.modules.pop(module_name, None)
 
     try:
-        with patch.dict(sys.modules, deps_to_mock):
+        # The fresh import re-runs ``@register_storage``, so the crippled classes
+        # would replace the real ones in the config registry for later tests.
+        with patch.dict(sys.modules, deps_to_mock), patch.dict(
+            base._STORAGE_CONSTRUCTORS
+        ), patch.object(base, "_STORAGE_CLASSES", set(base._STORAGE_CLASSES)):
             # This triggers a fresh import of the module without mutating the original
             test_logic()
     finally:
