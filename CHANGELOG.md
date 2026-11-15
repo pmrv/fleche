@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.23.1](https://github.com/pmrv/fleche/compare/0.23.0...0.23.1) (2026-11-15)
+
+
+### Bug Fixes
+
+* **benchmarks:** don't measure hit-phase timing against evicted keys ([#804](https://github.com/pmrv/fleche/issues/804)) ([3d9c242](https://github.com/pmrv/fleche/commit/3d9c242920dac7b729ba04f8b02ab6b863b65902))
+* **sql:** survive concurrent processes on a shared server database ([#1054](https://github.com/pmrv/fleche/issues/1054)) ([8f33053](https://github.com/pmrv/fleche/commit/8f330533a8d327b7a37ee7993ff830374d80b4af))
+* **state:** serialise BoundWrapper.func by value when not importable by reference ([#887](https://github.com/pmrv/fleche/issues/887)) ([ea20aff](https://github.com/pmrv/fleche/commit/ea20aff8c5a0cb35f82bff7d5b2136c00af2fe8b))
+
 ## [0.23.0](https://github.com/pmrv/fleche/compare/0.22.4...0.23.0) (2026-11-14)
 
 
