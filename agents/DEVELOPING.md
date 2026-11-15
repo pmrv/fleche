@@ -8,7 +8,7 @@ If you just want to *use* fleche as a dependency instead, see [USAGE.md](USAGE.m
 ## Commands
 
 ```bash
-pip install -e ".[tests]"                              # install with test deps
+pip install -e ".[tests]" -e src/fleche-numpy -e src/fleche-pandas   # install with test deps and the sister packages
 pytest tests/                                          # all tests
 pytest tests/unit/digest/test_digest.py::test_name     # single test
 pytest -m smoke                                        # one-round-trip-per-optional-dep packaging sanity
@@ -81,6 +81,23 @@ Other optional deps are gated via `pyiron_snippets.import_alarm.ImportAlarm` —
 `D(value)` passes non-empty hex strings (≤64 chars) through verbatim as lookup keys and digests anything else;
 `Digest` arguments to a wrapped function are expanded back to their value before hashing.
 
+**Sister packages:** `src/` holds more than `fleche` — `src/fleche-numpy/` (`fleche_numpy`) and `src/fleche-pandas/` (`fleche_pandas`) are separate distributions, each with its own `pyproject.toml`, static version,
+`CHANGELOG.md` and release, registering digest hooks through the `fleche`/`digest` entry point.
+They share fleche's single test suite under `tests/`, which expects all of them installed.
+They may import `fleche._hashing` (its `running_hash`) and `fleche.digest`'s public names, nothing else from fleche;
+`fleche_pandas` builds on `fleche_numpy.timedelta64_length`, so `fleche-pandas` depends on `fleche-numpy`.
+fleche itself never imports them, and the root sdist prunes them (`MANIFEST.in`).
+Versions and tags: fleche tags bare versions (`0.23.1`) from setuptools-scm, whose `describe_command` matches `[0-9]*` only;
+sister packages tag `<name>-v<version>` and release-please (`release-type: python`) bumps the `version` in their `pyproject.toml`.
+Commits touching only `src/fleche-<x>/` release only that package (`exclude-paths` on the root package), so scope such commits by package, e.g. `fix(fleche-numpy): ...`.
+`release-please.yml` publishes every path in `paths_released`;
+each PyPI project needs its own trusted publisher for that workflow and the `pypi` environment.
+CI checks out full history (`fetch-depth: 0`) so the editable fleche gets a real version and satisfies the sisters' `fleche >=` floor.
+Adding another sister package touches the same spots: `src/fleche-<x>/`,
+`release-please-config.json` (and the root's `exclude-paths`),
+`MANIFEST.in`, the `pip install` lines in `.github/workflows/`, the root `[project.optional-dependencies]`,
+`_SISTER_PACKAGES` in `digest.py` if fleche would otherwise digest its types wrongly, and a conda-forge feedstock.
+
 **Backends (config `type` strings):** `"memory"`, `"void"`, `"pickle"` / `"cloudpickle"` / `"dill"`, `"bagofholding_hdf"`, `"sql"` (**calls only**), `"ssh"` (whole-cache forwarding).
 Values and calls are stored separately so call records are queryable without deserializing heavy values.
 
@@ -109,29 +126,30 @@ Values and calls are stored separately so call records are queryable without des
   for an unimportable module, `version` falls back to the function's own `__version__`, not `None`.
 - `digest.py` — `digest()` is the single public entry point;
   on `Indigestible` it loads entry points and retries once.
-  Precedence: hooks and entry points first (for third-party types;
-  skipped when both hook lists are empty), then a class-level `__digest__` (still before the built-in `match` arms so dict/list subclasses can override;
-  negatives cached in `_TYPES_WITHOUT_DIGEST`), then the `_digest_bytes` match.
-  Order-sensitive arms: `np.timedelta64` goes to `_numpy.digest_timedelta64` before `Number` (numpy registers it as `Integral`);
-  pandas comes before `Iterable` (a DataFrame iterates its column names) and before the `datetime.timedelta` arm (`pd.Timedelta` subclasses it).
+  Precedence: hooks and entry points first (for third-party types, numpy and pandas included;
+  iterated in place, without allocating `get_hooks()`'s list, since the sister packages keep the hook lists non-empty), then a class-level `__digest__` (still before the built-in `match` arms so dict/list subclasses can override;
+  negatives cached in `_TYPES_WITHOUT_DIGEST`), then `_SISTER_PACKAGES`, then the `_digest_bytes` match.
+  `_SISTER_PACKAGES` refuses, as `Indigestible` with a note naming the package, the numpy and pandas types no hook took, matched by top-level module and class name along the MRO so fleche never imports numpy or pandas;
+  the built-in arms would digest them wrongly (`np.timedelta64` is registered as `Integral`, a DataFrame iterates its column names, `pd.Timedelta` subclasses `datetime.timedelta`), and the `Indigestible` is what makes `digest()` load the entry points in the first place.
   A `datetime.timedelta` digests its exact length in microseconds, not the old `total_seconds()` float, which merged unequal values past about 285 years.
   Built-in `type` objects digest by name, user classes are `Indigestible` as values;
   dataclass and `attrs` instances share one flat field-dict layout.
   Functions digest code plus captured cells and defaults, so closures from one factory differ (a function with neither digests as its code object);
   cycles fold a relative-depth marker, the `__class__` cell is named via `digest_class`, and `__digest__` is honoured per instance.
   `CO_NESTED` is part of the code, so un-nesting a helper changes its key (`test_nesting_changes_a_function_digest`).
-- Digest arm modules (`_numbers`, `_numpy`, `_pandas`) are kept out of `digest.py` and take `_digest_bytes` as an argument to avoid import cycles.
+- Digest arm modules (`_numbers`, and `fleche_numpy`/`fleche_pandas` in the sister packages) are kept out of `digest.py` and take `_digest_bytes` as an argument to avoid import cycles;
+  the sister packages' hooks pass `digest(v).encode()`, which is the same bytes.
   `_hashing.py` is the only home of the hash primitive they share (patch `_hashing.hashlib` to swap it everywhere);
   the hex encoding lives only there and in `digest.py`.
   `_numbers.py` walks `NUMBER_TREE`: non-NaN numbers digest equal iff they hold the same exact value (numpy's `==` is not the reference), converters must refuse inexact conversions themselves, NaNs digest by their float/complex bits, and `int` subclasses keep their own type name while `float` subclasses downcast.
   The tree is also drawn in a code comment and in `docs/digests/digest_equivalence.rst` — update both by hand.
   Equal values of different numeric types share one stored value, and the last save wins the return type — intended.
-  `_numpy.py` digests dtype + shape + bytes, except structured dtypes (per field;
+  `fleche_numpy` digests dtype + shape + bytes, except structured dtypes (per field;
   padding is uninitialised) and object dtypes (per element).
   Timedeltas stay apart per library (`datetime.timedelta`, `pd.Timedelta` and `np.timedelta64` of one length are three digests, by maintainer decision), each by its exact length.
   A fixed-unit `np.timedelta64` digests its length in attoseconds (numpy's finest unit, as a Python int), so the unit never matters and numpy's int64 cross-unit `==`, which can wrap, is not the reference;
   `Y`/`M` digest as months, the generic unit as its bare count (numpy's `5 == 5 s == 5 ms` is not transitive), and NaT as one constant.
-  `_pandas.py` folds name/dtype/index in by hand (`hash_pandas_object` ignores them) and digests non-string object columns element-wise with fleche's own hash (pandas would `str()` them).
+  `fleche_pandas` folds name/dtype/index in by hand (`hash_pandas_object` ignores them) and digests non-string object columns element-wise with fleche's own hash (pandas would `str()` them).
   A `pd.Timedelta` digests its exact length in nanoseconds through `to_timedelta64()`, not `.value`, which overflows beyond int64 ns;
   `pd.NaT` is a `datetime.datetime` subclass and keeps its datetime-arm digest.
   `_attrs.py` is import-safe without `attrs`.
@@ -262,6 +280,7 @@ discovery and merge rules are in [USAGE.md](USAGE.md#config-files--where-fleche-
 
 ## Test layout
 
+- `unit/digest/test_sister_packages.py` pins pre-split numpy/pandas digests and checks that fleche refuses those types without the sister packages.
 - `unit/<module>/` mirrors the source (`caches/`, `call/`, `config/`, `digest/`, `fleche/`, `metadata/`, `storage/`), filenames named after the feature;
   `integration/` is end-to-end (including every notebook via `test_notebooks.py`);
   `regression/test_issue_<N>.py` is one file per issue;
@@ -279,7 +298,7 @@ discovery and merge rules are in [USAGE.md](USAGE.md#config-files--where-fleche-
 ## Other directories
 
 - `docs/` — Sphinx;
-  `docs/digests/digest_equivalence` covers stdlib types, while `numpy` and `pandas` each get a standalone page so each can later move into its own package.
+  `docs/digests/digest_equivalence` covers stdlib types, while `numpy` and `pandas` each get a standalone page, documenting the `fleche-numpy` and `fleche-pandas` sister packages.
   `docs/figures/` SVGs are checked in (the RTD builder has no `dot`), and `gen_diagrams.py` also refreshes the PNGs embedded in `notebooks/Destructuring.ipynb`.
   `docs/notebooks/` is symlinks, so a new notebook needs one.
 - `.github/workflows/` — `test-minimum-deps.yml` uses `uv pip install --resolution lowest-direct` (not `uv sync`, whose lock floats deps up) in a venv pinned to the `requires-python` floor — keep the pin in sync.

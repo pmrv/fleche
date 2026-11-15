@@ -14,7 +14,8 @@ Use entry points whenever digest support for a type should "just work" after
 a ``pip install``:
 
 * as a *plugin package* that adds ``fleche`` support for a third-party
-  library (see :ref:`fleche-ase` below), or
+  library (see :ref:`fleche-ase` below; ``fleche``'s own numpy and pandas
+  support ships the same way, as ``fleche-numpy`` and ``fleche-pandas``), or
 * as a *library author* shipping ``fleche`` support for your own types
   alongside your library.
 

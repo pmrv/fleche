@@ -3,6 +3,13 @@ pandas
 
 How ``fleche`` digests pandas values.
 
+``DataFrame``, ``Series``, ``Index`` (with its subclasses), ``pd.Timedelta``
+and ``pd.NA`` are digested by the ``fleche-pandas`` companion package
+(``pip install fleche-pandas``, or ``pip install "fleche[pandas]"``), which
+pulls in ``fleche-numpy``; without it ``fleche`` refuses them as
+:exc:`~fleche.digest.Indigestible`.  ``pd.Timestamp`` and ``pd.NaT`` are
+``datetime.datetime`` subclasses and need no companion package.
+
 Timedeltas
 ----------
 

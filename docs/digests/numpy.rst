@@ -5,6 +5,11 @@ How ``fleche`` digests numpy values.  numpy number scalars, such as
 ``np.int64`` or ``np.float32``, are numbers and digest by their exact value;
 see :doc:`digest_equivalence`.
 
+Arrays, ``np.bool_`` and ``np.timedelta64`` are digested by the
+``fleche-numpy`` companion package (``pip install fleche-numpy``, or
+``pip install "fleche[numpy]"``); without it ``fleche`` refuses them as
+:exc:`~fleche.digest.Indigestible`.
+
 Timedeltas
 ----------
 

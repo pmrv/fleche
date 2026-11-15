@@ -17,7 +17,7 @@ A persistent caching solution for arbitrary Python functions - like `lru_cache` 
 - **Configurable**: Control what gets hashed (version, module, code, arguments)
 - **Multiple Backends**: File (pickle, cloudpickle, dill), SQLAlchemy, Bagofholding, and more
 - **Thread-Safe**: Safe for use in multi-threaded environments
-- **Type-Aware**: Works seamlessly with NumPy, Pandas, and custom types
+- **Type-Aware**: Works seamlessly with NumPy, Pandas (via the `fleche-numpy` and `fleche-pandas` companion packages), and custom types
 
 ## Installation
 
@@ -27,6 +27,14 @@ A persistent caching solution for arbitrary Python functions - like `lru_cache` 
 pip install fleche
 ```
 
+numpy arrays and pandas objects are digested by companion packages that live in this repository under `src/` and are released on their own:
+
+```bash
+pip install "fleche[numpy,pandas]"   # same as: pip install fleche fleche-numpy fleche-pandas
+```
+
+Without them, fleche refuses arrays and frames as `Indigestible` rather than guess at a key.
+
 ### With conda
 
 `fleche` is available on [conda-forge](https://conda-forge.org/). Two packages are
@@ -35,7 +43,8 @@ published:
 - **`fleche-base`** — the core library only (no optional dependencies)
 - **`fleche`** — the full install, which also pulls in the optional dependencies
   (`cloudpickle`, `dill`, `sqlalchemy`, and `bagofholding`), enabling the SQL,
-  SSH, alternate-serialization, and Bagofholding features out of the box
+  SSH, alternate-serialization, and Bagofholding features out of the box, plus
+  `fleche-numpy` and `fleche-pandas`
 
 ```bash
 # Core library only

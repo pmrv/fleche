@@ -24,10 +24,11 @@ runnable examples live in `notebooks/`.
 ## In a hurry
 
 ```bash
-pip install -e ".[tests]"     # install with test deps
+pip install -e ".[tests]" -e src/fleche-numpy -e src/fleche-pandas   # install with test deps
 pytest tests/                 # run tests
 ty check src/                 # type check
 ```
 
 Python `>=3.11,<3.15`.
+This is a monorepo: `src/fleche-numpy/` and `src/fleche-pandas/` are sister distributions carrying the numpy and pandas digest hooks, released independently — see [agents/DEVELOPING.md](agents/DEVELOPING.md#module-map).
 Conventional Commits are required on every commit message (`feat:`/`fix:`/`docs:`/`test:`/`chore:`/`refactor:`) — see [agents/DEVELOPING.md](agents/DEVELOPING.md#commit-messages) for why and how.
