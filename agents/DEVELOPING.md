@@ -185,6 +185,8 @@ Values and calls are stored separately so call records are queryable without des
   `KeyManagement.expand` rejects prefixes under 4 chars;
   subclasses override only `_prefix_candidates`.
   `ValueMixin`/`CallMixin` bridge `save`/`load`/`query` onto `put`/`get`.
+  `SaveError` is the only exception a backend may let out of `put`: every backend wraps any serialisation (or copy) failure as `SaveError(value) from e`, deliberately broad because serializers re-raise whatever `__reduce__` raised.
+  Callers key on it — `Call._to_digested` degrades a refused argument to a digest-only reference (hashed into the key, not stored) and `Cache.save` turns a refused result into `Rejected` — so a raw exception escaping `put` fails `prepare` and runs every call touching that value uncached.
   `@register_storage(name, kind)` on a backend class fills the config dispatch table.
   There is deliberately no inherited `to_config`: each concrete class writes its own, and `storage_to_config` checks the exact class so a subclass can't round-trip as its parent.
 - `file.py` — `FileStorage` is **lock-free**: `put` writes a dot-prefixed temp sibling and renames it into place, so `_to_file` must write a complete file at whatever path it gets.
@@ -196,6 +198,7 @@ Values and calls are stored separately so call records are queryable without des
   `prefix_length=0` is one file per key and lock-free;
   `None` infers from existing files, and a mismatch with files in `root` raises at construction.
   `refix(n)` / `consolidate(root, n)` migrate layouts.
+  A refused multi-bag save drops the group `H5Bag.save` already created (`_drop_group`, shared with `_evict`), else `contains` would report a value that was never stored.
   Check #893 before touching `lock_timeout`.
 - `memory.py` — `put`/`get` deep-copy.
 - `sql.py` — `Sql` stores calls only and is not a `StorageBackend`: it saves in one transaction and evicts with one `DELETE`, child rows going by `ON DELETE CASCADE` (SQLite needs `foreign_keys=ON` per connection).
@@ -320,7 +323,8 @@ Git history is the changelog — no PR numbers, dates or release versions here.
 #916 `.query()` with `hash_version=False`/`hash_module=False` (fix on branch `fix/query-hash-flags-916`);
 #918 destructuring ignores digest hooks;
 #883 custom destructurers hide children from `gc`;
-#1047 concurrent workers computing the same call on the `sql` backend can raise `IntegrityError` out of the decorated function (a duplicate insert should count as a hit; also #790, #218).
+#1047 concurrent workers computing the same call on the `sql` backend can raise `IntegrityError` out of the decorated function (a duplicate insert should count as a hit; also #790, #218;
+fix in flight on branch `claude/sql-concurrency-fixes`).
 
 **Feature requests**: #829, #854, #855.
 
