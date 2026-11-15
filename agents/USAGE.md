@@ -22,6 +22,7 @@ def expensive(x, y):
 - The decorator digests the function's identity (qualified name, module, `version`, and optionally `func.__code__` plus its captured variables when `hash_code=True`) together with its arguments (SHA256, content-based — not `id()`/pickle-identity based) into a lookup key, and returns the stored result on a hit.
 - Helpers attached to the wrapped function: `.call`, `.digest`, `.load`, `.contains`, `.query`, `.rerun`, `.bind` (mirrored under `.fleche.*` too).
 - Returning `None` is never cached (a warning is logged) — fleche can't distinguish "cached `None`" from "no result yet".
+- A value the storage backend can't serialise doesn't break the call: an unserialisable argument is folded into the key as a digest-only reference (the call caches and hits, but that argument's value is not stored), and an unserialisable result is handed back to the caller uncached on every call.
 
 ## The active cache
 
