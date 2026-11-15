@@ -255,8 +255,14 @@ def atoms_digest(structure: Atoms) -> Digest:
     """Cell, pbc and arrays, plus ``constraints`` and ``info`` when either is non-empty.
 
     ``FixAtoms([0, 1])`` used to digest to nothing, so a constrained and an unconstrained
-    relaxation of one cell shared a key. ``structure.calc`` stays out on purpose: a
-    calculator is an argument in its own right, not a property of the structure.
+    relaxation of one cell shared a key.
+
+    ``structure.calc`` stays out, which is a decision rather than an oversight and not a
+    comfortable one: ``Vibrations(atoms)`` and the optimizers take the calculator off the
+    structure, so a cached function written that way has one key for two calculators. Folding
+    it in costs more than it buys today -- ``ase.io.read`` attaches a ``SinglePointCalculator``
+    to anything read from a trajectory, and an unidentifiable calculator would make the
+    *structure* refuse. See fleche-ase#4.
     """
     parts = [
         "Atoms" if type(structure) is Atoms else str(type(structure)),
@@ -265,7 +271,7 @@ def atoms_digest(structure: Atoms) -> Digest:
         digest(structure.arrays),
     ]
     # Conditional so an unconstrained Atoms keeps the key it had before this change and
-    # existing caches stay valid -- see fleche-ase#3 for whether that was worth it.
+    # existing caches stay valid.
     if len(structure.constraints):
         parts.append(("constraints",
                       tuple(_constraint_digest(c) for c in structure.constraints)))
