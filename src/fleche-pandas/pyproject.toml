@@ -23,7 +23,7 @@ license = "BSD-3-Clause"
 dependencies = [
     # running_hash in fleche._hashing; an older fleche still digests pandas
     # itself, identically, and this package's hooks simply take precedence.
-    'fleche >= 0.23.1',
+    'fleche >= 0.23.0',
     # timedelta64_length, and the hooks for the arrays object columns hold.
     'fleche-numpy >= 0.1.0',
     'pandas >= 2.2, <4',

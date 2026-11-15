@@ -137,14 +137,16 @@ Decorator kwargs on `@fleche(...)`:
 Three mechanisms, in precedence order (highest first):
 
 1. `fleche.digest.add_hook((MyType, digest_fn))` — manual registration, overrides everything else for that type.
-2. **Entry points** — installed packages register hooks in the `fleche` entry-point group under the name `digest`;
+2. A `__digest__` method on the class itself.
+3. **Entry points** — installed packages register hooks in the `fleche` entry-point group under the name `digest`;
    fleche loads them lazily the first time `digest()` hits a value it can't handle.
    numpy and pandas support ships this way too: [`fleche-numpy`](https://pypi.org/project/fleche-numpy/) (arrays, `np.bool_`, `np.timedelta64`) and [`fleche-pandas`](https://pypi.org/project/fleche-pandas/) (`DataFrame`, `Series`, `Index`, `pd.Timedelta`, `pd.NA`), or `pip install "fleche[numpy,pandas]"`.
    Without them those values raise `Indigestible` with a note naming the package to install;
    numpy number scalars need neither.
    Notably, [`fleche-ase`](https://pypi.org/project/fleche-ase/) ships hooks for ASE's `Atoms`,
    `VibrationsData`, and `Calculator` types — `pip install fleche-ase` and ASE objects digest correctly with no further setup, so don't hand-roll digests for ASE types.
-3. A `__digest__` method on the class itself.
+   Among entry-point hooks a subclass's hook beats its base's;
+   `__digest__` sits above them because they load lazily and would otherwise flip a subclass's digest mid-process.
 
 Full details: `docs/digests/entry_points.rst` (the entry-point mechanism, fleche-ase, authoring your own plugin) and `docs/dev/custom_digests.rst` (writing good digest functions).
 

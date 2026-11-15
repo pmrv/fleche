@@ -126,9 +126,11 @@ Values and calls are stored separately so call records are queryable without des
   for an unimportable module, `version` falls back to the function's own `__version__`, not `None`.
 - `digest.py` — `digest()` is the single public entry point;
   on `Indigestible` it loads entry points and retries once.
-  Precedence: hooks and entry points first (for third-party types, numpy and pandas included;
-  iterated in place, without allocating `get_hooks()`'s list, since the sister packages keep the hook lists non-empty), then a class-level `__digest__` (still before the built-in `match` arms so dict/list subclasses can override;
-  negatives cached in `_TYPES_WITHOUT_DIGEST`), then `_SISTER_PACKAGES`, then the `_digest_bytes` match.
+  Precedence: `add_hook` hooks, then a class-level `__digest__` (before the built-in `match` arms so dict/list subclasses can override;
+  negatives cached in `_TYPES_WITHOUT_DIGEST`), then entry-point hooks (third-party types, numpy and pandas included), then `_SISTER_PACKAGES`, then the `_digest_bytes` match.
+  Entry-point hooks sit below `__digest__` because they load lazily: above it, a subclass's digest would flip the first time some other value loaded them.
+  `load_entry_points` sorts them subclass-first (stable, by MRO length), so which plugin wins for a subclass does not depend on distribution discovery order.
+  Both hook lists are iterated in place, without allocating `get_hooks()`'s list, since the sister packages keep the entry-point list non-empty.
   `_SISTER_PACKAGES` refuses, as `Indigestible` with a note naming the package, the numpy and pandas types no hook took, matched by top-level module and class name along the MRO so fleche never imports numpy or pandas;
   the built-in arms would digest them wrongly (`np.timedelta64` is registered as `Integral`, a DataFrame iterates its column names, `pd.Timedelta` subclasses `datetime.timedelta`), and the `Indigestible` is what makes `digest()` load the entry points in the first place.
   A `datetime.timedelta` digests its exact length in microseconds, not the old `total_seconds()` float, which merged unequal values past about 285 years.

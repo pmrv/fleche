@@ -23,7 +23,7 @@ license = "BSD-3-Clause"
 dependencies = [
     # running_hash in fleche._hashing; an older fleche still digests numpy
     # itself, identically, and this package's hooks simply take precedence.
-    'fleche >= 0.23.1',
+    'fleche >= 0.23.0',
     'numpy >= 1.26',
 ]
 
