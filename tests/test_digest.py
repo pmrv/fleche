@@ -1,5 +1,6 @@
 import os
 import time
+import types
 
 import numpy as np
 import pytest
@@ -205,8 +206,8 @@ def test_rapid_same_size_rewrites_each_get_their_own_fingerprint(tmp_path):
 
     The memo key is (path, size, mtime_ns), and mtime granularity is coarse -- a millisecond
     on ext4, up to a second on some NFS mounts -- so a same-size rewrite inside one tick
-    leaves the key unchanged. Before `_memoise` learned git's racily-clean rule this returned
-    a STALE hash, which is the one thing a content fingerprint must never do. It showed up as
+    leaves the key unchanged. Before `file_fingerprint` learned git's racily-clean rule this
+    returned a STALE hash, which a content fingerprint must never do. It showed up as
     a flaky `test_fingerprint_follows_content`; twenty rewrites in a row make it reliable.
     """
     p = tmp_path / "model.npz"
@@ -284,41 +285,35 @@ def test_a_model_calculator_without_an_identity_is_refused(tmp_path):
     calc = _ModelCalculator(p)
 
     assert calc.todict() == {}
-    with pytest.raises(Indigestible, match="identify"):
+    with pytest.raises(Indigestible, match="register_calculator"):
         digest(calc)
-
-
-def test_identify_distinguishes_two_models(tmp_path):
-    a, b = tmp_path / "a.npz", tmp_path / "b.npz"
-    a.write_bytes(b"weights-a")
-    b.write_bytes(b"weights-b")
-
-    ca = fleche_ase.identify(_ModelCalculator(a), model="one", path=a)
-    cb = fleche_ase.identify(_ModelCalculator(b), model="two", path=b)
-    assert digest(ca) != digest(cb)
-    assert digest(fleche_ase.identify(_ModelCalculator(a), model="one", path=a)) == digest(ca)
-
-
-def test_identify_is_content_addressed(tmp_path):
-    p = tmp_path / "model.npz"
-    p.write_bytes(b"weights-v1")
-    before = digest(fleche_ase.identify(_ModelCalculator(p), model="m", path=p))
-    p.write_bytes(b"weights-v2")
-    assert digest(fleche_ase.identify(_ModelCalculator(p), model="m", path=p)) != before
 
 
 def test_registered_extractor_is_used(tmp_path):
     p = tmp_path / "model.npz"
     p.write_bytes(b"weights")
-    fleche_ase.register("_ModelCalculator",
-                        lambda c: {"sha256": fleche_ase.file_fingerprint(c.path)})
+    fleche_ase.register_calculator(
+        "_ModelCalculator", lambda c: {"sha256": fleche_ase.file_fingerprint(c.path)})
     try:
         # `before` must be captured: digest() is not memoised on the object, so recomputing it
         # after the rewrite would read the new bytes and compare them with themselves.
         before = digest(_ModelCalculator(p))
         assert digest(_ModelCalculator(p)) == before
         p.write_bytes(b"other")
-        assert digest(_ModelCalculator(p)) != before
+        assert digest(_ModelCalculator(p)) != before, \
+            "a model re-exported in place must not read back the old run"
+    finally:
+        fleche_ase._EXTRACTORS.pop("_ModelCalculator", None)
+
+
+def test_two_models_of_one_class_do_not_share_a_key(tmp_path):
+    a, b = tmp_path / "a.npz", tmp_path / "b.npz"
+    a.write_bytes(b"weights-a")
+    b.write_bytes(b"weights-b")
+    fleche_ase.register_calculator(
+        "_ModelCalculator", lambda c: {"sha256": fleche_ase.file_fingerprint(c.path)})
+    try:
+        assert digest(_ModelCalculator(a)) != digest(_ModelCalculator(b))
     finally:
         fleche_ase._EXTRACTORS.pop("_ModelCalculator", None)
 
@@ -326,7 +321,7 @@ def test_registered_extractor_is_used(tmp_path):
 def test_a_class_can_be_declared_parameter_free(tmp_path):
     p = tmp_path / "model.npz"
     p.write_bytes(b"weights")
-    fleche_ase.register("_ModelCalculator", None)
+    fleche_ase.register_calculator("_ModelCalculator", None)
     try:
         assert digest(_ModelCalculator(p)) == digest(_ModelCalculator(p))
     finally:
@@ -386,5 +381,104 @@ def test_pyace_with_a_parsed_basis_object_is_refused(tmp_path):
     calc = PyACECalculator(_Basis())
     with pytest.raises(Indigestible):
         digest(calc)
-    fleche_ase.identify(calc, potential="AuPt-1000f")
-    assert digest(calc) == digest(calc)
+
+
+# --- the built-in tensorpotential extractor, exercised without tensorflow ---------------
+
+
+class _FakeTensor:
+    """Enough of a `tf.Variable` for the extractor: `numpy()`, `dtype`, `shape`."""
+
+    def __init__(self, value):
+        self._value = np.asarray(value)
+        self.dtype = self._value.dtype
+        self.shape = self._value.shape
+
+    def numpy(self):
+        return self._value
+
+
+class _FakeTrackable:
+    def __init__(self, **children):
+        self._children = children
+
+    def _trackable_children(self):
+        return dict(self._children)
+
+
+class TPCalculator(Calculator):
+    """Stand-in for `tensorpotential.calculator.TPCalculator`.
+
+    The real one replaces the path it is handed with `TensorPotential.load_model(path)` and
+    keeps only the result, so `todict()` is `{}` and the path is gone. What it does keep is
+    the loaded model, whose tensors hang off TF's trackable graph -- which is what the
+    extractor reads.
+    """
+
+    implemented_properties = ["energy"]
+
+    def __init__(self, weights, symbols=("Al", "Ca"), float_dtype="float64"):
+        super().__init__()
+        self.models = [_FakeTrackable(
+            instructions=_FakeTrackable(
+                Z=_FakeTrackable(
+                    # object dtype on purpose: `tobytes()` on one hashes POINTERS
+                    element_map_symbols=_FakeTensor(np.array(symbols, dtype=object)),
+                ),
+                A1=_FakeTrackable(w=_FakeTensor(weights)),
+            ),
+        )]
+        self.cutoff = 6.0
+        self.fidelity = None
+        self.min_dist = None
+        self.extra_properties = None
+        self.geom_data_builder = types.SimpleNamespace(float_dtype=float_dtype)
+
+
+def test_tensorpotential_is_identified_by_its_weights():
+    a = TPCalculator([1.0, 2.0, 3.0])
+    b = TPCalculator([1.0, 2.0, 4.0])
+    assert a.todict() == {}, "the premise: nothing in todict() tells the two apart"
+    assert digest(a) != digest(b)
+
+
+def test_tensorpotential_digest_is_stable_across_loads():
+    """Two loads of one model are different objects holding equal tensors.
+
+    The trap is the element map: it is an object-dtype array, so `tobytes()` would hash the
+    addresses of its strings and the same model would land on a new key every load.
+    """
+    assert digest(TPCalculator([1.0, 2.0])) == digest(TPCalculator([1.0, 2.0]))
+
+
+def test_tensorpotential_separates_fp32_from_fp64():
+    assert digest(TPCalculator([1.0, 2.0], float_dtype="float32")) \
+        != digest(TPCalculator([1.0, 2.0], float_dtype="float64"))
+
+
+def test_tensorpotential_element_map_is_part_of_the_identity():
+    assert digest(TPCalculator([1.0], symbols=("Al", "Ca"))) \
+        != digest(TPCalculator([1.0], symbols=("Al", "Mg")))
+
+
+def test_a_model_whose_tensors_cannot_be_reached_is_refused():
+    """A TF that renames `_trackable_children` must not key on a quarter of a model."""
+    class _Opaque:
+        pass
+
+    calc = TPCalculator([1.0])
+    calc.models = [_Opaque()]
+    with pytest.raises(Indigestible):
+        digest(calc)
+
+
+def test_a_model_that_cannot_be_weakly_referenced_still_digests():
+    """The hash memo is a weak dict; a model it cannot hold must cost speed, not a TypeError."""
+    calc = TPCalculator([1.0])
+    inner = calc.models[0]
+    calc.models = [_FakeTrackable(instructions=inner)]      # weak-referenceable
+    first = digest(calc)
+    calc.models = [object()]                                # not weak-referenceable, no tensors
+    with pytest.raises(Indigestible):
+        digest(calc)
+    assert first == first

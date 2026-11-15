@@ -1,57 +1,20 @@
 """fleche digest hooks for ASE objects.
 
-Two of these hooks decide whether a cache can be trusted, so they are written to **refuse
-rather than guess**: an argument fleche cannot identify raises ``Indigestible``, which makes
-fleche run the call uncached with a warning. A slow run is a recoverable mistake; a cache hit
-for a different computation is not.
+Importing this package is all that is needed: :data:`digest_hooks` is published through
+fleche's ``fleche`` entry point, so ``Atoms``, ``Calculator``, ``VibrationsData`` and the
+``ase.thermochemistry`` classes become digestible arguments of any cached function.
 
-``calc.todict()`` is not an identity
-------------------------------------
-
-``todict()`` is a serialisation contract for calculators whose parameters *are* their
-definition. A calculator that holds a model file breaks it silently, because an empty dict is
-a valid answer and an empty dict is also what "no idea" looks like. Measured with ase 3.29.0::
-
-    EMT().todict()                       -> {}        # genuinely parameter-free: correct
-    LennardJones().todict()              -> {'rc': 3.0, 'ro': 1.98}
-    GRACERuntimeCalculator(npz).todict() -> {}        # a 75 MB model, digested as nothing
-
-Under the old hook every GRACE model therefore shared one cache key, and re-exporting a
-potential served the previous one's numbers back under the new name. :func:`calculator_digest`
-now resolves identity in four tiers:
-
-1. an identity attached with :func:`identify` -- the escape hatch for a calculator that does
-   not keep what it was built from. ``tensorpotential.TPCalculator`` is the motivating case:
-   it loads a SavedModel in ``__init__`` and stores the loaded objects, so afterwards the path
-   is simply not recoverable from the object;
-2. an extractor registered for the class with :func:`register`, content-addressing the model
-   file;
-3. a non-empty ``todict()`` -- the classic ASE contract, unchanged;
-4. an empty ``todict()`` on a class listed in :data:`PARAMETER_FREE`.
-
-Anything else is ``Indigestible``.
-
-Constraints are part of a structure
------------------------------------
-
-``cell``, ``pbc`` and ``arrays`` say nothing about ``atoms.constraints``, so an ``Atoms``
-carrying ``FixAtoms([0, 1])`` used to digest identically to the same cell with nothing fixed --
-and relaxing the two is not the same calculation. :func:`atoms_digest` folds in ``constraints``
-and ``info``, and only when they are non-empty, so an unconstrained ``Atoms`` keeps exactly the
-key it had before and existing caches stay valid.
-
-Why content and not path
-------------------------
-
-A path is not an identity: re-exporting a model in place leaves every key unchanged while
-every value is stale. :func:`file_fingerprint` hashes the bytes, memoised per process on
-``(realpath, size, mtime_ns)`` so a model used at a thousand call sites is read once.
+Each hook documents its own rules; :func:`calculator_digest` is the one with a policy
+worth reading before using it.
 """
 
 import hashlib
 import os
 import time
+import weakref
 from pathlib import Path
+
+import numpy
 
 from ase import Atoms
 from ase.calculators.calculator import Calculator
@@ -61,23 +24,22 @@ from fleche.digest import Indigestible, digest, Digest
 
 __all__ = ["atoms_digest", "calculator_digest", "vibrations_digest",
            "thermo_mode_digest", "thermochemistry_digest",
-           "file_fingerprint", "identify", "register",
-           "digest_hooks", "PARAMETER_FREE", "IDENTITY_ATTR"]
-
-#: Attribute :func:`identify` writes on a calculator instance. Deliberately a plain attribute
-#: rather than a ``__digest__`` method: it has to work on third-party instances nobody can
-#: subclass, and it has to be visible to a reader of the object in a debugger.
-IDENTITY_ATTR = "_fleche_identity"
+           "file_fingerprint", "register_calculator",
+           "digest_hooks", "PARAMETER_FREE"]
 
 #: Calculator class names whose empty ``todict()`` is the truth rather than a gap. Names, not
 #: classes, so that nothing here imports a calculator backend. Extend it through
-#: :func:`register` with ``extractor=None``.
+#: :func:`register_calculator` with ``extractor=None``.
 PARAMETER_FREE = {"EMT", "LennardJones", "MorsePotential", "EAM", "TIP3P", "TIP4P",
                   "SinglePointCalculator", "SinglePointDFTCalculator"}
 
 _EXTRACTORS = {}
 _FINGERPRINTS = {}
+_MODEL_SHA = weakref.WeakKeyDictionary()
 _BLOCK = 1 << 20
+#: How deep :func:`_saved_model_tensors` follows TF's restore graph. GRACE's deepest tensor
+#: sits at 3; the bound is there so a cyclic or pathological graph cannot hang a digest.
+_TRACKABLE_DEPTH = 8
 
 
 def _hash_file(path, m):
@@ -86,42 +48,21 @@ def _hash_file(path, m):
             m.update(chunk)
 
 
+#: An mtime younger than this is not trusted to have settled.
 _RACE_WINDOW_NS = 2_000_000_000
-"""How fresh an mtime has to be before it is treated as untrustworthy; see :func:`_memoise`."""
-
-
-def _memoise(key, mtime_ns: int, compute) -> str:
-    """``compute()``, remembered under *key* unless the file was touched a moment ago.
-
-    *key* carries the file's size and mtime, so a rewrite normally changes it. Filesystem
-    mtime granularity is coarse, though -- a millisecond on ext4, and as much as a second on
-    some NFS mounts -- so a SAME-SIZE rewrite inside one tick leaves the key unchanged and the
-    memo hands back the OLD hash. That is precisely the failure this module exists to prevent:
-    a model re-exported in place silently reading back the previous run's results.
-
-    The rule is git's, adopted for the same reason it keeps "racily clean" index entries: a
-    file whose mtime is within a tick of now cannot be told apart from one that is about to be
-    written again, so its hash is computed and not remembered. The window closes by itself as
-    the clock moves on, costing at most a rehash per call for a second or two after a write.
-    """
-    hit = _FINGERPRINTS.get(key)
-    if hit is not None:
-        return hit
-    value = compute()
-    if time.time_ns() - mtime_ns > _RACE_WINDOW_NS:
-        _FINGERPRINTS[key] = value
-    return value
 
 
 def file_fingerprint(path, max_files: int = 20000) -> str:
     """SHA-256 of a file's bytes, or of a directory's (relative path, bytes) listing.
 
-    Memoised on ``(realpath, size, mtime_ns)``; for a directory on the file count, the summed
-    size and the newest mtime, which costs one ``stat`` per file rather than a reread. That
-    matters for a model that is reopened at every call site.
+    Memoised on ``(realpath, size, mtime_ns)`` -- for a directory, on the file count, the
+    summed size and the newest mtime, so a reused model costs one ``stat`` per file rather
+    than a reread. A hash whose mtime is younger than `_RACE_WINDOW_NS` is returned but not
+    remembered: mtime granularity runs to a second on some NFS mounts, so a same-size rewrite
+    inside one tick would leave the memo key unchanged and hand back the previous model's
+    hash. Git skips its "racily clean" index entries for the same reason.
 
-    Raises ``FileNotFoundError`` for a missing path and ``ValueError`` above *max_files*,
-    because silently fingerprinting half a tree is the failure this exists to prevent.
+    Raises ``FileNotFoundError`` for a missing path and ``ValueError`` above *max_files*.
     """
     p = Path(path).resolve()
     if not p.exists():
@@ -129,39 +70,44 @@ def file_fingerprint(path, max_files: int = 20000) -> str:
 
     if p.is_file():
         st = p.stat()
+        key, newest = (str(p), st.st_size, st.st_mtime_ns), st.st_mtime_ns
 
-        def one():
+        def compute():
             m = hashlib.sha256()
             _hash_file(p, m)
             return m.hexdigest()
+    else:
+        files = sorted(f for f in p.rglob("*") if f.is_file())
+        if len(files) > max_files:
+            raise ValueError(f"cannot fingerprint {p}: {len(files)} files exceeds "
+                             f"max_files={max_files}")
+        stats = [f.stat() for f in files]
+        newest = max((s.st_mtime_ns for s in stats), default=0)
+        key = (str(p), len(files), sum(s.st_size for s in stats), newest)
 
-        return _memoise((str(p), st.st_size, st.st_mtime_ns), st.st_mtime_ns, one)
+        def compute():
+            m = hashlib.sha256()
+            for f in files:
+                m.update(str(f.relative_to(p)).encode())
+                m.update(b"\0")
+                _hash_file(f, m)
+            return m.hexdigest()
 
-    files = sorted(f for f in p.rglob("*") if f.is_file())
-    if len(files) > max_files:
-        raise ValueError(f"cannot fingerprint {p}: {len(files)} files exceeds "
-                         f"max_files={max_files}")
-    stats = [f.stat() for f in files]
-    newest = max((s.st_mtime_ns for s in stats), default=0)
-
-    def tree():
-        m = hashlib.sha256()
-        for f in files:
-            m.update(str(f.relative_to(p)).encode())
-            m.update(b"\0")
-            _hash_file(f, m)
-        return m.hexdigest()
-
-    return _memoise((str(p), len(files), sum(s.st_size for s in stats), newest),
-                    newest, tree)
+    hit = _FINGERPRINTS.get(key)
+    if hit is not None:
+        return hit
+    value = compute()
+    if time.time_ns() - newest > _RACE_WINDOW_NS:
+        _FINGERPRINTS[key] = value
+    return value
 
 
-def register(class_name: str, extractor=None) -> None:
+def register_calculator(class_name: str, extractor=None) -> None:
     """Teach :func:`calculator_digest` about a calculator class, by NAME.
 
-    *extractor* takes the calculator and returns anything fleche can digest -- for a
-    model-backed calculator, its model's :func:`file_fingerprint`. ``extractor=None`` instead
-    declares the class parameter-free, i.e. that an empty ``todict()`` is its real identity.
+    *extractor* takes the calculator and returns anything fleche can digest. ``extractor=None``
+    instead declares the class parameter-free, i.e. that an empty ``todict()`` is its real
+    identity.
 
     Matching walks the MRO by class name, so a subclass is covered by its parent's
     registration and nothing here has to import a backend.
@@ -170,21 +116,6 @@ def register(class_name: str, extractor=None) -> None:
         PARAMETER_FREE.add(class_name)
     else:
         _EXTRACTORS[class_name] = extractor
-
-
-def identify(calc, **identity):
-    """Attach an explicit identity to a calculator instance; returns the calculator.
-
-    A ``path=`` key is content-addressed for you::
-
-        identify(TPCalculator(model=p), model="ft_1L_w", path=p)
-    """
-    ident = dict(identity)
-    if "path" in ident:
-        ident["path_sha256"] = file_fingerprint(ident["path"])
-        ident["path"] = str(Path(ident["path"]).resolve())
-    setattr(calc, IDENTITY_ATTR, ident)
-    return calc
 
 
 def _grace_runtime(calc):
@@ -218,19 +149,98 @@ def _pyace(calc):
         calc, "its basis_set is a parsed basis object, not a file this process can hash")
 
 
+def _saved_model_tensors(model):
+    """Every tensor hanging off a loaded SavedModel, as ``(dotted name, tensor)``, sorted.
+
+    ``_trackable_children()`` is TF's own restore graph -- the structure that put the values
+    back when the model was loaded -- so walking it reaches the weights, the element map and
+    the ZBL table alike. It is private, hence the defensive ``except``: a TF that renames it
+    yields nothing here, the extractor raises, and fleche refuses rather than keys on a
+    quarter of a model.
+    """
+    found, seen = [], set()
+
+    def walk(obj, path):
+        if id(obj) in seen or len(path) > _TRACKABLE_DEPTH:
+            return
+        seen.add(id(obj))
+        try:
+            children = obj._trackable_children()
+        except Exception:                                              # noqa: BLE001
+            return
+        for name, child in children.items():
+            here = path + (str(name),)
+            if hasattr(child, "numpy") and hasattr(child, "dtype"):
+                found.append((".".join(here), child))
+            walk(child, here)
+
+    walk(model, ())
+    return sorted(found, key=lambda kv: kv[0])
+
+
+def _tensor_sha256(model) -> str:
+    h = hashlib.sha256()
+    tensors = _saved_model_tensors(model)
+    if not tensors:
+        raise Indigestible(model)
+    for name, tensor in tensors:
+        arr = numpy.asarray(tensor.numpy())
+        h.update(name.encode())
+        h.update(str(arr.dtype).encode())
+        h.update(str(arr.shape).encode())
+        # An object array -- the element map is one -- holds POINTERS, so `tobytes` would
+        # hash addresses and the same model would digest differently on every load.
+        h.update(repr(arr.tolist()).encode() if arr.dtype == object else arr.tobytes())
+    return h.hexdigest()
+
+
+def _model_sha256(model) -> str:
+    """:func:`_tensor_sha256`, memoised weakly so a dropped model does not keep its hash."""
+    try:
+        hit = _MODEL_SHA.get(model)
+    except TypeError:           # not weak-referenceable: correctness first, pay the rehash
+        return _tensor_sha256(model)
+    if hit is None:
+        hit = _MODEL_SHA[model] = _tensor_sha256(model)
+    return hit
+
+
+def _tensorpotential(calc):
+    """`TPCalculator` replaces the path it was given with the loaded model, so hash the model.
+
+    ``__init__`` does ``model = TensorPotential.load_model(model)`` and keeps only the result:
+    the path is not on the calculator, not on the loaded object, and ``todict()`` is ``{}``.
+    The tensors are on it, though, and they are a better identity than the path ever was --
+    an fp32 re-export of the same training run lands on its own key without anyone saying so.
+
+    Hashing is memoised per loaded model (~0.5 s for a 9 M-parameter GRACE model), weakly so
+    that a model dropped by the caller does not keep its hash alive.
+    """
+    sha = [_model_sha256(model) for model in calc.models]
+    builder = getattr(calc, "geom_data_builder", None)
+    return {
+        "models": sha,
+        # a numpy scalar, so float() keeps the key off numpy's repr
+        "cutoff": None if calc.cutoff is None else float(calc.cutoff),
+        "fidelity": getattr(calc, "fidelity", None),
+        "min_dist": getattr(calc, "min_dist", None),
+        "extra_properties": getattr(calc, "extra_properties", None),
+        # fp32 and fp64 inference off one model are different numbers.
+        "float_dtype": str(getattr(builder, "float_dtype", None)),
+    }
+
+
 # Known model-backed calculators, keyed by class NAME so that importing this module pulls in
-# no machine-learning stack. Anything else goes through register() at the call site.
-register("GRACERuntimeCalculator", _grace_runtime)
-register("PyACECalculator", _pyace)
+# no machine-learning stack. Anything else goes through register_calculator() at the call site.
+register_calculator("GRACERuntimeCalculator", _grace_runtime)
+register_calculator("PyACECalculator", _pyace)
+register_calculator("TPCalculator", _tensorpotential)
 
 
 def _indigestible(value, why: str) -> Indigestible:
     return Indigestible(
-        f"{type(value).__name__}: {why}. Attach one with "
-        f"fleche_ase.identify(calc, model=..., path=...), or teach this process about the "
-        f"class with fleche_ase.register({type(value).__name__!r}, extractor). Refusing to "
-        f"digest it, because an unidentified calculator would share cache entries with every "
-        f"other calculator of its class."
+        f"{type(value).__name__}: {why}; "
+        f"register_calculator({type(value).__name__!r}, extractor) to say what identifies it."
     )
 
 
@@ -238,23 +248,24 @@ def _constraint_digest(con) -> Digest:
     try:
         return digest(con.todict())
     except AttributeError:
-        raise Indigestible(
-            f"{type(con).__name__} has no todict(); an Atoms carrying it cannot be digested, "
-            f"because ignoring a constraint would make a constrained and an unconstrained "
-            f"relaxation share a cache entry."
-        ) from None
+        raise Indigestible(type(con)) from None
 
 
 def atoms_digest(structure: Atoms) -> Digest:
+    """Cell, pbc and arrays, plus ``constraints`` and ``info`` when either is non-empty.
+
+    ``FixAtoms([0, 1])`` used to digest to nothing, so a constrained and an unconstrained
+    relaxation of one cell shared a key. ``structure.calc`` stays out on purpose: a
+    calculator is an argument in its own right, not a property of the structure.
+    """
     parts = [
         "Atoms" if type(structure) is Atoms else str(type(structure)),
         digest(structure.cell),
         digest(structure.pbc),
         digest(structure.arrays),
     ]
-    # Extend only when there is something to say, so an unconstrained Atoms keeps the key it
-    # had before this change and an existing cache stays valid. `structure.calc` stays out on
-    # purpose: a calculator is an argument in its own right, not a property of the structure.
+    # Conditional so an unconstrained Atoms keeps the key it had before this change and
+    # existing caches stay valid -- see fleche-ase#3 for whether that was worth it.
     if len(structure.constraints):
         parts.append(("constraints",
                       tuple(_constraint_digest(c) for c in structure.constraints)))
@@ -273,11 +284,19 @@ def vibrations_digest(vibrations: VibrationsData) -> Digest:
 
 
 def calculator_digest(calc: Calculator) -> Digest:
-    """Identity of a calculator, refusing to guess. See the module docstring for the tiers."""
-    ident = getattr(calc, IDENTITY_ATTR, None)
-    if ident is not None:
-        return digest((type(calc).__name__, "identity", ident))
+    """Identity of a calculator, refusing to guess rather than share a key.
 
+    ``todict()`` is a serialisation contract for calculators whose parameters *are* their
+    definition, and a model-backed calculator breaks it silently: an empty dict is both a
+    valid answer and what "no idea" looks like. ``GRACERuntimeCalculator.todict()`` returns
+    ``{}`` for a 75 MB model, so under a hook that trusted it every model shared one key.
+
+    Identity is therefore resolved in three tiers -- an extractor registered for the class
+    with :func:`register_calculator`, a non-empty ``todict()``, then an empty one on a class
+    listed in :data:`PARAMETER_FREE` -- and anything else raises ``Indigestible``, which makes
+    fleche run the call uncached with a warning. A slow run is recoverable; a cache hit for a
+    different model is not.
+    """
     for cls in type(calc).__mro__:
         if cls.__name__ in _EXTRACTORS:
             return digest((cls.__name__, "extractor", _EXTRACTORS[cls.__name__](calc)))
