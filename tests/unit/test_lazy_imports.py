@@ -41,7 +41,7 @@ def _cache_with_one_call() -> Cache:
 def test_table_without_pandas_raises_import_error():
     c = _cache_with_one_call()
     with patch.dict(sys.modules, {"pandas": None}):
-        with pytest.raises(ImportError, match=r"table\(\) requires 'pandas'"):
+        with pytest.raises(ImportError, match=r"table\(\) requires 'pandas'.*pip install pandas"):
             with pytest.warns(ImportWarning):
                 c.table()
 

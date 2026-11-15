@@ -202,7 +202,7 @@ Results and side effects
     Metadata fields are flattened into columns automatically.  Index
     entries are shortened to their shortest unambiguous digest prefix
     unless ``shrink_keys=False``.  Needs pandas, which ``fleche`` imports
-    only here (``pip install "fleche[pandas]"``).
+    only here.
 
 ``.evict() -> None``
     Remove all matching calls from the cache.
