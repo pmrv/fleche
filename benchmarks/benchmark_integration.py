@@ -201,12 +201,13 @@ def main():
                     Sql(f"sqlite:///{tmp_dir}/db_h5.sqlite"),
                 ),
             ),
-            # SizeLimitedCache: max_size smaller than iterations → evictions occur
-            (
-                "SizeLimitedCache(Memory,max=10)",
-                SizeLimitedCache(ValueMemory({}), CallMemory({}), max_size=10),
-            ),
-            # SizeLimitedCache: max_size larger than iterations → no evictions
+            # SizeLimitedCache. ``max_size`` must stay above the total number
+            # of calls this config accumulates — the instance is shared by all
+            # three functions below, so it ends up holding
+            # 3 * iterations == 60 call records. Anything smaller triggers
+            # evictions, and because SizeLimitedMixin._pick_eviction_target
+            # evicts uniformly at random there is no way to tell which keys
+            # survive; the hit phases would then silently re-measure misses.
             (
                 "SizeLimitedCache(Memory,max=100)",
                 SizeLimitedCache(ValueMemory({}), CallMemory({}), max_size=100),
