@@ -8,7 +8,7 @@ import importlib.metadata
 from collections.abc import Iterable, Mapping
 from typing import Any, TypeVar, Callable, Type, Generic
 
-from . import _attrs, _numbers, _numpy, _pandas
+from . import _attrs, _numbers
 from ._hashing import new_hash as _new_hash
 
 logger = logging.getLogger("fleche.digest")
@@ -74,6 +74,36 @@ _EP_HOOKS = []
 # ``hasattr`` MRO walk entirely.  No semantic change for class-defined
 # ``__digest__`` (instance-level dunders are not supported anyway).
 _TYPES_WITHOUT_DIGEST: set[type] = set()
+
+# Third-party types whose digest ships in a sister package, keyed by (top-level
+# module, class name) so fleche recognises them without importing numpy or
+# pandas.  Unless that package's hook takes them first, the built-in arms would
+# digest them silently and wrongly — an ndarray or a DataFrame is Iterable (a
+# DataFrame iterates its column names only), numpy registers np.timedelta64 as
+# numbers.Integral, pd.Timedelta subclasses datetime.timedelta — so they are
+# refused instead.  The Indigestible makes digest() load entry points and retry,
+# which is how the sister package's hooks get loaded in the first place.
+# numpy number scalars are not listed: fleche._numbers digests them itself.
+_SISTER_PACKAGES = {
+    ("numpy", "ndarray"): "fleche-numpy",
+    ("numpy", "bool"): "fleche-numpy",  # np.bool_ on numpy 2
+    ("numpy", "bool_"): "fleche-numpy",  # np.bool_ on numpy 1
+    ("numpy", "timedelta64"): "fleche-numpy",
+    ("pandas", "DataFrame"): "fleche-pandas",
+    ("pandas", "Series"): "fleche-pandas",
+    ("pandas", "Index"): "fleche-pandas",
+    ("pandas", "Timedelta"): "fleche-pandas",
+    ("pandas", "NAType"): "fleche-pandas",
+}
+
+
+def _sister_package(t: type) -> str | None:
+    """The sister package that digests type *t*, or None if fleche does itself."""
+    for c in t.__mro__:
+        key = (c.__module__.partition(".")[0], c.__qualname__)
+        if key in _SISTER_PACKAGES:
+            return _SISTER_PACKAGES[key]
+    return None
 
 
 def get_hooks():
@@ -284,11 +314,15 @@ def _digest_bytes(value: Any) -> bytes:
     ``__digest__``) to ``bytes.fromhex(...)``.  That must be coordinated with
     a ``hash_version`` bump and a ``Cache.redigest`` migration.
     """
-    # Fast-path: in the common case both hook lists are empty, so skip the
-    # ``get_hooks()`` call which would otherwise allocate a fresh combined list
-    # on every recursive ``_digest_bytes`` invocation (hot for large iterables).
+    # The same order as ``get_hooks()``, without allocating its combined list on
+    # every recursive ``_digest_bytes`` call: hot for large iterables, and the
+    # hook lists are rarely empty, since fleche-numpy and fleche-pandas register
+    # theirs as entry points.
     if _HOOKS or _EP_HOOKS:
-        for h in get_hooks():
+        for h in reversed(_HOOKS):
+            if isinstance(value, h.type):
+                return h.digest(value).encode()
+        for h in _EP_HOOKS:
             if isinstance(value, h.type):
                 return h.digest(value).encode()
 
@@ -301,6 +335,17 @@ def _digest_bytes(value: Any) -> bytes:
         if hasattr(t, "__digest__"):
             # For raw-bytes speedup (Issue #440): bytes.fromhex(value.__digest__())
             return value.__digest__().encode()
+        package = _sister_package(t)
+        if package is not None:
+            # No hook took it, so its sister package is missing (or its entry
+            # point is not loaded yet, which digest() retries for).  Not cached:
+            # the hook may yet arrive.
+            error = Indigestible(value)
+            error.add_note(
+                f"{t.__module__}.{t.__qualname__} is digested by the {package} "
+                f"package; install it (pip install {package}) to cache this value."
+            )
+            raise error
         _TYPES_WITHOUT_DIGEST.add(t)
 
     m = _new_hash(t.__name__.encode())
@@ -319,13 +364,6 @@ def _digest_bytes(value: Any) -> bytes:
             m.update(value.encode())
         case None:
             m.update(b"__None__")
-        case _ if _numpy.is_timedelta64(value):
-            # Must precede Number: numpy registers timedelta64 as Integral,
-            # and a duration must not digest as its bare count.
-            digested = _numpy.digest_timedelta64(value, _digest_bytes)
-            if digested is None:
-                raise Indigestible(value)
-            return digested
         case Number():
             # Must follow int (int ⊂ Number), so int and its subclasses can be treated separately
             digested = _numbers.digest_number(value, _digest_bytes)
@@ -334,16 +372,6 @@ def _digest_bytes(value: Any) -> bytes:
             return digested
         case bytes():
             m.update(value)
-        case _ if _numpy.is_numpy(value):
-            return _numpy.digest_numpy(value, _digest_bytes)
-        case _ if _pandas.is_pandas(value):
-            # Must precede Iterable: a DataFrame iterates over its column names
-            # only, so the Iterable arm would collide any two frames sharing them.
-            try:
-                return _pandas.digest_pandas(value, _digest_bytes)
-            except KeyError as err:
-                # A pd.Timedelta in a unit without a known length.
-                raise Indigestible(value) from err
         case types.MethodType():
             # A bound method is its function plus the receiver it is bound to.
             # Leaving __self__ out would collide obj1.method with obj2.method —
@@ -383,7 +411,7 @@ def _digest_bytes(value: Any) -> bytes:
             m.update(_digest_bytes(value.utcoffset(None)))
         case datetime.timedelta():
             # Its exact length in microseconds.  pd.Timedelta, a subclass, is
-            # taken by the pandas arm above and digests apart.
+            # taken by fleche-pandas' hook first and digests apart.
             micro = (value.days * 86400 + value.seconds) * 1_000_000 + value.microseconds
             m.update(_digest_bytes(micro))
         case datetime.datetime():  # datetime subclasses date; must precede date case

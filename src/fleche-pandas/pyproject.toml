@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=64.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["fleche_pandas"]
+
+[project]
+name = "fleche-pandas"
+# Bumped by release-please (release-type "python"); see release-please-config.json.
+version = "0.1.0"
+description = "pandas digest hooks for fleche"
+authors = [
+    { name="Marvin Poul", email="pmrv@posteo.de" },
+]
+readme = "README.md"
+requires-python = ">=3.11,<3.15"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+license = "BSD-3-Clause"
+dependencies = [
+    # running_hash in fleche._hashing; an older fleche still digests pandas
+    # itself, identically, and this package's hooks simply take precedence.
+    'fleche >= 0.23.1',
+    # timedelta64_length, and the hooks for the arrays object columns hold.
+    'fleche-numpy >= 0.1.0',
+    'pandas >= 2.2, <4',
+]
+
+[project.urls]
+Homepage = "https://github.com/pmrv/fleche"
+Documentation = "https://fleche.readthedocs.io/"
+
+[project.entry-points.'fleche']
+digest = 'fleche_pandas:digest_hooks'
