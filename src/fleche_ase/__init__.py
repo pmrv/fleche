@@ -207,7 +207,7 @@ def _tensor_digest(model) -> Digest:
     """
     tensors = _saved_model_tensors(model)
     if not tensors:
-        raise Indigestible(model)
+        raise Indigestible(model, "no tensors are reachable through _trackable_children()")
     # One at a time: `tensor.numpy()` copies, and a GRACE model is ~150 MB of float64.
     return digest(tuple((name, digest(numpy.asarray(t.numpy()))) for name, t in tensors))
 
@@ -282,10 +282,12 @@ register_calculator("EAM", _eam)
 
 
 def _indigestible(value, why: str) -> Indigestible:
+    # `args[0]` is the value that did not hash, as fleche raises it everywhere; the message
+    # follows as diagnostics.
     return Indigestible(
-        f"{type(value).__name__}: {why}; "
-        f"register_calculator({type(value).__name__!r}, extractor) to say what identifies it."
-    )
+        value,
+        f"{why}; register_calculator({type(value).__name__!r}, extractor) "
+        f"to say what identifies it.")
 
 
 def _constraint_digest(con) -> Digest:
@@ -327,12 +329,13 @@ def atoms_digest(structure: Atoms) -> Digest:
         try:
             parts.append(("calc", digest(structure.calc)))
         except Indigestible as exc:
-            # Re-raised rather than passed through: the refusal is about the calculator, but
-            # it surfaces on the structure, and the value in `exc.args` can be something far
-            # inside it -- a scipy spline, say -- that says nothing about where it came from.
-            raise Indigestible(*exc.args,
-                               "attached to an Atoms, which cannot be digested without it"
-                               ) from exc
+            # The value that is not hashing, as far as the caller is concerned, is the
+            # STRUCTURE: that is what it handed over, so that is `args[0]`, as everywhere
+            # else. What came back can be something far inside the calculator -- a scipy
+            # spline, say -- which is diagnostics, and follows.
+            raise Indigestible(structure,
+                               "its attached calculator cannot be digested",
+                               *exc.args) from exc
     return digest(tuple(parts))
 
 

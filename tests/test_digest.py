@@ -250,8 +250,9 @@ def test_an_unidentifiable_calculator_makes_the_structure_refuse(water, tmp_path
     p.write_bytes(b"weights")
     held = water.copy()
     held.calc = _ModelCalculator(p)
-    with pytest.raises(Indigestible, match="attached to an Atoms"):
+    with pytest.raises(Indigestible, match="attached calculator") as caught:
         digest(held)
+    assert caught.value.args[0] is held, "the value that did not hash is the structure"
 
 
 def test_a_refusal_from_inside_the_calculator_still_says_where_it_surfaced(water):
@@ -272,8 +273,10 @@ def test_a_refusal_from_inside_the_calculator_still_says_where_it_surfaced(water
                         cutoff=6.0)
     with pytest.raises(Indigestible) as caught:
         digest(held)
-    assert "attached to an Atoms" in str(caught.value)
-    assert len(caught.value.args) > 1, "the original value is kept alongside the message"
+    assert caught.value.args[0] is held, "args[0] is what the caller asked us to digest"
+    assert "attached calculator" in str(caught.value)
+    assert any(isinstance(a, RealEAM) for a in caught.value.args[1:]), \
+        "what actually refused is kept, as diagnostics"
 
 
 # --------------------------------------------------------------------------- file identity
@@ -373,8 +376,9 @@ def test_a_model_calculator_without_an_identity_is_refused(tmp_path):
     calc = _ModelCalculator(p)
 
     assert calc.todict() == {}
-    with pytest.raises(Indigestible, match="register_calculator"):
+    with pytest.raises(Indigestible, match="register_calculator") as caught:
         digest(calc)
+    assert caught.value.args[0] is calc, "the value that did not hash comes first"
 
 
 def test_registered_extractor_is_used(tmp_path):
