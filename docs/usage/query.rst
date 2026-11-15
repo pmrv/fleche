@@ -201,7 +201,8 @@ Results and side effects
     them as columns; set ``results=True`` to add a ``result`` column.
     Metadata fields are flattened into columns automatically.  Index
     entries are shortened to their shortest unambiguous digest prefix
-    unless ``shrink_keys=False``.
+    unless ``shrink_keys=False``.  Needs pandas, which ``fleche`` imports
+    only here (``pip install "fleche[pandas]"``).
 
 ``.evict() -> None``
     Remove all matching calls from the cache.

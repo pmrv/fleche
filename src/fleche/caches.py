@@ -5,8 +5,6 @@ import random
 from dataclasses import dataclass, replace, field
 from typing import TYPE_CHECKING, Iterable, Any, Callable, Literal, overload
 
-import pandas as pd
-
 from . import digest as _digest
 from .digest import Digest  # type hint convenience
 from . import storage
@@ -16,6 +14,9 @@ from .storage.thread_safe import PerKeyLockMixin, _PicklableRLock
 from .call import Call, LazyCall, PreparedCall, QueryCall
 from . import call
 from . import query
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 logger = logging.getLogger("fleche.cache")
 
@@ -239,7 +240,7 @@ class BaseCache(OperationContext):
         arguments: Iterable[str] | str | Literal[True] = (),
         results=False,
         shrink_keys: bool = True,
-    ) -> pd.DataFrame:
+    ) -> "pd.DataFrame":
         """Return a pandas DataFrame summarizing cached calls via query().
 
         This implementation uses a fully-wildcard Call template to retrieve
@@ -270,6 +271,9 @@ class BaseCache(OperationContext):
 
         Returns:
             :class:`pandas.DataFrame`: table of all calls on cache
+
+        Raises:
+            ImportError: if pandas is not installed.
         """
         tpl = call.QueryCall(
             name=None,

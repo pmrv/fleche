@@ -5,14 +5,29 @@ import logging
 from dataclasses import dataclass, field
 from typing import Iterable, Iterator, Any, Literal, Callable, TYPE_CHECKING
 
-import pandas as pd
+from pyiron_snippets.import_alarm import ImportAlarm
 
 from . import call
 
 if TYPE_CHECKING:
+    import pandas as pd
+
     from .caches import BaseCache
 
 logger = logging.getLogger("fleche.query")
+
+
+def _import_pandas():
+    """pandas, imported on first use: only :meth:`QueryIterator.table` needs it,
+    and importing it costs more than the rest of fleche put together."""
+    with ImportAlarm(
+        "table() requires 'pandas' to be installed. "
+        "Install it with `pip install fleche[pandas]`.",
+        raise_exception=True,
+    ) as pandas_alarm:
+        import pandas
+    pandas_alarm.warn_if_failed()
+    return pandas
 
 
 def _resolve_key(key: "str | Callable[[call.LazyCall], Any]") -> "Callable[[call.LazyCall], Any]":
@@ -227,7 +242,7 @@ class QueryIterator(Iterable[call.LazyCall]):
         arguments: Iterable[str] | str | Literal[True] = (),
         results=False,
         shrink_keys: bool = True,
-    ) -> pd.DataFrame:
+    ) -> "pd.DataFrame":
         """Return a pandas DataFrame summarizing queried calls.
 
         Arguments and results are elided.
@@ -260,7 +275,11 @@ class QueryIterator(Iterable[call.LazyCall]):
 
         Returns:
             :class:`pandas.DataFrame`: table of all calls on cache
+
+        Raises:
+            ImportError: if pandas is not installed.
         """
+        pd = _import_pandas()
 
         if arguments is True:
             pass
