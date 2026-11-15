@@ -125,3 +125,63 @@ def test_pandas_timedelta_still_digests_apart_from_datetime_timedelta():
 def test_add_hook_overrides_a_sister_package(clean_hooks):
     add_hook(Hook(np.ndarray, lambda a: digest(("mine", a.tolist()))))
     assert digest(np.arange(3)) == digest(("mine", [0, 1, 2]))
+
+
+class _OwnDigestArray(np.ndarray):
+    def __digest__(self):
+        return digest(("own", self.tolist()))
+
+
+class _OwnDigestFrame(pd.DataFrame):
+    def __digest__(self):
+        return digest(("own", self.to_dict()))
+
+
+@pytest.mark.parametrize(
+    "make",
+    [lambda: np.arange(3).view(_OwnDigestArray), lambda: _OwnDigestFrame({"a": [1, 2]})],
+    ids=["ndarray", "DataFrame"],
+)
+def test_own_digest_wins_over_sister_hooks_whenever_they_load(make):
+    """``__digest__`` beat the built-in numpy/pandas arms; it must beat their
+    hooks too, and before and after the hooks load alike."""
+    value = make()
+    saved = list(_EP_HOOKS)
+    _EP_HOOKS.clear()
+    try:
+        before = digest(value)  # entry points not loaded
+    finally:
+        _EP_HOOKS[:] = saved
+    load_entry_points()
+    assert digest(value) == before == value.__digest__()
+
+
+def test_missing_sister_package_names_it_when_caching_is_skipped(without_sister_packages, caplog):
+    from fleche import cache, fleche
+    from fleche.caches import Cache
+    from fleche.storage import CallMemory, ValueMemory
+
+    @fleche()
+    def total(a):
+        return int(a.sum())
+
+    with cache(Cache(ValueMemory({}), CallMemory({}))), caplog.at_level("WARNING"):
+        assert total(np.arange(3)) == 3
+    assert "pip install fleche-numpy" in caplog.text
+
+
+def test_entry_point_hooks_for_a_subclass_beat_their_base_whatever_the_order(clean_hooks):
+    from unittest.mock import MagicMock
+
+    class Sub(np.ndarray):
+        pass
+
+    plugin = MagicMock()
+    plugin.load.return_value = [(Sub, lambda a: digest(("sub", a.tolist())))]
+    numpy_ep = MagicMock()
+    numpy_ep.load.return_value = fleche_numpy.digest_hooks
+    value = np.arange(2).view(Sub)
+    for order in ([numpy_ep, plugin], [plugin, numpy_ep]):
+        with patch("importlib.metadata.entry_points", return_value=order):
+            load_entry_points()
+        assert digest(value) == digest(("sub", [0, 1]))

@@ -205,7 +205,9 @@ def make_wrapper(func, policy, meta, isolate, get_call):
             call = get_call(*args, **kwargs)
             key = call.to_lookup_key()
         except digest.Indigestible as e:
-            logger.warning("No hash for argument: %s", e.args[0])
+            # The notes say what to install, when a sister package is missing.
+            notes = "".join(f"; {n}" for n in getattr(e, "__notes__", ()))
+            logger.warning("No hash for argument: %s%s", e.args[0], notes)
             return func(*args, **kwargs)
 
         missing = policy.check_required(args, kwargs)
