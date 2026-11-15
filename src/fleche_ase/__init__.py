@@ -30,12 +30,11 @@ __all__ = ["atoms_digest", "calculator_digest", "vibrations_digest",
 #: Calculator class names whose empty ``todict()`` is the truth rather than a gap. Names, not
 #: classes, so that nothing here imports a calculator backend. Extend it through
 #: :func:`register_calculator` with ``extractor=None``.
-PARAMETER_FREE = {"EMT", "LennardJones", "MorsePotential", "EAM", "TIP3P", "TIP4P",
-                  "SinglePointCalculator", "SinglePointDFTCalculator"}
+PARAMETER_FREE = {"EMT", "LennardJones", "MorsePotential", "TIP3P", "TIP4P"}
 
 _EXTRACTORS = {}
 _FINGERPRINTS = {}
-_MODEL_SHA = weakref.WeakKeyDictionary()
+_MODEL_DIGEST = weakref.WeakKeyDictionary()
 _BLOCK = 1 << 20
 #: How deep :func:`_saved_model_tensors` follows TF's restore graph. GRACE's deepest tensor
 #: sits at 3; the bound is there so a cyclic or pathological graph cannot hang a digest.
@@ -128,25 +127,45 @@ def _grace_runtime(calc):
             "dispersion": repr(getattr(calc, "dispersion", None))}
 
 
-def _pyace(calc):
-    """pyace parses the basis at construction, but ase keeps the constructor argument.
+def _file_backed(calc, key: str, label: str = "potential"):
+    """``todict()``, with *key* replaced by the CONTENTS of the file it names.
 
-    `PyACECalculator.__init__` forwards `basis_set` into `Calculator.__init__`, which files it
-    in `calc.parameters` and so into `todict()`. It is there either as the path it was handed
-    or as a basis object the caller built itself; the path is content-addressed, and the
-    object is refused, because it identifies nothing that survives the process. The rest of
-    `todict()` rides along -- `recursive`, `fast_nl` and the gamma bounds change the numbers.
+    The pattern both pyace and EAM follow: the constructor parses a potential file into
+    something in memory, and ase keeps the constructor ARGUMENT in ``calc.parameters``, so
+    ``todict()`` still carries it. A path is not an identity -- refitting a potential in
+    place leaves the key unchanged and every value stale -- so the file is hashed. The same
+    argument also accepts an object the caller built itself, which identifies nothing that
+    survives the process, and that is refused. The rest of ``todict()`` rides along: for
+    pyace, ``recursive``, ``fast_nl`` and the gamma bounds all change the numbers.
     """
     try:
         params = dict(calc.todict())
     except Exception as e:                                             # noqa: BLE001
         raise _indigestible(calc, f"todict() raised {type(e).__name__}: {e}") from None
-    basis = params.pop("basis_set", None)
-    if isinstance(basis, (str, os.PathLike)) and Path(basis).exists():
-        return {"potential": str(Path(basis).resolve()),
-                "sha256": file_fingerprint(basis), **params}
+    value = params.pop(key, None)
+    if isinstance(value, (str, os.PathLike)) and Path(value).exists():
+        return {label: str(Path(value).resolve()),
+                "sha256": file_fingerprint(value), **params}
     raise _indigestible(
-        calc, "its basis_set is a parsed basis object, not a file this process can hash")
+        calc, f"its {key} is an in-memory object, not a file this process can hash")
+
+
+def _pyace(calc):
+    return _file_backed(calc, "basis_set")
+
+
+def _eam(calc):
+    """``EAM`` was in :data:`PARAMETER_FREE`, which was wrong.
+
+    ``EAM(potential='Cu.eam.alloy')`` keeps that path in ``parameters``, so ``todict()`` is
+    not empty and it never reached the parameter-free tier in practice. Built the other way
+    it does not have a path at all: ase's own test constructs one as
+    ``EAM(elements=['Al'], embedded_energy=np.array([spline(...)]), ...)``, i.e. object arrays
+    of ``scipy`` splines. Those identify nothing that survives the process -- the same
+    position as pyace's parsed basis -- so it refuses. Declaring the class parameter-free
+    instead said the empty dict was its identity, when the empty dict is the gap.
+    """
+    return _file_backed(calc, "potential")
 
 
 def _saved_model_tensors(model):
@@ -178,30 +197,29 @@ def _saved_model_tensors(model):
     return sorted(found, key=lambda kv: kv[0])
 
 
-def _tensor_sha256(model) -> str:
-    h = hashlib.sha256()
+def _tensor_digest(model) -> Digest:
+    """Digest of every tensor under *model*, one array at a time.
+
+    `fleche.digest` does the arrays, including the dtype, the shape and -- since 0.22.2 --
+    an object-dtype array by value rather than by the addresses `tobytes()` would return.
+    The element map is such an array, so before that fix the same model digested differently
+    on every load; it is why this package requires that version.
+    """
     tensors = _saved_model_tensors(model)
     if not tensors:
         raise Indigestible(model)
-    for name, tensor in tensors:
-        arr = numpy.asarray(tensor.numpy())
-        h.update(name.encode())
-        h.update(str(arr.dtype).encode())
-        h.update(str(arr.shape).encode())
-        # An object array -- the element map is one -- holds POINTERS, so `tobytes` would
-        # hash addresses and the same model would digest differently on every load.
-        h.update(repr(arr.tolist()).encode() if arr.dtype == object else arr.tobytes())
-    return h.hexdigest()
+    # One at a time: `tensor.numpy()` copies, and a GRACE model is ~150 MB of float64.
+    return digest(tuple((name, digest(numpy.asarray(t.numpy()))) for name, t in tensors))
 
 
-def _model_sha256(model) -> str:
-    """:func:`_tensor_sha256`, memoised weakly so a dropped model does not keep its hash."""
+def _model_digest(model) -> Digest:
+    """:func:`_tensor_digest`, memoised weakly so a dropped model does not keep its digest."""
     try:
-        hit = _MODEL_SHA.get(model)
+        hit = _MODEL_DIGEST.get(model)
     except TypeError:           # not weak-referenceable: correctness first, pay the rehash
-        return _tensor_sha256(model)
+        return _tensor_digest(model)
     if hit is None:
-        hit = _MODEL_SHA[model] = _tensor_sha256(model)
+        hit = _MODEL_DIGEST[model] = _tensor_digest(model)
     return hit
 
 
@@ -213,13 +231,13 @@ def _tensorpotential(calc):
     The tensors are on it, though, and they are a better identity than the path ever was --
     an fp32 re-export of the same training run lands on its own key without anyone saying so.
 
-    Hashing is memoised per loaded model (~0.5 s for a 9 M-parameter GRACE model), weakly so
-    that a model dropped by the caller does not keep its hash alive.
+    Digesting is memoised per loaded model (~0.5 s for a 9 M-parameter GRACE model), weakly
+    so that a model dropped by the caller does not keep its digest alive.
     """
-    sha = [_model_sha256(model) for model in calc.models]
+    models = [_model_digest(model) for model in calc.models]
     builder = getattr(calc, "geom_data_builder", None)
     return {
-        "models": sha,
+        "models": models,
         # a numpy scalar, so float() keeps the key off numpy's repr
         "cutoff": None if calc.cutoff is None else float(calc.cutoff),
         "fidelity": getattr(calc, "fidelity", None),
@@ -230,11 +248,37 @@ def _tensorpotential(calc):
     }
 
 
+def _single_point(calc):
+    """A ``SinglePointCalculator`` IS its stored results; it cannot compute anything else.
+
+    That is what separates it from a real calculator, whose cached ``results`` need not be
+    digested because it would recompute the same numbers. This one would raise instead, so
+    two of them holding different energies behave differently and must not share a key.
+
+    ``get_property`` also calls ``check_state``, refusing when the atoms it is asked about
+    have moved away from the configuration it was built from -- so that configuration is part
+    of the identity too. ``__init__`` stores ``atoms.copy()``, which carries no calculator of
+    its own, so this nests exactly one level and cannot recurse.
+    """
+    identity = {"results": calc.results, "atoms": atoms_digest(calc.atoms)}
+    # SinglePointDFTCalculator reaches this through the MRO, and its extras are observable
+    # through get_fermi_level() and friends.
+    for attr in ("eFermi", "bz_kpts", "ibz_kpts", "bz2ibz"):
+        if hasattr(calc, attr):
+            identity[attr] = getattr(calc, attr)
+    kpts = getattr(calc, "kpts", None)
+    if kpts is not None:
+        identity["kpts"] = [(k.weight, k.s, k.k, k.eps_n, k.f_n) for k in kpts]
+    return identity
+
+
 # Known model-backed calculators, keyed by class NAME so that importing this module pulls in
 # no machine-learning stack. Anything else goes through register_calculator() at the call site.
 register_calculator("GRACERuntimeCalculator", _grace_runtime)
 register_calculator("PyACECalculator", _pyace)
 register_calculator("TPCalculator", _tensorpotential)
+register_calculator("SinglePointCalculator", _single_point)
+register_calculator("EAM", _eam)
 
 
 def _indigestible(value, why: str) -> Indigestible:
@@ -248,21 +292,23 @@ def _constraint_digest(con) -> Digest:
     try:
         return digest(con.todict())
     except AttributeError:
-        raise Indigestible(type(con)) from None
+        raise Indigestible(con) from None
 
 
 def atoms_digest(structure: Atoms) -> Digest:
     """Cell, pbc and arrays, plus ``constraints`` and ``info`` when either is non-empty.
 
     ``FixAtoms([0, 1])`` used to digest to nothing, so a constrained and an unconstrained
-    relaxation of one cell shared a key.
+    relaxation of one cell shared a key. ``structure.calc`` is in for the same reason:
+    ``Vibrations(atoms)`` and the optimizers take the calculator off the structure rather
+    than as an argument, so without it one key covered two calculators.
 
-    ``structure.calc`` stays out, which is a decision rather than an oversight and not a
-    comfortable one: ``Vibrations(atoms)`` and the optimizers take the calculator off the
-    structure, so a cached function written that way has one key for two calculators. Folding
-    it in costs more than it buys today -- ``ase.io.read`` attaches a ``SinglePointCalculator``
-    to anything read from a trajectory, and an unidentifiable calculator would make the
-    *structure* refuse. See fleche-ase#4.
+    THE TEST IS OBSERVABLE BEHAVIOUR IN ASE, not physical sameness. Two cells that are
+    identical but for an attached calculator answer ``get_potential_energy()`` differently,
+    so they are two objects and get two keys -- including the common case of a structure read
+    back from a trajectory, which ``ase.io.read`` hands a ``SinglePointCalculator``. The
+    consequence of the same rule is that an ``Atoms`` whose calculator cannot be identified
+    now refuses: its behaviour genuinely is unknown. See fleche-ase#4.
     """
     parts = [
         "Atoms" if type(structure) is Atoms else str(type(structure)),
@@ -277,6 +323,8 @@ def atoms_digest(structure: Atoms) -> Digest:
                       tuple(_constraint_digest(c) for c in structure.constraints)))
     if structure.info:
         parts.append(("info", digest(structure.info)))
+    if structure.calc is not None:
+        parts.append(("calc", digest(structure.calc)))
     return digest(tuple(parts))
 
 

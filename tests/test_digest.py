@@ -188,6 +188,72 @@ def test_unconstrained_atoms_keep_the_previous_key(water):
     assert fleche_ase.atoms_digest(water) == previous
 
 
+# ------------------------------------------------------------------ the attached calculator
+
+def test_an_attached_calculator_changes_the_key(water):
+    """`Vibrations(atoms)` and the optimizers read `atoms.calc` instead of taking it, so a
+    cached function written that way had one key for two calculators."""
+    from ase.calculators.emt import EMT
+
+    with_calc = water.copy()
+    with_calc.calc = EMT()
+    assert digest(with_calc) != digest(water)
+    assert digest(with_calc) == digest(with_calc)
+
+
+def test_two_stored_results_do_not_share_a_key(water):
+    """The measure is observable behaviour in ASE, not physical sameness.
+
+    `ase.io.read` hands anything read back from a trajectory a `SinglePointCalculator`
+    (`extxyz.py`, `trajectory.py`), and that calculator cannot recompute -- it answers
+    `get_potential_energy()` with what it stored, or raises. Two cells identical but for
+    the energy stapled to them therefore behave differently and are two objects.
+    """
+    from ase.calculators.singlepoint import SinglePointCalculator
+
+    a, b = water.copy(), water.copy()
+    a.calc = SinglePointCalculator(a, energy=-1.0)
+    b.calc = SinglePointCalculator(b, energy=-2.0)
+    assert digest(a) != digest(b)
+    assert a.get_potential_energy() != b.get_potential_energy(), "the premise"
+
+
+def test_a_stored_result_from_another_configuration_is_a_different_calculator(water):
+    """`get_property` calls `check_state` and refuses once the atoms have moved, so the
+    configuration a SinglePointCalculator was built from is part of what it does."""
+    from ase.calculators.singlepoint import SinglePointCalculator
+
+    moved = water.copy()
+    moved.positions[0] += 0.5
+
+    a, b = water.copy(), water.copy()
+    a.calc = SinglePointCalculator(water, energy=-1.0)
+    b.calc = SinglePointCalculator(moved, energy=-1.0)
+    assert digest(a) != digest(b)
+
+
+def test_a_calculator_digest_does_not_recurse(water):
+    """A SinglePointCalculator holds `atoms.copy()`, which carries no calculator, so folding
+    the calculator into the structure nests exactly one level."""
+    from ase.calculators.singlepoint import SinglePointCalculator
+
+    held = water.copy()
+    held.calc = SinglePointCalculator(held, energy=-1.0)
+    assert held.calc.atoms.calc is None, "the premise"
+    assert digest(held) == digest(held)
+
+
+def test_an_unidentifiable_calculator_makes_the_structure_refuse(water, tmp_path):
+    """The same rule, taken seriously: a structure whose calculator is unknown behaves in a
+    way nothing here can predict, so it refuses rather than sharing a key."""
+    p = tmp_path / "model.npz"
+    p.write_bytes(b"weights")
+    held = water.copy()
+    held.calc = _ModelCalculator(p)
+    with pytest.raises(Indigestible):
+        digest(held)
+
+
 # --------------------------------------------------------------------------- file identity
 
 def test_fingerprint_follows_content(tmp_path):
@@ -369,6 +435,63 @@ def test_pyace_parameters_that_change_the_numbers_change_the_key(tmp_path):
     assert digest(PyACECalculator(str(p))) != digest(PyACECalculator(str(p), recursive=True))
 
 
+def test_a_real_eam_built_from_splines_is_refused():
+    """EAM was in PARAMETER_FREE; this is the construction that made that wrong.
+
+    The REAL `ase.calculators.eam.EAM`, built the way ase's own test builds it: the slots
+    hold object arrays of `scipy` splines, not numbers. A spline identifies nothing that
+    survives the process -- the same position as pyace's parsed basis -- so this refuses.
+    Declaring the class parameter-free said instead that its empty `todict()` was its
+    identity, which put every array-built EAM on one key.
+    """
+    from ase.calculators.eam import EAM as RealEAM
+    from scipy.interpolate import InterpolatedUnivariateSpline as spline
+
+    xs = np.linspace(0.0, 1.0, 5)
+    calc = RealEAM(elements=["Al"],
+                   embedded_energy=np.array([spline(xs, xs ** 2)]),
+                   electron_density=np.array([spline(xs, xs)]),
+                   phi=np.array([[spline(xs, -xs)]]),
+                   cutoff=6.0)
+    assert "potential" not in calc.todict(), "the premise: no file names this one"
+    with pytest.raises(Indigestible):
+        digest(calc)
+
+
+class EAM(Calculator):
+    """Stand-in for a file-backed `ase.calculators.eam.EAM`.
+
+    The real one parses the file in `__init__`, so testing the content-addressing branch
+    against it would mean writing a valid LAMMPS `.alloy` -- a second parser in the test for
+    no extra coverage. What matters is the shape ase gives us: the constructor argument stays
+    in `calc.parameters` and so comes back out of `todict()`.
+    """
+
+    implemented_properties = ["energy"]
+
+    def __init__(self, **kw):
+        super().__init__()
+        self._params = dict(kw)
+
+    def todict(self):
+        return dict(self._params)
+
+
+def test_eam_is_identified_by_the_contents_of_its_potential_file(tmp_path):
+    p = tmp_path / "Cu.eam.alloy"
+    p.write_bytes(b"embedding: [1, 2, 3]\n")
+    before = digest(EAM(potential=str(p)))
+    assert digest(EAM(potential=str(p))) == before
+    p.write_bytes(b"embedding: [1, 2, 4]\n")
+    assert digest(EAM(potential=str(p))) != before, \
+        "a refitted table in place must not read back the old run"
+
+
+def test_an_eam_with_no_potential_file_is_refused():
+    with pytest.raises(Indigestible):
+        digest(EAM())
+
+
 def test_pyace_with_a_parsed_basis_object_is_refused(tmp_path):
     """A caller who built a `BBasisConfiguration` itself has to say what it is.
 
@@ -445,8 +568,9 @@ def test_tensorpotential_is_identified_by_its_weights():
 def test_tensorpotential_digest_is_stable_across_loads():
     """Two loads of one model are different objects holding equal tensors.
 
-    The trap is the element map: it is an object-dtype array, so `tobytes()` would hash the
-    addresses of its strings and the same model would land on a new key every load.
+    The trap is the element map: it is an object-dtype array, whose `tobytes()` is the
+    addresses of its strings. `fleche.digest` handles that since 0.22.2 (hence the pin);
+    this is the regression test that we are actually going through it.
     """
     assert digest(TPCalculator([1.0, 2.0])) == digest(TPCalculator([1.0, 2.0]))
 
