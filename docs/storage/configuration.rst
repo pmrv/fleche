@@ -322,7 +322,8 @@ Key descriptions
     — history vanishes when the process exits. It only applies to a bare
     ``calls.type = "sql"`` block; the ``sql`` :ref:`template <cache-templates>`
     below defaults ``url`` to the persistent ``sqlite:///root/calls.db``
-    instead.
+    instead.  For a PostgreSQL or MariaDB server shared by many workers, see
+    :ref:`sql-server`.
 
 ``echo``
     (bool, default ``false``) — *sql only.*  Log all SQL statements to
