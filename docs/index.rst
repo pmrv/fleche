@@ -56,6 +56,7 @@ Welcome to the **Fleche** library documentation.
    storage/destructuring
    storage/cache_stack
    storage/security
+   storage/sql_server
 
 .. toctree::
    :maxdepth: 2

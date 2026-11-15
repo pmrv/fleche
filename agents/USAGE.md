@@ -110,6 +110,11 @@ Full worked examples for every shape (stack, pool, read-only, size-limited, SSH-
 
 `values` and `calls` are stored separately on purpose: call records (arguments, metadata) are queryable without deserializing the (potentially heavy) result values.
 
+For many processes or nodes writing one cache, point `calls.url` at a PostgreSQL or MariaDB server instead of SQLite — fleche does not run the server, you do.
+Name the driver in the URL (`postgresql+psycopg2://`, `mysql+pymysql://`;
+a bare `postgresql://` means psycopg 3 since SQLAlchemy 2.1) and keep the password out of `fleche.toml` with the client's own credential file: `postgresql+psycopg2:///?service=NAME` with `~/.pg_service.conf` + `~/.pgpass`, or `mysql+pymysql:///DB?read_default_file=~/.my.cnf`.
+`docs/storage/sql_server.rst` has setup recipes without root, multi-node notes and known limitations.
+
 ## Controlling the cache key
 
 Decorator kwargs on `@fleche(...)`:
