@@ -250,8 +250,30 @@ def test_an_unidentifiable_calculator_makes_the_structure_refuse(water, tmp_path
     p.write_bytes(b"weights")
     held = water.copy()
     held.calc = _ModelCalculator(p)
-    with pytest.raises(Indigestible):
+    with pytest.raises(Indigestible, match="attached to an Atoms"):
         digest(held)
+
+
+def test_a_refusal_from_inside_the_calculator_still_says_where_it_surfaced(water):
+    """The value a nested refusal carries can be far inside the calculator.
+
+    An array-built EAM refuses on a `scipy` spline, which on its own gives a reader nothing
+    to act on and no hint that the structure was refused because of what is bolted to it.
+    """
+    from ase.calculators.eam import EAM as RealEAM
+    from scipy.interpolate import InterpolatedUnivariateSpline as spline
+
+    xs = np.linspace(0.0, 1.0, 5)
+    held = water.copy()
+    held.calc = RealEAM(elements=["Al"],
+                        embedded_energy=np.array([spline(xs, xs ** 2)]),
+                        electron_density=np.array([spline(xs, xs)]),
+                        phi=np.array([[spline(xs, -xs)]]),
+                        cutoff=6.0)
+    with pytest.raises(Indigestible) as caught:
+        digest(held)
+    assert "attached to an Atoms" in str(caught.value)
+    assert len(caught.value.args) > 1, "the original value is kept alongside the message"
 
 
 # --------------------------------------------------------------------------- file identity

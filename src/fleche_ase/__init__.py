@@ -324,7 +324,15 @@ def atoms_digest(structure: Atoms) -> Digest:
     if structure.info:
         parts.append(("info", digest(structure.info)))
     if structure.calc is not None:
-        parts.append(("calc", digest(structure.calc)))
+        try:
+            parts.append(("calc", digest(structure.calc)))
+        except Indigestible as exc:
+            # Re-raised rather than passed through: the refusal is about the calculator, but
+            # it surfaces on the structure, and the value in `exc.args` can be something far
+            # inside it -- a scipy spline, say -- that says nothing about where it came from.
+            raise Indigestible(*exc.args,
+                               "attached to an Atoms, which cannot be digested without it"
+                               ) from exc
     return digest(tuple(parts))
 
 
