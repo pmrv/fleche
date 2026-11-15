@@ -1,5 +1,6 @@
 import bisect
 import contextlib
+import importlib
 import logging
 
 from abc import ABC, abstractmethod
@@ -17,6 +18,17 @@ _STORAGE_CONSTRUCTORS: "dict[tuple[str, StorageKind], Callable[..., Any]]" = {}
 
 _STORAGE_CLASSES: "set[type]" = set()
 """Every class passed to :func:`register_storage`, exactly (not subclasses)."""
+
+_LAZY_STORAGE_MODULES: "dict[tuple[str, StorageKind], str]" = {
+    # SQLAlchemy takes longer to import than all of fleche; only pay for it
+    # when a config actually asks for SQL storage.
+    ("sql", "call"): "fleche.storage.sql",
+}
+"""Backends registered by a module ``fleche.storage`` does not import up front.
+
+:func:`get_storage_constructor` imports the module, which registers the
+backend, the first time its ``(name, kind)`` is looked up.
+"""
 
 
 def register_storage(
@@ -71,7 +83,10 @@ def register_storage(
 
 def get_storage_constructor(name: str, kind: StorageKind) -> "Callable[..., Any] | None":
     """Look up the registered constructor for ``(name, kind)``, or ``None`` if unregistered."""
-    return _STORAGE_CONSTRUCTORS.get((name, kind))
+    key = (name, kind)
+    if key not in _STORAGE_CONSTRUCTORS and key in _LAZY_STORAGE_MODULES:
+        importlib.import_module(_LAZY_STORAGE_MODULES[key])
+    return _STORAGE_CONSTRUCTORS.get(key)
 
 
 def is_registered_storage(cls: type) -> bool:

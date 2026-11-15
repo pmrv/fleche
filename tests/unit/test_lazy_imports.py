@@ -11,10 +11,10 @@ from fleche.caches import Cache
 from fleche.storage import CallMemory, ValueMemory
 
 
-def _modules_after_import_fleche() -> set[str]:
+def _modules_after(code: str) -> set[str]:
     # A fresh interpreter: this one has long since imported everything.
     out = subprocess.run(
-        [sys.executable, "-c", "import sys, fleche; print('\\n'.join(sys.modules))"],
+        [sys.executable, "-c", f"import sys; {code}; print('\\n'.join(sys.modules))"],
         capture_output=True,
         text=True,
         check=True,
@@ -22,8 +22,30 @@ def _modules_after_import_fleche() -> set[str]:
     return set(out.split())
 
 
-def test_import_fleche_does_not_import_pandas():
-    assert "pandas" not in _modules_after_import_fleche()
+@pytest.mark.parametrize("module", ["pandas", "sqlalchemy", "fleche.storage.sql"])
+def test_import_fleche_does_not_import(module):
+    assert module not in _modules_after("import fleche")
+
+
+def test_sql_storage_from_config_imports_sql_on_demand():
+    pytest.importorskip("sqlalchemy")
+    code = (
+        "from fleche.config import storage_from_config; "
+        "s = storage_from_config({'type': 'sql', 'url': 'sqlite:///:memory:'}, 'call'); "
+        "assert type(s).__name__ == 'Sql'"
+    )
+    assert "sqlalchemy" in _modules_after(code)
+
+
+def test_sql_is_importable_from_storage():
+    import fleche.storage
+    from fleche.storage import Sql
+    from fleche.storage.sql import Sql as SqlItself
+
+    assert Sql is SqlItself
+    assert "Sql" in dir(fleche.storage)
+    with pytest.raises(AttributeError):
+        fleche.storage.NoSuchBackend
 
 
 def _cache_with_one_call() -> Cache:
