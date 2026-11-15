@@ -19,15 +19,18 @@ _STORAGE_CONSTRUCTORS: "dict[tuple[str, StorageKind], Callable[..., Any]]" = {}
 _STORAGE_CLASSES: "set[type]" = set()
 """Every class passed to :func:`register_storage`, exactly (not subclasses)."""
 
-_LAZY_STORAGE_MODULES: "dict[tuple[str, StorageKind], str]" = {
-    # SQLAlchemy takes longer to import than all of fleche; only pay for it
-    # when a config actually asks for SQL storage.
-    ("sql", "call"): "fleche.storage.sql",
+_LAZY_STORAGE: "dict[tuple[str, StorageKind], tuple[str, str]]" = {
+    # SQLAlchemy is slow to import; only pay for it when a config actually
+    # asks for SQL storage.
+    ("sql", "call"): ("fleche.storage.sql", "Sql"),
 }
-"""Backends registered by a module ``fleche.storage`` does not import up front.
+"""Backends defined in a module ``fleche.storage`` does not import up front,
+as ``(module, class name)``.
 
-:func:`get_storage_constructor` imports the module, which registers the
-backend, the first time its ``(name, kind)`` is looked up.
+:func:`get_storage_constructor` imports the class and registers it whenever its
+``(name, kind)`` is looked up and nothing is registered there.  The module
+registers the class itself on import too, but with ``replace=False``, so a
+backend registered under the same name beforehand is not overwritten.
 """
 
 
@@ -36,6 +39,7 @@ def register_storage(
     kind: StorageKind,
     *,
     factory: "Callable[..., Any] | None" = None,
+    replace: bool = True,
 ) -> "Callable[[Any], Any]":
     """Register a storage backend constructor for config (de)serialisation.
 
@@ -73,9 +77,15 @@ def register_storage(
     *cls* is intentionally untyped (``Any``): most registrants are
     ``StorageBackend`` subclasses, but ``Sql`` implements ``CallStorage``
     directly and registers here too.
+
+    With ``replace=False`` a constructor already registered for
+    ``(name, kind)`` is kept; *cls* still becomes serialisable.  Built-in
+    backends that are imported lazily register this way, so importing them
+    late never overrides a user's own backend of the same name.
     """
     def decorator(cls: Any) -> Any:
-        _STORAGE_CONSTRUCTORS[(name, kind)] = factory if factory is not None else cls
+        if replace or (name, kind) not in _STORAGE_CONSTRUCTORS:
+            _STORAGE_CONSTRUCTORS[(name, kind)] = factory if factory is not None else cls
         _STORAGE_CLASSES.add(cls)
         return cls
     return decorator
@@ -84,8 +94,9 @@ def register_storage(
 def get_storage_constructor(name: str, kind: StorageKind) -> "Callable[..., Any] | None":
     """Look up the registered constructor for ``(name, kind)``, or ``None`` if unregistered."""
     key = (name, kind)
-    if key not in _STORAGE_CONSTRUCTORS and key in _LAZY_STORAGE_MODULES:
-        importlib.import_module(_LAZY_STORAGE_MODULES[key])
+    if key not in _STORAGE_CONSTRUCTORS and key in _LAZY_STORAGE:
+        module, attr = _LAZY_STORAGE[key]
+        register_storage(name, kind, replace=False)(getattr(importlib.import_module(module), attr))
     return _STORAGE_CONSTRUCTORS.get(key)
 
 

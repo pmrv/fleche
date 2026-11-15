@@ -69,7 +69,7 @@ following **lowercase** identifiers:
     Optional (value backend): ``remaining_depth`` (int, default ``1``).
 
 ``"sql"``
-    SQL database via SQLAlchemy (:class:`~fleche.storage.Sql`).
+    SQL database via SQLAlchemy (:class:`~fleche.storage.sql.Sql`).
     *Call storage only.*  Optional: ``url`` (SQLAlchemy connection URL,
     e.g. ``"sqlite:///~/.fleche/calls.db"``; defaults to the non-persistent
     ``"sqlite:///:memory:"`` if omitted), ``echo`` (bool, default

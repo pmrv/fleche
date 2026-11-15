@@ -71,3 +71,35 @@ def test_table_without_pandas_raises_import_error():
 def test_table_with_pandas():
     pd = pytest.importorskip("pandas")
     assert isinstance(_cache_with_one_call().table(), pd.DataFrame)
+
+
+def test_sql_registration_survives_a_restored_registry():
+    """Registry snapshots (as the config tests take) may drop the lazily
+    registered entry after fleche.storage.sql was imported; a lookup must
+    register it again rather than report an unknown type."""
+    pytest.importorskip("sqlalchemy")
+    from fleche.storage import base
+    from fleche.storage.sql import Sql
+
+    snapshot = {k: v for k, v in base._STORAGE_CONSTRUCTORS.items() if k != ("sql", "call")}
+    with patch.dict(base._STORAGE_CONSTRUCTORS, snapshot, clear=True):
+        assert base.get_storage_constructor("sql", "call") is Sql
+        del base._STORAGE_CONSTRUCTORS[("sql", "call")]
+        assert base.get_storage_constructor("sql", "call") is Sql
+
+
+def test_lazy_sql_import_keeps_a_user_registered_sql_backend():
+    pytest.importorskip("sqlalchemy")
+    code = "\n".join([
+        "from fleche.storage import register_storage, get_storage_constructor",
+        "class MySql: pass",
+        "register_storage('sql', kind='call')(MySql)",
+        "from fleche.storage import Sql",  # imports fleche.storage.sql late
+        "assert get_storage_constructor('sql', 'call') is MySql",
+    ])
+    assert "sqlalchemy" in _modules_after(code)
+
+
+def test_sql_module_is_an_attribute_of_fleche_storage():
+    code = "import fleche; fleche.storage.sql.Sql"
+    assert "fleche.storage.sql" in _modules_after(code)
