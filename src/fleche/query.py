@@ -282,7 +282,7 @@ class QueryIterator(Iterable[call.LazyCall]):
             ImportError: if pandas is not installed.
         """
         _require_pandas()
-        import pandas  # imported by _require_pandas; this binds it, typed
+        import pandas
 
         if arguments is True:
             pass

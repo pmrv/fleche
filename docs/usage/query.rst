@@ -196,13 +196,13 @@ Results and side effects
     load per call).
 
 ``.table(arguments=(), results=False, shrink_keys=True) -> DataFrame``
+    Only available with pandas installed.
     Return a :class:`~pandas.DataFrame` summarising the matched calls.
     Pass argument names (or ``True`` for all) via *arguments* to include
     them as columns; set ``results=True`` to add a ``result`` column.
     Metadata fields are flattened into columns automatically.  Index
     entries are shortened to their shortest unambiguous digest prefix
-    unless ``shrink_keys=False``.  Needs pandas, which ``fleche`` imports
-    only here.
+    unless ``shrink_keys=False``.
 
 ``.evict() -> None``
     Remove all matching calls from the cache.
