@@ -5,14 +5,31 @@ import logging
 from dataclasses import dataclass, field
 from typing import Iterable, Iterator, Any, Literal, Callable, TYPE_CHECKING
 
-import pandas as pd
+from pyiron_snippets.import_alarm import ImportAlarm
 
 from . import call
 
 if TYPE_CHECKING:
+    import pandas as pd
+
     from .caches import BaseCache
 
 logger = logging.getLogger("fleche.query")
+
+
+def _require_pandas() -> None:
+    """Import pandas, or raise ImportError saying how to install it.
+
+    Only :meth:`QueryIterator.table` needs pandas, so it is imported on first
+    use rather than by ``import fleche``, a third of whose time it took.
+    """
+    with ImportAlarm(
+        "table() requires 'pandas' to be installed. "
+        "Install it with `pip install pandas` or `conda install pandas`.",
+        raise_exception=True,
+    ) as pandas_alarm:
+        import pandas  # noqa: F401
+    pandas_alarm.warn_if_failed()
 
 
 def _resolve_key(key: "str | Callable[[call.LazyCall], Any]") -> "Callable[[call.LazyCall], Any]":
@@ -227,7 +244,7 @@ class QueryIterator(Iterable[call.LazyCall]):
         arguments: Iterable[str] | str | Literal[True] = (),
         results=False,
         shrink_keys: bool = True,
-    ) -> pd.DataFrame:
+    ) -> "pd.DataFrame":
         """Return a pandas DataFrame summarizing queried calls.
 
         Arguments and results are elided.
@@ -260,7 +277,12 @@ class QueryIterator(Iterable[call.LazyCall]):
 
         Returns:
             :class:`pandas.DataFrame`: table of all calls on cache
+
+        Raises:
+            ImportError: if pandas is not installed.
         """
+        _require_pandas()
+        import pandas
 
         if arguments is True:
             pass
@@ -303,11 +325,11 @@ class QueryIterator(Iterable[call.LazyCall]):
                     row[f"a_{a}"] = c.arguments.get(a, None)
             rows[str(key)] = row
 
-        df = pd.DataFrame.from_dict(rows, orient="index")
+        df = pandas.DataFrame.from_dict(rows, orient="index")
         local_tz = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
         for col in ("timestart", "timestop"):
             if col in df.columns:
-                df[col] = pd.to_datetime(df[col], unit="s", utc=True).dt.tz_convert(local_tz)
+                df[col] = pandas.to_datetime(df[col], unit="s", utc=True).dt.tz_convert(local_tz)
         return df
 
     def results(self) -> Iterator[Any]:

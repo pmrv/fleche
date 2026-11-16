@@ -32,6 +32,8 @@ Optional dep extras: `cloudpickle`,
 `attrs` itself has no dedicated extra — it is only required to exercise the `attrs`-class digest/destructuring paths in tests;
 runtime support degrades gracefully when `attrs` is missing.
 Other optional deps are gated via `pyiron_snippets.import_alarm.ImportAlarm` — importing a backend without its extra installed raises at construction, not at module import.
+pandas is imported lazily, inside `query._require_pandas()` (still through `ImportAlarm`), because `table()` is its only user and it took a third of `import fleche`;
+`tests/unit/test_lazy_imports.py` checks that `import fleche` leaves it unimported.
 
 ## Conventions
 

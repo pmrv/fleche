@@ -83,7 +83,8 @@ brackets, e.g. ``pip install "fleche[sqlalchemy,ssh]"``.
    * - ``pandas``
      - ``pip install "fleche[pandas]"``
      - Digests of pandas frames, series, indices, ``pd.Timedelta`` and
-       ``pd.NA``, through the ``fleche-pandas`` companion package (see below).
+       ``pd.NA``, through the ``fleche-pandas`` companion package (see below),
+       and ``table()`` on caches and queries.
    * - ``tests``
      - ``pip install "fleche[tests]"``
      - The full test suite plus every optional backend it exercises. The suite
