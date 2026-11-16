@@ -86,9 +86,9 @@ def test_digests_are_unchanged_by_the_split(value, expected):
     ids=lambda v: v if isinstance(v, str) else type(v).__name__,
 )
 def test_missing_sister_package_is_indigestible(without_sister_packages, value, package):
-    with pytest.raises(Indigestible) as info:
+    with pytest.raises(Indigestible):
         digest(value)
-    assert any(package in note for note in info.value.__notes__)
+    assert package in fd._install_hint(value)
 
 
 def test_missing_sister_package_inside_a_container(without_sister_packages):
@@ -162,7 +162,7 @@ def test_missing_sister_package_names_it_when_caching_is_skipped(without_sister_
 
     with cache(Cache(ValueMemory({}), CallMemory({}))), caplog.at_level("WARNING"):
         assert total(np.arange(3)) == 3
-    assert "pip install fleche-numpy" in caplog.text
+    assert "install fleche-numpy" in caplog.text
 
 
 def test_entry_point_hooks_for_a_subclass_beat_their_base_whatever_the_order(clean_hooks):
@@ -180,3 +180,16 @@ def test_entry_point_hooks_for_a_subclass_beat_their_base_whatever_the_order(cle
         with patch("importlib.metadata.entry_points", return_value=order):
             load_entry_points()
         assert digest(value) == digest(("sub", [0, 1]))
+
+
+def test_missing_sister_package_named_when_a_capture_is_indigestible(without_sister_packages, caplog):
+    from fleche.call import _code_digest
+
+    weights = np.arange(3)
+
+    def scaled(x):
+        return x * weights
+
+    with caplog.at_level("WARNING"):
+        _code_digest(scaled)
+    assert "install fleche-numpy" in caplog.text

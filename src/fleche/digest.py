@@ -112,6 +112,16 @@ def _sister_package(t: type) -> str | None:
     return None
 
 
+def _install_hint(value: Any) -> str:
+    """For warnings about an Indigestible *value*: what to install, if only a
+    sister package digests it, as ``"; install ..."``, else ``""``."""
+    t = type(value)
+    package = _sister_package(t)
+    if package is None:
+        return ""
+    return f"; install {package} to digest {t.__module__}.{t.__qualname__}"
+
+
 def get_hooks() -> "tuple[Hook, ...]":
     """Every hook, add_hook()'s newest first, then the entry points'."""
     return _ALL_HOOKS
@@ -372,12 +382,7 @@ def _digest_bytes(value: Any) -> bytes:
             # No hook took it, so its sister package is missing (or its entry
             # point is not loaded yet, which digest() retries for).  Not cached:
             # the hook may yet arrive.
-            error = Indigestible(value)
-            error.add_note(
-                f"{t.__module__}.{t.__qualname__} is digested by the {package} "
-                f"package; install it (pip install {package}) to cache this value."
-            )
-            raise error
+            raise Indigestible(value)
         _TYPES_WITHOUT_DIGEST.add(t)
 
     m = _new_hash(t.__name__.encode())
