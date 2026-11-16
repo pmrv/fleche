@@ -1,3 +1,4 @@
 # The sister packages under src/ ship in their own sdists.
 prune src/fleche-numpy
 prune src/fleche-pandas
+prune src/fleche-ase

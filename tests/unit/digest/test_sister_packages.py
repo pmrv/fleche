@@ -11,6 +11,8 @@ from unittest.mock import patch
 import numpy as np
 import pandas as pd
 import pytest
+from ase import Atoms
+from ase.calculators.lj import LennardJones
 
 import fleche_numpy
 import fleche_pandas
@@ -82,6 +84,9 @@ def test_digests_are_unchanged_by_the_split(value, expected):
         # A datetime.timedelta subclass; it must not digest like one.
         (pd.Timedelta(seconds=1), "fleche-pandas"),
         (pd.NA, "fleche-pandas"),
+        # Iterable, of Atom objects.
+        (Atoms("H2", positions=[(0, 0, 0), (0, 0, 0.74)]), "fleche-ase"),
+        (LennardJones(), "fleche-ase"),  # a Calculator subclass
     ],
     ids=lambda v: v if isinstance(v, str) else type(v).__name__,
 )
