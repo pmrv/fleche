@@ -13,28 +13,35 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     outputs:
-      # JSON list of the package paths released by this run: "." for fleche,
-      # "src/fleche-numpy" etc. for the sister packages (release-please-config.json).
-      paths_released: ${{ steps.rp.outputs.paths_released }}
+      # JSON list of {path, environment} for the packages this run released:
+      # path "." for fleche, "src/fleche-numpy" etc. for the sister packages.
+      released: ${{ steps.released.outputs.released }}
     steps:
       - uses: googleapis/release-please-action@v4
         id: rp
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+      # Each package publishes from its own environment: fleche from pypi, a
+      # sister package from pypi-<name>.  PyPI allows only one pending trusted
+      # publisher per repository, workflow and environment, so new projects
+      # need environments of their own.
+      - id: released
+        env:
+          PATHS: ${{ steps.rp.outputs.paths_released }}
+        run: |
+          echo "released=$(jq -c 'map({path: ., environment: (if . == "." then "pypi" else "pypi-" + (split("/") | last) end)})' <<< "${PATHS:-[]}")" >> "$GITHUB_OUTPUT"
 
   publish:
     needs: release-please
-    if: ${{ needs.release-please.outputs.paths_released != '[]' && needs.release-please.outputs.paths_released != '' }}
+    if: ${{ needs.release-please.outputs.released != '[]' }}
     strategy:
       fail-fast: false
       matrix:
-        path: ${{ fromJSON(needs.release-please.outputs.paths_released) }}
+        include: ${{ fromJSON(needs.release-please.outputs.released) }}
     runs-on: ubuntu-latest
-    # Every package publishes from this one workflow and environment, so each
-    # PyPI project needs a trusted publisher for release-please.yml + pypi.
     environment:
-      name: pypi
+      name: ${{ matrix.environment }}
     permissions:
       id-token: write
     steps:
