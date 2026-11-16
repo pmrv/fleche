@@ -194,11 +194,11 @@ class ValuePickleFile(PerKeyLockMixin, DestructuringMixin, ValueMixin, PickleFil
             "compress": self.compress,
             "remaining_depth": self.remaining_depth,
         }
-        # Keys are bytes; store them hex-encoded, and omit the key list
-        # entirely when unset so the config stays minimal.
         # Omitted at the default so configs written before the option existed round-trip unchanged.
         if self.compress_level != 9:
             config["compress_level"] = self.compress_level
+        # Keys are bytes; store them hex-encoded, and omit the key list
+        # entirely when unset so the config stays minimal.
         if self.secret_key:
             config["secret_key"] = [k.hex() for k in self.secret_key]
         return config
