@@ -362,6 +362,19 @@ def _digest_bytes(value: Any) -> bytes:
     # so dict/list subclasses can override their own digest.  The overwhelming
     # common case (plain built-ins) skips this block via ``_TYPES_WITHOUT_DIGEST``.
     t = type(value)
+    if t not in _TYPES_WITHOUT_DIGEST and hasattr(t, "__digest__"):
+        # For raw-bytes speedup (Issue #440): bytes.fromhex(value.__digest__())
+        return value.__digest__().encode()
+
+    # Entry-point hooks come after ``__digest__``, unlike add_hook's: they load
+    # lazily, on the first Indigestible, so were they first an ndarray subclass
+    # defining ``__digest__`` would digest by it until some plain array had
+    # loaded fleche-numpy's hook, and by the hook ever after — one value, two
+    # keys in one process.
+    for h in _EP_HOOKS:
+        if isinstance(value, h.type):
+            return h.digest(value).encode()
+
     if t not in _TYPES_WITHOUT_DIGEST:
         if hasattr(t, "__digest__"):
             # For raw-bytes speedup (Issue #440): bytes.fromhex(value.__digest__())

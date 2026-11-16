@@ -113,6 +113,7 @@ Values and calls are stored separately so call records are queryable without des
   `cache(x, stack=True)` puts `x` in front of the current cache as a `CacheStack`.
   `BoundWrapper` pins cache + metadata at `.bind()` time and re-installs them around each call (metadata reset before cache);
   it is how calls cross pickle and executors.
+  `BoundWrapper.__reduce__` pre-serialises `func` into a standalone bytes payload — plain `pickle` by reference when importable, else cloudpickle by value (`TypeError` when cloudpickle is missing) — so a `__main__`/notebook/closure func survives a stdlib-pickle carrier such as a `spawn`-context `ProcessPoolExecutor`, which hardcodes `pickle`.
 - `wrapper.py` — the decorator and its helpers (`.call/.digest/.load/.contains/.query/.rerun/.bind`, mirrored on `.fleche.*`), registered via `_PRE_WRAPPER_SPECS`/`_POST_WRAPPER_SPECS`.
   Two-phase save: `cache.prepare(call)` seals the key *before* the body runs, so an argument-mutating body cannot leak into it.
   Any prepare failure runs the call uncached;
@@ -343,14 +344,13 @@ Git history is the changelog — no PR numbers, dates or release versions here.
   `autostart` on shared cluster nodes.
 
 **Known bugs**: #826 gc vs `PreparedCall`;
-#840 `BoundWrapper` needs `fork`;
 #893/#903 multi-bag `filelock.Timeout` under contention;
 #895 cache hits return a plain `Future` (accepted);
 #916 `.query()` with `hash_version=False`/`hash_module=False` (fix on branch `fix/query-hash-flags-916`);
 #918 destructuring ignores digest hooks;
 #883 custom destructurers hide children from `gc`;
-#1047 concurrent workers computing the same call on the `sql` backend can raise `IntegrityError` out of the decorated function (a duplicate insert should count as a hit; also #790, #218;
-fix in flight on branch `claude/sql-concurrency-fixes`).
+#1047 concurrent workers computing the same call on the `sql` backend can raise `IntegrityError` out of the decorated function (a duplicate insert should count as a hit;
+also #790, #218).
 
 **Feature requests**: #829, #854, #855.
 
