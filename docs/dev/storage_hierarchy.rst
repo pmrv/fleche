@@ -346,8 +346,10 @@ Registration and config
 
 :func:`~fleche.storage.base.register_storage` maps a ``(name, kind)`` pair
 from a config file onto a constructor, and is what makes a class acceptable to
-:func:`fleche.config.storage_to_config` in the other direction.  Two details
-matter when adding a backend:
+:func:`fleche.config.storage_to_config` in the other direction.  Each pair
+belongs to one class: registering another class under a taken pair raises
+``ValueError``, built-in names included (``"sql"`` even before its module is
+imported).  Two details matter when adding a backend:
 
 * The check is **exact-class**, not ``issubclass``.  A subclass inherits its
   parent's ``to_config`` and would serialize under the parent's ``type``, then

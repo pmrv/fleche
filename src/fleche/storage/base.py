@@ -28,8 +28,15 @@ _LAZY_STORAGE: "dict[tuple[str, StorageKind], tuple[str, str]]" = {
 as ``(module, class name)``.
 
 :func:`get_storage_constructor` imports the class and registers it whenever its
-``(name, kind)`` is looked up and nothing is registered there.  Their slots are
-reserved: :func:`register_storage` refuses any other class there.
+``(name, kind)`` is looked up and nothing is registered there.
+"""
+
+_STORAGE_OWNERS: "dict[tuple[str, StorageKind], tuple[str, str]]" = dict(_LAZY_STORAGE)
+"""The class, as ``(module, qualified name)``, that holds each ``(name, kind)``.
+
+Seeded with :data:`_LAZY_STORAGE`, so the slots of backends not imported yet
+are taken already.  Classes are compared by name rather than identity so that
+re-importing a module (``importlib.reload``) can register its classes again.
 """
 
 
@@ -77,22 +84,16 @@ def register_storage(
     directly and registers here too.
 
     Raises:
-        ValueError: when ``(name, kind)`` belongs to a built-in backend that
-            is imported lazily (``"sql"``) and *cls* is not that backend.
+        ValueError: when another class already holds ``(name, kind)``,
+            including a built-in backend that is imported lazily (``"sql"``).
     """
-    if (name, kind) in _LAZY_STORAGE:
-        module, attr = _LAZY_STORAGE[(name, kind)]
-
-        def check(cls: Any) -> None:
-            if (getattr(cls, "__module__", None), getattr(cls, "__qualname__", None)) != (module, attr):
-                raise ValueError(f"{name!r} {kind} storage is reserved for {module}.{attr}")
-    else:
-        def check(cls: Any) -> None:
-            pass
-
     def decorator(cls: Any) -> Any:
-        check(cls)
-        _STORAGE_CONSTRUCTORS[(name, kind)] = factory if factory is not None else cls
+        key = (name, kind)
+        owner = (cls.__module__, cls.__qualname__)
+        held = _STORAGE_OWNERS.setdefault(key, owner)
+        if held != owner:
+            raise ValueError(f"{name!r} {kind} storage is already registered to {'.'.join(held)}")
+        _STORAGE_CONSTRUCTORS[key] = factory if factory is not None else cls
         _STORAGE_CLASSES.add(cls)
         return cls
     return decorator

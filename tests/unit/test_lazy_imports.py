@@ -89,13 +89,13 @@ def test_sql_registration_survives_a_restored_registry():
 
 
 def test_the_sql_slot_is_reserved():
-    """No other class may register as "sql": fleche resolves that name itself."""
+    """No other class may register as "sql", even before fleche.storage.sql is imported."""
     from fleche.storage import register_storage
 
     class MySql:
         pass
 
-    with pytest.raises(ValueError, match="reserved"):
+    with pytest.raises(ValueError, match="already registered to fleche.storage.sql.Sql"):
         register_storage("sql", kind="call")(MySql)
 
 
