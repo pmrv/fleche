@@ -22,7 +22,7 @@ following **lowercase** identifiers:
     :class:`~fleche.storage.CallPickleFile`).
     Required: ``root`` (path to storage directory).
     Optional: ``compress`` (bool, default ``False``) — gzip-compress files.
-    Optional: ``compress_level`` (int 0–9, default ``9``) — gzip level for ``compress``.
+    Optional: ``compresslevel`` (int 0–9, default ``9``) — gzip level for ``compress``.
     Deprecated: ``lock_timeout`` (float) — dropped with a ``FutureWarning``;
     the pickle family writes atomically and no longer uses file locks.
     Optional: ``secret_key`` (list of hex strings) — HMAC-SHA256 signing keys;
@@ -35,7 +35,7 @@ following **lowercase** identifiers:
     complex Python objects than ``pickle``.
     Required: ``root``.
     Optional: ``compress`` (bool, default ``False``) — gzip-compress files.
-    Optional: ``compress_level`` (int 0–9, default ``9``) — same as ``"pickle"``.
+    Optional: ``compresslevel`` (int 0–9, default ``9``) — same as ``"pickle"``.
     Deprecated: ``lock_timeout`` (float) — dropped with a warning, as for ``"pickle"``.
     Optional: ``secret_key`` (list of hex strings) — same as ``"pickle"``.
     Optional (value backend): ``remaining_depth`` (int, default ``1``).
@@ -44,7 +44,7 @@ following **lowercase** identifiers:
     Filesystem backend serialised with ``dill``.
     Required: ``root``.
     Optional: ``compress`` (bool, default ``False``) — gzip-compress files.
-    Optional: ``compress_level`` (int 0–9, default ``9``) — same as ``"pickle"``.
+    Optional: ``compresslevel`` (int 0–9, default ``9``) — same as ``"pickle"``.
     Deprecated: ``lock_timeout`` (float) — dropped with a warning, as for ``"pickle"``.
     Optional: ``secret_key`` (list of hex strings) — same as ``"pickle"``.
     Optional (value backend): ``remaining_depth`` (int, default ``1``).
@@ -449,7 +449,7 @@ def storage_from_config(d: dict[str, Any], type: Literal["call", "value"]) -> st
     * ``{"type": "memory"}``
     * ``{"type": "void"}``
     * ``{"type": "pickle", "root": "<path>"}``
-      — optional: ``compress``, ``compress_level``,
+      — optional: ``compress``, ``compresslevel``,
       ``secret_key`` (list of hex strings), ``remaining_depth`` (value only);
       ``lock_timeout`` is deprecated and dropped with a ``FutureWarning``
     * ``{"type": "cloudpickle", "root": "<path>"}``
