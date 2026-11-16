@@ -5,20 +5,17 @@ from dataclasses import dataclass
 import pytest
 
 from fleche import storage
-from fleche.storage.base import _STORAGE_CLASSES, _STORAGE_CONSTRUCTORS
+from fleche.storage.base import _STORAGE
 from fleche.config import storage_to_config, storage_from_config
 
 
 @pytest.fixture
 def clean_registry():
     """Undo any backend registration a test performs."""
-    constructors = dict(_STORAGE_CONSTRUCTORS)
-    classes = set(_STORAGE_CLASSES)
+    registry = dict(_STORAGE)
     yield
-    _STORAGE_CONSTRUCTORS.clear()
-    _STORAGE_CONSTRUCTORS.update(constructors)
-    _STORAGE_CLASSES.clear()
-    _STORAGE_CLASSES.update(classes)
+    _STORAGE.clear()
+    _STORAGE.update(registry)
 
 
 def test_memory():
@@ -250,3 +247,23 @@ def test_bagofholding_lock_timeout_still_meaningful(tmp_path):
     cfg = {"type": "bagofholding_hdf", "root": str(tmp_path), "lock_timeout": 2.0}
     s = storage_from_config(cfg, "value")
     assert s.lock_timeout == 2.0
+
+
+@pytest.mark.parametrize("name, kind", [("memory", "value"), ("pickle", "call"), ("void", "call")])
+def test_register_storage_refuses_a_taken_name(clean_registry, name, kind):
+    class Impostor:
+        pass
+
+    before = storage.get_storage_constructor(name, kind)
+    with pytest.raises(ValueError, match="already registered"):
+        storage.register_storage(name, kind=kind)(Impostor)
+    assert storage.get_storage_constructor(name, kind) is before
+
+
+def test_register_storage_accepts_the_same_class_again(clean_registry):
+    @storage.register_storage("twice", kind="value")
+    class Twice:
+        pass
+
+    storage.register_storage("twice", kind="value")(Twice)
+    assert storage.get_storage_constructor("twice", "value") is Twice

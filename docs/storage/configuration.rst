@@ -284,7 +284,7 @@ Available storage types
      - ``lock_timeout``,
        ``version_validator``, ``prefix_length``, ``remaining_depth`` *(value only)*
    * - ``"sql"``
-     - SQL via SQLAlchemy (:class:`~fleche.storage.Sql`).
+     - SQL via SQLAlchemy (:class:`~fleche.storage.sql.Sql`).
        *Call storage only.*
      - —
      - ``url``, ``echo``

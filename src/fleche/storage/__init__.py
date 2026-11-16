@@ -4,6 +4,9 @@ This module re-exports the primary storage interfaces and implementations
 for backward compatibility with `from fleche.storage import ...` imports.
 """
 
+import importlib
+from typing import TYPE_CHECKING
+
 from .base import (
     SaveError,
     AmbiguousDigestError,
@@ -29,8 +32,27 @@ from .bagofholding_file import (
     ValueBagOfHoldingH5File,
     CallBagOfHoldingH5File,
 )
-from .sql import Sql
 from .thread_safe import SerializingMixin, PerKeyLockMixin
+
+if TYPE_CHECKING:
+    from .sql import Sql
+
+
+# Sql and its module are imported on first access: SQLAlchemy is slow to import,
+# and most users never touch it.
+def __getattr__(name: str):
+    if name == "Sql":
+        from .sql import Sql
+
+        return Sql
+    if name == "sql":
+        return importlib.import_module(".sql", __name__)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | {"Sql", "sql"})
+
 
 __all__ = [
     "SaveError",

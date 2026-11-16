@@ -1,5 +1,6 @@
 import bisect
 import contextlib
+import importlib
 import logging
 
 from abc import ABC, abstractmethod
@@ -13,10 +14,19 @@ logger = logging.getLogger("fleche.storage")
 
 StorageKind = Literal["value", "call"]
 
-_STORAGE_CONSTRUCTORS: "dict[tuple[str, StorageKind], Callable[..., Any]]" = {}
+_STORAGE: "dict[tuple[str, StorageKind], tuple[str, Callable[..., Any] | None]]" = {
+    # SQLAlchemy is slow to import, so fleche.storage.sql is imported only when
+    # a config asks for it; until then its slot holds no constructor.
+    ("sql", "call"): ("fleche.storage.sql.Sql", None),
+}
+"""The registry: ``(name, kind)`` to the qualified name of the class that holds
+it, and the constructor to call.  Classes are named rather than kept so that a
+re-imported module can register its classes again.
+"""
 
-_STORAGE_CLASSES: "set[type]" = set()
-"""Every class passed to :func:`register_storage`, exactly (not subclasses)."""
+
+def _qualified_name(cls: Any) -> str:
+    return f"{cls.__module__}.{cls.__qualname__}"
 
 
 def register_storage(
@@ -61,17 +71,30 @@ def register_storage(
     *cls* is intentionally untyped (``Any``): most registrants are
     ``StorageBackend`` subclasses, but ``Sql`` implements ``CallStorage``
     directly and registers here too.
+
+    Raises:
+        ValueError: when another class already holds ``(name, kind)``,
+            including a built-in backend that is imported lazily (``"sql"``).
     """
     def decorator(cls: Any) -> Any:
-        _STORAGE_CONSTRUCTORS[(name, kind)] = factory if factory is not None else cls
-        _STORAGE_CLASSES.add(cls)
+        owner = _qualified_name(cls)
+        held, _ = _STORAGE.get((name, kind), (owner, None))
+        if held != owner:
+            raise ValueError(f"{name!r} {kind} storage is already registered to {held}")
+        _STORAGE[(name, kind)] = (owner, factory if factory is not None else cls)
         return cls
     return decorator
 
 
 def get_storage_constructor(name: str, kind: StorageKind) -> "Callable[..., Any] | None":
     """Look up the registered constructor for ``(name, kind)``, or ``None`` if unregistered."""
-    return _STORAGE_CONSTRUCTORS.get((name, kind))
+    if (name, kind) not in _STORAGE:
+        return None
+    owner, constructor = _STORAGE[(name, kind)]
+    if constructor is None:
+        module, _, qualname = owner.rpartition(".")
+        constructor = getattr(importlib.import_module(module), qualname)
+    return constructor
 
 
 def is_registered_storage(cls: type) -> bool:
@@ -82,7 +105,7 @@ def is_registered_storage(cls: type) -> bool:
     ``storage_to_config`` refuses it rather than silently round-tripping it
     back as the parent.
     """
-    return cls in _STORAGE_CLASSES
+    return any(owner == _qualified_name(cls) for owner, _ in _STORAGE.values())
 
 
 class SaveError(Exception):
