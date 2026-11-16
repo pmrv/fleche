@@ -70,7 +70,9 @@ def file_fingerprint(path, max_files: int = 20000) -> str:
     Args:
         path: An existing file or directory. Symlinks are followed, so a link is hashed as
             its target's content; inside a directory, a broken link and anything that is
-            neither a file nor a directory are skipped.
+            neither a file nor a directory are skipped. An empty subdirectory leaves no
+            trace either, so two trees differing only by one hash alike -- the one place
+            this is coarser than the tree digest on fleche's ``temppath`` branch.
         max_files: Upper bound on the number of files under a directory.
 
     Returns:
@@ -130,9 +132,10 @@ def _path_identity(path):
 
     Where a file lives is not part of it -- one potential reached through two paths is one
     potential, and a key carrying the path would miss on the copy -- but what it is called
-    is. A directory's own name is dropped and the names inside it are kept. This is how
-    fleche digests a :class:`pathlib.Path`, so the two agree on what makes two files the
-    same file.
+    is. A directory's own name is dropped and the names inside it are kept. That is the
+    shape fleche's ``temppath`` branch gives a :class:`pathlib.Path`; on fleche main a
+    ``Path`` is still ``Indigestible``. The digests differ -- what matches is which two
+    files count as the same file -- so deferring to upstream's hashing later moves no key.
 
     Args:
         path: The file or directory.

@@ -536,8 +536,8 @@ def test_a_file_is_identified_by_its_name_and_content_not_its_location(tmp_path)
     """A model copied to another filesystem is the same model and keeps its key.
 
     Location is not identity -- the copy on scratch and the original in the shared store hold
-    one potential -- while the basename is, which is how fleche digests a `pathlib.Path`.
-    Keeping the two in step means swapping this hashing for fleche's own will not re-key
+    one potential -- while the basename is. That is the relation fleche's `temppath` branch
+    gives a `pathlib.Path`, so swapping this hashing for upstream's later will not re-key
     anything.
     """
     here, there = tmp_path / "store", tmp_path / "scratch"
@@ -551,7 +551,7 @@ def test_a_file_is_identified_by_its_name_and_content_not_its_location(tmp_path)
     (here / "Al.eam.alloy").write_bytes(b"embedding: [1, 2, 3]\n")
     assert digest(EAM(potential=str(here / "Al.eam.alloy"))) \
         != digest(EAM(potential=str(here / "Cu.eam.alloy"))), \
-        "same bytes under another name is another potential, as it is for fleche"
+        "same bytes under another name is another potential, as upstream has it too"
 
 
 def test_an_eam_with_no_potential_file_is_refused():
