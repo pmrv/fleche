@@ -65,9 +65,10 @@ def _code_digest(func) -> Digest:
         logger.warning(
             "Cannot digest what %s captured (a %s); its code digest ignores every "
             "captured variable and so collides with other closures made from the "
-            "same definition",
+            "same definition%s",
             getattr(func, "__qualname__", func),
             offender,
+            digest._install_hint(e.args[0]) if e.args else "",
         )
         return digest.digest(func.__code__)
 
