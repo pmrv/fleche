@@ -96,7 +96,8 @@ Each package gets its own release PR (`separate-pull-requests`), so each is cut 
 a `Release-As: x.y.z` footer on a commit touching a package forces its next version.
 Commits touching only `src/fleche-<x>/` release only that package (`exclude-paths` on the root package), so scope such commits by package, e.g. `fix(fleche-numpy): ...`.
 `release-please.yml` publishes every path in `paths_released`;
-each PyPI project needs its own trusted publisher for that workflow and the `pypi` environment.
+fleche publishes from the `pypi` environment and each sister package from `pypi-<name>`, because PyPI allows only one pending trusted publisher per repository, workflow and environment;
+each PyPI project needs a trusted publisher for `release-please.yml` and its environment (and one for `pypi-publish.yml`, the manual fallback, if that is used).
 CI installs fleche and every `src/fleche-*` package editable through the composite action `.github/actions/install-fleche`, after a checkout with full history (`fetch-depth: 0`) so the editable fleche gets a real version and satisfies the sisters' `fleche >=` floor.
 Adding another sister package touches the same spots: `src/fleche-<x>/`,
 `release-please-config.json` (and the root's `exclude-paths`),
