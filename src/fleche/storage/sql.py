@@ -595,6 +595,4 @@ class Sql(PerKeyLockMixin, CallStorage):
                 yield c
 
 
-# replace=False: imported lazily (see fleche.storage.base._LAZY_STORAGE), this
-# may run after a user registered a backend of their own as "sql".
-register_storage("sql", kind="call", replace=False)(Sql)
+register_storage("sql", kind="call")(Sql)

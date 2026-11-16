@@ -28,9 +28,8 @@ _LAZY_STORAGE: "dict[tuple[str, StorageKind], tuple[str, str]]" = {
 as ``(module, class name)``.
 
 :func:`get_storage_constructor` imports the class and registers it whenever its
-``(name, kind)`` is looked up and nothing is registered there.  The module
-registers the class itself on import too, but with ``replace=False``, so a
-backend registered under the same name beforehand is not overwritten.
+``(name, kind)`` is looked up and nothing is registered there.  Their slots are
+reserved: :func:`register_storage` refuses any other class there.
 """
 
 
@@ -39,7 +38,6 @@ def register_storage(
     kind: StorageKind,
     *,
     factory: "Callable[..., Any] | None" = None,
-    replace: bool = True,
 ) -> "Callable[[Any], Any]":
     """Register a storage backend constructor for config (de)serialisation.
 
@@ -78,14 +76,23 @@ def register_storage(
     ``StorageBackend`` subclasses, but ``Sql`` implements ``CallStorage``
     directly and registers here too.
 
-    With ``replace=False`` a constructor already registered for
-    ``(name, kind)`` is kept; *cls* still becomes serialisable.  Built-in
-    backends that are imported lazily register this way, so importing them
-    late never overrides a user's own backend of the same name.
+    Raises:
+        ValueError: when ``(name, kind)`` belongs to a built-in backend that
+            is imported lazily (``"sql"``) and *cls* is not that backend.
     """
+    if (name, kind) in _LAZY_STORAGE:
+        module, attr = _LAZY_STORAGE[(name, kind)]
+
+        def check(cls: Any) -> None:
+            if (getattr(cls, "__module__", None), getattr(cls, "__qualname__", None)) != (module, attr):
+                raise ValueError(f"{name!r} {kind} storage is reserved for {module}.{attr}")
+    else:
+        def check(cls: Any) -> None:
+            pass
+
     def decorator(cls: Any) -> Any:
-        if replace or (name, kind) not in _STORAGE_CONSTRUCTORS:
-            _STORAGE_CONSTRUCTORS[(name, kind)] = factory if factory is not None else cls
+        check(cls)
+        _STORAGE_CONSTRUCTORS[(name, kind)] = factory if factory is not None else cls
         _STORAGE_CLASSES.add(cls)
         return cls
     return decorator
@@ -96,7 +103,7 @@ def get_storage_constructor(name: str, kind: StorageKind) -> "Callable[..., Any]
     key = (name, kind)
     if key not in _STORAGE_CONSTRUCTORS and key in _LAZY_STORAGE:
         module, attr = _LAZY_STORAGE[key]
-        register_storage(name, kind, replace=False)(getattr(importlib.import_module(module), attr))
+        register_storage(name, kind)(getattr(importlib.import_module(module), attr))
     return _STORAGE_CONSTRUCTORS.get(key)
 
 

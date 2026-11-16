@@ -2,10 +2,6 @@
 
 This module re-exports the primary storage interfaces and implementations
 for backward compatibility with `from fleche.storage import ...` imports.
-
-:class:`~fleche.storage.sql.Sql` is the exception: it and its module,
-``fleche.storage.sql``, are imported on first access, so that ``import fleche``
-does not import SQLAlchemy for everyone who has it installed but never uses it.
 """
 
 import importlib
@@ -42,6 +38,8 @@ if TYPE_CHECKING:
     from .sql import Sql
 
 
+# Sql and its module are imported on first access: SQLAlchemy is slow to import,
+# and most users never touch it.
 def __getattr__(name: str):
     if name == "Sql":
         from .sql import Sql

@@ -88,16 +88,15 @@ def test_sql_registration_survives_a_restored_registry():
         assert base.get_storage_constructor("sql", "call") is Sql
 
 
-def test_lazy_sql_import_keeps_a_user_registered_sql_backend():
-    pytest.importorskip("sqlalchemy")
-    code = "\n".join([
-        "from fleche.storage import register_storage, get_storage_constructor",
-        "class MySql: pass",
-        "register_storage('sql', kind='call')(MySql)",
-        "from fleche.storage import Sql",  # imports fleche.storage.sql late
-        "assert get_storage_constructor('sql', 'call') is MySql",
-    ])
-    assert "sqlalchemy" in _modules_after(code)
+def test_the_sql_slot_is_reserved():
+    """No other class may register as "sql": fleche resolves that name itself."""
+    from fleche.storage import register_storage
+
+    class MySql:
+        pass
+
+    with pytest.raises(ValueError, match="reserved"):
+        register_storage("sql", kind="call")(MySql)
 
 
 def test_sql_module_is_an_attribute_of_fleche_storage():
