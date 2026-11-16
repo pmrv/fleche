@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fleche-ase"
-version = "0.2.0"
+version = "0.3.0"
 description = "ASE bindings to fleche"
 authors = [{name = "Marvin Poul", email = "pmrv@posteo.de"}]
 readme = "README.md"
