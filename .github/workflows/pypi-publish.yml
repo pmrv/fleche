@@ -22,12 +22,11 @@ jobs:
       env:
         TAG: ${{ github.event.release.tag_name }}
       run: |
-        # Sister packages tag as <name>-v<version> and live in src/<name>;
-        # fleche's own tags are bare versions.
+        # fleche tags <version>; a sister package in src/<name> tags <name>-<version>.
         tag="$TAG"
         case "$tag" in
           [0-9]*) path=. ;;
-          *-v[0-9]*) path="src/${tag%-v*}" ;;
+          fleche-*-[0-9]*) path="src/${tag%-*}" ;;
           *) echo "Cannot tell which package $tag releases" >&2; exit 1 ;;
         esac
         pip install build

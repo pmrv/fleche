@@ -22,9 +22,8 @@ jobs:
         cache: pip
     - name: Setup
       shell: bash -l {0}
-      run: |
-        python -m pip install --upgrade pip
-        pip install -e .[tests] -e src/fleche-numpy -e src/fleche-pandas
+      run: python -m pip install --upgrade pip
+    - uses: ./.github/actions/install-fleche
     - name: Run benchmarks
       shell: bash -l {0}
       run: |

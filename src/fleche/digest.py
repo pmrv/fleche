@@ -9,7 +9,7 @@ from collections.abc import Iterable, Mapping
 from typing import Any, TypeVar, Callable, Type, Generic
 
 from . import _attrs, _numbers
-from ._hashing import new_hash as _new_hash
+from .hashing import new_hash as _new_hash
 
 logger = logging.getLogger("fleche.digest")
 
@@ -75,15 +75,11 @@ _EP_HOOKS = []
 # ``__digest__`` (instance-level dunders are not supported anyway).
 _TYPES_WITHOUT_DIGEST: set[type] = set()
 
-# Third-party types whose digest ships in a sister package, keyed by (top-level
-# module, class name) so fleche recognises them without importing numpy or
-# pandas.  Unless that package's hook takes them first, the built-in arms would
-# digest them silently and wrongly — an ndarray or a DataFrame is Iterable (a
-# DataFrame iterates its column names only), numpy registers np.timedelta64 as
-# numbers.Integral, pd.Timedelta subclasses datetime.timedelta — so they are
-# refused instead.  The Indigestible makes digest() load entry points and retry,
-# which is how the sister package's hooks get loaded in the first place.
-# numpy number scalars are not listed: fleche._numbers digests them itself.
+# Types only a sister package digests, keyed by (top-level module, class name) so
+# fleche needs neither numpy nor pandas to recognise them.  Without the package's
+# hook they are Indigestible, though the built-in arms would accept them (an
+# ndarray is Iterable, np.timedelta64 an Integral); the Indigestible is also what
+# makes digest() load the entry points.
 _SISTER_PACKAGES = {
     ("numpy", "ndarray"): "fleche-numpy",
     ("numpy", "bool"): "fleche-numpy",  # np.bool_ on numpy 2
@@ -318,20 +314,15 @@ def _digest_bytes(value: Any) -> bytes:
     hex bytes) so the bytes fed into parent hashes are identical to the previous
     ``digest(v).encode()`` calls — no backwards-incompatible change.  To gain
     the raw-bytes speedup (Issue #440), change the final ``return`` here and
-    ``_hashing.running_hash.__exit__`` to ``m.digest()`` (32 bytes), update
+    ``hashing.running_hash.__exit__`` to ``m.digest()`` (32 bytes), update
     ``digest()`` to call ``.hex()`` instead of ``.decode()``, and change the
     ``encode()`` calls on the early-return paths (Digest pass-through, hooks,
     ``__digest__``) to ``bytes.fromhex(...)``.  That must be coordinated with
     a ``hash_version`` bump and a ``Cache.redigest`` migration.
     """
-    # Hooks are iterated in place rather than through ``get_hooks()``, whose list
-    # would be allocated on every recursive ``_digest_bytes`` call: hot for large
-    # iterables, and the entry-point list is rarely empty, since fleche-numpy and
-    # fleche-pandas register theirs there.
-    if _HOOKS:
-        for h in reversed(_HOOKS):
-            if isinstance(value, h.type):
-                return h.digest(value).encode()
+    for h in reversed(_HOOKS):
+        if isinstance(value, h.type):
+            return h.digest(value).encode()
 
     # ``__digest__`` opt-in protocol must win over the built-in ``match`` cases
     # so dict/list subclasses can override their own digest.  Avoid the

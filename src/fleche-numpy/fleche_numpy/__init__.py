@@ -1,10 +1,8 @@
 """fleche digest hooks for numpy: arrays, ``np.bool_`` and ``np.timedelta64``.
 
 Registered through the ``fleche`` entry point group (see :data:`digest_hooks`),
-so installing this package is all it takes.  Without it fleche refuses these
-values as :exc:`~fleche.digest.Indigestible` instead of guessing: an array is
-``Iterable`` and numpy registers ``np.timedelta64`` as ``numbers.Integral``, so
-fleche's built-in arms would otherwise digest them silently and wrongly.
+so installing this package is all it takes.  Without it, fleche does not digest
+these values.
 
 numpy number scalars (``np.float64``, ``np.int32``, ...) are not handled here:
 they are numbers, digested by fleche's own :mod:`fleche._numbers`.
@@ -19,7 +17,7 @@ from typing import Any
 
 import numpy as np
 
-from fleche._hashing import running_hash
+from fleche.hashing import running_hash
 from fleche.digest import Digest, Indigestible, digest
 
 __all__ = [

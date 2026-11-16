@@ -8,7 +8,7 @@ packages = ["fleche_pandas"]
 [project]
 name = "fleche-pandas"
 # Bumped by release-please (release-type "python"); see release-please-config.json.
-version = "0.1.0"
+version = "1.0.0"
 description = "pandas digest hooks for fleche"
 authors = [
     { name="Marvin Poul", email="pmrv@posteo.de" },
@@ -21,11 +21,8 @@ classifiers = [
 ]
 license = "BSD-3-Clause"
 dependencies = [
-    # running_hash in fleche._hashing; an older fleche still digests pandas
-    # itself, identically, and this package's hooks simply take precedence.
-    'fleche >= 0.23.0',
-    # timedelta64_length, and the hooks for the arrays object columns hold.
-    'fleche-numpy >= 0.1.0',
+    'fleche >= 0.24.0.dev0',
+    'fleche-numpy >= 1.0.0',
     'pandas >= 2.2, <4',
 ]
 

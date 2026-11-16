@@ -2,15 +2,11 @@
 ``pd.Timedelta`` and ``pd.NA``.
 
 Registered through the ``fleche`` entry point group (see :data:`digest_hooks`),
-so installing this package is all it takes.  Without it fleche refuses these
-values as :exc:`~fleche.digest.Indigestible` instead of guessing: a DataFrame
-iterates over its column names only, so fleche's ``Iterable`` arm would collide
-any two frames sharing them.  ``pd.Timedelta`` subclasses ``datetime.timedelta``;
-hooks precede fleche's built-in arms, so a ``pd.Timedelta`` digests here, by its
-length in nanoseconds, and apart from ``datetime.timedelta``.
+so installing this package is all it takes.  Without it, fleche does not digest
+these values.  A ``pd.Timedelta`` digests by its length in nanoseconds, apart
+from the ``datetime.timedelta`` it subclasses.
 
-Builds on :mod:`fleche_numpy`, which must be installed too: object columns are
-digested element by element and hold arrays as often as anything else.
+Builds on :mod:`fleche_numpy`: object columns are digested element by element.
 
 Object columns need care (#1004).  ``pd.util.hash_pandas_object`` hashes a
 column of strings by their encoded bytes, and every missing value by one shared
@@ -39,7 +35,7 @@ from pandas.api.types import infer_dtype
 # ``-> object``, which leaves type checkers nothing callable to check.
 from pandas.core.util.hashing import hash_pandas_object
 
-from fleche._hashing import running_hash
+from fleche.hashing import running_hash
 from fleche.digest import Digest, Indigestible, digest
 from fleche_numpy import timedelta64_length
 
