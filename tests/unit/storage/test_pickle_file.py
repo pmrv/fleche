@@ -95,6 +95,55 @@ def test_compression(tmp_path):
     assert loaded_value == value
 
 
+
+def test_compresslevel_changes_output(tmp_path):
+    """compresslevel reaches gzip: level 0 stores, level 9 shrinks, both read back."""
+    value = b"fleche " * 10_000
+    key = Digest("a" * 64)
+    sizes = {}
+    for level in (0, 9):
+        root = tmp_path / str(level)
+        storage = PickleFile.with_pickle(root=root, compress=True, compresslevel=level)
+        storage.put(value, key)
+        content = (root / str(key)).read_bytes()
+        assert content.startswith(b"\x1f\x8b")
+        sizes[level] = len(content)
+        assert storage.get(key) == value
+    assert sizes[9] < sizes[0]
+
+
+def test_compress_all_uses_compresslevel(tmp_path):
+    """compress_all() compresses at the storage's compresslevel."""
+    value = b"fleche " * 10_000
+    key = Digest("a" * 64)
+    PickleFile.with_pickle(root=tmp_path, compress=False).put(value, key)
+    PickleFile.with_pickle(root=tmp_path, compresslevel=0).compress_all()
+    content = (tmp_path / str(key)).read_bytes()
+    assert content.startswith(b"\x1f\x8b")
+    assert len(content) > len(value)
+
+
+@pytest.mark.parametrize("level", [-1, 10, 1.5, True, "9"])
+def test_compresslevel_rejects_invalid(tmp_path, level):
+    with pytest.raises(ValueError, match="compresslevel"):
+        PickleFile.with_pickle(root=tmp_path, compresslevel=level)
+
+
+def test_compresslevel_config_roundtrip(tmp_path):
+    """Non-default compresslevel survives to_config/storage_from_config; the default is omitted."""
+    from fleche.config import storage_from_config, storage_to_config
+
+    default = PickleFile.with_pickle(root=tmp_path, compress=True)
+    assert "compresslevel" not in storage_to_config(default)
+
+    storage = PickleFile.with_pickle(root=tmp_path, compress=True, compresslevel=3)
+    config = storage_to_config(storage)
+    assert config["compresslevel"] == 3
+    assert storage_from_config(config, "value").compresslevel == 3
+
+    call_storage = CallPickleFile.with_pickle(root=tmp_path, compresslevel=1)
+    assert storage_from_config(storage_to_config(call_storage), "call").compresslevel == 1
+
 # --- PickleFile.__post_init__ key handling tests ---
 
 def test_post_init_bytes_key(tmp_path):
