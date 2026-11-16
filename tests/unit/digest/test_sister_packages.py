@@ -14,31 +14,30 @@ import pytest
 
 import fleche_numpy
 import fleche_pandas
-from fleche.digest import Hook, Indigestible, _EP_HOOKS, _HOOKS, add_hook, digest, load_entry_points
+import fleche.digest as fd
+from fleche.digest import Hook, Indigestible, add_hook, digest, load_entry_points
 
 
 @pytest.fixture
 def without_sister_packages():
     """Digest as if neither sister package were installed."""
-    saved_hooks, saved_ep_hooks = list(_HOOKS), list(_EP_HOOKS)
-    _HOOKS.clear()
-    _EP_HOOKS.clear()
+    saved = fd._HOOKS, fd._EP_HOOKS
+    fd._set_hooks((), ())
     with patch("importlib.metadata.entry_points", return_value=[]):
         yield
-    _HOOKS[:] = saved_hooks
-    _EP_HOOKS[:] = saved_ep_hooks
+    fd._set_hooks(*saved)
 
 
 @pytest.fixture
 def clean_hooks():
     yield
-    _HOOKS.clear()
+    fd._set_hooks(manual=())
     load_entry_points()
 
 
 def test_sister_packages_register_their_hooks():
     load_entry_points()
-    registered = {h.type for h in _EP_HOOKS}
+    registered = {h.type for h in fd._EP_HOOKS}
     assert {t for t, _ in fleche_numpy.digest_hooks} <= registered
     assert {t for t, _ in fleche_pandas.digest_hooks} <= registered
 
@@ -105,14 +104,13 @@ def test_missing_sister_package_inside_a_container(without_sister_packages):
 def test_values_fleche_digests_itself_need_no_sister_package(value):
     """numpy scalars are numbers (or strings), pandas timestamps datetimes."""
     expected = digest(value)
-    _HOOKS.clear()
-    saved = list(_EP_HOOKS)
-    _EP_HOOKS.clear()
+    saved = fd._HOOKS, fd._EP_HOOKS
+    fd._set_hooks((), ())
     try:
         with patch("importlib.metadata.entry_points", return_value=[]):
             assert digest(value) == expected
     finally:
-        _EP_HOOKS[:] = saved
+        fd._set_hooks(*saved)
 
 
 def test_pandas_timedelta_still_digests_apart_from_datetime_timedelta():
@@ -143,12 +141,12 @@ def test_own_digest_wins_over_sister_hooks_whenever_they_load(make):
     """``__digest__`` beat the built-in numpy/pandas arms; it must beat their
     hooks too, and before and after the hooks load alike."""
     value = make()
-    saved = list(_EP_HOOKS)
-    _EP_HOOKS.clear()
+    saved = fd._EP_HOOKS
+    fd._set_hooks(entry_points=())
     try:
         before = digest(value)  # entry points not loaded
     finally:
-        _EP_HOOKS[:] = saved
+        fd._set_hooks(entry_points=saved)
     load_entry_points()
     assert digest(value) == before == value.__digest__()
 
