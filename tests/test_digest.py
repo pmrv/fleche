@@ -297,9 +297,8 @@ def test_rapid_same_size_rewrites_each_get_their_own_fingerprint(tmp_path):
 
     The memo key is (path, size, mtime_ns), and mtime granularity is coarse -- a millisecond
     on ext4, up to a second on some NFS mounts -- so a same-size rewrite inside one tick
-    leaves the key unchanged. Before `file_fingerprint` learned git's racily-clean rule this
-    returned a STALE hash, which a content fingerprint must never do. It showed up as
-    a flaky `test_fingerprint_follows_content`; twenty rewrites in a row make it reliable.
+    leaves the key unchanged and a memo written before it would hand back a stale hash.
+    Twenty rewrites in a row land inside one tick often enough to catch it.
     """
     p = tmp_path / "model.npz"
     seen = []
@@ -345,6 +344,28 @@ def test_fingerprint_refuses_what_it_cannot_read(tmp_path):
         (d / str(i)).write_bytes(b"x")
     with pytest.raises(ValueError, match="max_files"):
         fleche_ase.file_fingerprint(d, max_files=4)
+
+    fifo = tmp_path / "pipe"
+    os.mkfifo(fifo)
+    with pytest.raises(ValueError, match="neither a file nor a directory"):
+        fleche_ase.file_fingerprint(fifo)
+
+
+def test_a_path_that_cannot_be_read_is_indigestible_rather_than_an_OSError(tmp_path):
+    """An unreadable file is a caching problem, not a reason to fail the call.
+
+    `Indigestible` makes fleche run the call uncached with a warning; an `OSError` out of a
+    digest hook would crash it before the body ever ran, and a function that does need the
+    file will raise on its own terms inside it. fleche degrades a `Path` argument the same
+    way.
+    """
+    fifo = tmp_path / "pipe"
+    os.mkfifo(fifo)
+    for bad in (tmp_path / "gone.npz", fifo):
+        with pytest.raises(Indigestible):
+            fleche_ase._path_identity(bad)
+
+
 
 
 # --------------------------------------------------------------------------- calculators
@@ -462,13 +483,11 @@ def test_pyace_parameters_that_change_the_numbers_change_the_key(tmp_path):
 
 
 def test_a_real_eam_built_from_splines_is_refused():
-    """EAM was in PARAMETER_FREE; this is the construction that made that wrong.
+    """The REAL `ase.calculators.eam.EAM`, built the way ase's own test builds it.
 
-    The REAL `ase.calculators.eam.EAM`, built the way ase's own test builds it: the slots
-    hold object arrays of `scipy` splines, not numbers. A spline identifies nothing that
-    survives the process -- the same position as pyace's parsed basis -- so this refuses.
-    Declaring the class parameter-free said instead that its empty `todict()` was its
-    identity, which put every array-built EAM on one key.
+    The slots hold object arrays of `scipy` splines, not numbers, and a spline identifies
+    nothing that survives the process -- the same position as pyace's parsed basis. Treating
+    the empty `todict()` as an identity instead would put every array-built EAM on one key.
     """
     from ase.calculators.eam import EAM as RealEAM
     from scipy.interpolate import InterpolatedUnivariateSpline as spline
@@ -511,6 +530,28 @@ def test_eam_is_identified_by_the_contents_of_its_potential_file(tmp_path):
     p.write_bytes(b"embedding: [1, 2, 4]\n")
     assert digest(EAM(potential=str(p))) != before, \
         "a refitted table in place must not read back the old run"
+
+
+def test_a_file_is_identified_by_its_name_and_content_not_its_location(tmp_path):
+    """A model copied to another filesystem is the same model and keeps its key.
+
+    Location is not identity -- the copy on scratch and the original in the shared store hold
+    one potential -- while the basename is, which is how fleche digests a `pathlib.Path`.
+    Keeping the two in step means swapping this hashing for fleche's own will not re-key
+    anything.
+    """
+    here, there = tmp_path / "store", tmp_path / "scratch"
+    here.mkdir()
+    there.mkdir()
+    for d in (here, there):
+        (d / "Cu.eam.alloy").write_bytes(b"embedding: [1, 2, 3]\n")
+    assert digest(EAM(potential=str(here / "Cu.eam.alloy"))) \
+        == digest(EAM(potential=str(there / "Cu.eam.alloy")))
+
+    (here / "Al.eam.alloy").write_bytes(b"embedding: [1, 2, 3]\n")
+    assert digest(EAM(potential=str(here / "Al.eam.alloy"))) \
+        != digest(EAM(potential=str(here / "Cu.eam.alloy"))), \
+        "same bytes under another name is another potential, as it is for fleche"
 
 
 def test_an_eam_with_no_potential_file_is_refused():
