@@ -120,8 +120,7 @@ installing them alongside ``fleche`` is all that is needed:
    pip install fleche-numpy fleche-pandas fleche-ase
 
 ``fleche-numpy`` and ``fleche-pandas`` live in the fleche repository, under
-``src/``, and are versioned and released independently of ``fleche``, which
-itself depends on neither numpy nor pandas.
+``src/``, and are versioned and released independently of ``fleche``.
 
 Installing documentation
 -------------------------
