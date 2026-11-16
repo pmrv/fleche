@@ -46,7 +46,6 @@ dependencies = [
 
 [project.optional-dependencies]
 # Digest hooks for third-party types, released from src/ in this repository.
-# fleche itself needs neither numpy nor pandas; `pandas` also covers table().
 numpy = [
     "fleche-numpy",
 ]
