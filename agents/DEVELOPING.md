@@ -213,9 +213,11 @@ Values and calls are stored separately so call records are queryable without des
   `SaveError` is the only exception a backend may let out of `put`: every backend wraps any serialisation (or copy) failure as `SaveError(value) from e`, deliberately broad because serializers re-raise whatever `__reduce__` raised.
   Callers key on it — `Call._to_digested` degrades a refused argument to a digest-only reference (hashed into the key, not stored) and `Cache.save` turns a refused result into `Rejected` — so a raw exception escaping `put` fails `prepare` and runs every call touching that value uncached.
   `@register_storage(name, kind)` on a backend class fills the config dispatch table.
-  Each `(name, kind)` belongs to one class (`_STORAGE_OWNERS`, by module and qualified name, so a reload may re-register);
-  another class under a taken pair raises `ValueError`, and `_LAZY_STORAGE` pre-claims `sql` before `storage/sql.py` is imported.
-  Tests that register backends snapshot `_STORAGE_OWNERS` along with `_STORAGE_CONSTRUCTORS` and `_STORAGE_CLASSES`.
+  The registry is one dict, `base._STORAGE`: `(name, kind)` to the qualified name of the class holding it and its constructor.
+  Each pair belongs to one class, compared by qualified name so a reload may re-register;
+  another class under a taken pair raises `ValueError`.
+  `sql` is in it from the start with no constructor, which `get_storage_constructor` resolves by importing `storage/sql.py`.
+  Tests that register backends snapshot and restore `_STORAGE`.
   There is deliberately no inherited `to_config`: each concrete class writes its own, and `storage_to_config` checks the exact class so a subclass can't round-trip as its parent.
 - `file.py` — `FileStorage` is **lock-free**: `put` writes a dot-prefixed temp sibling and renames it into place, so `_to_file` must write a complete file at whatever path it gets.
   `list()` skips `*.lock` and dot-files;

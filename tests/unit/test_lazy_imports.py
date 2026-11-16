@@ -73,18 +73,15 @@ def test_table_with_pandas():
     assert isinstance(_cache_with_one_call().table(), pd.DataFrame)
 
 
-def test_sql_registration_survives_a_restored_registry():
-    """Registry snapshots (as the config tests take) may drop the lazily
-    registered entry after fleche.storage.sql was imported; a lookup must
-    register it again rather than report an unknown type."""
+def test_sql_constructor_resolves_from_a_registry_snapshot_taken_before_import():
+    """A registry snapshot taken before fleche.storage.sql was imported holds
+    no constructor for "sql"; restoring it after the import must still resolve."""
     pytest.importorskip("sqlalchemy")
     from fleche.storage import base
     from fleche.storage.sql import Sql
 
-    snapshot = {k: v for k, v in base._STORAGE_CONSTRUCTORS.items() if k != ("sql", "call")}
-    with patch.dict(base._STORAGE_CONSTRUCTORS, snapshot, clear=True):
-        assert base.get_storage_constructor("sql", "call") is Sql
-        del base._STORAGE_CONSTRUCTORS[("sql", "call")]
+    unimported = ("fleche.storage.sql.Sql", None)
+    with patch.dict(base._STORAGE, {("sql", "call"): unimported}):
         assert base.get_storage_constructor("sql", "call") is Sql
 
 

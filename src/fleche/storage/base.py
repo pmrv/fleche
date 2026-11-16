@@ -14,30 +14,19 @@ logger = logging.getLogger("fleche.storage")
 
 StorageKind = Literal["value", "call"]
 
-_STORAGE_CONSTRUCTORS: "dict[tuple[str, StorageKind], Callable[..., Any]]" = {}
-
-_STORAGE_CLASSES: "set[type]" = set()
-"""Every class passed to :func:`register_storage`, exactly (not subclasses)."""
-
-_LAZY_STORAGE: "dict[tuple[str, StorageKind], tuple[str, str]]" = {
-    # SQLAlchemy is slow to import; only pay for it when a config actually
-    # asks for SQL storage.
-    ("sql", "call"): ("fleche.storage.sql", "Sql"),
+_STORAGE: "dict[tuple[str, StorageKind], tuple[str, Callable[..., Any] | None]]" = {
+    # SQLAlchemy is slow to import, so fleche.storage.sql is imported only when
+    # a config asks for it; until then its slot holds no constructor.
+    ("sql", "call"): ("fleche.storage.sql.Sql", None),
 }
-"""Backends defined in a module ``fleche.storage`` does not import up front,
-as ``(module, class name)``.
-
-:func:`get_storage_constructor` imports the class and registers it whenever its
-``(name, kind)`` is looked up and nothing is registered there.
+"""The registry: ``(name, kind)`` to the qualified name of the class that holds
+it, and the constructor to call.  Classes are named rather than kept so that a
+re-imported module can register its classes again.
 """
 
-_STORAGE_OWNERS: "dict[tuple[str, StorageKind], tuple[str, str]]" = dict(_LAZY_STORAGE)
-"""The class, as ``(module, qualified name)``, that holds each ``(name, kind)``.
 
-Seeded with :data:`_LAZY_STORAGE`, so the slots of backends not imported yet
-are taken already.  Classes are compared by name rather than identity so that
-re-importing a module (``importlib.reload``) can register its classes again.
-"""
+def _qualified_name(cls: Any) -> str:
+    return f"{cls.__module__}.{cls.__qualname__}"
 
 
 def register_storage(
@@ -88,24 +77,24 @@ def register_storage(
             including a built-in backend that is imported lazily (``"sql"``).
     """
     def decorator(cls: Any) -> Any:
-        key = (name, kind)
-        owner = (cls.__module__, cls.__qualname__)
-        held = _STORAGE_OWNERS.setdefault(key, owner)
+        owner = _qualified_name(cls)
+        held, _ = _STORAGE.get((name, kind), (owner, None))
         if held != owner:
-            raise ValueError(f"{name!r} {kind} storage is already registered to {'.'.join(held)}")
-        _STORAGE_CONSTRUCTORS[key] = factory if factory is not None else cls
-        _STORAGE_CLASSES.add(cls)
+            raise ValueError(f"{name!r} {kind} storage is already registered to {held}")
+        _STORAGE[(name, kind)] = (owner, factory if factory is not None else cls)
         return cls
     return decorator
 
 
 def get_storage_constructor(name: str, kind: StorageKind) -> "Callable[..., Any] | None":
     """Look up the registered constructor for ``(name, kind)``, or ``None`` if unregistered."""
-    key = (name, kind)
-    if key not in _STORAGE_CONSTRUCTORS and key in _LAZY_STORAGE:
-        module, attr = _LAZY_STORAGE[key]
-        register_storage(name, kind)(getattr(importlib.import_module(module), attr))
-    return _STORAGE_CONSTRUCTORS.get(key)
+    if (name, kind) not in _STORAGE:
+        return None
+    owner, constructor = _STORAGE[(name, kind)]
+    if constructor is None:
+        module, _, qualname = owner.rpartition(".")
+        constructor = getattr(importlib.import_module(module), qualname)
+    return constructor
 
 
 def is_registered_storage(cls: type) -> bool:
@@ -116,7 +105,7 @@ def is_registered_storage(cls: type) -> bool:
     ``storage_to_config`` refuses it rather than silently round-tripping it
     back as the parent.
     """
-    return cls in _STORAGE_CLASSES
+    return any(owner == _qualified_name(cls) for owner, _ in _STORAGE.values())
 
 
 class SaveError(Exception):

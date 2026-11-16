@@ -5,23 +5,17 @@ from dataclasses import dataclass
 import pytest
 
 from fleche import storage
-from fleche.storage.base import _STORAGE_CLASSES, _STORAGE_CONSTRUCTORS, _STORAGE_OWNERS
+from fleche.storage.base import _STORAGE
 from fleche.config import storage_to_config, storage_from_config
 
 
 @pytest.fixture
 def clean_registry():
     """Undo any backend registration a test performs."""
-    constructors = dict(_STORAGE_CONSTRUCTORS)
-    classes = set(_STORAGE_CLASSES)
-    owners = dict(_STORAGE_OWNERS)
+    registry = dict(_STORAGE)
     yield
-    _STORAGE_CONSTRUCTORS.clear()
-    _STORAGE_CONSTRUCTORS.update(constructors)
-    _STORAGE_CLASSES.clear()
-    _STORAGE_CLASSES.update(classes)
-    _STORAGE_OWNERS.clear()
-    _STORAGE_OWNERS.update(owners)
+    _STORAGE.clear()
+    _STORAGE.update(registry)
 
 
 def test_memory():
