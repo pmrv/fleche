@@ -243,6 +243,8 @@ Values and calls are stored separately so call records are queryable without des
 - `destructuring.py` — `DestructuringMixin` stores containers, dataclasses and attrs instances as separately stored parts (`remaining_depth`), composed **above** `ValueMixin`.
   `Digested*` markers keep digest equivalence via `__digest__` and rebuild fields via `object.__new__` + `__setattr__`, so `init=False`/`InitVar`/frozen/slots round-trip.
   NamedTuples are not destructured.
+  Scalars (depth 0, inlined like `int`) are `_SCALAR_TYPES` plus `_FOREIGN_SCALARS`, the latter matched by module and class name so numpy and pandas stay unimported;
+  anything else no destructurer claims is opaque (depth ∞).
   `register_destructurer` appends to `_DESTRUCTURERS`, first match wins.
 - `thread_safe.py` — `SerializingMixin` and `PerKeyLockMixin` (striped locks keyed by the instance, so instances must be **hashable**) subclass `OperationContext` directly, so they attach at either layer.
   `_PicklableLock`/`_PicklableRLock` pickle without state — in-process only.

@@ -2,6 +2,7 @@ import hashlib
 from abc import ABC, abstractmethod
 from collections import Counter
 import dataclasses as _dataclasses
+import datetime
 from dataclasses import dataclass
 from numbers import Number
 from typing import Any, Callable, Protocol, runtime_checkable
@@ -215,6 +216,51 @@ def register_destructurer(pred: Callable[[Any], bool], fn: Callable) -> None:
     _DESTRUCTURERS.append((pred, fn))
 
 
+# Leaves that are atomic values rather than containers or opaque objects: depth 0,
+# so they inline into their parent like ints do.  Anything else that no
+# destructurer claims is opaque (depth ∞) and always gets an entry of its own.
+_SCALAR_TYPES = (
+    Number,
+    str,
+    bytes,
+    type(None),
+    datetime.date,  # datetime.datetime too, and pd.Timestamp
+    datetime.time,
+    datetime.timedelta,  # pd.Timedelta too
+    datetime.tzinfo,
+)
+
+# Third-party scalars matched by (top-level module, class name) along the MRO, the
+# way digest._SISTER_PACKAGES does, so fleche never imports numpy or pandas.
+# np.bool_ is not a numbers.Number since numpy 1.20; the other numpy number
+# scalars are, and np.str_/np.bytes_ subclass str/bytes.
+_FOREIGN_SCALARS = {
+    ("numpy", "bool"),  # np.bool_ on numpy 2
+    ("numpy", "bool_"),  # np.bool_ on numpy 1
+    ("pandas", "NAType"),
+}
+
+# Per-type answers for the _FOREIGN_SCALARS MRO walk.
+_FOREIGN_SCALAR_CACHE: dict[type, bool] = {}
+
+
+def _is_scalar(value: Any) -> bool:
+    """Whether *value* is an atomic leaf, inlined like an ``int`` (depth 0)."""
+    if isinstance(value, _SCALAR_TYPES):
+        return True
+    t = type(value)
+    try:
+        return _FOREIGN_SCALAR_CACHE[t]
+    except KeyError:
+        pass
+    result = any(
+        (c.__module__.partition(".")[0], c.__qualname__) in _FOREIGN_SCALARS
+        for c in t.__mro__
+    )
+    _FOREIGN_SCALAR_CACHE[t] = result
+    return result
+
+
 @runtime_checkable
 class HasChildDigests(Protocol):
     """Structural protocol for value storages that expose a reference-graph edge query.
@@ -274,7 +320,7 @@ class DestructuringMixin(base.ValueStorage):
 
         depth = float("inf")
 
-        if isinstance(value, (Number, str, bytes)):
+        if _is_scalar(value):
             depth = 0
         elif isinstance(value, (dict, list, tuple)) and not value:
             # empty containers treated like scalars; no point destructuring nothing

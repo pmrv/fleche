@@ -38,7 +38,8 @@ The ``remaining_depth`` parameter
 
 How finely a value is split is controlled by the ``remaining_depth`` option of
 the value backend (integer, default ``1``).  Depth is measured *up from the
-leaves*: a scalar (:class:`int`, :class:`str`, :class:`bytes`, …) has depth 0,
+leaves*: a scalar (a number, :class:`str`, :class:`bytes`, ``None``, a
+:mod:`datetime` date, time or timedelta, ``np.bool_``, ``pd.NA``) has depth 0,
 and a container has depth ``1 + max(child depths)``.  Note that this is not
 the distance from the root — two siblings can have different depths.
 
