@@ -7,7 +7,7 @@ pip install fleche-numpy
 ```
 
 Installing it is all it takes: fleche finds the hooks through its `fleche` entry point group.
-Without it, fleche refuses these values as `Indigestible` rather than guess at a digest.
+Without it, fleche does not digest these values.
 numpy number scalars (`np.float64`, `np.int32`, ...) need no hooks; fleche digests them itself.
 
 How arrays are digested — dtype, shape and bytes, per field for structured dtypes, per element for object dtypes — is described in fleche's [numpy documentation](https://fleche.readthedocs.io/en/latest/digests/numpy.html).

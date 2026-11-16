@@ -8,7 +8,7 @@ packages = ["fleche_numpy"]
 [project]
 name = "fleche-numpy"
 # Bumped by release-please (release-type "python"); see release-please-config.json.
-version = "0.1.0"
+version = "1.0.0"
 description = "numpy digest hooks for fleche"
 authors = [
     { name="Marvin Poul", email="pmrv@posteo.de" },
@@ -21,9 +21,7 @@ classifiers = [
 ]
 license = "BSD-3-Clause"
 dependencies = [
-    # running_hash in fleche._hashing; an older fleche still digests numpy
-    # itself, identically, and this package's hooks simply take precedence.
-    'fleche >= 0.23.0',
+    'fleche >= 0.24.0.dev0',
     'numpy >= 1.26',
 ]
 

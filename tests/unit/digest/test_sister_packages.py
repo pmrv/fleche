@@ -12,11 +12,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-# importorskip rather than import: `pytest -m smoke` still collects this module,
-# and must not error where only fleche itself is installed.
-fleche_numpy = pytest.importorskip("fleche_numpy")
-fleche_pandas = pytest.importorskip("fleche_pandas")
-
+import fleche_numpy
+import fleche_pandas
 from fleche.digest import Hook, Indigestible, _EP_HOOKS, _HOOKS, add_hook, digest, load_entry_points
 
 

@@ -20,10 +20,11 @@ jobs:
       with:
         python-version: "3.12"
         cache: pip
+    - uses: ./.github/actions/install-fleche
     - name: Setup
       shell: bash -l {0}
       run: |
-        pip install -e .[tests] -e src/fleche-numpy -e src/fleche-pandas jupyter nbconvert ipykernel
+        pip install jupyter nbconvert ipykernel
     - name: render
       shell: bash -l {0}
       run: |

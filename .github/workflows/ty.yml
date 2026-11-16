@@ -21,6 +21,7 @@ jobs:
               - 'tests/**'
               - 'pyproject.toml'
               - '.github/workflows/ty.yml'
+              - '.github/actions/**'
 
   ty:
     needs: changes
@@ -39,11 +40,10 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: Setup
+      - uses: ./.github/actions/install-fleche
         if: needs.changes.outputs.run == 'true'
-        shell: bash -l {0}
-        run: |
-          pip install -e .[tests,ty] -e src/fleche-numpy -e src/fleche-pandas
+        with:
+          extras: tests,ty
       - name: Run ty
         if: needs.changes.outputs.run == 'true'
         run: ty check src/

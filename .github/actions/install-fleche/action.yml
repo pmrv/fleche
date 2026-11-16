@@ -1,0 +1,30 @@
+name: Install fleche
+description: >-
+  Editable install of fleche, with the given extras, and of every sister
+  package under src/.  Run it after actions/checkout with fetch-depth 0, so the
+  editable fleche gets a real version for the sister packages' `fleche >=` floor.
+inputs:
+  extras:
+    description: Comma-separated extras of fleche to install.
+    default: tests
+  installer:
+    description: The install command, `pip` or `uv pip`.
+    default: pip
+  args:
+    description: Further arguments for the installer, e.g. `--resolution lowest-direct`.
+    default: ""
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        EXTRAS: ${{ inputs.extras }}
+        INSTALLER: ${{ inputs.installer }}
+        ARGS: ${{ inputs.args }}
+      run: |
+        sisters=()
+        for dir in src/fleche-*/; do
+          sisters+=(-e "$dir")
+        done
+        # INSTALLER and ARGS are split into words on purpose.
+        $INSTALLER install $ARGS -e ".[$EXTRAS]" "${sisters[@]}"
