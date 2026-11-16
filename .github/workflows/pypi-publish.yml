@@ -2,24 +2,48 @@ on:
   release:
     types: [published]
 jobs:
+  resolve:
+    name: Find the released package
+    runs-on: ubuntu-latest
+    outputs:
+      path: ${{ steps.resolve.outputs.path }}
+      environment: ${{ steps.resolve.outputs.environment }}
+    steps:
+    - id: resolve
+      shell: bash
+      env:
+        TAG: ${{ github.event.release.tag_name }}
+      run: |
+        # fleche tags <version> and publishes from the pypi environment; a
+        # sister package in src/<name> tags <name>-<version> and publishes from
+        # pypi-<name> (see release-please.yml).
+        case "$TAG" in
+          [0-9]*) echo "path=." >> "$GITHUB_OUTPUT"; echo "environment=pypi" >> "$GITHUB_OUTPUT" ;;
+          fleche-*-[0-9]*) name="${TAG%-*}"; echo "path=src/$name" >> "$GITHUB_OUTPUT"; echo "environment=pypi-$name" >> "$GITHUB_OUTPUT" ;;
+          *) echo "Cannot tell which package $TAG releases" >&2; exit 1 ;;
+        esac
+
   pypi-publish:
     name: Upload release to PyPI
+    needs: resolve
     runs-on: ubuntu-latest
     environment:
-      name: pypi
-      url: https://pypi.org/p/fleche
+      name: ${{ needs.resolve.outputs.environment }}
     permissions:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
     steps:
-    # retrieve your distributions here
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     - uses: actions/setup-python@v5
       with:
         python-version: '3.12'
     - name: Build
       shell: bash
+      env:
+        PACKAGE_PATH: ${{ needs.resolve.outputs.path }}
       run: |
         pip install build
-        python -m build --sdist
+        python -m build --sdist --outdir dist/ "$PACKAGE_PATH"
     - name: pypi-publish
       uses: pypa/gh-action-pypi-publish@v1.13.0

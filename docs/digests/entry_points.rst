@@ -14,7 +14,8 @@ Use entry points whenever digest support for a type should "just work" after
 a ``pip install``:
 
 * as a *plugin package* that adds ``fleche`` support for a third-party
-  library (see :ref:`fleche-ase` below), or
+  library (see :ref:`fleche-ase` below; ``fleche``'s own numpy and pandas
+  support ships the same way, as ``fleche-numpy`` and ``fleche-pandas``), or
 * as a *library author* shipping ``fleche`` support for your own types
   alongside your library.
 
@@ -74,12 +75,16 @@ Precedence rules:
   priority over entry point hooks; an ``INFO`` message is logged when one
   shadows the other.
 * If multiple entry points provide hooks for the same type, the first one
-  encountered wins.
+  encountered wins.  Hooks for a subclass are tried before hooks for its
+  bases, whichever distribution provides them, so a plugin's hook for an
+  ``np.ndarray`` subclass takes precedence over ``fleche-numpy``'s.
 * An entry point that fails to load is logged as an ``ERROR`` (with
   traceback) and skipped — it never breaks digestion of other values.
-* Hooks — manual or entry-point — take priority over a type's own
-  ``__digest__`` method (see :doc:`/dev/custom_digests`): if a hook is
-  registered for a type, its ``__digest__`` is never consulted.
+* Manual hooks take priority over a type's own ``__digest__`` method (see
+  :doc:`/dev/custom_digests`), and ``__digest__`` takes priority over entry
+  point hooks.  Entry points load lazily, so with them first a subclass
+  defining ``__digest__`` would digest one way before they load and another
+  way after.
 
 Registering Your Own Entry Point
 --------------------------------

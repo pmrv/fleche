@@ -21,6 +21,7 @@ jobs:
               - 'tests/**'
               - 'pyproject.toml'
               - '.github/workflows/ty.yml'
+              - '.github/actions/**'
 
   ty:
     needs: changes
@@ -31,17 +32,18 @@ jobs:
         run: echo "No src/ or tests/ changes; skipping."
       - uses: actions/checkout@v6
         if: needs.changes.outputs.run == 'true'
+        with:
+          fetch-depth: 0
       - name: Set up Python
         if: needs.changes.outputs.run == 'true'
         uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
-      - name: Setup
+      - uses: ./.github/actions/install-fleche
         if: needs.changes.outputs.run == 'true'
-        shell: bash -l {0}
-        run: |
-          pip install -e .[tests,ty]
+        with:
+          extras: tests,ty
       - name: Run ty
         if: needs.changes.outputs.run == 'true'
         run: ty check src/

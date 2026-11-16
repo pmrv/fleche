@@ -24,7 +24,7 @@ from decimal import Decimal
 from fractions import Fraction
 from typing import Any
 
-from ._hashing import running_hash
+from .hashing import running_hash
 
 DigestBytes = Callable[[Any], bytes]
 

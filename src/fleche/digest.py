@@ -8,8 +8,8 @@ import importlib.metadata
 from collections.abc import Iterable, Mapping
 from typing import Any, TypeVar, Callable, Type, Generic
 
-from . import _attrs, _numbers, _numpy, _pandas
-from ._hashing import new_hash as _new_hash
+from . import _attrs, _numbers
+from .hashing import new_hash as _new_hash
 
 logger = logging.getLogger("fleche.digest")
 
@@ -75,6 +75,42 @@ _EP_HOOKS = []
 # ``__digest__`` (instance-level dunders are not supported anyway).
 _TYPES_WITHOUT_DIGEST: set[type] = set()
 
+# Types only a sister package digests, keyed by (top-level module, class name) so
+# fleche needs neither numpy nor pandas to recognise them.  Without the package's
+# hook they are Indigestible, though the built-in arms would accept them (an
+# ndarray is Iterable, np.timedelta64 an Integral); the Indigestible is also what
+# makes digest() load the entry points.
+_SISTER_PACKAGES = {
+    ("numpy", "ndarray"): "fleche-numpy",
+    ("numpy", "bool"): "fleche-numpy",  # np.bool_ on numpy 2
+    ("numpy", "bool_"): "fleche-numpy",  # np.bool_ on numpy 1
+    ("numpy", "timedelta64"): "fleche-numpy",
+    ("pandas", "DataFrame"): "fleche-pandas",
+    ("pandas", "Series"): "fleche-pandas",
+    ("pandas", "Index"): "fleche-pandas",
+    ("pandas", "Timedelta"): "fleche-pandas",
+    ("pandas", "NAType"): "fleche-pandas",
+}
+
+
+def _sister_package(t: type) -> str | None:
+    """The sister package that digests type *t*, or None if fleche does itself."""
+    for c in t.__mro__:
+        key = (c.__module__.partition(".")[0], c.__qualname__)
+        if key in _SISTER_PACKAGES:
+            return _SISTER_PACKAGES[key]
+    return None
+
+
+def _install_hint(value: Any) -> str:
+    """For warnings about an Indigestible *value*: what to install, if only a
+    sister package digests it, as ``"; install ..."``, else ``""``."""
+    t = type(value)
+    package = _sister_package(t)
+    if package is None:
+        return ""
+    return f"; install {package} to digest {t.__module__}.{t.__qualname__}"
+
 
 def get_hooks():
     return list(reversed(_HOOKS)) + _EP_HOOKS
@@ -127,6 +163,16 @@ def load_entry_points():
                 seen_types[hook.type] = ep.value
         except Exception as e:
             logger.error("Failed to load entry point %s: %s", ep.name, e, exc_info=True)
+
+    # The first matching hook wins, so subclasses go before their bases: a
+    # plugin's hook for an ndarray subclass must not depend on whether its
+    # distribution happens to be discovered before fleche-numpy's.  The sort is
+    # stable, so unrelated types keep their discovery order.
+    _EP_HOOKS.sort(key=_hook_specificity, reverse=True)
+
+
+def _hook_specificity(hook: Hook) -> int:
+    return len(getattr(hook.type, "__mro__", ()))
 
 
 def digest_class(cls: type) -> Digest:
@@ -278,29 +324,41 @@ def _digest_bytes(value: Any) -> bytes:
     hex bytes) so the bytes fed into parent hashes are identical to the previous
     ``digest(v).encode()`` calls — no backwards-incompatible change.  To gain
     the raw-bytes speedup (Issue #440), change the final ``return`` here and
-    ``_hashing.running_hash.__exit__`` to ``m.digest()`` (32 bytes), update
+    ``hashing.running_hash.__exit__`` to ``m.digest()`` (32 bytes), update
     ``digest()`` to call ``.hex()`` instead of ``.decode()``, and change the
     ``encode()`` calls on the early-return paths (Digest pass-through, hooks,
     ``__digest__``) to ``bytes.fromhex(...)``.  That must be coordinated with
     a ``hash_version`` bump and a ``Cache.redigest`` migration.
     """
-    # Fast-path: in the common case both hook lists are empty, so skip the
-    # ``get_hooks()`` call which would otherwise allocate a fresh combined list
-    # on every recursive ``_digest_bytes`` invocation (hot for large iterables).
-    if _HOOKS or _EP_HOOKS:
-        for h in get_hooks():
-            if isinstance(value, h.type):
-                return h.digest(value).encode()
+    for h in reversed(_HOOKS):
+        if isinstance(value, h.type):
+            return h.digest(value).encode()
 
     # ``__digest__`` opt-in protocol must win over the built-in ``match`` cases
     # so dict/list subclasses can override their own digest.  Avoid the
     # per-call ``hasattr`` MRO walk for the overwhelming common case (plain
     # built-ins) by caching the negative answer in ``_TYPES_WITHOUT_DIGEST``.
     t = type(value)
+    if t not in _TYPES_WITHOUT_DIGEST and hasattr(t, "__digest__"):
+        # For raw-bytes speedup (Issue #440): bytes.fromhex(value.__digest__())
+        return value.__digest__().encode()
+
+    # Entry-point hooks come after ``__digest__``, unlike add_hook's: they load
+    # lazily, on the first Indigestible, so were they first an ndarray subclass
+    # defining ``__digest__`` would digest by it until some plain array had
+    # loaded fleche-numpy's hook, and by the hook ever after — one value, two
+    # keys in one process.
+    for h in _EP_HOOKS:
+        if isinstance(value, h.type):
+            return h.digest(value).encode()
+
     if t not in _TYPES_WITHOUT_DIGEST:
-        if hasattr(t, "__digest__"):
-            # For raw-bytes speedup (Issue #440): bytes.fromhex(value.__digest__())
-            return value.__digest__().encode()
+        package = _sister_package(t)
+        if package is not None:
+            # No hook took it, so its sister package is missing (or its entry
+            # point is not loaded yet, which digest() retries for).  Not cached:
+            # the hook may yet arrive.
+            raise Indigestible(value)
         _TYPES_WITHOUT_DIGEST.add(t)
 
     m = _new_hash(t.__name__.encode())
@@ -319,13 +377,6 @@ def _digest_bytes(value: Any) -> bytes:
             m.update(value.encode())
         case None:
             m.update(b"__None__")
-        case _ if _numpy.is_timedelta64(value):
-            # Must precede Number: numpy registers timedelta64 as Integral,
-            # and a duration must not digest as its bare count.
-            digested = _numpy.digest_timedelta64(value, _digest_bytes)
-            if digested is None:
-                raise Indigestible(value)
-            return digested
         case Number():
             # Must follow int (int ⊂ Number), so int and its subclasses can be treated separately
             digested = _numbers.digest_number(value, _digest_bytes)
@@ -334,16 +385,6 @@ def _digest_bytes(value: Any) -> bytes:
             return digested
         case bytes():
             m.update(value)
-        case _ if _numpy.is_numpy(value):
-            return _numpy.digest_numpy(value, _digest_bytes)
-        case _ if _pandas.is_pandas(value):
-            # Must precede Iterable: a DataFrame iterates over its column names
-            # only, so the Iterable arm would collide any two frames sharing them.
-            try:
-                return _pandas.digest_pandas(value, _digest_bytes)
-            except KeyError as err:
-                # A pd.Timedelta in a unit without a known length.
-                raise Indigestible(value) from err
         case types.MethodType():
             # A bound method is its function plus the receiver it is bound to.
             # Leaving __self__ out would collide obj1.method with obj2.method —
@@ -383,7 +424,7 @@ def _digest_bytes(value: Any) -> bytes:
             m.update(_digest_bytes(value.utcoffset(None)))
         case datetime.timedelta():
             # Its exact length in microseconds.  pd.Timedelta, a subclass, is
-            # taken by the pandas arm above and digests apart.
+            # taken by fleche-pandas' hook first and digests apart.
             micro = (value.days * 86400 + value.seconds) * 1_000_000 + value.microseconds
             m.update(_digest_bytes(micro))
         case datetime.datetime():  # datetime subclasses date; must precede date case

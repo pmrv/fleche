@@ -124,3 +124,33 @@ def test_attrs():
         assert norm(Point(1, 2)) == 3
 
     assert calls == [Point(1, 2)], "attrs arg should hash to a cache hit"
+
+
+def _assert_hit_on_equal_argument(make):
+    """A function taking ``make()`` hits the cache on a fresh, equal argument."""
+    calls = []
+
+    @fleche()
+    def size(x):
+        calls.append(1)
+        return len(x)
+
+    with cache(Cache(ValueMemory({}), CallMemory({}))):
+        assert size(make()) == 3
+        assert size(make()) == 3
+
+    assert calls == [1], "an equal argument should hash to a cache hit"
+
+
+def test_fleche_numpy():
+    """fleche-numpy's entry point loads and digests arrays."""
+    np = pytest.importorskip("numpy")
+    pytest.importorskip("fleche_numpy")
+    _assert_hit_on_equal_argument(lambda: np.arange(3))
+
+
+def test_fleche_pandas():
+    """fleche-pandas' entry point loads and digests frames."""
+    pd = pytest.importorskip("pandas")
+    pytest.importorskip("fleche_pandas")
+    _assert_hit_on_equal_argument(lambda: pd.DataFrame({"a": [1, 2, 3]}))

@@ -1,11 +1,15 @@
-"""Digest arms for numpy arrays, ``np.bool_`` and ``np.timedelta64``.
+"""fleche digest hooks for numpy: arrays, ``np.bool_`` and ``np.timedelta64``.
 
-:func:`fleche.digest._digest_bytes` returns :func:`digest_numpy` for any value
-:func:`is_numpy` accepts, and :func:`digest_timedelta64` for a timedelta64
-ahead of its ``Number`` arm (numpy registers ``np.timedelta64`` as
-``numbers.Integral``, but a duration must not digest as its bare count).  The digest function is passed in because
-:mod:`fleche.digest` imports this module.  numpy number scalars are not handled
-here: they are numbers, digested by :mod:`fleche._numbers`.
+Registered through the ``fleche`` entry point group (see :data:`digest_hooks`),
+so installing this package is all it takes.  Without it, fleche does not digest
+these values.
+
+numpy number scalars (``np.float64``, ``np.int32``, ...) are not handled here:
+they are numbers, digested by fleche's own :mod:`fleche._numbers`.
+
+The digest functions take the recursive digest as an argument, ``digest_bytes``,
+returning the hex digest as bytes; the hooks pass :func:`fleche.digest.digest`.
+:mod:`fleche_pandas` builds on :func:`timedelta64_length`.
 """
 
 from collections.abc import Callable
@@ -13,16 +17,15 @@ from typing import Any
 
 import numpy as np
 
-from ._hashing import running_hash
+from fleche.hashing import running_hash
+from fleche.digest import Digest, Indigestible, digest
 
-
-def is_numpy(value: Any) -> bool:
-    """Whether :func:`digest_numpy` digests *value*."""
-    return isinstance(value, (np.ndarray, np.bool_))
-
-
-def is_timedelta64(value: Any) -> bool:
-    return isinstance(value, np.timedelta64)
+__all__ = [
+    "digest_hooks",
+    "digest_numpy",
+    "digest_timedelta64",
+    "timedelta64_length",
+]
 
 
 def digest_numpy(value, digest_bytes: Callable[[Any], bytes]) -> bytes:
@@ -106,3 +109,30 @@ def timedelta64_length(value) -> tuple[bytes, int]:
     unit, multiple = np.datetime_data(value.dtype)
     salt, per_unit = _TIMEDELTA64_SCALES[unit]
     return salt, int(value.view(np.int64)) * multiple * per_unit
+
+
+def _digest_bytes(value: Any) -> bytes:
+    return digest(value).encode()
+
+
+def _array_digest(value: np.ndarray) -> Digest:
+    return Digest(digest_numpy(value, _digest_bytes).decode())
+
+
+def _bool_digest(value: np.bool_) -> Digest:
+    return Digest(digest_numpy(value, _digest_bytes).decode())
+
+
+def _timedelta64_digest(value: np.timedelta64) -> Digest:
+    digested = digest_timedelta64(value, _digest_bytes)
+    if digested is None:
+        raise Indigestible(value)
+    return Digest(digested.decode())
+
+
+#: The hooks fleche loads from this package's ``fleche``/``digest`` entry point.
+digest_hooks = [
+    (np.ndarray, _array_digest),
+    (np.bool_, _bool_digest),
+    (np.timedelta64, _timedelta64_digest),
+]

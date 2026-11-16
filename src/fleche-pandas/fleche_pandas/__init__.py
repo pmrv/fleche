@@ -1,11 +1,12 @@
-"""Digest arms for pandas objects: ``DataFrame``, ``Series``, ``Index``,
+"""fleche digest hooks for pandas: ``DataFrame``, ``Series``, ``Index``,
 ``pd.Timedelta`` and ``pd.NA``.
 
-:func:`fleche.digest._digest_bytes` returns :func:`digest_pandas` for any value
-:func:`is_pandas` accepts.  The digest function is passed in because
-:mod:`fleche.digest` imports this module.  ``pd.Timedelta`` subclasses
-``datetime.timedelta``; the pandas arm precedes that one, so a ``pd.Timedelta``
-digests here, by its length in nanoseconds, and apart from ``datetime.timedelta``.
+Registered through the ``fleche`` entry point group (see :data:`digest_hooks`),
+so installing this package is all it takes.  Without it, fleche does not digest
+these values.  A ``pd.Timedelta`` digests by its length in nanoseconds, apart
+from the ``datetime.timedelta`` it subclasses.
+
+Builds on :mod:`fleche_numpy`: object columns are digested element by element.
 
 Object columns need care (#1004).  ``pd.util.hash_pandas_object`` hashes a
 column of strings by their encoded bytes, and every missing value by one shared
@@ -34,8 +35,11 @@ from pandas.api.types import infer_dtype
 # ``-> object``, which leaves type checkers nothing callable to check.
 from pandas.core.util.hashing import hash_pandas_object
 
-from . import _numpy
-from ._hashing import running_hash
+from fleche.hashing import running_hash
+from fleche.digest import Digest, Indigestible, digest
+from fleche_numpy import timedelta64_length
+
+__all__ = ["digest_hooks", "digest_pandas"]
 
 # What ``infer_dtype`` calls the object columns pandas hashes faithfully.
 SAFE_OBJECT = frozenset({"string", "empty"})
@@ -59,11 +63,6 @@ def element_digests(values, digest_bytes: Callable[[Any], bytes]) -> np.ndarray:
     would anywhere else, rather than falling back to pandas' unstable ``str()``.
     """
     return np.array([digest_bytes(v).decode() for v in values], dtype=object)
-
-
-def is_pandas(value: Any) -> bool:
-    """Whether :func:`digest_pandas` digests *value*."""
-    return isinstance(value, (pd.DataFrame, pd.Series, pd.Index, pd.Timedelta)) or value is pd.NA
 
 
 def digest_pandas(value, digest_bytes: Callable[[Any], bytes]) -> bytes:
@@ -117,12 +116,35 @@ def digest_pandas(value, digest_bytes: Callable[[Any], bytes]) -> bytes:
             case pd.Timedelta():
                 # Its exact length in nanoseconds, whatever unit it stores; .value
                 # would overflow for a second-unit Timedelta beyond int64 ns.
-                # KeyError for a unit without a known length, which digest.py
+                # KeyError for a unit without a known length, which the hook
                 # raises as Indigestible; pandas only stores s, ms, us or ns.
-                _, attoseconds = _numpy.timedelta64_length(value.to_timedelta64())
+                _, attoseconds = timedelta64_length(value.to_timedelta64())
                 m.update(digest_bytes(attoseconds // 10**9))
             case _ if value is pd.NA:
                 # A singleton like None; it turns up in object columns, which the
                 # arms above digest element by element.
                 m.update(b"__NA__")
     return m.result
+
+
+def _digest_bytes(value: Any) -> bytes:
+    return digest(value).encode()
+
+
+def _pandas_digest(value) -> Digest:
+    try:
+        return Digest(digest_pandas(value, _digest_bytes).decode())
+    except KeyError as err:
+        # A pd.Timedelta in a unit without a known length.
+        raise Indigestible(value) from err
+
+
+#: The hooks fleche loads from this package's ``fleche``/``digest`` entry point.
+#: ``pd.Index`` covers its subclasses, ``MultiIndex`` and ``RangeIndex`` among them.
+digest_hooks = [
+    (pd.DataFrame, _pandas_digest),
+    (pd.Series, _pandas_digest),
+    (pd.Index, _pandas_digest),
+    (pd.Timedelta, _pandas_digest),
+    (type(pd.NA), _pandas_digest),
+]

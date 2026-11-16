@@ -13,35 +13,53 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     outputs:
-      release_created: ${{ steps.rp.outputs.release_created }}
-      tag_name: ${{ steps.rp.outputs.tag_name }}
+      # JSON list of {path, environment} for the packages this run released:
+      # path "." for fleche, "src/fleche-numpy" etc. for the sister packages.
+      released: ${{ steps.released.outputs.released }}
     steps:
       - uses: googleapis/release-please-action@v4
         id: rp
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+      # Each package publishes from its own environment: fleche from pypi, a
+      # sister package from pypi-<name>.  PyPI allows only one pending trusted
+      # publisher per repository, workflow and environment, so new projects
+      # need environments of their own.
+      - id: released
+        env:
+          PATHS: ${{ steps.rp.outputs.paths_released }}
+        run: |
+          echo "released=$(jq -c 'map({path: ., environment: (if . == "." then "pypi" else "pypi-" + (split("/") | last) end)})' <<< "${PATHS:-[]}")" >> "$GITHUB_OUTPUT"
 
   publish:
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created }}
+    if: ${{ needs.release-please.outputs.released != '[]' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.release-please.outputs.released) }}
     runs-on: ubuntu-latest
     environment:
-      name: pypi
-      url: https://pypi.org/p/fleche
+      name: ${{ matrix.environment }}
     permissions:
       id-token: write
     steps:
+      # The release commit carries every tag this run created; the full history
+      # lets setuptools-scm find fleche's.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.release-please.outputs.tag_name }}
+          ref: ${{ github.sha }}
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - name: Build
         shell: bash
+        env:
+          PACKAGE_PATH: ${{ matrix.path }}
         run: |
           pip install build
-          python -m build --sdist
+          python -m build --sdist --outdir dist/ "$PACKAGE_PATH"
       - name: pypi-publish
         uses: pypa/gh-action-pypi-publish@v1.13.0

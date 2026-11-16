@@ -20,6 +20,7 @@ jobs:
               - 'tests/**'
               - 'pyproject.toml'
               - '.github/workflows/test-minimum-deps.yml'
+              - '.github/actions/**'
 
   test-minimum-deps:
     needs: changes
@@ -44,7 +45,10 @@ jobs:
         if: needs.changes.outputs.run == 'true'
       # --resolution lowest-direct pins every direct dependency to the lowest
       # version its bound allows, exercising the floors declared in pyproject.
-      - run: uv pip install --resolution lowest-direct -e ".[tests]"
+      - uses: ./.github/actions/install-fleche
         if: needs.changes.outputs.run == 'true'
+        with:
+          installer: uv pip
+          args: --resolution lowest-direct
       - run: uv run --no-sync pytest
         if: needs.changes.outputs.run == 'true'

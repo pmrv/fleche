@@ -20,7 +20,8 @@ packages are published:
 * ``fleche`` -- the full install, which also pulls in the optional dependencies
   (``cloudpickle``, ``dill``, ``sqlalchemy`` and ``bagofholding``), enabling the
   SQL, SSH, alternate-serialization and Bagofholding features (see the ``ssh``
-  row below for the extra runtime requirement it carries).
+  row below for the extra runtime requirement it carries), and the
+  ``fleche-numpy`` and ``fleche-pandas`` companion packages.
 
 .. code-block:: bash
 
@@ -75,9 +76,20 @@ brackets, e.g. ``pip install "fleche[sqlalchemy,ssh]"``.
    * - ``docs``
      - ``pip install "fleche[docs]"``
      - The packages needed to build this documentation (see below).
+   * - ``numpy``
+     - ``pip install "fleche[numpy]"``
+     - Digests of numpy arrays, ``np.bool_`` and ``np.timedelta64``, through the
+       ``fleche-numpy`` companion package (see below).
+   * - ``pandas``
+     - ``pip install "fleche[pandas]"``
+     - Digests of pandas frames, series, indices, ``pd.Timedelta`` and
+       ``pd.NA``, through the ``fleche-pandas`` companion package (see below).
    * - ``tests``
      - ``pip install "fleche[tests]"``
-     - The full test suite plus every optional backend it exercises.
+     - The full test suite plus every optional backend it exercises. The suite
+       also needs the companion packages; from a checkout, install them
+       alongside: ``pip install -e ".[tests]" -e src/fleche-numpy -e
+       src/fleche-pandas``.
 
 .. note::
 
@@ -93,13 +105,21 @@ Digest support for third-party libraries ships as separate companion packages
 that register themselves via :doc:`entry points <digests/entry_points>` —
 installing them alongside ``fleche`` is all that is needed:
 
+* ``fleche-numpy`` (`PyPI <https://pypi.org/project/fleche-numpy/>`__) —
+  arrays, ``np.bool_`` and ``np.timedelta64``; see :doc:`digests/numpy`.
+* ``fleche-pandas`` (`PyPI <https://pypi.org/project/fleche-pandas/>`__) —
+  ``DataFrame``, ``Series``, ``Index``, ``pd.Timedelta`` and ``pd.NA``; see
+  :doc:`digests/pandas`. Pulls in ``fleche-numpy``.
 * ``fleche-ase`` (`PyPI <https://pypi.org/project/fleche-ase/>`__) — digest
   hooks for the Atomic Simulation Environment. See :doc:`digests/entry_points`
   for exactly which types it covers.
 
 .. code-block:: bash
 
-   pip install fleche-ase
+   pip install fleche-numpy fleche-pandas fleche-ase
+
+``fleche-numpy`` and ``fleche-pandas`` live in the fleche repository, under
+``src/``, and are versioned and released independently of ``fleche``.
 
 Installing documentation
 -------------------------
