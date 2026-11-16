@@ -17,15 +17,13 @@
       "package-name": "fleche-numpy",
       "component": "fleche-numpy",
       "release-type": "python",
-      "include-component-in-tag": true,
-      "initial-version": "1.0.0"
+      "include-component-in-tag": true
     },
     "src/fleche-pandas": {
       "package-name": "fleche-pandas",
       "component": "fleche-pandas",
       "release-type": "python",
-      "include-component-in-tag": true,
-      "initial-version": "1.0.0"
+      "include-component-in-tag": true
     }
   }
 }
