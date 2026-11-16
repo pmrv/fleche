@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.24.0](https://github.com/pmrv/fleche/compare/0.23.1...0.24.0) (2026-11-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* code that relied on fleche to install numpy or pandas must depend on them itself, or on fleche[numpy] / fleche[pandas].
+* **digest:** digesting numpy arrays, np.bool_, np.timedelta64 or pandas objects requires fleche-numpy / fleche-pandas (the fleche[numpy] and fleche[pandas] extras). A type with both __digest__ and an entry-point hook digests by __digest__. fleche._hashing is renamed fleche.hashing.
+
+### Features
+
+* **digest:** move numpy and pandas digests into sister packages ([#1058](https://github.com/pmrv/fleche/issues/1058)) ([4aaebce](https://github.com/pmrv/fleche/commit/4aaebcedfd19d398a082427d88bc135b423314e5))
+* drop numpy and pandas from fleche's dependencies ([#1060](https://github.com/pmrv/fleche/issues/1060)) ([db48536](https://github.com/pmrv/fleche/commit/db48536623bdf971b953d0bded1dbc85dc4226b3))
+* **query:** import pandas only when table() is called ([#1059](https://github.com/pmrv/fleche/issues/1059)) ([52e8fab](https://github.com/pmrv/fleche/commit/52e8fabdef27eedd0d51364d65525530f0109e5f))
+
 ## [0.23.1](https://github.com/pmrv/fleche/compare/0.23.0...0.23.1) (2026-11-15)
 
 
