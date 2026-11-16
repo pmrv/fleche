@@ -195,11 +195,57 @@ class DigestedAttrs(DigestedFields):
         return _attrs.field_items(value)
 
 
+@dataclass
+class DigestedArray(Digested):
+    """Marker for numpy arrays of ``dtype=object``, destructured element-wise like a list.
+
+    *items* is a copy of the array, of the same shape and type, whose elements are
+    the interned children: inline values or :class:`~fleche.digest.Digest`
+    back-references.  fleche-numpy digests an object array element by element and a
+    ``Digest`` digests as itself, so the default :meth:`__digest__` over *items*
+    equals the digest of the original array.  Only ndarray methods are used, so
+    fleche still never imports numpy.
+    """
+
+    items: Any  # numpy.ndarray of dtype object
+
+    def underlying(self):
+        return self.items
+
+    def mend(self, storage: 'DestructuringMixin'):
+        return self._filled(self.items, (self.get(storage, v) for v in self.items.reshape(-1)))
+
+    @staticmethod
+    def _filled(array, children):
+        # copy() is C-contiguous, so reshape(-1) is a view and writes land in *out*;
+        # assigning one element at a time stores lists and arrays as objects
+        # instead of letting numpy broadcast them.
+        out = array.copy()
+        flat = out.reshape(-1)
+        for i, child in enumerate(children):
+            flat[i] = child
+        return out
+
+    @classmethod
+    def _slots(cls, value: Any) -> list[tuple[None, Any]]:
+        return [(None, v) for v in value.reshape(-1)]
+
+    @classmethod
+    def _rebuild_plain(cls, value: Any, labels: tuple, children: tuple) -> Any:
+        # no element was replaced by a Digest, so the array itself is the result
+        return value
+
+    @classmethod
+    def _rebuild_digest(cls, value: Any, labels: tuple, children: tuple) -> 'DigestedArray':
+        return cls(cls._filled(value, children))
+
+
 _DESTRUCTURERS: list[tuple[Callable[[Any], bool], Callable]] = [
     (lambda v: isinstance(v, (list, tuple)), DigestedIterable.sunder),
     (lambda v: isinstance(v, dict), DigestedDict.sunder),
     (lambda v: _dataclasses.is_dataclass(v) and not isinstance(v, type), DigestedDataclass.sunder),
     (_attrs.is_attrs_instance, DigestedAttrs.sunder),
+    (lambda v: _is_ndarray(v) and v.dtype.kind == "O", DigestedArray.sunder),
 ]
 
 
@@ -230,35 +276,43 @@ _SCALAR_TYPES = (
     datetime.tzinfo,
 )
 
-# Third-party scalars matched by (top-level module, class name) along the MRO, the
+# Third-party types matched by (top-level module, class name) along the MRO, the
 # way digest._SISTER_PACKAGES does, so fleche never imports numpy or pandas.
 # np.bool_ is not a numbers.Number since numpy 1.20; the other numpy number
 # scalars are, and np.str_/np.bytes_ subclass str/bytes.
-_FOREIGN_SCALARS = {
-    ("numpy", "bool"),  # np.bool_ on numpy 2
-    ("numpy", "bool_"),  # np.bool_ on numpy 1
-    ("pandas", "NAType"),
+_FOREIGN_TYPES = {
+    ("numpy", "bool"): "scalar",  # np.bool_ on numpy 2
+    ("numpy", "bool_"): "scalar",  # np.bool_ on numpy 1
+    ("pandas", "NAType"): "scalar",
+    ("numpy", "ndarray"): "ndarray",
 }
 
-# Per-type answers for the _FOREIGN_SCALARS MRO walk.
-_FOREIGN_SCALAR_CACHE: dict[type, bool] = {}
+# Per-type answers for the _FOREIGN_TYPES MRO walk; None for unmatched types.
+_FOREIGN_KIND_CACHE: dict[type, str | None] = {}
+
+
+def _foreign_kind(value: Any) -> str | None:
+    t = type(value)
+    try:
+        return _FOREIGN_KIND_CACHE[t]
+    except KeyError:
+        pass
+    kind = None
+    for c in t.__mro__:
+        kind = _FOREIGN_TYPES.get((c.__module__.partition(".")[0], c.__qualname__))
+        if kind is not None:
+            break
+    _FOREIGN_KIND_CACHE[t] = kind
+    return kind
+
+
+def _is_ndarray(value: Any) -> bool:
+    return _foreign_kind(value) == "ndarray"
 
 
 def _is_scalar(value: Any) -> bool:
     """Whether *value* is an atomic leaf, inlined like an ``int`` (depth 0)."""
-    if isinstance(value, _SCALAR_TYPES):
-        return True
-    t = type(value)
-    try:
-        return _FOREIGN_SCALAR_CACHE[t]
-    except KeyError:
-        pass
-    result = any(
-        (c.__module__.partition(".")[0], c.__qualname__) in _FOREIGN_SCALARS
-        for c in t.__mro__
-    )
-    _FOREIGN_SCALAR_CACHE[t] = result
-    return result
+    return isinstance(value, _SCALAR_TYPES) or _foreign_kind(value) == "scalar"
 
 
 @runtime_checkable
@@ -382,6 +436,8 @@ class DestructuringMixin(base.ValueStorage):
                 }
             case DigestedFields():
                 return {v for v in raw.fields.values() if isinstance(v, digest.Digest)}
+            case DigestedArray():
+                return {v for v in raw.items.reshape(-1) if isinstance(v, digest.Digest)}
             case _:
                 return set()
 
