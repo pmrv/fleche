@@ -83,7 +83,11 @@ are the whole reason a concrete class needs no method bodies.
 
 The two differ in where the key comes from.
 :class:`~fleche.storage.base.ValueMixin` hashes the value
-(``key = digest(value)``) unless one is passed in;
+(``key = digest(value)``) unless one is passed in, and skips the write when
+the key is already present: an entry under a content digest holds an equal
+value already.  That is only sound because every backend's ``put`` publishes
+a key once its entry is complete and never earlier — see
+:meth:`~fleche.storage.base.StorageBackend.put`;
 :class:`~fleche.storage.base.CallMixin` takes it from the record
 (``key = call.to_lookup_key()``) and evicts any existing entry first, because
 a re-save under the same lookup key is an overwrite rather than a second

@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -52,7 +53,6 @@ def test_version_validator_passed_to_load(tmp_path, monkeypatch):
 
     s = BagOfHoldingH5FileBackend(tmp_path, version_validator="semantic-minor")
     key = Digest("test_key")
-    s.put(42, key)
     result = s.get(key)
 
     assert result == 42
@@ -69,7 +69,6 @@ def test_version_validator_none_not_passed_to_load(tmp_path, monkeypatch):
 
     s = BagOfHoldingH5FileBackend(tmp_path)
     key = Digest("test_key2")
-    s.put(42, key)
     s.get(key)
 
     _, kwargs = mock_h5bag.return_value.load.call_args
@@ -82,6 +81,7 @@ def test_rebag_calls_load_and_save(tmp_path, monkeypatch):
 
     mock_h5bag = MagicMock()
     mock_h5bag.return_value.load.return_value = 99
+    mock_h5bag.save.side_effect = lambda value, path: Path(path).write_bytes(b"rebagged")
     monkeypatch.setattr(boh_mod, "H5Bag", mock_h5bag)
 
     s = BagOfHoldingH5FileBackend(tmp_path, prefix_length=0)
@@ -91,7 +91,10 @@ def test_rebag_calls_load_and_save(tmp_path, monkeypatch):
     s.rebag(version_validator="none")
 
     mock_h5bag.return_value.load.assert_called_once_with(version_validator="none")
-    mock_h5bag.save.assert_called_once_with(99, s._path(key))
+    # Rewritten through put: into a temp sibling, then renamed into place.
+    (value, path), _ = mock_h5bag.save.call_args
+    assert value == 99 and Path(path).parent == s._path(key).parent
+    assert s._path(key).read_bytes() == b"rebagged"
 
 
 def test_rebag_skips_oserror(tmp_path, monkeypatch, caplog):
@@ -379,7 +382,8 @@ def test_refix_unlinks_old_bags_as_soon_as_drained(tmp_path, monkeypatch):
     bags_at_save = {}
 
     def spying_save(value, path):
-        bags_at_save[Path(path).name] = {p.name for p in tmp_path.glob("*.h5")}
+        key = Path(path).name.removeprefix(boh_mod._STAGING_PREFIX)
+        bags_at_save[key] = {p.name for p in tmp_path.glob("*.h5")}
         return real_save(value, path)
 
     monkeypatch.setattr(boh_mod.H5Bag, "save", staticmethod(spying_save))

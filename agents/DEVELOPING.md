@@ -153,7 +153,7 @@ Values and calls are stored separately so call records are queryable without des
   the hex encoding lives only there and in `digest.py`.
   `_numbers.py` walks `NUMBER_TREE`: non-NaN numbers digest equal iff they hold the same exact value (numpy's `==` is not the reference), converters must refuse inexact conversions themselves, NaNs digest by their float/complex bits, and `int` subclasses keep their own type name while `float` subclasses downcast.
   The tree is also drawn in a code comment and in `docs/digests/digest_equivalence.rst` — update both by hand.
-  Equal values of different numeric types share one stored value, and the last save wins the return type — intended.
+  Equal values of different numeric types share one stored value, and the first save fixes the return type — intended.
   `fleche_numpy` digests dtype + shape + bytes, except structured dtypes (per field;
   padding is uninitialised) and object dtypes (per element).
   Timedeltas stay apart per library (`datetime.timedelta`, `pd.Timedelta` and `np.timedelta64` of one length are three digests, by maintainer decision), each by its exact length.
@@ -213,6 +213,8 @@ Values and calls are stored separately so call records are queryable without des
   `KeyManagement.expand` rejects prefixes under 4 chars;
   subclasses override only `_prefix_candidates`.
   `ValueMixin`/`CallMixin` bridge `save`/`load`/`query` onto `put`/`get`.
+  `ValueMixin.save` skips keys `_contains` already reports (content-addressed, so the stored value is equal), while `CallMixin.save` always overwrites, since a record under one lookup key can change (`rerun`, metadata).
+  The skip makes **`put` atomicity a hard invariant**: a key must become visible to `_contains`/`get` only once its entry is complete, crash mid-write included, or the torn entry is never rewritten.
   `SaveError` is the only exception a backend may let out of `put`: every backend wraps any serialisation (or copy) failure as `SaveError(value) from e`, deliberately broad because serializers re-raise whatever `__reduce__` raised.
   Callers key on it — `Call._to_digested` degrades a refused argument to a digest-only reference (hashed into the key, not stored) and `Cache.save` turns a refused result into `Rejected` — so a raw exception escaping `put` fails `prepare` and runs every call touching that value uncached.
   `@register_storage(name, kind)` on a backend class fills the config dispatch table.
@@ -231,7 +233,9 @@ Values and calls are stored separately so call records are queryable without des
   `prefix_length=0` is one file per key and lock-free;
   `None` infers from existing files, and a mismatch with files in `root` raises at construction.
   `refix(n)` / `consolidate(root, n)` migrate layouts.
-  A refused multi-bag save drops the group `H5Bag.save` already created (`_drop_group`, shared with `_evict`), else `contains` would report a value that was never stored.
+  Multi-bag `put` writes into a `.staging-<key>` group and renames it to `<key>` under the bag lock, the in-file analogue of the temp-file rename;
+  `list`/`_contains` never see staging groups, a refused save drops its staging group, and every `put` sweeps staging leftovers of dead writers from its bag.
+  `rebag` rewrites through `put` for the same reason.
   Check #893 before touching `lock_timeout`.
 - `memory.py` — `put`/`get` deep-copy.
 - `sql.py` — `Sql` stores calls only and is not a `StorageBackend`: it saves in one transaction and evicts with one `DELETE`, child rows going by `ON DELETE CASCADE` (SQLite needs `foreign_keys=ON` per connection).

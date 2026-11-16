@@ -348,7 +348,15 @@ class StorageBackend(KeyManagement):
     """
 
     @abstractmethod
-    def put(self, value: Any, key: Digest) -> Digest: ...
+    def put(self, value: Any, key: Digest) -> Digest:
+        """Write *value* under *key*, replacing any entry already there.
+
+        Must be atomic with respect to ``_contains`` and ``get``: until the
+        entry is complete they see the previous state, never a partial one —
+        also if the process dies mid-write.  :meth:`ValueMixin.save` skips
+        keys ``_contains`` reports, so a key published early would stay torn
+        for good.  On failure raise :class:`SaveError` and leave no trace.
+        """
 
     @abstractmethod
     def get(self, key: Digest) -> Any: ...
@@ -381,9 +389,20 @@ class ValueMixin(ValueStorage, StorageBackend):
     """
 
     def save(self, value: Any, key: Digest | None = None) -> Digest:
+        """Store *value* under *key* (its digest by default), unless already present.
+
+        Keys are content digests, so an entry already under *key* holds an
+        equal value and writing it again is pure I/O.  Skipping it relies on
+        every backend's ``put`` publishing a key only once its entry is
+        complete — a torn entry that ``_contains`` reported would otherwise
+        never be repaired.
+        """
         if key is None:
             key = digest(value)
         with self._operation_context(key):
+            if self._contains(key):
+                logger.debug("Value with key %s already stored", key)
+                return key
             logger.debug("Saving value with key %s", key)
             return self.put(value, key)
 
