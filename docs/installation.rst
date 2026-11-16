@@ -120,13 +120,7 @@ installing them alongside ``fleche`` is all that is needed:
    pip install fleche-numpy fleche-pandas fleche-ase
 
 ``fleche-numpy`` and ``fleche-pandas`` live in the fleche repository, under
-``src/``, and are versioned and released independently of ``fleche``. Without
-them, ``fleche`` refuses arrays and frames as
-:exc:`~fleche.digest.Indigestible` (naming the package to install) rather than
-digest them as plain iterables: a DataFrame iterates over its column names
-only, so that would give any two frames with the same columns the same key.
-numpy number scalars (``np.float64``, ...) need neither; ``fleche`` digests
-them itself.
+``src/``, and are versioned and released independently of ``fleche``.
 
 Installing documentation
 -------------------------
