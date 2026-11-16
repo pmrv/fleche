@@ -329,10 +329,6 @@ def atoms_digest(structure: Atoms) -> Digest:
         try:
             parts.append(("calc", digest(structure.calc)))
         except Indigestible as exc:
-            # The value that is not hashing, as far as the caller is concerned, is the
-            # STRUCTURE: that is what it handed over, so that is `args[0]`, as everywhere
-            # else. What came back can be something far inside the calculator -- a scipy
-            # spline, say -- which is diagnostics, and follows.
             raise Indigestible(structure,
                                "its attached calculator cannot be digested",
                                *exc.args) from exc
