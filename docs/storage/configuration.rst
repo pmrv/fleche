@@ -264,7 +264,7 @@ Available storage types
      - Filesystem backend, standard ``pickle``
        (:class:`~fleche.storage.ValuePickleFile` / :class:`~fleche.storage.CallPickleFile`)
      - ``root``
-     - ``compress``,
+     - ``compress``, ``compress_level``,
        ``secret_key``, ``remaining_depth`` *(value only)*
    * - ``"cloudpickle"``
      - Filesystem backend, ``cloudpickle``; handles lambdas, closures, etc.
@@ -298,6 +298,12 @@ Key descriptions
 ``compress``
     (bool, default ``false``) — *pickle-family only.*  gzip-compress each
     stored file.
+
+``compress_level``
+    (int ``0``–``9``, default ``9``) — *pickle-family only.*  gzip level used
+    when ``compress`` is on and by ``compress_all()``; lower is faster and
+    larger.  Reading never depends on it, so it can be changed freely on an
+    existing cache.
 
 ``lock_timeout``
     (float, default ``1.0``) — maximum seconds to wait to acquire a file lock

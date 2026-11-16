@@ -69,6 +69,8 @@ class PickleFileBackend(FileStorage):
     secret_key: tuple[bytes, ...] = field(default_factory=tuple)
     serializer: str = "pickle"
     compress: bool = False
+    # gzip level used when `compress` is set and by `compress_all`; 9 is gzip's own default.
+    compress_level: int = 9
     # Derived from `serializer` in `__post_init__` via the `_SERIALIZERS` registry;
     # `init=False` keeps them off the constructor signature.
     dumps: Callable = field(init=False, repr=False)
@@ -76,6 +78,14 @@ class PickleFileBackend(FileStorage):
 
     def __post_init__(self):
         super().__post_init__()
+        if (
+            isinstance(self.compress_level, bool)
+            or not isinstance(self.compress_level, int)
+            or not 0 <= self.compress_level <= 9
+        ):
+            raise ValueError(
+                f"compress_level must be an integer from 0 to 9, got {self.compress_level!r}"
+            )
         raw = get_secret_key() if not self.secret_key else normalize_secret_key(self.secret_key)
         object.__setattr__(self, "secret_key", tuple(raw))
         try:
@@ -122,7 +132,7 @@ class PickleFileBackend(FileStorage):
             raise SaveError(value) from e
         data = signer.dumps(payload)
         if self.compress:
-            data = gzip.compress(data)
+            data = gzip.compress(data, compresslevel=self.compress_level)
         path.write_bytes(data)
 
     def _from_file(self, path: Path) -> Any:
@@ -157,9 +167,14 @@ class PickleFileBackend(FileStorage):
                 _atomic_write(path, lambda tmp, data=result: tmp.write_bytes(data))
 
     def compress_all(self) -> None:
-        """Rewrite all stored files in gzip-compressed form."""
+        """Rewrite all stored files in gzip-compressed form, at ``compress_level``.
+
+        Files that are already compressed are left as they are, whatever level
+        they were written at.
+        """
+        level = self.compress_level
         self._rewrite_all(
-            lambda c: None if c[:2] == b"\x1f\x8b" else gzip.compress(c)
+            lambda c: None if c[:2] == b"\x1f\x8b" else gzip.compress(c, compresslevel=level)
         )
 
     def decompress_all(self) -> None:
@@ -181,6 +196,9 @@ class ValuePickleFile(PerKeyLockMixin, DestructuringMixin, ValueMixin, PickleFil
         }
         # Keys are bytes; store them hex-encoded, and omit the key list
         # entirely when unset so the config stays minimal.
+        # Omitted at the default so configs written before the option existed round-trip unchanged.
+        if self.compress_level != 9:
+            config["compress_level"] = self.compress_level
         if self.secret_key:
             config["secret_key"] = [k.hex() for k in self.secret_key]
         return config
@@ -193,6 +211,9 @@ class CallPickleFile(PerKeyLockMixin, CallMixin, PickleFileBackend):
             "root": str(self.root),
             "compress": self.compress,
         }
+        # Omitted at the default so configs written before the option existed round-trip unchanged.
+        if self.compress_level != 9:
+            config["compress_level"] = self.compress_level
         if self.secret_key:
             config["secret_key"] = [k.hex() for k in self.secret_key]
         return config
