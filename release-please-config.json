@@ -1,12 +1,13 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
   "release-type": "simple",
-  "bump-minor-pre-major": true,
+  "separate-pull-requests": true,
   "include-component-in-tag": false,
   "include-v-in-tag": false,
   "packages": {
     ".": {
       "package-name": "fleche",
+      "bump-minor-pre-major": true,
       "exclude-paths": [
         "src/fleche-numpy",
         "src/fleche-pandas"
@@ -17,16 +18,14 @@
       "component": "fleche-numpy",
       "release-type": "python",
       "include-component-in-tag": true,
-      "include-v-in-tag": true,
-      "initial-version": "0.1.0"
+      "initial-version": "1.0.0"
     },
     "src/fleche-pandas": {
       "package-name": "fleche-pandas",
       "component": "fleche-pandas",
       "release-type": "python",
       "include-component-in-tag": true,
-      "include-v-in-tag": true,
-      "initial-version": "0.1.0"
+      "initial-version": "1.0.0"
     }
   }
 }
