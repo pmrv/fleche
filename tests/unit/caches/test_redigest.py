@@ -2,7 +2,7 @@
 import pytest
 from fleche.call import Call
 from fleche.digest import Digest
-import fleche._hashing as _hashing
+import fleche.hashing as hashing
 import fleche.digest as _fd
 from fleche.caches import Cache
 
@@ -225,7 +225,7 @@ def test_redigest_orphans_all_value_keys_when_entire_hash_changes(monkeypatch, c
         def sha256():
             return hashlib.blake2b(digest_size=32)
 
-    monkeypatch.setattr(_hashing, "hashlib", _Blake2bHashlib)
+    monkeypatch.setattr(hashing, "hashlib", _Blake2bHashlib)
 
     clean_cache.redigest()
 

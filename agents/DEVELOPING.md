@@ -84,19 +84,22 @@ Other optional deps are gated via `pyiron_snippets.import_alarm.ImportAlarm` —
 **Sister packages:** `src/` holds more than `fleche` — `src/fleche-numpy/` (`fleche_numpy`) and `src/fleche-pandas/` (`fleche_pandas`) are separate distributions, each with its own `pyproject.toml`, static version,
 `CHANGELOG.md` and release, registering digest hooks through the `fleche`/`digest` entry point.
 They share fleche's single test suite under `tests/`, which expects all of them installed.
-They may import `fleche._hashing` (its `running_hash`) and `fleche.digest`'s public names, nothing else from fleche;
+They may import `fleche.hashing` and `fleche.digest`'s public names, nothing else from fleche;
 `fleche_pandas` builds on `fleche_numpy.timedelta64_length`, so `fleche-pandas` depends on `fleche-numpy`.
 fleche itself never imports them, and the root sdist prunes them (`MANIFEST.in`).
 Versions and tags: fleche tags bare versions (`0.23.1`) from setuptools-scm, whose `describe_command` matches `[0-9]*` only;
-sister packages tag `<name>-v<version>` and release-please (`release-type: python`) bumps the `version` in their `pyproject.toml`.
+development checkouts version as the next minor (`release-branch-semver`, e.g. `0.24.0.devN`), so a sister package can require an unreleased fleche as `fleche >= 0.24.0.dev0`.
+Sister packages started at 1.0.0, tag `<name>-<version>`, and release-please (`release-type: python`) bumps the `version` in their `pyproject.toml`.
+Each package gets its own release PR (`separate-pull-requests`), so each is cut whenever its PR is merged, independently of the others;
+a `Release-As: x.y.z` footer on a commit touching a package forces its next version.
 Commits touching only `src/fleche-<x>/` release only that package (`exclude-paths` on the root package), so scope such commits by package, e.g. `fix(fleche-numpy): ...`.
 `release-please.yml` publishes every path in `paths_released`;
 each PyPI project needs its own trusted publisher for that workflow and the `pypi` environment.
-CI checks out full history (`fetch-depth: 0`) so the editable fleche gets a real version and satisfies the sisters' `fleche >=` floor.
+CI installs fleche and every `src/fleche-*` package editable through the composite action `.github/actions/install-fleche`, after a checkout with full history (`fetch-depth: 0`) so the editable fleche gets a real version and satisfies the sisters' `fleche >=` floor.
 Adding another sister package touches the same spots: `src/fleche-<x>/`,
 `release-please-config.json` (and the root's `exclude-paths`),
-`MANIFEST.in`, the `pip install` lines in `.github/workflows/`, the root `[project.optional-dependencies]`,
-`_SISTER_PACKAGES` in `digest.py` if fleche would otherwise digest its types wrongly, and a conda-forge feedstock.
+`MANIFEST.in`, the root `[project.optional-dependencies]`,
+`_SISTER_PACKAGES` in `digest.py` if a built-in arm would accept its types, and a conda-forge feedstock.
 
 **Backends (config `type` strings):** `"memory"`, `"void"`, `"pickle"` / `"cloudpickle"` / `"dill"`, `"bagofholding_hdf"`, `"sql"` (**calls only**), `"ssh"` (whole-cache forwarding).
 Values and calls are stored separately so call records are queryable without deserializing heavy values.
@@ -130,9 +133,8 @@ Values and calls are stored separately so call records are queryable without des
   negatives cached in `_TYPES_WITHOUT_DIGEST`), then entry-point hooks (third-party types, numpy and pandas included), then `_SISTER_PACKAGES`, then the `_digest_bytes` match.
   Entry-point hooks sit below `__digest__` because they load lazily: above it, a subclass's digest would flip the first time some other value loaded them.
   `load_entry_points` sorts them subclass-first (stable, by MRO length), so which plugin wins for a subclass does not depend on distribution discovery order.
-  Both hook lists are iterated in place, without allocating `get_hooks()`'s list, since the sister packages keep the entry-point list non-empty.
   `_SISTER_PACKAGES` refuses, as `Indigestible` with a note naming the package, the numpy and pandas types no hook took, matched by top-level module and class name along the MRO so fleche never imports numpy or pandas;
-  the built-in arms would digest them wrongly (`np.timedelta64` is registered as `Integral`, a DataFrame iterates its column names, `pd.Timedelta` subclasses `datetime.timedelta`), and the `Indigestible` is what makes `digest()` load the entry points in the first place.
+  the built-in arms would accept them (an ndarray is `Iterable`, `np.timedelta64` an `Integral`), and the `Indigestible` is what makes `digest()` load the entry points.
   A `datetime.timedelta` digests its exact length in microseconds, not the old `total_seconds()` float, which merged unequal values past about 285 years.
   Built-in `type` objects digest by name, user classes are `Indigestible` as values;
   dataclass and `attrs` instances share one flat field-dict layout.
@@ -141,7 +143,7 @@ Values and calls are stored separately so call records are queryable without des
   `CO_NESTED` is part of the code, so un-nesting a helper changes its key (`test_nesting_changes_a_function_digest`).
 - Digest arm modules (`_numbers`, and `fleche_numpy`/`fleche_pandas` in the sister packages) are kept out of `digest.py` and take `_digest_bytes` as an argument to avoid import cycles;
   the sister packages' hooks pass `digest(v).encode()`, which is the same bytes.
-  `_hashing.py` is the only home of the hash primitive they share (patch `_hashing.hashlib` to swap it everywhere);
+  `hashing.py` is the only home of the hash primitive they share (patch `hashing.hashlib` to swap it everywhere);
   the hex encoding lives only there and in `digest.py`.
   `_numbers.py` walks `NUMBER_TREE`: non-NaN numbers digest equal iff they hold the same exact value (numpy's `==` is not the reference), converters must refuse inexact conversions themselves, NaNs digest by their float/complex bits, and `int` subclasses keep their own type name while `float` subclasses downcast.
   The tree is also drawn in a code comment and in `docs/digests/digest_equivalence.rst` — update both by hand.

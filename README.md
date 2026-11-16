@@ -33,7 +33,7 @@ numpy arrays and pandas objects are digested by companion packages that live in 
 pip install "fleche[numpy,pandas]"   # same as: pip install fleche fleche-numpy fleche-pandas
 ```
 
-Without them, fleche refuses arrays and frames as `Indigestible` rather than guess at a key.
+Without them, fleche refuses arrays and frames as `Indigestible`.
 
 ### With conda
 
