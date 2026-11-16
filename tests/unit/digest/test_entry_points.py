@@ -2,12 +2,11 @@ import logging
 
 import pytest
 from unittest.mock import MagicMock, patch
+import fleche.digest as fd
 from fleche.digest import (
     digest,
     Indigestible,
     Hook,
-    _HOOKS,
-    _EP_HOOKS,
     load_entry_points,
     add_hook,
     get_hooks,
@@ -17,11 +16,9 @@ from fleche.digest import (
 @pytest.fixture(autouse=True)
 def clean_hooks():
     """Fixture to ensure hooks are cleaned before and after each test."""
-    _HOOKS.clear()
-    _EP_HOOKS.clear()
+    fd._set_hooks((), ())
     yield
-    _HOOKS.clear()
-    _EP_HOOKS.clear()
+    fd._set_hooks((), ())
 
 
 class CustomType:
@@ -127,7 +124,7 @@ def test_multiple_entry_points():
 
 
 def test_add_hook_with_hook_instance():
-    """Test adding a Hook instance appends it to _HOOKS."""
+    """Test adding a Hook instance registers it."""
 
     def dummy_digest(x):
         return "dummy"
@@ -135,8 +132,7 @@ def test_add_hook_with_hook_instance():
     hook = Hook(int, dummy_digest)
     add_hook(hook)
 
-    assert len(_HOOKS) == 1
-    assert _HOOKS[0] is hook
+    assert fd._HOOKS == (hook,)
 
 
 def test_add_hook_with_tuple():
@@ -148,14 +144,14 @@ def test_add_hook_with_tuple():
     hook_tuple = (str, dummy_digest)
     add_hook(hook_tuple)
 
-    assert len(_HOOKS) == 1
-    assert isinstance(_HOOKS[0], Hook)
-    assert _HOOKS[0].type is str
-    assert _HOOKS[0].digest is dummy_digest
+    assert len(fd._HOOKS) == 1
+    assert isinstance(fd._HOOKS[0], Hook)
+    assert fd._HOOKS[0].type is str
+    assert fd._HOOKS[0].digest is dummy_digest
 
 
 def test_get_hooks():
-    """Test get_hooks combines _HOOKS (reversed) and _EP_HOOKS."""
+    """get_hooks() lists add_hook()'s hooks, newest first, then the entry points'."""
 
     def dummy_digest1(x):
         return "dummy1"
@@ -170,18 +166,12 @@ def test_get_hooks():
     hook2 = Hook(float, dummy_digest2)
     hook3 = Hook(str, dummy_digest3)
 
-    _HOOKS.append(hook1)
-    _HOOKS.append(hook2)
-    _EP_HOOKS.append(hook3)
+    add_hook(hook1)
+    add_hook(hook2)
+    fd._set_hooks(entry_points=[hook3])
 
-    hooks = get_hooks()
-
-    assert len(hooks) == 3
-    # _HOOKS are reversed so last-added has priority
-    assert hooks[0] is hook2
-    assert hooks[1] is hook1
-    # EP hooks follow after
-    assert hooks[2] is hook3
+    assert get_hooks() == (hook2, hook1, hook3)
+    assert get_hooks() is get_hooks()
 
 
 def test_multiple_entry_points_logs_single_correct_override(caplog):
@@ -216,7 +206,7 @@ def test_multiple_entry_points_logs_single_correct_override(caplog):
     )
 
     # the losing hook must not have been registered
-    assert [h.digest for h in _EP_HOOKS] == [custom_digest]
+    assert [h.digest for h in fd._EP_HOOKS] == [custom_digest]
 
 
 def test_add_hook_lifo_priority():
@@ -233,3 +223,18 @@ def test_add_hook_lifo_priority():
 
     obj = CustomType("test")
     assert digest(obj) == "second"
+
+
+def test_entry_point_hooks_apply_to_types_digested_before_they_loaded():
+    """A type already digested by a built-in arm is cached as hookless; loading
+    an entry-point hook for it must still take effect."""
+
+    class Pairs(dict):
+        pass
+
+    before = digest(Pairs(a=1))  # the Mapping arm; Pairs is now cached
+    ep = MagicMock()
+    ep.load.return_value = Hook(Pairs, lambda p: digest(("pairs", sorted(p))))
+    with patch("importlib.metadata.entry_points", return_value=[ep]):
+        load_entry_points()
+    assert digest(Pairs(a=1)) == digest(("pairs", ["a"])) != before

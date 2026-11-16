@@ -136,7 +136,9 @@ Values and calls are stored separately so call records are queryable without des
   Precedence: `add_hook` hooks, then a class-level `__digest__` (before the built-in `match` arms so dict/list subclasses can override;
   negatives cached in `_TYPES_WITHOUT_DIGEST`), then entry-point hooks (third-party types, numpy and pandas included), then `_SISTER_PACKAGES`, then the `_digest_bytes` match.
   Entry-point hooks sit below `__digest__` because they load lazily: above it, a subclass's digest would flip the first time some other value loaded them.
-  `load_entry_points` sorts them subclass-first (stable, by MRO length), so which plugin wins for a subclass does not depend on distribution discovery order.
+  They are sorted subclass-first (stable, by MRO length), so which plugin wins for a subclass does not depend on distribution discovery order.
+  Both hook collections are tuples, replaced whole by `_set_hooks()` (which `add_hook` and `load_entry_points` call, and tests use to reset them), so `get_hooks()` returns a stable tuple and reading the hooks never copies;
+  `_set_hooks()` also clears `_TYPES_WITHOUT_DIGEST`, which caches the types with neither `__digest__` nor an entry-point hook, so plain values skip both checks.
   `_SISTER_PACKAGES` refuses, as `Indigestible`, the numpy and pandas types no hook took (the warnings in `wrapper.py` and `call.py` name the package to install, via `_install_hint`), matched by top-level module and class name along the MRO so fleche never imports numpy or pandas;
   the built-in arms would accept them (an ndarray is `Iterable`, `np.timedelta64` an `Integral`), and the `Indigestible` is what makes `digest()` load the entry points.
   A `datetime.timedelta` digests its exact length in microseconds, not the old `total_seconds()` float, which merged unequal values past about 285 years.

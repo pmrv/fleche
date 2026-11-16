@@ -62,16 +62,26 @@ class Hook(Generic[T]):
     digest: Callable[[T], str | Digest]
 
 
-_HOOKS = []
-_EP_HOOKS = []
+# The hooks are tuples, replaced whole by _set_hooks() whenever they change, so
+# reading them never copies and a digest running concurrently with
+# load_entry_points() sees either the old hooks or the new ones.
+_HOOKS: "tuple[Hook, ...]" = ()
+"""add_hook()'s hooks, newest first: the order they are tried in."""
+_EP_HOOKS: "tuple[Hook, ...]" = ()
+"""Entry-point hooks, subclasses before their bases: the order they are tried in."""
+_EP_TYPES: tuple = ()
+"""The types of ``_EP_HOOKS``, so one ``isinstance`` passes over most values."""
+_ALL_HOOKS: "tuple[Hook, ...]" = ()
 
-# Types confirmed *not* to define ``__digest__``.  ``__digest__`` is the opt-in
-# protocol that lets user types (including subclasses of dict/list/...) take
-# over their own digest, so the check has to run before the built-in ``match``
-# cases — which means it executes on every recursive ``_digest_bytes`` call for
-# plain ints, strs, dicts, lists, etc., where the answer is always False.  After
-# the first sighting of each built-in type, a set-membership check skips the
-# ``hasattr`` MRO walk entirely.  No semantic change for class-defined
+# Types confirmed to have neither ``__digest__`` nor an entry-point hook, and to
+# need no sister package.  ``__digest__`` is the opt-in protocol that lets user
+# types (including subclasses of dict/list/...) take over their own digest, so
+# the check has to run before the built-in ``match`` cases — which means it
+# executes on every recursive ``_digest_bytes`` call for plain ints, strs,
+# dicts, lists, etc., where the answer is always False.  After the first
+# sighting of each such type, a set-membership check skips the ``hasattr`` MRO
+# walk and the entry-point hooks entirely.  _set_hooks() clears it, since new
+# entry-point hooks may claim a type.  No semantic change for class-defined
 # ``__digest__`` (instance-level dunders are not supported anyway).
 _TYPES_WITHOUT_DIGEST: set[type] = set()
 
@@ -112,23 +122,40 @@ def _install_hint(value: Any) -> str:
     return f"; install {package} to digest {t.__module__}.{t.__qualname__}"
 
 
-def get_hooks():
-    return list(reversed(_HOOKS)) + _EP_HOOKS
+def get_hooks() -> "tuple[Hook, ...]":
+    """Every hook, add_hook()'s newest first, then the entry points'."""
+    return _ALL_HOOKS
+
+
+def _set_hooks(
+    manual: "Iterable[Hook] | None" = None, entry_points: "Iterable[Hook] | None" = None
+) -> None:
+    """Replace add_hook()'s hooks (newest first) and/or the entry-point hooks."""
+    global _HOOKS, _EP_HOOKS, _EP_TYPES, _ALL_HOOKS
+    if manual is not None:
+        _HOOKS = tuple(manual)
+    if entry_points is not None:
+        # The first matching hook wins, so subclasses go before their bases: a
+        # plugin's hook for an ndarray subclass must not depend on whether its
+        # distribution happens to be discovered before fleche-numpy's.  The
+        # sort is stable, so unrelated types keep their discovery order.
+        _EP_HOOKS = tuple(sorted(entry_points, key=_hook_specificity, reverse=True))
+        _EP_TYPES = tuple(h.type for h in _EP_HOOKS)
+        _TYPES_WITHOUT_DIGEST.clear()
+    _ALL_HOOKS = _HOOKS + _EP_HOOKS
 
 
 def add_hook(hook: Hook | tuple[Type[T], Callable[[T], str]]):
     if isinstance(hook, tuple):
         hook = Hook(*hook)
-        _HOOKS.append(hook)
-    elif isinstance(hook, Hook):
-        _HOOKS.append(hook)
-    else:
+    elif not isinstance(hook, Hook):
         raise ValueError("Must be a Hook instance or (type, digest function) tuple!")
+    _set_hooks(manual=(hook, *_HOOKS))
 
 
 def load_entry_points():
-    _EP_HOOKS.clear()
     eps = importlib.metadata.entry_points(group="fleche", name="digest")
+    loaded: list[Hook] = []
 
     seen_types = {h.type: "add_hook" for h in _HOOKS}
 
@@ -159,16 +186,12 @@ def load_entry_points():
                         )
                     continue
 
-                _EP_HOOKS.append(hook)
+                loaded.append(hook)
                 seen_types[hook.type] = ep.value
         except Exception as e:
             logger.error("Failed to load entry point %s: %s", ep.name, e, exc_info=True)
 
-    # The first matching hook wins, so subclasses go before their bases: a
-    # plugin's hook for an ndarray subclass must not depend on whether its
-    # distribution happens to be discovered before fleche-numpy's.  The sort is
-    # stable, so unrelated types keep their discovery order.
-    _EP_HOOKS.sort(key=_hook_specificity, reverse=True)
+    _set_hooks(entry_points=loaded)
 
 
 def _hook_specificity(hook: Hook) -> int:
@@ -330,14 +353,14 @@ def _digest_bytes(value: Any) -> bytes:
     ``__digest__``) to ``bytes.fromhex(...)``.  That must be coordinated with
     a ``hash_version`` bump and a ``Cache.redigest`` migration.
     """
-    for h in reversed(_HOOKS):
-        if isinstance(value, h.type):
-            return h.digest(value).encode()
+    if _HOOKS:
+        for h in _HOOKS:
+            if isinstance(value, h.type):
+                return h.digest(value).encode()
 
     # ``__digest__`` opt-in protocol must win over the built-in ``match`` cases
-    # so dict/list subclasses can override their own digest.  Avoid the
-    # per-call ``hasattr`` MRO walk for the overwhelming common case (plain
-    # built-ins) by caching the negative answer in ``_TYPES_WITHOUT_DIGEST``.
+    # so dict/list subclasses can override their own digest.  The overwhelming
+    # common case (plain built-ins) skips this block via ``_TYPES_WITHOUT_DIGEST``.
     t = type(value)
     if t not in _TYPES_WITHOUT_DIGEST and hasattr(t, "__digest__"):
         # For raw-bytes speedup (Issue #440): bytes.fromhex(value.__digest__())
@@ -353,6 +376,20 @@ def _digest_bytes(value: Any) -> bytes:
             return h.digest(value).encode()
 
     if t not in _TYPES_WITHOUT_DIGEST:
+        if hasattr(t, "__digest__"):
+            # For raw-bytes speedup (Issue #440): bytes.fromhex(value.__digest__())
+            return value.__digest__().encode()
+
+        # Entry-point hooks come after ``__digest__``, unlike add_hook's: they
+        # load lazily, on the first Indigestible, so were they first an ndarray
+        # subclass defining ``__digest__`` would digest by it until some plain
+        # array had loaded fleche-numpy's hook, and by the hook ever after —
+        # one value, two keys in one process.
+        if isinstance(value, _EP_TYPES):
+            for h in _EP_HOOKS:
+                if isinstance(value, h.type):
+                    return h.digest(value).encode()
+
         package = _sister_package(t)
         if package is not None:
             # No hook took it, so its sister package is missing (or its entry
