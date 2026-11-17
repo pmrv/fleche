@@ -395,11 +395,21 @@ class ChildItems(ABC):
     def child_digests(self) -> "set[Digest]":
         """The digests among :meth:`child_items` — this record's outgoing edges.
 
+        A child that is itself a record (inlined into this one because it is
+        shallow, while holding a reference further down) contributes its own
+        edges: they belong to the entry this record is stored in.
+
         The record-level counterpart of
         :meth:`~fleche.storage.destructuring.DestructuringMixin.child_digests`,
         which answers the same question for a stored *key*.
         """
-        return {child for _, child in self.child_items() if isinstance(child, Digest)}
+        found: set[Digest] = set()
+        for _, child in self.child_items():
+            if isinstance(child, Digest):
+                found.add(child)
+            elif isinstance(child, ChildItems):
+                found |= child.child_digests()
+        return found
 
 
 class ValueStorage(KeyManagement):

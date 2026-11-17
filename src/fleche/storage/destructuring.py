@@ -34,6 +34,11 @@ class Digested(base.ChildItems, ABC):
         :meth:`_slots`), intern each one, and either return the rebuilt plain value
         (:meth:`_rebuild_plain`, no child became a Digest back-reference) or a *cls*
         wrapper around the interned children (:meth:`_rebuild_digest`, at least one did).
+
+        A child that is itself a wrapper (inlined because it is shallow, but holding a
+        reference further down) counts as a reference too.  That way the wrappers mark
+        exactly the path from the entry's root to each reference, plain subtrees stay
+        plain, and :meth:`mend` only descends where something needs resolving.
         """
         slots = cls._slots(value)
         if slots is None:
@@ -46,7 +51,7 @@ class Digested(base.ChildItems, ABC):
         children, depths = zip(*(intern(v) for v in raw_children))
         depth = 1 + max(depths)
 
-        if all(not isinstance(c, digest.Digest) for c in children):
+        if not any(isinstance(c, (digest.Digest, Digested)) for c in children):
             return cls._rebuild_plain(value, labels, children), depth
         return cls._rebuild_digest(value, labels, children), depth
 
@@ -69,12 +74,18 @@ class Digested(base.ChildItems, ABC):
     def get(storage, key):
         if isinstance(key, digest.Digest):
             return storage.load(key)
-        else:
-            return key
+        if isinstance(key, Digested):
+            return key.mend(storage)
+        return key
 
 @dataclass
 class DigestedIterable(Digested):
     items: list | tuple
+
+    def __hash__(self):
+        # Forward the hash of the underlying container: if it was a dict key (a
+        # tuple), the wrapper inlined in its place must be a valid key as well.
+        return hash((type(self), self.items))
 
     def underlying(self):
         return self.items

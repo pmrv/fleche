@@ -322,7 +322,10 @@ def test_namedtuple_nested_in_list_not_destructured(ds):
     assert type(loaded[0]) is Point
 
 
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+# Each example may create a fresh namedtuple class, which can blow the default
+# 200ms deadline on a cold CI runner and get flagged as flaky (as for
+# test_count_reuses_nonnegative below).
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @given(namedtuples(st_base_values))
 def test_namedtuple_hypothesis_roundtrip(ds, nt):
     """Hypothesis-generated namedtuples round-trip with their type preserved."""
@@ -332,7 +335,7 @@ def test_namedtuple_hypothesis_roundtrip(ds, nt):
     assert type(loaded) is type(nt)
 
 
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @given(namedtuples(st_base_values))
 def test_namedtuple_hypothesis_not_destructured(ds, nt):
     """Hypothesis-generated namedtuples are never stored as DigestedIterable."""
@@ -342,7 +345,7 @@ def test_namedtuple_hypothesis_not_destructured(ds, nt):
     assert type(raw) is type(nt)
 
 
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @given(namedtuples(st_base_values))
 def test_namedtuple_save_is_deterministic(ds, nt):
     """Saving the same namedtuple twice yields the same key."""
@@ -519,3 +522,75 @@ def test_an_incomplete_child_items_subclass_cannot_be_instantiated():
         type("Incomplete", (ChildItems,), {})()
 
 
+# ---- Inlined wrappers ----
+#
+# A wrapper shallow enough to be inlined into its parent can still hold a
+# reference further down.  Wrappers then mark the whole path from the entry's
+# root to the reference, plain subtrees stay plain, and load and GC descend
+# into the inlined wrappers.  Reachable with explicit Digest elements today.
+
+
+def test_inlined_wrapper_is_mended():
+    ds = make_ds(remaining_depth=2)
+    ref = ds.save((7, (8, 9)))
+    key = ds.save([[1, ref]])
+    raw = ds.storage[key]
+    assert isinstance(raw, DigestedIterable)
+    assert isinstance(raw.items[0], DigestedIterable)
+    assert ds.load(key) == [[1, (7, (8, 9))]]
+    assert key == digest([[1, ref]])
+
+
+def test_wrappers_mark_only_the_path_to_a_reference():
+    ds = make_ds(remaining_depth=4)
+    ref = ds.save((7, (8, 9)))
+    value = [0, [1, [2, ref]], [3, 4]]
+    key = ds.save(value)
+    raw = ds.storage[key]
+    assert set(ds.storage) == {key, ref}
+    assert isinstance(raw.items[1], DigestedIterable)
+    assert isinstance(raw.items[1].items[1], DigestedIterable)
+    assert raw.items[2] == [3, 4] and type(raw.items[2]) is list
+    assert ds.load(key) == [0, [1, [2, (7, (8, 9))]], [3, 4]]
+
+
+def test_inlined_wrapper_in_dict_and_dataclass():
+    @dataclass
+    class Box:
+        inner: list
+
+    ds = make_ds(remaining_depth=3)
+    ref = ds.save((7, (8, 9)))
+    value = {"a": Box([1, ref]), "b": 2}
+    key = ds.save(value)
+    loaded = ds.load(key)
+    assert loaded == {"a": Box([1, (7, (8, 9))]), "b": 2}
+    assert ds.child_digests(key) == {ref}
+
+
+def test_inlined_tuple_wrapper_as_dict_key():
+    ds = make_ds(remaining_depth=2)
+    ref = ds.save((7, (8, 9)))
+    key = ds.save({(1, ref): 2})
+    assert ds.load(key) == {(1, (7, (8, 9))): 2}
+    assert ds.child_digests(key) == {ref}
+
+
+def test_references_in_inlined_wrappers_are_children():
+    ds = make_ds(remaining_depth=2)
+    ref = ds.save((7, (8, 9)))
+    key = ds.save([[1, ref]])
+    assert ds.child_digests(key) == {ref}
+    assert ds.count_reuses()[ref] == 1
+
+
+def test_gc_keeps_value_referenced_from_inlined_wrapper():
+    from fleche.caches import Cache
+    from fleche.call import Call
+    from fleche.storage.memory import CallMemory, ValueMemory
+
+    cache = Cache(values=ValueMemory({}, remaining_depth=2), calls=CallMemory({}))
+    ref = cache.values.save((7, (8, 9)))
+    cache.save(Call(name="f", arguments={"x": 1}, result=[[1, ref]]))
+    cache.gc()
+    assert cache.values.load(ref) == (7, (8, 9))
