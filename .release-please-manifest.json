@@ -1,5 +1,6 @@
 {
   ".": "0.24.0",
   "src/fleche-numpy": "1.0.0",
-  "src/fleche-pandas": "1.0.0"
+  "src/fleche-pandas": "1.0.0",
+  "src/fleche-ase": "1.0.0"
 }
