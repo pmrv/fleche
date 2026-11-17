@@ -8,6 +8,7 @@ jobs:
     outputs:
       path: ${{ steps.resolve.outputs.path }}
       environment: ${{ steps.resolve.outputs.environment }}
+      version: ${{ steps.resolve.outputs.version }}
     steps:
     - id: resolve
       shell: bash
@@ -18,8 +19,10 @@ jobs:
         # sister package in src/<name> tags <name>-<version> and publishes from
         # pypi-<name> (see release-please.yml).
         case "$TAG" in
-          [0-9]*) echo "path=." >> "$GITHUB_OUTPUT"; echo "environment=pypi" >> "$GITHUB_OUTPUT" ;;
-          fleche-*-[0-9]*) name="${TAG%-*}"; echo "path=src/$name" >> "$GITHUB_OUTPUT"; echo "environment=pypi-$name" >> "$GITHUB_OUTPUT" ;;
+          [0-9]*) echo "path=." >> "$GITHUB_OUTPUT"; echo "environment=pypi" >> "$GITHUB_OUTPUT"
+                  echo "version=$TAG" >> "$GITHUB_OUTPUT" ;;
+          fleche-*-[0-9]*) name="${TAG%-*}"; echo "path=src/$name" >> "$GITHUB_OUTPUT"; echo "environment=pypi-$name" >> "$GITHUB_OUTPUT"
+                  echo "version=${TAG##*-}" >> "$GITHUB_OUTPUT" ;;
           *) echo "Cannot tell which package $TAG releases" >&2; exit 1 ;;
         esac
 
@@ -45,5 +48,26 @@ jobs:
       run: |
         pip install build
         python -m build --sdist --outdir dist/ "$PACKAGE_PATH"
+    # The tag and the version the sdist carries are two independent strings, and nothing
+    # compared them. fleche-ase 0.2.0 on PyPI is 0.3.0's code uploaded under the wrong
+    # version for exactly that reason, back when fleche-ase had its own repo and a static
+    # `version =`; it had to be yanked, and downstream pins still carry a comment about it.
+    # The sister packages here are static-versioned too (release-please writes them), and
+    # the root would publish `fallback_version` 0.0.0 if setuptools-scm ever came up empty.
+    # Check the ARTIFACT, not the input: the sdist's filename is what pip resolves against.
+    - name: Refuse to publish a version that is not the release tag
+      shell: bash
+      env:
+        EXPECTED: ${{ needs.resolve.outputs.version }}
+        TAG: ${{ github.event.release.tag_name }}
+      run: |
+        sdist=$(ls dist/*.tar.gz)
+        built=$(basename "$sdist" .tar.gz)
+        built="${built##*-}"
+        if [ "$built" != "$EXPECTED" ]; then
+          echo "::error::release '$TAG' builds version '$built', expected '$EXPECTED' -- refusing to publish a mislabelled sdist"
+          exit 1
+        fi
+        echo "release '$TAG' builds version '$built'"
     - name: pypi-publish
       uses: pypa/gh-action-pypi-publish@v1.13.0
