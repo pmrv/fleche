@@ -34,6 +34,11 @@ class Digested(ABC):
         :meth:`_slots`), intern each one, and either return the rebuilt plain value
         (:meth:`_rebuild_plain`, no child became a Digest back-reference) or a *cls*
         wrapper around the interned children (:meth:`_rebuild_digest`, at least one did).
+
+        A child that is itself a wrapper (inlined because it is shallow, but holding a
+        reference further down) counts as a reference too.  That way the wrappers mark
+        exactly the path from the entry's root to each reference, plain subtrees stay
+        plain, and :meth:`mend` only descends where something needs resolving.
         """
         slots = cls._slots(value)
         if slots is None:
@@ -46,7 +51,7 @@ class Digested(ABC):
         children, depths = zip(*(intern(v) for v in raw_children))
         depth = 1 + max(depths)
 
-        if all(not isinstance(c, digest.Digest) for c in children):
+        if not any(isinstance(c, (digest.Digest, Digested)) for c in children):
             return cls._rebuild_plain(value, labels, children), depth
         return cls._rebuild_digest(value, labels, children), depth
 
@@ -69,12 +74,19 @@ class Digested(ABC):
     def get(storage, key):
         if isinstance(key, digest.Digest):
             return storage.load(key)
-        else:
-            return key
+        if isinstance(key, Digested):
+            # an inlined wrapper: its own references still need resolving
+            return key.mend(storage)
+        return key
 
 @dataclass
 class DigestedIterable(Digested):
     items: list | tuple
+
+    def __hash__(self):
+        # An inlined tuple wrapper can be a dict key; hashing fails, as it should,
+        # for a list wrapper, which never is one.
+        return hash((type(self), self.items))
 
     def underlying(self):
         return self.items
@@ -368,22 +380,25 @@ class DestructuringMixin(base.ValueStorage):
         to the underlying backend before :meth:`~fleche.storage.destructuring.Digested.mend` rewires sub-digests back
         into their parent container.  Only :class:`~fleche.storage.destructuring.Digested` wrappers carry
         child references; scalars and plain (non-destructured) containers
-        return an empty set.
+        return an empty set.  References held by a wrapper inlined into this
+        entry belong to this entry, so nested wrappers are searched too.
         """
         match raw:
             case DigestedIterable():
-                return {i for i in raw.items if isinstance(i, digest.Digest)}
+                children = raw.items
             case DigestedDict():
-                return {
-                    x
-                    for pair in raw.items.items()
-                    for x in pair
-                    if isinstance(x, digest.Digest)
-                }
+                children = [x for pair in raw.items.items() for x in pair]
             case DigestedFields():
-                return {v for v in raw.fields.values() if isinstance(v, digest.Digest)}
+                children = raw.fields.values()
             case _:
                 return set()
+        found: set[digest.Digest] = set()
+        for child in children:
+            if isinstance(child, digest.Digest):
+                found.add(child)
+            elif isinstance(child, Digested):
+                found |= self._raw_sub_digests(child)
+        return found
 
     def child_digests(self, key: digest.Digest | str) -> set[digest.Digest]:
         """Direct digest children of the raw entry stored at *key*.
