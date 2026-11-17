@@ -83,8 +83,8 @@ class DigestedIterable(Digested):
     items: list | tuple
 
     def __hash__(self):
-        # An inlined tuple wrapper can be a dict key; hashing fails, as it should,
-        # for a list wrapper, which never is one.
+        # Forward the hash of the underlying container: if it was a dict key (a
+        # tuple), the wrapper inlined in its place must be a valid key as well.
         return hash((type(self), self.items))
 
     def underlying(self):
