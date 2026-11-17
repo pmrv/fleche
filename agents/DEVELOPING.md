@@ -20,20 +20,23 @@ Python `>=3.11,<3.15`.
 No committed lint config;
 `pyproject.toml` has no `[tool.ruff]`/`[tool.flake8]`.
 
-Optional dep extras: `cloudpickle`,
+Optional dep extras: `numpy` / `pandas` / `ase` (each installs the matching sister package from PyPI;
+CI installs the `src/` checkouts editable instead),
+`cloudpickle`,
 `dill`,
 `sqlalchemy`,
 `bagofholding`,
 `ssh` (cloudpickle — **hard-required** for `SshCache`'s wire protocol, not optional within that feature),
 `executorlib`,
 `docs`,
-`tests` (the `tests` extra already pulls in cloudpickle/dill/sqlalchemy/bagofholding/attrs plus pytest/hypothesis/nbconvert/ipykernel/tabulate),
+`tests` (the `tests` extra already pulls in numpy and pandas themselves — not the sister packages — plus cloudpickle/dill/sqlalchemy/bagofholding/attrs and pytest/hypothesis/nbconvert/ipykernel/tabulate),
 `ty` (pins the `ty` type-checker version run in CI).
 `attrs` itself has no dedicated extra — it is only required to exercise the `attrs`-class digest/destructuring paths in tests;
 runtime support degrades gracefully when `attrs` is missing.
 Other optional deps are gated via `pyiron_snippets.import_alarm.ImportAlarm` — importing a backend without its extra installed raises at construction, not at module import.
 pandas is imported lazily, inside `query._require_pandas()` (still through `ImportAlarm`), because `table()` is its only user and it took a third of `import fleche`;
-`tests/unit/test_lazy_imports.py` checks that `import fleche` leaves it unimported.
+SQLAlchemy is lazy the same way — `fleche.storage` resolves `Sql` and its `sql` module through a module-level `__getattr__` on first access;
+`tests/unit/test_lazy_imports.py` checks that `import fleche` leaves pandas, sqlalchemy and `fleche.storage.sql` unimported.
 
 ## Conventions
 
@@ -353,6 +356,10 @@ Git history is the changelog — no PR numbers, dates or release versions here.
 - Re-keying after a module rename (#942 has a tested recipe).
 - Central SQL call index on HPC (#1047 is the field report and entry point): no compute fallback when the server is down, hosted-server tooling and its config write-back,
   `autostart` on shared cluster nodes.
+- Destructuring store layout (#1063 is the entry point — read its newest comments before touching `destructuring.py`): per-leaf value files dominate NFS write time.
+  Agreed direction, in order: track references inside inlined wrappers (the prerequisite), move destructurer registration to a `destructure` entry point so sister packages can ship destructurers, then a size-based split — `should_split` per registration judged against a log2-bytes level on the value backend, monotonic, never measured by speculative pickling.
+  Whether plain arrays (and other opaque leaves) default to depth 0 waits on production census data;
+  `Digest` elements stay back-references, and returning them as data is a caller bug, not a reason for a `Ref` type.
 
 **Known bugs**: #826 gc vs `PreparedCall`;
 #893/#903 multi-bag `filelock.Timeout` under contention;
