@@ -34,6 +34,20 @@ with the prefix; ``list``, ``_contains`` and ``_drop_group`` ignore such groups.
 """
 
 
+def _has_entries(bag: "h5py.File") -> bool:
+    """Whether *bag* holds any entry, ignoring staging groups.
+
+    Staging leftovers don't keep a bag alive: under the bag lock they can only
+    belong to dead writers.  ``.`` sorts before every hex digit, so the bag
+    holds an entry iff its last name is not a staging one — read from the
+    name index in descending order, without scanning the bag.
+    """
+    last, _ = bag.id.links.iterate(
+        lambda name: name.decode(), idx_type=h5py.h5.INDEX_NAME, order=h5py.h5.ITER_DEC
+    )
+    return last is not None and not last.startswith(_STAGING_PREFIX)
+
+
 @contextmanager
 def _file_read_lock_with_fallback(
     lock_path: Path, timeout: float, key: str
@@ -355,10 +369,8 @@ class BagOfHoldingH5FileBackend(FileStorage):
         with h5py.File(file_path, "a") as f:
             if group in f:
                 del f[group]
-            # Staging leftovers don't keep a bag alive: under the lock they
-            # can only belong to dead writers.
-            remaining = sum(1 for n in f if not n.startswith(_STAGING_PREFIX))
-        if remaining == 0:
+            alive = _has_entries(f)
+        if not alive:
             file_path.unlink(missing_ok=True)
             self._lock_path(key).unlink(missing_ok=True)
 
