@@ -215,11 +215,11 @@ Values and calls are stored separately so call records are queryable without des
   `ValueMixin`/`CallMixin` bridge `save`/`load`/`query` onto `put`/`get`.
   `ValueMixin.save` skips keys `_contains` already reports (content-addressed, so the stored value is equal), while `CallMixin.save` always overwrites, since a record under one lookup key can change (`rerun`, metadata).
   The skip makes **`put` atomicity a hard invariant**: a key must become visible to `_contains`/`get` only once its entry is complete, crash mid-write included.
-  Entries that are present but unreadable anyway (pre-0.22 non-atomic writes, power loss without `fsync`, damage on disk) heal on read: a failed `ValueMixin.load` of a present key adds it to the process-local `_unreadable` set (kept in the instance `__dict__`, not a dataclass field), and the next `save` rewrites it.
-  An `UnverifiedEntry` (a `KeyError` subclass) is not marked: pickle storages raise it for a well-formed signature that no held key verifies (`security.SignatureMismatch`), which may be another key holder's valid entry, while a malformed signature (truncation, garbage) is a plain `KeyError` and heals.
-  Nothing is evicted on read, and the exception is re-raised unchanged, so only a `KeyError` reads as a cache miss.
-  Function results are saved with `ValueStorage.save_verified` (in `Call.stash` and `PreparedCall.resolve`), which loads a present entry before skipping it, so a damaged stored result is rewritten by the save that would otherwise skip it, instead of costing a second run after the next lookup fails;
-  arguments keep the unread skip, since a damaged argument costs no recomputation.
+  Entries that are present but damaged anyway (pre-0.22 non-atomic writes, power loss without `fsync`, damage on disk) heal on read: a backend's `get` raises `CorruptEntry` (a `KeyError`) on a positive structural signal of damage, and `ValueMixin.load` evicts the entry, so the next `save` in any process writes it again.
+  Only positive signals count, never an error an intact entry could also raise: pickle storages flag a malformed signature, a broken gzip stream, or unsigned data not ending in STOP, but not an unpickling error on intact bytes (a missing module);
+  HDF5 storages raise no `CorruptEntry` at all, since a damaged file and one locked by a writer both surface as `OSError`.
+  `UnverifiedEntry` (also a `KeyError`) is a well-formed signature no held key verifies (`security.SignatureMismatch`): another key holder's valid entry, or a tampered one, and never evicted.
+  A damaged value is found only when read, so a new result whose value is already stored damaged costs one extra run: the lookup fails, evicts, and the function runs again (accepted).
   `SaveError` is the only exception a backend may let out of `put`: every backend wraps any serialisation (or copy) failure as `SaveError(value) from e`, deliberately broad because serializers re-raise whatever `__reduce__` raised.
   Callers key on it — `Call._to_digested` degrades a refused argument to a digest-only reference (hashed into the key, not stored) and `Cache.save` turns a refused result into `Rejected` — so a raw exception escaping `put` fails `prepare` and runs every call touching that value uncached.
   `@register_storage(name, kind)` on a backend class fills the config dispatch table.

@@ -152,33 +152,32 @@ class TestCallStash:
 
     def test_already_digest_argument_not_saved(self):
         values = MagicMock()
-        values.save_verified.return_value = Digest("b" * 64)
+        values.save.return_value = Digest("b" * 64)
         existing_digest = Digest("a" * 64)
         call = _call(arguments={"x": existing_digest})
         call.stash(values)
-        # Only the result is stored (through save_verified); the Digest arg is not
-        assert values.save.call_count == 0
-        assert values.save_verified.call_count == 1
+        # values.save should only be called for the result, not for the Digest arg
+        assert values.save.call_count == 1
 
     def test_arg_save_failure_falls_back_to_digest(self):
         values = MagicMock()
-        values.save_verified.return_value = Digest("r" * 64)
-        values.save.side_effect = SaveError("cannot save")
+        result_digest = Digest("r" * 64)
+        values.save.side_effect = [result_digest, SaveError("cannot save")]
         call = _call(arguments={"x": 99})
         digested = call.stash(values)
         assert isinstance(digested.arguments["x"], Digest)
 
     def test_arg_save_non_save_error_propagates(self):
         values = MagicMock()
-        values.save_verified.return_value = Digest("r" * 64)
-        values.save.side_effect = RuntimeError("unexpected")
+        result_digest = Digest("r" * 64)
+        values.save.side_effect = [result_digest, RuntimeError("unexpected")]
         call = _call(arguments={"x": 99})
         with pytest.raises(RuntimeError, match="unexpected"):
             call.stash(values)
 
     def test_result_save_failure_propagates(self):
         values = MagicMock()
-        values.save_verified.side_effect = RuntimeError("storage full")
+        values.save.side_effect = RuntimeError("storage full")
         call = _call()
         with pytest.raises(RuntimeError, match="storage full"):
             call.stash(values)

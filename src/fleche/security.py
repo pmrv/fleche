@@ -94,6 +94,23 @@ _SIGNATURE_LENGTH = 64  # hex-encoded HMAC-SHA256
 _HEX_DIGITS = b"0123456789abcdef"
 
 
+def _well_formed_signature(signature: bytes) -> bool:
+    return len(signature) == _SIGNATURE_LENGTH and not signature.strip(_HEX_DIGITS)
+
+
+def ends_like_a_pickle(content: bytes) -> bool:
+    """Whether *content* ends the way a complete entry does: in pickle's STOP
+    opcode, or in STOP plus a well-formed signature.
+
+    A reader without keys gets signed entries unverified, signature included,
+    so both endings are intact; anything else was cut short.
+    """
+    if content.endswith(pickle.STOP):
+        return True
+    tail = content[-(_SIGNATURE_LENGTH + 1):]
+    return tail[:1] == pickle.STOP and _well_formed_signature(tail[1:])
+
+
 @dataclass(slots=True, frozen=True)
 class SignedBytes:
     """
@@ -172,7 +189,7 @@ class SignedBytes:
             logger.error("Cache entry has no signature but security is enabled.")
             raise SignatureError("No signature found")
 
-        if len(signature) != _SIGNATURE_LENGTH or signature.strip(_HEX_DIGITS):
+        if not _well_formed_signature(signature):
             # A truncated entry cuts into the signature, or loses it so that
             # rfind lands on a STOP byte inside the payload: either way what
             # follows the STOP is not 64 hex digits.

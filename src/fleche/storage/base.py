@@ -116,12 +116,24 @@ class AmbiguousDigestError(ValueError):
     pass
 
 
+class CorruptEntry(KeyError):
+    """An entry whose stored bytes are positively known to be damaged.
+
+    Raised by a backend's ``get`` only on a structural signal that the bytes
+    are not what any writer produced — a truncated pickle, a malformed
+    signature, a broken gzip stream — never on an error that could also hit
+    an intact entry (a locked or briefly unreachable file, a missing module
+    or package version).  :meth:`ValueMixin.load` evicts such an entry, so
+    the next save, in any process, writes it again.  Reads as a miss.
+    """
+
+
 class UnverifiedEntry(KeyError):
     """An entry that is present and intact, but this storage cannot verify it.
 
-    E.g. a pickle signed with a key the storage does not hold.  It reads as a
-    miss like any ``KeyError``, but unlike a damaged entry it is never marked
-    for rewriting: it may be another key holder's valid value.
+    E.g. a pickle signed with a key the storage does not hold, or altered
+    behind its signature.  It reads as a miss like any ``KeyError``, but is
+    never evicted or rewritten: it may be another key holder's valid value.
     """
 
 
@@ -363,10 +375,10 @@ class StorageBackend(KeyManagement):
         Must be atomic with respect to ``_contains`` and ``get``: until the
         entry is complete they see the previous state, never a partial one —
         also if the process dies mid-write.  :meth:`ValueMixin.save` skips
-        keys ``_contains`` reports and rewrites one only after a failed
-        :meth:`~ValueMixin.load`, so a key published early stays torn until
-        something tries to read it.  If the value cannot be serialised, raise
-        :class:`SaveError` and leave no entry under *key*.
+        keys ``_contains`` reports, so a key published early stays torn unless
+        ``get`` recognises the damage and raises :class:`CorruptEntry`.  If
+        the value cannot be serialised, raise :class:`SaveError` and leave no
+        entry under *key*.
         """
 
     @abstractmethod
@@ -390,29 +402,6 @@ class ValueStorage(KeyManagement):
     @abstractmethod
     def load(self, key: Digest | str) -> Any: ...
 
-    def save_verified(self, value: Any, key: Digest | None = None) -> Digest:
-        """Like :meth:`save`, but an entry already under *key* must also load.
-
-        For values whose loss costs a recomputation: function results.  A
-        plain ``save`` skips a present key unread, so a damaged result would
-        only surface when the next lookup fails to load it — after the
-        function had run for nothing.  Loading it here instead lets the
-        failed load mark the damaged entries (see :class:`ValueMixin`) and
-        this same save rewrite them.  The read costs something only when the
-        value is already stored.
-        """
-        if key is None:
-            key = digest(value)
-        if self.contains(key):
-            try:
-                self.load(key)
-                return key
-            except Exception:
-                # Whatever failed to load is now marked, so save rewrites it;
-                # an UnverifiedEntry is not, and save keeps skipping it.
-                pass
-        return self.save(value, key)
-
 
 class ValueMixin(ValueStorage, StorageBackend):
     """Bridges :class:`~fleche.storage.base.ValueStorage` with :class:`~fleche.storage.base.StorageBackend` primitives.
@@ -421,45 +410,30 @@ class ValueMixin(ValueStorage, StorageBackend):
     Concrete classes inherit from this and a :class:`~fleche.storage.base.StorageBackend`
     implementation to get a fully functional value storage.
 
-    ``save`` skips keys already present.  An entry that is present but cannot
-    be read — truncated by a power loss or an older fleche, damaged on disk —
-    would then never be rewritten, so a failed ``load`` of a present key marks
-    it, and the next ``save`` of that key writes it again.  An
-    :class:`UnverifiedEntry` is not marked: it is intact, only not verifiable
-    here, e.g. signed with a key this storage does not hold.  Nothing is
-    evicted on read.
+    ``save`` skips keys already present, so an entry that is present but
+    damaged — truncated by a power loss or an older fleche, garbled on disk —
+    would never be rewritten by it.  A backend that recognises such an entry
+    raises :class:`CorruptEntry` from ``get``, and ``load`` evicts it then, so
+    the next save writes it again.  Any other load failure is re-raised
+    untouched.
     """
-
-    @property
-    def _unreadable(self) -> "set[Digest]":
-        """Keys whose entry is present but failed to load in this process.
-
-        Kept in the instance ``__dict__`` rather than as a dataclass field:
-        backends are frozen dataclasses, and this is process-local state, not
-        configuration, so it stays out of ``__init__``, ``__eq__`` and
-        ``to_config``.  Set operations are atomic under the GIL.
-        """
-        return self.__dict__.setdefault("_unreadable_keys", set())
 
     def save(self, value: Any, key: Digest | None = None) -> Digest:
         """Store *value* under *key* (its digest by default), unless already present.
 
-        Keys are content digests, so a readable entry already under *key*
-        holds an equal value and writing it again is pure I/O.  Skipping it
-        relies on every backend's ``put`` publishing a key only once its
-        entry is complete; an entry that is present but failed to
-        :meth:`load` is written again regardless.
+        Keys are content digests, so an entry already under *key* holds an
+        equal value and writing it again is pure I/O.  Skipping it relies on
+        every backend's ``put`` publishing a key only once its entry is
+        complete.
         """
         if key is None:
             key = digest(value)
         with self._operation_context(key):
-            if key not in self._unreadable and self._contains(key):
+            if self._contains(key):
                 logger.debug("Value with key %s already stored", key)
                 return key
             logger.debug("Saving value with key %s", key)
-            stored = self.put(value, key)
-            self._unreadable.discard(key)
-            return stored
+            return self.put(value, key)
 
     def load(self, key: Digest | str) -> Any:
         with self._operation_context(key):
@@ -467,16 +441,9 @@ class ValueMixin(ValueStorage, StorageBackend):
             logger.debug("Loading value with key %s", key)
             try:
                 return self.get(key)
-            except UnverifiedEntry:
-                raise
-            except Exception:
-                # Present but unreadable: let the next save rewrite it.  The
-                # exception itself is the backend's to choose — a KeyError
-                # reads as a miss, anything else (e.g. a version check the
-                # user asked for) still reaches the caller.
-                if self._contains(key):
-                    logger.warning("Value %s is stored but unreadable; the next save rewrites it", key)
-                    self._unreadable.add(key)
+            except CorruptEntry:
+                logger.warning("Value %s is corrupt; dropping it so the next save rewrites it", key)
+                self._evict(key)
                 raise
 
 

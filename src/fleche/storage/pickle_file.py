@@ -1,14 +1,22 @@
 import pickle
 import gzip
+import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
 from .file import FileStorage, _atomic_write
-from .base import SaveError, UnverifiedEntry, ValueMixin, CallMixin, register_storage
+from .base import CorruptEntry, SaveError, UnverifiedEntry, ValueMixin, CallMixin, register_storage
 from .thread_safe import PerKeyLockMixin
 from .destructuring import DestructuringMixin
-from ..security import get_secret_key, normalize_secret_key, SignedBytes, SignatureError, SignatureMismatch
+from ..security import (
+    get_secret_key,
+    normalize_secret_key,
+    ends_like_a_pickle,
+    SignedBytes,
+    SignatureError,
+    SignatureMismatch,
+)
 
 from pyiron_snippets.import_alarm import ImportAlarm
 
@@ -128,17 +136,27 @@ class PickleFileBackend(FileStorage):
     def _from_file(self, path: Path) -> Any:
         try:
             content = path.read_bytes()
-            if content[:2] == b"\x1f\x8b":
-                content = gzip.decompress(content)
-            signer = SignedBytes(self.secret_key)
-            data = signer.loads(content)
-            return self.loads(data)
         except FileNotFoundError:
             raise KeyError(path) from None
+        if content[:2] == b"\x1f\x8b":
+            try:
+                content = gzip.decompress(content)
+            except (EOFError, gzip.BadGzipFile, zlib.error):
+                raise CorruptEntry(path, "Value present but corrupt: broken gzip stream.") from None
+        try:
+            data = SignedBytes(self.secret_key).loads(content)
         except SignatureMismatch:
             raise UnverifiedEntry(path, "Value present but no key held here verifies its signature.") from None
         except SignatureError:
-            raise KeyError(path, "Value present but corrupt: malformed signature.") from None
+            raise CorruptEntry(path, "Value present but corrupt: malformed signature.") from None
+        if not ends_like_a_pickle(data):
+            # Every pickle ends in STOP (plus the signature, read without
+            # keys), so this one was cut short.  Checked here because without
+            # keys nothing above looked at the bytes.
+            raise CorruptEntry(path, "Value present but corrupt: truncated pickle.")
+        # Intact bytes from here on: an unpickling error is the environment's
+        # (a renamed class, a missing module), not damage, and passes through.
+        return self.loads(data)
 
     def _rewrite_all(self, transform: Callable[[bytes], bytes | None]) -> None:
         """Read and conditionally rewrite every stored file via *transform*.

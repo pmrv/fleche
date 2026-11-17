@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from .base import (
     SaveError,
+    CorruptEntry,
     UnverifiedEntry,
     AmbiguousDigestError,
     Intent,
@@ -57,6 +58,7 @@ def __dir__() -> list[str]:
 
 __all__ = [
     "SaveError",
+    "CorruptEntry",
     "UnverifiedEntry",
     "AmbiguousDigestError",
     "Intent",
