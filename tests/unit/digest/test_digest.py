@@ -695,7 +695,9 @@ def test_merkle_tree_property_fixed(value, partially_digested_value):
 @given(
     st.dictionaries(
         st.text(string.ascii_letters, min_size=1).filter(
-            lambda x: not keyword.iskeyword(x)
+            # "mro" resolves to type.mro on the class, which make_dataclass
+            # takes for a default, as in tests/strategies.py
+            lambda x: not keyword.iskeyword(x) and x != "mro"
         ),
         st.integers(),
     )
