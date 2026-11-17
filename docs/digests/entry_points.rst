@@ -30,12 +30,45 @@ registers digest hooks for the core types of the `Atomic Simulation
 Environment (ASE) <https://wiki.fysik.dtu.dk/ase/>`_:
 
 * ``ase.Atoms`` — digested from the cell, the periodic boundary conditions
-  and all per-atom arrays (positions, atomic numbers, ...).
+  and all per-atom arrays (positions, atomic numbers, ...), plus the
+  constraints and ``info`` when non-empty and the attached calculator when
+  there is one.
+  Two structures that differ only in their calculator get two keys, since
+  ``get_potential_energy()`` answers differently for them.
+* ``ase.calculators.calculator.Calculator`` and its subclasses — identified by
+  the first of:
+
+  1. an extractor registered for the class with
+     ``fleche_ase.register_calculator`` (built in for ``EAM``,
+     ``PyACECalculator``, ``GRACERuntimeCalculator``, ``TPCalculator`` and
+     ``SinglePointCalculator``; file-backed potentials are keyed by the
+     file's name and content),
+  2. a non-empty ``todict()``,
+  3. an empty ``todict()`` on a class listed in ``fleche_ase.PARAMETER_FREE``
+     (``EMT``, ``LennardJones``, ``MorsePotential``, ``TIP3P``, ``TIP4P``).
+
+  Any other calculator is :class:`~fleche.digest.Indigestible`: the call runs
+  uncached, with a warning.
+  So does a call on an ``Atoms`` carrying such a calculator.
 * ``ase.vibrations.VibrationsData`` — digested from the underlying atoms,
   the vibrational indices and the 2D Hessian.
-* ``ase.calculators.calculator.Calculator`` — digested from the calculator
-  class name and its ``todict()`` parameters; matches all calculator
-  subclasses.
+* ``ase.thermochemistry`` modes (``AbstractMode``) and objects
+  (``BaseThermoChem``) — digested from the class name and the instance
+  attributes.
+
+Teach it a calculator it cannot identify by registering an extractor, a
+function returning anything ``fleche`` can digest that tells two instances
+apart:
+
+.. code-block:: python
+
+   from fleche_ase import register_calculator
+
+   register_calculator("MyCalculator", lambda calc: (calc.model_path, calc.cutoff))
+   register_calculator("MyFixedCalculator")  # no parameters: empty todict() is complete
+
+Classes match by name along the MRO, so registering a base class covers its
+subclasses.
 
 With it installed, ``@fleche()``-decorated functions can accept and return
 ASE objects with no further setup:
