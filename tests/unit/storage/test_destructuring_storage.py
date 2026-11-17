@@ -321,7 +321,10 @@ def test_namedtuple_nested_in_list_not_destructured(ds):
     assert type(loaded[0]) is Point
 
 
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+# Each example may create a fresh namedtuple class, which can blow the default
+# 200ms deadline on a cold CI runner and get flagged as flaky (as for
+# test_count_reuses_nonnegative below).
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @given(namedtuples(st_base_values))
 def test_namedtuple_hypothesis_roundtrip(ds, nt):
     """Hypothesis-generated namedtuples round-trip with their type preserved."""
@@ -331,7 +334,7 @@ def test_namedtuple_hypothesis_roundtrip(ds, nt):
     assert type(loaded) is type(nt)
 
 
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @given(namedtuples(st_base_values))
 def test_namedtuple_hypothesis_not_destructured(ds, nt):
     """Hypothesis-generated namedtuples are never stored as DigestedIterable."""
@@ -341,7 +344,7 @@ def test_namedtuple_hypothesis_not_destructured(ds, nt):
     assert type(raw) is type(nt)
 
 
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @given(namedtuples(st_base_values))
 def test_namedtuple_save_is_deterministic(ds, nt):
     """Saving the same namedtuple twice yields the same key."""
