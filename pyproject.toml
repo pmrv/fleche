@@ -52,6 +52,9 @@ numpy = [
 pandas = [
     "fleche-pandas",
 ]
+ase = [
+    "fleche-ase",
+]
 docs = [
     "sphinx",
     "shibuya",
@@ -101,4 +104,4 @@ ty = [
 [tool.ty.environment]
 # The sister packages under src/ are first-party code too; ty does not follow
 # setuptools' editable-install finders to them.
-root = ["src", "src/fleche-numpy", "src/fleche-pandas"]
+root = ["src", "src/fleche-numpy", "src/fleche-pandas", "src/fleche-ase"]

@@ -25,8 +25,9 @@ a ``pip install``:
 ---------------------------
 
 `fleche-ase <https://pypi.org/project/fleche-ase/>`_ is the canonical entry
-point plugin.  It registers digest hooks for the core types of the `Atomic
-Simulation Environment (ASE) <https://wiki.fysik.dtu.dk/ase/>`_:
+point plugin; it lives in the fleche repository, under ``src/fleche-ase``.  It
+registers digest hooks for the core types of the `Atomic Simulation
+Environment (ASE) <https://wiki.fysik.dtu.dk/ase/>`_:
 
 * ``ase.Atoms`` — digested from the cell, the periodic boundary conditions
   and all per-atom arrays (positions, atomic numbers, ...).

@@ -100,6 +100,11 @@ _SISTER_PACKAGES = {
     ("pandas", "Index"): "fleche-pandas",
     ("pandas", "Timedelta"): "fleche-pandas",
     ("pandas", "NAType"): "fleche-pandas",
+    ("ase", "Atoms"): "fleche-ase",
+    ("ase", "Calculator"): "fleche-ase",
+    ("ase", "VibrationsData"): "fleche-ase",
+    ("ase", "AbstractMode"): "fleche-ase",
+    ("ase", "BaseThermoChem"): "fleche-ase",
 }
 
 

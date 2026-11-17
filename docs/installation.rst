@@ -85,12 +85,16 @@ brackets, e.g. ``pip install "fleche[sqlalchemy,ssh]"``.
      - Digests of pandas frames, series, indices, ``pd.Timedelta`` and
        ``pd.NA``, through the ``fleche-pandas`` companion package (see below),
        and ``table()`` on caches and queries.
+   * - ``ase``
+     - ``pip install "fleche[ase]"``
+     - Digests of ASE objects, through the ``fleche-ase`` companion package
+       (see below).
    * - ``tests``
      - ``pip install "fleche[tests]"``
      - The full test suite plus every optional backend it exercises. The suite
        also needs the companion packages; from a checkout, install them
        alongside: ``pip install -e ".[tests]" -e src/fleche-numpy -e
-       src/fleche-pandas``.
+       src/fleche-pandas -e src/fleche-ase``.
 
 .. note::
 
@@ -119,8 +123,9 @@ installing them alongside ``fleche`` is all that is needed:
 
    pip install fleche-numpy fleche-pandas fleche-ase
 
-``fleche-numpy`` and ``fleche-pandas`` live in the fleche repository, under
-``src/``, and are versioned and released independently of ``fleche``.
+``fleche-numpy``, ``fleche-pandas`` and ``fleche-ase`` live in the fleche
+repository, under ``src/``, and are versioned and released independently of
+``fleche``.
 
 Installing documentation
 -------------------------

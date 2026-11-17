@@ -8,7 +8,7 @@ If you just want to *use* fleche as a dependency instead, see [USAGE.md](USAGE.m
 ## Commands
 
 ```bash
-pip install -e ".[tests]" -e src/fleche-numpy -e src/fleche-pandas   # install with test deps and the sister packages
+pip install -e ".[tests]" -e src/fleche-numpy -e src/fleche-pandas -e src/fleche-ase   # install with test deps and the sister packages
 pytest tests/                                          # all tests
 pytest tests/unit/digest/test_digest.py::test_name     # single test
 pytest -m smoke                                        # one-round-trip-per-optional-dep packaging sanity
@@ -83,11 +83,13 @@ pandas is imported lazily, inside `query._require_pandas()` (still through `Impo
 `D(value)` passes non-empty hex strings (≤64 chars) through verbatim as lookup keys and digests anything else;
 `Digest` arguments to a wrapped function are expanded back to their value before hashing.
 
-**Sister packages:** `src/` holds more than `fleche` — `src/fleche-numpy/` (`fleche_numpy`) and `src/fleche-pandas/` (`fleche_pandas`) are separate distributions, each with its own `pyproject.toml`, static version,
+**Sister packages:** `src/` holds more than `fleche` — `src/fleche-numpy/` (`fleche_numpy`),
+`src/fleche-pandas/` (`fleche_pandas`) and `src/fleche-ase/` (`fleche_ase`) are separate distributions, each with its own `pyproject.toml`, static version,
 `CHANGELOG.md` and release, registering digest hooks through the `fleche`/`digest` entry point.
 They share fleche's single test suite under `tests/`, which expects all of them installed.
 They may import `fleche.hashing` and `fleche.digest`'s public names, nothing else from fleche;
-`fleche_pandas` builds on `fleche_numpy.timedelta64_length`, so `fleche-pandas` depends on `fleche-numpy`.
+`fleche_pandas` builds on `fleche_numpy.timedelta64_length`, and `fleche_ase` digests `Atoms.arrays`, so both depend on `fleche-numpy`.
+fleche-ase came from its own repository (pmrv/fleche-ase) with its history, after its 0.3.0 release.
 fleche itself never imports them, and the root sdist prunes them (`MANIFEST.in`).
 Versions and tags: fleche tags bare versions (`0.23.1`) from setuptools-scm, whose `describe_command` matches `[0-9]*` only;
 development checkouts version as the next minor (`release-branch-semver`, e.g. `0.24.0.devN`), so a sister package can require an unreleased fleche as `fleche >= 0.24.0.dev0`.
