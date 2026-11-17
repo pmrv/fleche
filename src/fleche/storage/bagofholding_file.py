@@ -327,11 +327,13 @@ class BagOfHoldingH5FileBackend(FileStorage):
                 raise
             with h5py.File(bag_file, "a") as f:
                 if key in f:
+                    logger.debug("Replacing entry %s in %s", key, bag_file)
                     del f[key]
                 f.move(staging, key)
                 # Under the bag lock every other staging group belongs to a
                 # writer that died before its rename.
                 for name in [n for n in f if n.startswith(_STAGING_PREFIX)]:
+                    logger.debug("Dropping %s in %s, left by a dead writer", name, bag_file)
                     del f[name]
         return key
 

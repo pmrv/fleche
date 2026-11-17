@@ -5,10 +5,10 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .file import FileStorage, _atomic_write
-from .base import SaveError, ValueMixin, CallMixin, register_storage
+from .base import SaveError, UnverifiedEntry, ValueMixin, CallMixin, register_storage
 from .thread_safe import PerKeyLockMixin
 from .destructuring import DestructuringMixin
-from ..security import get_secret_key, normalize_secret_key, SignedBytes, SignatureError
+from ..security import get_secret_key, normalize_secret_key, SignedBytes, SignatureError, SignatureMismatch
 
 from pyiron_snippets.import_alarm import ImportAlarm
 
@@ -135,8 +135,10 @@ class PickleFileBackend(FileStorage):
             return self.loads(data)
         except FileNotFoundError:
             raise KeyError(path) from None
+        except SignatureMismatch:
+            raise UnverifiedEntry(path, "Value present but no key held here verifies its signature.") from None
         except SignatureError:
-            raise KeyError(path, "Value present but failed signature check.")
+            raise KeyError(path, "Value present but corrupt: malformed signature.") from None
 
     def _rewrite_all(self, transform: Callable[[bytes], bytes | None]) -> None:
         """Read and conditionally rewrite every stored file via *transform*.

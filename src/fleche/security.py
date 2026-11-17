@@ -9,8 +9,21 @@ from dataclasses import dataclass
 logger = logging.getLogger("fleche.security")
 
 class SignatureError(Exception):
-    """Exception raised when signature verification fails."""
+    """Exception raised when signature verification fails.
+
+    Raised as is when the signed data is malformed — truncated, garbled, or
+    never signed — and as :class:`SignatureMismatch` when it is intact but
+    signed with a key not in hand.
+    """
     pass
+
+
+class SignatureMismatch(SignatureError):
+    """A well-formed signature that none of the keys verifies.
+
+    The entry is intact as far as the signer can tell: it was signed with a
+    key this reader does not hold (or its payload was altered in place).
+    """
 
 
 def normalize_secret_key(key: bytes | str | Sequence[bytes | str]) -> list[bytes]:
@@ -77,6 +90,10 @@ def get_secret_key() -> list[bytes]:
         return normalize_secret_key(env_key)
     return []
 
+_SIGNATURE_LENGTH = 64  # hex-encoded HMAC-SHA256
+_HEX_DIGITS = b"0123456789abcdef"
+
+
 @dataclass(slots=True, frozen=True)
 class SignedBytes:
     """
@@ -134,8 +151,9 @@ class SignedBytes:
             bytes: The original serialized data, stripped of the signature.
 
         Raises:
-            SignatureError: If verification fails, if the data is corrupted, or if the
-                            STOP opcode is missing.
+            SignatureMismatch: If the signature is well-formed but no key verifies it.
+            SignatureError: If the data is malformed: the STOP opcode or the
+                            signature is missing, or the signature is not 64 hex digits.
         """
         if not self.keys:
             return content
@@ -154,10 +172,17 @@ class SignedBytes:
             logger.error("Cache entry has no signature but security is enabled.")
             raise SignatureError("No signature found")
 
+        if len(signature) != _SIGNATURE_LENGTH or signature.strip(_HEX_DIGITS):
+            # A truncated entry cuts into the signature, or loses it so that
+            # rfind lands on a STOP byte inside the payload: either way what
+            # follows the STOP is not 64 hex digits.
+            logger.error("Malformed signature in cache entry. Data is corrupted.")
+            raise SignatureError("Malformed signature")
+
         for key in self.keys:
             expected_signature = self._sign(data, key)
             if hmac.compare_digest(expected_signature, signature):
                 return data
 
         logger.error("Invalid signature for cache entry. Potential tampering or key mismatch.")
-        raise SignatureError("Invalid signature")
+        raise SignatureMismatch("Invalid signature")

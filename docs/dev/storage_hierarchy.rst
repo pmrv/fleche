@@ -88,8 +88,7 @@ the key is already present: an entry under a content digest holds an equal
 value already.  That is only sound because every backend's ``put`` publishes
 a key once its entry is complete and never earlier — see
 :meth:`~fleche.storage.base.StorageBackend.put`.  An entry that is present but
-unreadable anyway (truncated before writes were atomic, cut short by a power
-loss, signed with a key since dropped) is caught on read: a failed ``load`` of
+unreadable anyway is caught on read: a failed ``load`` of
 a present key marks it, and the next ``save`` rewrites it;
 :class:`~fleche.storage.base.CallMixin` takes it from the record
 (``key = call.to_lookup_key()``) and evicts any existing entry first, because

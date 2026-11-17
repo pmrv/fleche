@@ -297,11 +297,29 @@ def test_failed_load_of_an_absent_key_marks_nothing(tmp_path):
     assert key not in storage._unreadable
 
 
-def test_entry_signed_with_a_dropped_key_is_rewritten(tmp_path):
+def test_entry_signed_with_another_key_is_left_alone(tmp_path, monkeypatch):
+    """A well-formed signature no held key verifies may be another key holder's
+    valid entry: it reads as a miss but is never rewritten."""
     from fleche.storage import ValuePickleFile
+    from fleche.storage.base import UnverifiedEntry
 
-    key = ValuePickleFile.with_pickle(tmp_path, secret_key=b"old").save([1, 2, 3])
-    storage = ValuePickleFile.with_pickle(tmp_path, secret_key=b"new")
+    theirs = ValuePickleFile.with_pickle(tmp_path, secret_key=b"theirs")
+    key = theirs.save([1, 2, 3])
+    ours = ValuePickleFile.with_pickle(tmp_path, secret_key=b"ours")
+    with pytest.raises(UnverifiedEntry):
+        ours.load(key)
+    puts = _count_puts(ours, monkeypatch)
+    assert ours.save([1, 2, 3]) == key
+    assert puts == []
+    assert theirs.load(key) == [1, 2, 3]
+
+
+def test_truncated_signed_entry_is_rewritten(tmp_path):
+    """Cut short mid-signature: damaged, not foreign, so it heals."""
+    storage = _storage("pickle", tmp_path)
+    key = storage.save([1, 2, 3])
+    path = storage._path(key)
+    path.write_bytes(path.read_bytes()[:-10])
     with pytest.raises(KeyError):
         storage.load(key)
     assert storage.save([1, 2, 3]) == key

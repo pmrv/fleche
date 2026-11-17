@@ -116,6 +116,15 @@ class AmbiguousDigestError(ValueError):
     pass
 
 
+class UnverifiedEntry(KeyError):
+    """An entry that is present and intact, but this storage cannot verify it.
+
+    E.g. a pickle signed with a key the storage does not hold.  It reads as a
+    miss like any ``KeyError``, but unlike a damaged entry it is never marked
+    for rewriting: it may be another key holder's valid value.
+    """
+
+
 class Intent(StrEnum):
     """Describes the kind of operation being performed on storage.
 
@@ -390,11 +399,12 @@ class ValueMixin(ValueStorage, StorageBackend):
     implementation to get a fully functional value storage.
 
     ``save`` skips keys already present.  An entry that is present but cannot
-    be read — truncated by a power loss or an older fleche, signed with a
-    key this storage no longer holds, damaged on disk — would then never be
-    rewritten, so a failed ``load`` of a present key marks it, and the next
-    ``save`` of that key writes it again.  Nothing is evicted on read: an
-    entry this process cannot verify may be another key holder's valid one.
+    be read — truncated by a power loss or an older fleche, damaged on disk —
+    would then never be rewritten, so a failed ``load`` of a present key marks
+    it, and the next ``save`` of that key writes it again.  An
+    :class:`UnverifiedEntry` is not marked: it is intact, only not verifiable
+    here, e.g. signed with a key this storage does not hold.  Nothing is
+    evicted on read.
     """
 
     @property
@@ -434,6 +444,8 @@ class ValueMixin(ValueStorage, StorageBackend):
             logger.debug("Loading value with key %s", key)
             try:
                 return self.get(key)
+            except UnverifiedEntry:
+                raise
             except Exception:
                 # Present but unreadable: let the next save rewrite it.  The
                 # exception itself is the backend's to choose — a KeyError
