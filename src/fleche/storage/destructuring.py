@@ -75,7 +75,6 @@ class Digested(ABC):
         if isinstance(key, digest.Digest):
             return storage.load(key)
         if isinstance(key, Digested):
-            # an inlined wrapper: its own references still need resolving
             return key.mend(storage)
         return key
 
