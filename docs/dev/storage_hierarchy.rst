@@ -89,7 +89,10 @@ value already.  That is only sound because every backend's ``put`` publishes
 a key once its entry is complete and never earlier — see
 :meth:`~fleche.storage.base.StorageBackend.put`.  An entry that is present but
 unreadable anyway is caught on read: a failed ``load`` of
-a present key marks it, and the next ``save`` rewrites it;
+a present key marks it, and the next ``save`` rewrites it.  Function results
+are saved with :meth:`~fleche.storage.base.ValueStorage.save_verified`, which
+loads a present entry before skipping it, so a damaged result is rewritten at
+once rather than after a second run;
 :class:`~fleche.storage.base.CallMixin` takes it from the record
 (``key = call.to_lookup_key()``) and evicts any existing entry first, because
 a re-save under the same lookup key is an overwrite rather than a second

@@ -347,3 +347,92 @@ def test_cached_function_heals_a_torn_result(tmp_path):
         for _ in range(3):
             assert f(1) == [1, 2]
     assert len(runs) == 2
+
+
+# A function result whose value is already stored, but damaged: the unread
+# skip would let the damage surface only at the next lookup, after the
+# function ran for nothing.  Results are saved with save_verified instead.
+
+
+def test_save_verified_skips_a_healthy_entry(tmp_path, monkeypatch):
+    storage = _storage("pickle", tmp_path)
+    key = storage.save([1, 2, 3])
+    puts = _count_puts(storage, monkeypatch)
+    assert storage.save_verified([1, 2, 3]) == key
+    assert puts == []
+
+
+@pytest.mark.parametrize("kind", ["pickle", "h5", "h5_multi"])
+def test_save_verified_rewrites_a_damaged_entry_at_once(tmp_path, kind):
+    storage = _storage(kind, tmp_path)
+    value = list(range(10))
+    key = storage.save(value)
+    _tear(storage, key)
+    assert storage.save_verified(value) == key
+    assert storage.load(key) == value
+
+
+def test_save_verified_rewrites_a_damaged_part(tmp_path):
+    """A destructured value is checked whole: a damaged part is rewritten too."""
+    storage = _storage("pickle", tmp_path)
+    value = [[1, 2], [3, 4]]
+    key = storage.save(value)
+    _tear(storage, digest([1, 2]))
+    assert storage.save_verified(value) == key
+    assert storage.load(key) == value
+
+
+def test_save_verified_keeps_skipping_an_unverified_entry(tmp_path, monkeypatch):
+    from fleche.storage import ValuePickleFile
+
+    key = ValuePickleFile.with_pickle(tmp_path, secret_key=b"theirs").save([1, 2, 3])
+    ours = ValuePickleFile.with_pickle(tmp_path, secret_key=b"ours")
+    puts = _count_puts(ours, monkeypatch)
+    assert ours.save_verified([1, 2, 3]) == key
+    assert puts == []
+
+
+def test_damaged_result_costs_one_run(tmp_path):
+    """The reviewer's case: a new call whose result is already stored, damaged."""
+    from fleche import cache, fleche
+    from fleche.caches import Cache
+    from fleche.storage import CallPickleFile, ValuePickleFile
+
+    values = ValuePickleFile.with_pickle(tmp_path / "v", secret_key=b"k")
+    c = Cache(values, CallPickleFile.with_pickle(tmp_path / "c", secret_key=b"k"))
+    _tear(values, values.save([1, 2]))  # stored by someone else, then damaged
+    runs = []
+
+    @fleche()
+    def f(x):
+        runs.append(x)
+        return [x, x + 1]
+
+    with cache(c):
+        for _ in range(3):
+            assert f(1) == [1, 2]
+    assert len(runs) == 1
+
+
+def test_stored_arguments_are_not_read_back(tmp_path, monkeypatch):
+    """Arguments keep the unread skip: a damaged argument costs no recomputation."""
+    from fleche.call import Call
+
+    storage = _storage("pickle", tmp_path)
+    storage.save(list(range(100)))
+    gets = []
+    original = type(storage).get
+    monkeypatch.setattr(type(storage), "get", lambda self, key: gets.append(key) or original(self, key))
+    Call(name="f", arguments={"x": list(range(100))}, result="new").stash(storage)
+    assert gets == []
+
+
+def test_stashed_result_is_verified(tmp_path):
+    """The one-shot form (Cache.save of a Call, transfer, back-fill) too."""
+    from fleche.call import Call
+
+    storage = _storage("pickle", tmp_path)
+    key = storage.save([1, 2])
+    _tear(storage, key)
+    assert Call(name="f", arguments={"x": 1}, result=[1, 2]).stash(storage).result == key
+    assert storage.load(key) == [1, 2]

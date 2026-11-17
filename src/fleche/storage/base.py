@@ -390,6 +390,29 @@ class ValueStorage(KeyManagement):
     @abstractmethod
     def load(self, key: Digest | str) -> Any: ...
 
+    def save_verified(self, value: Any, key: Digest | None = None) -> Digest:
+        """Like :meth:`save`, but an entry already under *key* must also load.
+
+        For values whose loss costs a recomputation: function results.  A
+        plain ``save`` skips a present key unread, so a damaged result would
+        only surface when the next lookup fails to load it — after the
+        function had run for nothing.  Loading it here instead lets the
+        failed load mark the damaged entries (see :class:`ValueMixin`) and
+        this same save rewrite them.  The read costs something only when the
+        value is already stored.
+        """
+        if key is None:
+            key = digest(value)
+        if self.contains(key):
+            try:
+                self.load(key)
+                return key
+            except Exception:
+                # Whatever failed to load is now marked, so save rewrites it;
+                # an UnverifiedEntry is not, and save keeps skipping it.
+                pass
+        return self.save(value, key)
+
 
 class ValueMixin(ValueStorage, StorageBackend):
     """Bridges :class:`~fleche.storage.base.ValueStorage` with :class:`~fleche.storage.base.StorageBackend` primitives.

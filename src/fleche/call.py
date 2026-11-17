@@ -229,14 +229,20 @@ class Call:
         call = replace(self, arguments=arg_pairs, metadata=None, result=None)
         return digest.digest(call)
 
-    def _to_digested(self, save_fn: Callable[[Any], Digest]) -> "DigestedCall":
+    def _to_digested(
+        self,
+        save_fn: Callable[[Any], Digest],
+        save_result_fn: "Callable[[Any], Digest] | None" = None,
+    ) -> "DigestedCall":
         """Generic conversion to DigestedCall using *save_fn* to handle each value.
 
-        A ``None`` result stays ``None`` (an incomplete record awaiting its
-        result — see :meth:`fleche.caches.BaseCache.prepare`) rather than being
-        run through *save_fn*.
+        The result goes through *save_result_fn* instead when given.  A ``None``
+        result stays ``None`` (an incomplete record awaiting its result — see
+        :meth:`fleche.caches.BaseCache.prepare`) rather than being run through
+        either.
         """
-        result = None if self.result is None else save_fn(self.result)
+        save_result_fn = save_fn if save_result_fn is None else save_result_fn
+        result = None if self.result is None else save_result_fn(self.result)
         arguments: dict[str, Digest] = {}
         for k, v in self.arguments.items():
             if isinstance(v, Digest):
@@ -276,7 +282,9 @@ class Call:
         See Also:
             :meth:`digest` for a variant that does not write to storage.
         """
-        return self._to_digested(values.save)
+        # A damaged stored argument costs no recomputation (the call still
+        # hits), so arguments take the unread skip; a result is verified.
+        return self._to_digested(values.save, values.save_verified)
 
     def digest(self) -> "DigestedCall":
         """Digest arguments and result without saving to storage, returning a :class:`~fleche.call.DigestedCall`.
@@ -429,7 +437,7 @@ class PreparedCall:
         """
         return replace(
             self.digested,
-            result=values.save(self._result),
+            result=values.save_verified(self._result),
             metadata=self.digested.metadata if self._metadata is None else self._metadata,
         )
 

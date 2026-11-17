@@ -714,6 +714,10 @@ class _RemoteValues:
     def save(self, value: Any) -> Digest:
         return self._cache._rpc("save_value", value)
 
+    # The server files the value in the result slot of a stashed call, so it
+    # goes through the server's ``save_verified`` either way.
+    save_verified = save
+
 
 def _fetch_lazy_call(sc: "SshCache", dc: DigestedCall) -> LazyCall:
     return dc.fetch(sc)
