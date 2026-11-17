@@ -92,8 +92,10 @@ def test_rebag_calls_load_and_save(tmp_path, monkeypatch):
 
     mock_h5bag.return_value.load.assert_called_once_with(version_validator="none")
     # Rewritten through put: into a temp sibling, then renamed into place.
+    mock_h5bag.save.assert_called_once()
     (value, path), _ = mock_h5bag.save.call_args
-    assert value == 99 and Path(path).parent == s._path(key).parent
+    assert value == 99
+    assert Path(path).parent == s._path(key).parent and Path(path) != s._path(key)
     assert s._path(key).read_bytes() == b"rebagged"
 
 

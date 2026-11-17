@@ -214,7 +214,9 @@ Values and calls are stored separately so call records are queryable without des
   subclasses override only `_prefix_candidates`.
   `ValueMixin`/`CallMixin` bridge `save`/`load`/`query` onto `put`/`get`.
   `ValueMixin.save` skips keys `_contains` already reports (content-addressed, so the stored value is equal), while `CallMixin.save` always overwrites, since a record under one lookup key can change (`rerun`, metadata).
-  The skip makes **`put` atomicity a hard invariant**: a key must become visible to `_contains`/`get` only once its entry is complete, crash mid-write included, or the torn entry is never rewritten.
+  The skip makes **`put` atomicity a hard invariant**: a key must become visible to `_contains`/`get` only once its entry is complete, crash mid-write included.
+  Entries that are present but unreadable anyway (pre-0.22 non-atomic writes, power loss without `fsync`, a dropped secret key) heal on read: a failed `ValueMixin.load` of a present key adds it to the process-local `_unreadable` set (kept in the instance `__dict__`, not a dataclass field), and the next `save` rewrites it.
+  Nothing is evicted on read, since an entry this process cannot verify may be valid under another holder's key, and the exception is re-raised unchanged, so only a `KeyError` reads as a cache miss.
   `SaveError` is the only exception a backend may let out of `put`: every backend wraps any serialisation (or copy) failure as `SaveError(value) from e`, deliberately broad because serializers re-raise whatever `__reduce__` raised.
   Callers key on it — `Call._to_digested` degrades a refused argument to a digest-only reference (hashed into the key, not stored) and `Cache.save` turns a refused result into `Rejected` — so a raw exception escaping `put` fails `prepare` and runs every call touching that value uncached.
   `@register_storage(name, kind)` on a backend class fills the config dispatch table.
@@ -236,6 +238,7 @@ Values and calls are stored separately so call records are queryable without des
   Multi-bag `put` writes into a `.staging-<key>` group and renames it to `<key>` under the bag lock, the in-file analogue of the temp-file rename;
   `list`/`_contains` never see staging groups, a refused save drops its staging group, and every `put` sweeps staging leftovers of dead writers from its bag.
   `rebag` rewrites through `put` for the same reason.
+  Staging covers writes that end with the bag closed (exceptions, Ctrl-C/`SIGINT`), not SIGKILL or default-handler `SIGTERM` while `H5Bag.save` holds the bag open: HDF5 then leaves its open-for-write flag set and the whole bag unreadable, so `save` into it raises a raw `OSError` (pre-existing, unfixed).
   Check #893 before touching `lock_timeout`.
 - `memory.py` — `put`/`get` deep-copy.
 - `sql.py` — `Sql` stores calls only and is not a `StorageBackend`: it saves in one transaction and evicts with one `DELETE`, child rows going by `ON DELETE CASCADE` (SQLite needs `foreign_keys=ON` per connection).

@@ -354,8 +354,10 @@ class StorageBackend(KeyManagement):
         Must be atomic with respect to ``_contains`` and ``get``: until the
         entry is complete they see the previous state, never a partial one —
         also if the process dies mid-write.  :meth:`ValueMixin.save` skips
-        keys ``_contains`` reports, so a key published early would stay torn
-        for good.  On failure raise :class:`SaveError` and leave no trace.
+        keys ``_contains`` reports and rewrites one only after a failed
+        :meth:`~ValueMixin.load`, so a key published early stays torn until
+        something tries to read it.  If the value cannot be serialised, raise
+        :class:`SaveError` and leave no entry under *key*.
         """
 
     @abstractmethod
@@ -386,31 +388,61 @@ class ValueMixin(ValueStorage, StorageBackend):
     Implements ``save`` and ``load`` using ``put`` and ``get``.
     Concrete classes inherit from this and a :class:`~fleche.storage.base.StorageBackend`
     implementation to get a fully functional value storage.
+
+    ``save`` skips keys already present.  An entry that is present but cannot
+    be read — truncated by a power loss or an older fleche, signed with a
+    key this storage no longer holds, damaged on disk — would then never be
+    rewritten, so a failed ``load`` of a present key marks it, and the next
+    ``save`` of that key writes it again.  Nothing is evicted on read: an
+    entry this process cannot verify may be another key holder's valid one.
     """
+
+    @property
+    def _unreadable(self) -> "set[Digest]":
+        """Keys whose entry is present but failed to load in this process.
+
+        Kept in the instance ``__dict__`` rather than as a dataclass field:
+        backends are frozen dataclasses, and this is process-local state, not
+        configuration, so it stays out of ``__init__``, ``__eq__`` and
+        ``to_config``.  Set operations are atomic under the GIL.
+        """
+        return self.__dict__.setdefault("_unreadable_keys", set())
 
     def save(self, value: Any, key: Digest | None = None) -> Digest:
         """Store *value* under *key* (its digest by default), unless already present.
 
-        Keys are content digests, so an entry already under *key* holds an
-        equal value and writing it again is pure I/O.  Skipping it relies on
-        every backend's ``put`` publishing a key only once its entry is
-        complete — a torn entry that ``_contains`` reported would otherwise
-        never be repaired.
+        Keys are content digests, so a readable entry already under *key*
+        holds an equal value and writing it again is pure I/O.  Skipping it
+        relies on every backend's ``put`` publishing a key only once its
+        entry is complete; an entry that is present but failed to
+        :meth:`load` is written again regardless.
         """
         if key is None:
             key = digest(value)
         with self._operation_context(key):
-            if self._contains(key):
+            if key not in self._unreadable and self._contains(key):
                 logger.debug("Value with key %s already stored", key)
                 return key
             logger.debug("Saving value with key %s", key)
-            return self.put(value, key)
+            stored = self.put(value, key)
+            self._unreadable.discard(key)
+            return stored
 
     def load(self, key: Digest | str) -> Any:
         with self._operation_context(key):
             key = self._normalize_key(key)
             logger.debug("Loading value with key %s", key)
-            return self.get(key)
+            try:
+                return self.get(key)
+            except Exception:
+                # Present but unreadable: let the next save rewrite it.  The
+                # exception itself is the backend's to choose — a KeyError
+                # reads as a miss, anything else (e.g. a version check the
+                # user asked for) still reaches the caller.
+                if self._contains(key):
+                    logger.warning("Value %s is stored but unreadable; the next save rewrites it", key)
+                    self._unreadable.add(key)
+                raise
 
 
 class CallStorage(KeyManagement):

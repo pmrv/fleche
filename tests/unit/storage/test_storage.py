@@ -95,6 +95,14 @@ def test_backend_refusal_leaves_nothing_behind(storage_backend, shared):
     assert _files(storage_backend) == before
     if shared:
         assert storage_backend.get(neighbour) == "kept"
+        # A multi-bag refusal happens inside a bag that survives it, so the
+        # file comparison above cannot see a staging group left in it.
+        root = getattr(storage_backend, "root", None)
+        for bag in root.glob("*.h5") if root is not None else ():
+            import h5py
+
+            with h5py.File(bag, "r") as f:
+                assert sorted(f) == [neighbour]
 
 
 def test_callstorages_evict():
