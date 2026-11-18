@@ -249,6 +249,9 @@ Values and calls are stored separately so call records are queryable without des
   `regression/test_sql_non_sqlite_backends.py::test_concurrent_processes_on_fresh_database` pins both against real servers.
 - `destructuring.py` — `DestructuringMixin` stores containers, dataclasses and attrs instances as separately stored parts (`remaining_depth`), composed **above** `ValueMixin`.
   `Digested*` markers keep digest equivalence via `__digest__` and rebuild fields via `object.__new__` + `__setattr__`, so `init=False`/`InitVar`/frozen/slots round-trip.
+  Wrappers mark exactly the path from an entry's root to each reference: in `sunder` an inlined wrapper child counts as a reference,
+  `Digested.get` mends nested wrappers, and `_raw_sub_digests` searches them, so `child_digests` and `gc` see references held through an inlined wrapper;
+  `DigestedIterable` hashes via its underlying container, so an inlined tuple wrapper stays a valid dict key.
   NamedTuples are not destructured.
   Scalars (depth 0, inlined like `int`) are `_SCALAR_TYPES` plus `_FOREIGN_SCALARS`, the latter matched by module and class name so numpy and pandas stay unimported;
   anything else no destructurer claims is opaque (depth ∞).
@@ -357,9 +360,9 @@ Git history is the changelog — no PR numbers, dates or release versions here.
 - Central SQL call index on HPC (#1047 is the field report and entry point): no compute fallback when the server is down, hosted-server tooling and its config write-back,
   `autostart` on shared cluster nodes.
 - Destructuring store layout (#1063 is the entry point — read its newest comments before touching `destructuring.py`): per-leaf value files dominate NFS write time.
-  Agreed direction, in order: track references inside inlined wrappers (the prerequisite), move destructurer registration to a `destructure` entry point so sister packages can ship destructurers, then a size-based split — `should_split` per registration judged against a log2-bytes level on the value backend, monotonic, never measured by speculative pickling.
-  Whether plain arrays (and other opaque leaves) default to depth 0 waits on production census data;
-  `Digest` elements stay back-references, and returning them as data is a caller bug, not a reason for a `Ref` type.
+  Agreed direction, in order: move destructurer registration to a `destructure` entry point so sister packages can ship destructurers, then a size-based split — `should_split` per registration judged against a log2-bytes level on the value backend, monotonic, never measured by speculative pickling.
+  A 16-store production census (in the thread) supports depth 0 for plain arrays: duplication from inlining is small (≤ ~5 % of reachable store bytes) and sits in small arrays a size threshold would miss, while per-file overhead dominates — except when a large leaf is both a top-level result and nested in another result, which only the size split catches.
+  `Digest` elements stay back-references, and returning them as data is a caller bug, not a reason for a `Ref` type (census: zero dangling references, no caller returns digests as data).
 
 **Known bugs**: #826 gc vs `PreparedCall`;
 #893/#903 multi-bag `filelock.Timeout` under contention;
