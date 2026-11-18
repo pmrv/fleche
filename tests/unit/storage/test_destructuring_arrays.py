@@ -157,7 +157,7 @@ def test_entry_points_load_once():
     registered = list(destructuring._DESTRUCTURERS)
     destructuring._load_entry_points()
     assert destructuring._DESTRUCTURERS == registered
-    assert sum(d.fn is destructurers[0][1] for d in registered) == 1
+    assert sum(fn is destructurers[0][1] for _, fn, _ in registered) == 1
 
 
 def test_first_save_in_a_fresh_process_is_destructured():

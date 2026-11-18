@@ -8,7 +8,7 @@ import dataclasses as _dataclasses
 import datetime
 from dataclasses import dataclass
 from numbers import Number
-from typing import Any, Callable, NamedTuple, Protocol, runtime_checkable
+from typing import Any, Callable, Protocol, runtime_checkable
 
 from . import base
 from .. import _attrs
@@ -225,19 +225,14 @@ class DigestedAttrs(DigestedFields):
         return _attrs.field_items(value)
 
 
-class Destructurer(NamedTuple):
-    """One entry of the destructurer table: which values, how to split them, and when they are big."""
-
-    pred: Callable[[Any], bool]
-    fn: Callable
-    should_split: Callable[[Any, int], bool] | None = None
-
-
-_DESTRUCTURERS: list[Destructurer] = [
-    Destructurer(lambda v: isinstance(v, (list, tuple)), DigestedIterable.sunder),
-    Destructurer(lambda v: isinstance(v, dict), DigestedDict.sunder),
-    Destructurer(lambda v: _dataclasses.is_dataclass(v) and not isinstance(v, type), DigestedDataclass.sunder),
-    Destructurer(_attrs.is_attrs_instance, DigestedAttrs.sunder),
+# (pred, fn, should_split) per entry.  Plain tuples, not a NamedTuple: save() and
+# _intern_rec unpack every entry for every value, and CPython only takes its fast
+# unpacking path for exact tuples.
+_DESTRUCTURERS: list[tuple[Callable[[Any], bool], Callable, Callable[[Any, int], bool] | None]] = [
+    (lambda v: isinstance(v, (list, tuple)), DigestedIterable.sunder, None),
+    (lambda v: isinstance(v, dict), DigestedDict.sunder, None),
+    (lambda v: _dataclasses.is_dataclass(v) and not isinstance(v, type), DigestedDataclass.sunder, None),
+    (_attrs.is_attrs_instance, DigestedAttrs.sunder, None),
 ]
 
 
@@ -264,7 +259,7 @@ def register_destructurer(
     the ``fleche`` entry point ``destructure``; they are registered before the
     first save.
     """
-    _DESTRUCTURERS.append(Destructurer(pred, fn, should_split))
+    _DESTRUCTURERS.append((pred, fn, should_split))
 
 
 _ENTRY_POINTS_LOADED = False

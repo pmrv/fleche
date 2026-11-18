@@ -270,7 +270,7 @@ Values and calls are stored separately so call records are queryable without des
   `_load_entry_points` registers them once, before the first `DestructuringMixin.save`, since destructuring decides before anything is digested and so cannot wait for digest's lazy entry-point load.
   fleche-numpy uses it for `dtype=object` arrays (`fleche_numpy.destructure.DigestedArray`) and makes other arrays without object fields leaves (depth 0);
   fleche-pandas makes `DataFrame`/`Series`/`Index` leaves, fleche-ase an `Atoms` without a live calculator (one other than `SinglePointCalculator`).
-  `_DESTRUCTURERS` holds `Destructurer(pred, fn, should_split)` named tuples;
+  `_DESTRUCTURERS` holds `(pred, fn, should_split)` plain tuples (not a NamedTuple: CPython's fast unpacking path is for exact tuples, and every save unpacks every entry);
   with the value backend's `split_level` set,
   `_intern_rec` stores a value whose `should_split(value, level)` holds (or a `bytes`/`str` of `len >= 2**level`) as its own entry while keeping its depth, so the parent still folds and holds a reference (#1076's wrapper propagation makes that reachable).
   `Digested` inherits `storage.base.ChildItems`: every record that holds other stored entries declares them once through the abstract `child_items()`, and the record-level `child_digests()` derives from it.
