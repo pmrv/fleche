@@ -12,7 +12,6 @@ from .destructuring import DestructuringMixin
 from ..security import (
     get_secret_key,
     normalize_secret_key,
-    ends_like_a_pickle,
     SignedBytes,
     SignatureError,
     SignatureMismatch,
@@ -147,15 +146,9 @@ class PickleFileBackend(FileStorage):
             data = SignedBytes(self.secret_key).loads(content)
         except SignatureMismatch:
             raise UnverifiedEntry(path, "Value present but no key held here verifies its signature.") from None
-        except SignatureError:
-            raise CorruptEntry(path, "Value present but corrupt: malformed signature.") from None
-        if not ends_like_a_pickle(data):
-            # Every pickle ends in STOP (plus the signature, read without
-            # keys), so this one was cut short.  Checked here because without
-            # keys nothing above looked at the bytes.
-            raise CorruptEntry(path, "Value present but corrupt: truncated pickle.")
-        # Intact bytes from here on: an unpickling error is the environment's
-        # (a renamed class, a missing module), not damage, and passes through.
+        except SignatureError as e:
+            raise CorruptEntry(path, f"Value present but corrupt: {e}") from None
+        # Intact bytes: an unpickling error here is not damage.
         return self.loads(data)
 
     def _rewrite_all(self, transform: Callable[[bytes], bytes | None]) -> None:

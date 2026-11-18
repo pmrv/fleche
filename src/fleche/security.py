@@ -98,13 +98,9 @@ def _well_formed_signature(signature: bytes) -> bool:
     return len(signature) == _SIGNATURE_LENGTH and not signature.strip(_HEX_DIGITS)
 
 
-def ends_like_a_pickle(content: bytes) -> bool:
-    """Whether *content* ends the way a complete entry does: in pickle's STOP
-    opcode, or in STOP plus a well-formed signature.
-
-    A reader without keys gets signed entries unverified, signature included,
-    so both endings are intact; anything else was cut short.
-    """
+def _ends_like_a_pickle(content: bytes) -> bool:
+    """Whether *content* ends in pickle's STOP opcode, alone or followed by a
+    well-formed signature."""
     if content.endswith(pickle.STOP):
         return True
     tail = content[-(_SIGNATURE_LENGTH + 1):]
@@ -160,6 +156,8 @@ class SignedBytes:
         Extracts the signature by searching for the pickle STOP opcode.
         Iterates through all provided keys for verification.
         Returns the original content if verification passes.
+        Without keys, returns the content as is, signed or not, unless it was
+        cut short.
 
         Args:
             content (bytes): The payload containing the data and the appended signature.
@@ -170,9 +168,12 @@ class SignedBytes:
         Raises:
             SignatureMismatch: If the signature is well-formed but no key verifies it.
             SignatureError: If the data is malformed: the STOP opcode or the
-                            signature is missing, or the signature is not 64 hex digits.
+                            signature is missing, or the signature is not 64 hex digits;
+                            without keys, if the content ends in neither.
         """
         if not self.keys:
+            if not _ends_like_a_pickle(content):
+                raise SignatureError("Truncated data")
             return content
 
         stop_index = content.rfind(pickle.STOP)

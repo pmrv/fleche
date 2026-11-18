@@ -374,11 +374,9 @@ class StorageBackend(KeyManagement):
 
         Must be atomic with respect to ``_contains`` and ``get``: until the
         entry is complete they see the previous state, never a partial one —
-        also if the process dies mid-write.  :meth:`ValueMixin.save` skips
-        keys ``_contains`` reports, so a key published early stays torn unless
-        ``get`` recognises the damage and raises :class:`CorruptEntry`.  If
-        the value cannot be serialised, raise :class:`SaveError` and leave no
-        entry under *key*.
+        also if the process dies mid-write; :meth:`ValueMixin.save` skips keys
+        ``_contains`` reports.  If the value cannot be serialised, raise
+        :class:`SaveError` and leave no entry under *key*.
         """
 
     @abstractmethod
@@ -411,8 +409,7 @@ class ValueMixin(ValueStorage, StorageBackend):
     implementation to get a fully functional value storage.
 
     ``save`` skips keys already present, so an entry that is present but
-    damaged — truncated by a power loss or an older fleche, garbled on disk —
-    would never be rewritten by it.  A backend that recognises such an entry
+    damaged would never be rewritten by it.  A backend that recognises such an entry
     raises :class:`CorruptEntry` from ``get``, and ``load`` evicts it then, so
     the next save writes it again.  Any other load failure is re-raised
     untouched.

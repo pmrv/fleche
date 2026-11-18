@@ -44,7 +44,7 @@ def test_secure_storage_unsigned_data_fails_when_auth_enabled(tmp_path):
 
     # Should fail to load because security is enabled but no signature exists;
     # nobody signed it, so it counts as damaged, not as another key holder's.
-    with pytest.raises(KeyError, match="malformed signature") as excinfo:
+    with pytest.raises(KeyError, match="No signature found") as excinfo:
         storage_auth.load(digest_key)
     assert not isinstance(excinfo.value, UnverifiedEntry)
 
@@ -245,3 +245,19 @@ def test_signed_bytes_garbled_signature_is_not_a_mismatch():
     with pytest.raises(SignatureError) as excinfo:
         signer.loads(data[:-64] + b"\x00" * 64)
     assert not isinstance(excinfo.value, SignatureMismatch)
+
+
+def test_keyless_loads_passes_signed_and_unsigned_data_through():
+    unsigned = pickle.dumps("value")
+    signed = SignedBytes(keys=[b"1" * 32]).dumps(unsigned)
+    keyless = SignedBytes(keys=[])
+    assert keyless.loads(unsigned) == unsigned
+    assert keyless.loads(signed) == signed
+
+
+@pytest.mark.parametrize("cut", [1, 10, 70], ids=lambda n: f"truncated_by_{n}")
+def test_keyless_loads_rejects_truncated_data(cut):
+    signed = SignedBytes(keys=[b"1" * 32]).dumps(pickle.dumps(list(range(50))))
+    for data in (pickle.dumps(list(range(50))), signed):
+        with pytest.raises(SignatureError):
+            SignedBytes(keys=[]).loads(data[:-cut])
