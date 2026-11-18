@@ -1,7 +1,7 @@
 pandas
 ======
 
-How ``fleche`` digests pandas values.
+How ``fleche`` digests and stores pandas values.
 
 ``DataFrame``, ``Series``, ``Index`` (with its subclasses), ``pd.Timedelta``
 and ``pd.NA`` are digested by the ``fleche-pandas`` companion package
@@ -26,3 +26,10 @@ This covers single values.  A ``TimedeltaIndex`` or a timedelta ``Series``
 digests by its dtype and values, so there the unit matters:
 ``pd.to_timedelta(["5s"]).as_unit("s")`` and ``pd.to_timedelta(["5s"])`` digest
 apart.
+
+Storage
+-------
+
+``DataFrame``, ``Series`` and ``Index`` are leaves when
+:doc:`destructuring <../storage/destructuring>` (depth 0, inlined like an
+``int``).

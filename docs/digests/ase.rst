@@ -3,7 +3,7 @@
 ASE
 ===
 
-How ``fleche`` digests objects of the `Atomic Simulation Environment (ASE)
+How ``fleche`` digests and stores objects of the `Atomic Simulation Environment (ASE)
 <https://wiki.fysik.dtu.dk/ase/>`_.
 
 They are digested by the `fleche-ase <https://pypi.org/project/fleche-ase/>`_
@@ -73,3 +73,10 @@ ASE objects with no further setup:
        ...
 
    relax(bulk("Al"))
+
+Storage
+-------
+
+When :doc:`destructuring <../storage/destructuring>`, an ``Atoms`` is a leaf
+(depth 0, inlined like an ``int``) unless it carries a live calculator, which
+is pickled with it and may be a whole model; then it stays opaque.
