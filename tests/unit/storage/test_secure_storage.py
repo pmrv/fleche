@@ -1,8 +1,10 @@
 import pickle
 import pytest
+from fleche.storage.base import UnverifiedEntry
 from fleche.storage.pickle_file import ValuePickleFile as PickleFile
 from fleche.security import (
     SignatureError,
+    SignatureMismatch,
     SignedBytes,
     get_secret_key,
     normalize_secret_key,
@@ -25,7 +27,7 @@ def test_secure_storage_tampering(tmp_path):
     tampered_content = b"garbage" + content
     file_path.write_bytes(tampered_content)
 
-    with pytest.raises(KeyError, match="Value present but failed signature check."):
+    with pytest.raises(UnverifiedEntry):
         storage.load(digest_key)
 
 
@@ -40,9 +42,11 @@ def test_secure_storage_unsigned_data_fails_when_auth_enabled(tmp_path):
     key = b"B" * 32
     storage_auth = PickleFile.with_pickle(root=tmp_path, secret_key=[key])
 
-    # Should fail to load because security is enabled but no signature exists
-    with pytest.raises(KeyError, match="Value present but failed signature check."):
+    # Should fail to load because security is enabled but no signature exists;
+    # nobody signed it, so it counts as damaged, not as another key holder's.
+    with pytest.raises(KeyError, match="No signature found") as excinfo:
         storage_auth.load(digest_key)
+    assert not isinstance(excinfo.value, UnverifiedEntry)
 
 
 def test_secure_storage_wrong_key(tmp_path):
@@ -57,7 +61,7 @@ def test_secure_storage_wrong_key(tmp_path):
     digest_key = storage1.save(value)
 
     # Try to load with wrong key
-    with pytest.raises(KeyError, match="Value present but failed signature check."):
+    with pytest.raises(UnverifiedEntry):
         storage2.load(digest_key)
 
 
@@ -128,7 +132,7 @@ def test_secure_storage_multiple_keys(tmp_path):
     digest_key_multi = storage_multi.save("third")
     assert storage_auth2.load(digest_key_multi) == "third"
 
-    with pytest.raises(KeyError, match="Value present but failed signature check."):
+    with pytest.raises(UnverifiedEntry):
         storage_auth1.load(digest_key_multi)
 
 
@@ -211,3 +215,49 @@ def test_signed_bytes_loads_raises_on_missing_stop_opcode():
     assert pickle.STOP not in payload_without_stop
     with pytest.raises(SignatureError, match="No STOP opcode found"):
         signer.loads(payload_without_stop)
+
+
+# --- telling a key mismatch from damage ---
+
+def test_signed_bytes_mismatch_is_a_signature_mismatch():
+    data = SignedBytes(keys=[b"1" * 32]).dumps(pickle.dumps("value"))
+    with pytest.raises(SignatureMismatch):
+        SignedBytes(keys=[b"2" * 32]).loads(data)
+
+
+@pytest.mark.parametrize(
+    "cut",
+    [1, 32, 64, 65, 70],
+    ids=lambda n: f"truncated_by_{n}",
+)
+def test_signed_bytes_truncation_is_not_a_mismatch(cut):
+    """A truncated entry must read as damaged, whichever part the cut lands in."""
+    signer = SignedBytes(keys=[b"1" * 32])
+    data = signer.dumps(pickle.dumps(list(range(50))))
+    with pytest.raises(SignatureError) as excinfo:
+        signer.loads(data[:-cut])
+    assert not isinstance(excinfo.value, SignatureMismatch)
+
+
+def test_signed_bytes_garbled_signature_is_not_a_mismatch():
+    signer = SignedBytes(keys=[b"1" * 32])
+    data = signer.dumps(pickle.dumps("value"))
+    with pytest.raises(SignatureError) as excinfo:
+        signer.loads(data[:-64] + b"\x00" * 64)
+    assert not isinstance(excinfo.value, SignatureMismatch)
+
+
+def test_keyless_loads_passes_signed_and_unsigned_data_through():
+    unsigned = pickle.dumps("value")
+    signed = SignedBytes(keys=[b"1" * 32]).dumps(unsigned)
+    keyless = SignedBytes(keys=[])
+    assert keyless.loads(unsigned) == unsigned
+    assert keyless.loads(signed) == signed
+
+
+@pytest.mark.parametrize("cut", [1, 10, 70], ids=lambda n: f"truncated_by_{n}")
+def test_keyless_loads_rejects_truncated_data(cut):
+    signed = SignedBytes(keys=[b"1" * 32]).dumps(pickle.dumps(list(range(50))))
+    for data in (pickle.dumps(list(range(50))), signed):
+        with pytest.raises(SignatureError):
+            SignedBytes(keys=[]).loads(data[:-cut])

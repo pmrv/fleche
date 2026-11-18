@@ -27,6 +27,26 @@ VersionValidator = Literal["exact", "semantic-minor", "semantic-major", "none"]
 
 _DEFAULT_PREFIX_LENGTH = 2
 
+_STAGING_PREFIX = ".staging-"
+"""Multi-bag writes land in a group named ``{_STAGING_PREFIX}{key}`` and are
+renamed to ``key`` only once complete.  Digests are hex, so no key ever starts
+with the prefix; ``list``, ``_contains`` and ``_drop_group`` ignore such groups.
+"""
+
+
+def _has_entries(bag: "h5py.File") -> bool:
+    """Whether *bag* holds any entry, ignoring staging groups.
+
+    Staging leftovers don't keep a bag alive: under the bag lock they can only
+    belong to dead writers.  ``.`` sorts before every hex digit, so the bag
+    holds an entry iff its last name is not a staging one — read from the
+    name index in descending order, without scanning the bag.
+    """
+    last, _ = bag.id.links.iterate(
+        lambda name: name.decode(), idx_type=h5py.h5.INDEX_NAME, order=h5py.h5.ITER_DEC
+    )
+    return last is not None and not last.startswith(_STAGING_PREFIX)
+
 
 @contextmanager
 def _file_read_lock_with_fallback(
@@ -290,14 +310,31 @@ class BagOfHoldingH5FileBackend(FileStorage):
     def put(self, value: Any, key: Digest) -> Digest:
         if self.prefix_length == 0:
             return super().put(value, key)
+        # The multi-bag counterpart of FileStorage's temp-file-and-rename:
+        # write the whole entry into a staging group, then rename it to `key`.
+        # A writer that dies mid-save leaves only the staging group, which no
+        # reader sees and the next writer to this bag sweeps; `key` either
+        # names a complete entry or nothing.  HDF5 itself is not crash-safe,
+        # so a crash can still corrupt the bag file as a whole — that reads as
+        # a miss (`_contains` turns the OSError into False), never as a value.
+        staging = f"{_STAGING_PREFIX}{key}"
+        bag_file = self._bag_file(key)
         with filelock.FileLock(self._lock_path(key), timeout=self.lock_timeout):
             try:
-                self._to_file(value, self._path(key))
+                self._to_file(value, bag_file / staging)
             except SaveError:
-                # H5Bag has already created (and, on overwrite, emptied) the group;
-                # left behind, it would make `contains` report a value never stored.
-                self._drop_group(key)
+                self._drop_group(key, staging)
                 raise
+            with h5py.File(bag_file, "a") as f:
+                if key in f:
+                    logger.debug("Replacing entry %s in %s", key, bag_file)
+                    del f[key]
+                f.move(staging, key)
+                # Under the bag lock every other staging group belongs to a
+                # writer that died before its rename.
+                for name in [n for n in f if n.startswith(_STAGING_PREFIX)]:
+                    logger.debug("Dropping %s in %s, left by a dead writer", name, bag_file)
+                    del f[name]
         return key
 
     def get(self, key: Digest) -> Any:
@@ -324,16 +361,18 @@ class BagOfHoldingH5FileBackend(FileStorage):
         with filelock.FileLock(self._lock_path(key), timeout=self.lock_timeout):
             self._drop_group(key)
 
-    def _drop_group(self, key: Digest) -> None:
-        """Delete *key*'s group from its bag, and the bag once empty; the caller holds the lock."""
+    def _drop_group(self, key: Digest, group: str | None = None) -> None:
+        """Delete *group* (default: *key*'s own) from *key*'s bag, and the bag
+        once no entry is left in it; the caller holds the lock."""
+        group = key if group is None else group
         file_path = self._bag_file(key)
         if not file_path.is_file():
             return
         with h5py.File(file_path, "a") as f:
-            if key in f:
-                del f[key]
-            remaining = len(f)
-        if remaining == 0:
+            if group in f:
+                del f[group]
+            alive = _has_entries(f)
+        if not alive:
             file_path.unlink(missing_ok=True)
             self._lock_path(key).unlink(missing_ok=True)
 
@@ -358,7 +397,11 @@ class BagOfHoldingH5FileBackend(FileStorage):
                 continue
             try:
                 with h5py.File(p, "r") as f:
-                    keys.extend(Digest(name) for name in f.keys())
+                    keys.extend(
+                        Digest(name)
+                        for name in f.keys()
+                        if not name.startswith(_STAGING_PREFIX)
+                    )
             except OSError as e:
                 logger.error("Corrupt file present in cache at path %s: %s", p, e, exc_info=True)
         return keys
@@ -374,8 +417,10 @@ class BagOfHoldingH5FileBackend(FileStorage):
             with self._operation_context(key):
                 try:
                     value = H5Bag(path, _skip_load=True).load(version_validator=version_validator)
-                    H5Bag.save(value, path)
-                except OSError as e:
+                    # Through `put`, so the rewrite is as atomic as any save:
+                    # an interrupted rebag leaves the old bag, not a torn one.
+                    self.put(value, key)
+                except (OSError, SaveError) as e:
                     logger.warning("Failed to rebag %s: %s", key, e)
 
 

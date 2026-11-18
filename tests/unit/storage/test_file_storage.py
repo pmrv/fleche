@@ -56,8 +56,8 @@ def test_failed_load_creates_no_files(tmp_path):
 def test_overwrite_leaves_single_file(tmp_path):
     storage = PickleFile.with_pickle(tmp_path)
     key = digest("test")
-    storage.save("first", key=key)
-    storage.save("second", key=key)
+    storage.put("first", key)
+    storage.put("second", key)
 
     assert storage.load(key) == "second"
     assert [p.name for p in tmp_path.iterdir()] == [str(key)]

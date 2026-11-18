@@ -464,8 +464,9 @@ write, so this isn't planned as a near-term fix — see workarounds below.
 
    If you submit many workers with the same arguments before the first result
    is cached, all workers will compute the function.  The last writer wins for
-   the stored value, but **no data is lost or corrupted** — subsequent calls
-   will hit the cache normally.
+   the stored call record, but **no data is lost or corrupted** — subsequent calls
+   will hit the cache normally.  Values are content-addressed, so a value
+   already stored is not written again.
 
 **Practical workarounds:**
 
