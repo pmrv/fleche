@@ -6,6 +6,10 @@ so installing this package is all it takes.  Without it, fleche does not digest
 these values.  A ``pd.Timedelta`` digests by its length in nanoseconds, apart
 from the ``datetime.timedelta`` it subclasses.
 
+:data:`destructurers`, under the entry point ``destructure``, makes
+``DataFrame``, ``Series`` and ``Index`` leaves of a destructuring store:
+inlined into their parent like an ``int``.
+
 Builds on :mod:`fleche_numpy`: object columns are digested element by element.
 
 Object columns need care (#1004).  ``pd.util.hash_pandas_object`` hashes a
@@ -39,7 +43,7 @@ from fleche.hashing import running_hash
 from fleche.digest import Digest, Indigestible, digest
 from fleche_numpy import timedelta64_length
 
-__all__ = ["digest_hooks", "digest_pandas"]
+__all__ = ["destructurers", "digest_hooks", "digest_pandas"]
 
 # What ``infer_dtype`` calls the object columns pandas hashes faithfully.
 SAFE_OBJECT = frozenset({"string", "empty"})
@@ -148,3 +152,18 @@ digest_hooks = [
     (pd.Timedelta, _pandas_digest),
     (type(pd.NA), _pandas_digest),
 ]
+
+
+def _leaf(intern, value):
+    """Destructurer for an atomic value: depth 0, inlined like an ``int``."""
+    return value, 0
+
+
+def _is_pandas_container(value: Any) -> bool:
+    return isinstance(value, (pd.DataFrame, pd.Series, pd.Index))
+
+
+#: The destructurers fleche loads from this package's ``fleche``/``destructure`` entry point:
+#: DataFrames, Series and Indexes are leaves, inlined into their parent like an ``int``.
+destructurers = [(_is_pandas_container, _leaf)]
+

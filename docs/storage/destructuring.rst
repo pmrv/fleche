@@ -15,8 +15,9 @@ the same value — is stored exactly once.
 
 Containers that are destructured: :class:`list`, :class:`tuple`,
 :class:`dict`, :mod:`dataclasses` instances, ``attrs`` instances, and, with
-fleche-numpy installed, numpy arrays of ``dtype=object``.  Scalars are leaves;
-everything else is treated as an opaque leaf (see `Special cases`_).
+fleche-numpy installed, numpy arrays of ``dtype=object``.  Scalars are leaves,
+and so are the types the sister packages declare (see `Special cases`_);
+everything else is treated as an opaque leaf.
 
 Deduplication
 -------------
@@ -81,18 +82,26 @@ A few kinds of value deliberately break the depth pattern:
          namedtuples versus plain tuples, and empty containers.
    :width: 100%
 
-**Opaque objects.**  Values with no registered destructurer — numpy arrays,
-sets, arbitrary objects — are assigned depth ∞.  They can never be inlined and
-always get an entry of their own, at every ``remaining_depth``.
+**Opaque objects.**  Values with no registered destructurer — sets, arbitrary
+objects — are assigned depth ∞.  They can never be inlined and always get an
+entry of their own, at every ``remaining_depth``.
 
 **∞ propagates upward.**  Since a container's depth is
 ``1 + max(child depths)``, a container holding an opaque value is depth ∞ as
 well and also splits at every setting.
 
-**Object arrays.**  A numpy array of ``dtype=object`` holds arbitrary Python
-objects.  With fleche-numpy installed it is destructured element by element
-like a list, keeping its shape.  Every other numpy array, a structured one with
-object fields included, is opaque.
+**Types declared by the sister packages.**  These packages declare how their
+types are stored:
+
+- fleche-numpy: an array without object fields is a leaf (depth 0, inlined like
+  an ``int``).  An array of ``dtype=object`` holds arbitrary Python objects and
+  is destructured element by element like a list, keeping its shape.  A
+  structured array with object fields stays opaque.
+- fleche-pandas: ``DataFrame``, ``Series`` and ``Index`` are leaves.
+- fleche-ase: an ``Atoms`` is a leaf unless it carries a live calculator, which
+  is pickled with it and may be a whole model; then it stays opaque.
+
+Without the package installed, its types are opaque.
 
 **Namedtuples.**  A plain tuple destructures normally, but a
 :func:`~collections.namedtuple` is kept opaque on purpose: its constructor

@@ -96,7 +96,7 @@ def container_node(x, y, w=30, h=20, stroke=INK2, fs=10, label="[ ]"):
             + text(x, y + fs * 0.36, label, size=fs, anchor="middle", mono=True))
 
 
-def opaque_node(x, y, w=32, h=20, fs=9.5, label="arr"):
+def opaque_node(x, y, w=32, h=20, fs=9.5, label="obj"):
     return (f'<rect x="{x - w / 2}" y="{y - h / 2}" width="{w}" height="{h}" rx="6" '
             f'fill="{NEUTRAL}" stroke="{MUTED}" stroke-width="1.3" '
             f'stroke-dasharray="3 2.5"/>'
@@ -426,19 +426,19 @@ def svg_special(hashes=None, background=True):
     out.append('<g transform="translate(0,-64)">')
 
     panels = [
-        ("opaque", 45, 100, "Opaque object", "2 entries", "[1, array([8, 9])]",
+        ("opaque", 45, 100, "Opaque object", "2 entries", "[1, frozenset({8, 9})]",
          {"root": ("c", 170, 90, "[ ]"), "1": ("s", 110, 160, "1"),
-          "A": ("o", 230, 160, "arr")},
+          "A": ("o", 230, 160, "set")},
          [("root", "1"), ("root", "A")],
          [("root", [["1", "root"]]), ("A", [["A"]])],
          {("root", "A")},
          [(230, 128, "middle", "d=&#8734;")],
          {"root": (132, 70, "end"), "A": (230, 198, "middle")}),
 
-        ("propagate", 425, 100, "&#8734; propagates upward", "3 entries", "[1, [2, array([8, 9])]]",
+        ("propagate", 425, 100, "&#8734; propagates upward", "3 entries", "[1, [2, frozenset({8, 9})]]",
          {"root": ("c", 170, 80, "[ ]"), "1": ("s", 110, 150, "1"),
           "M": ("c", 230, 150, "[ ]"), "2": ("s", 180, 220, "2"),
-          "A": ("o", 285, 220, "arr")},
+          "A": ("o", 285, 220, "set")},
          [("root", "1"), ("root", "M"), ("M", "2"), ("M", "A")],
          [("root", [["1", "root"]]), ("M", [["2", "M"]]), ("A", [["A"]])],
          {("root", "M"), ("M", "A")},
@@ -495,8 +495,6 @@ def real_hashes():
     """
     from collections import namedtuple
 
-    import numpy as np
-
     from fleche.digest import digest
     from fleche.storage import ValueMemory
 
@@ -516,7 +514,7 @@ def real_hashes():
     depth = {n: short(vm0, digest(v)) for n, v in node_values.items()}
 
     Point = namedtuple("Point", ["x", "y"])
-    arr = np.array([8, 9])
+    arr = frozenset({8, 9})
     vm_o = ValueMemory({})
     vm_o.save([1, arr])
     vm_p = ValueMemory({})

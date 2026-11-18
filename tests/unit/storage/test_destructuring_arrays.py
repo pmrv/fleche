@@ -70,19 +70,39 @@ def test_roundtrip_and_digest(value, remaining_depth):
     assert same(vm.load(key), value)
 
 
-def test_plain_array_stays_opaque():
+def test_plain_array_is_a_leaf():
+    """An array without object fields inlines into its parent like an int."""
     arr = np.arange(3)
-    vm = ValueMemory({}, remaining_depth=99)
+    vm = ValueMemory({}, remaining_depth=1)
+    key = vm.save({"x": arr, "y": np.ones((2, 2))})
+    assert set(vm.storage) == {key}
+    assert same(vm.load(key), {"x": arr, "y": np.ones((2, 2))})
+
+
+def test_plain_array_split_at_depth_zero():
+    arr = np.arange(3)
+    vm = ValueMemory({}, remaining_depth=0)
     vm.save([1, arr])
     assert digest(arr) in vm.storage
 
 
-def test_object_array_references_plain_array():
+def test_records_of_arrays_fold_by_remaining_depth():
+    """A list of records holding arrays: one entry per record at depth 1, one in all at 2."""
+    value = [{"disp": np.full(3, i), "forces": np.ones(3) * i} for i in range(4)]
+    counts = {}
+    for depth in (1, 2):
+        vm = ValueMemory({}, remaining_depth=depth)
+        vm.save(value)
+        counts[depth] = len(vm.storage)
+    assert counts == {1: 5, 2: 1}
+
+
+def test_object_array_inlines_plain_array():
     plain = np.arange(3)
     vm = ValueMemory({}, remaining_depth=1)
     key = vm.save(object_array(1, plain))
-    assert isinstance(vm.storage[key], DigestedArray)
-    assert vm.child_digests(key) == {digest(plain)}
+    assert set(vm.storage) == {key}
+    assert type(vm.storage[key]) is np.ndarray
 
 
 def test_object_array_destructured_like_list():
