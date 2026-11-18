@@ -4,6 +4,11 @@ Importing this package is all that is needed: :data:`digest_hooks` is published 
 fleche's ``fleche`` entry point, so ``Atoms``, its constraints, ``Calculator``, ``VibrationsData``
 and the ``ase.thermochemistry`` classes are digestible arguments of any cached function.
 
+:data:`destructurers`, under the entry point ``destructure``, makes an ``Atoms``
+without a live calculator a leaf of a destructuring store: inlined into its
+parent like an ``int``.  A structure carrying a calculator stays a separate
+entry, since the calculator is pickled with it.
+
 A calculator this module cannot identify raises ``Indigestible`` rather than sharing a key
 with another one; :func:`register_calculator` is how a project teaches it one.
 """
@@ -18,6 +23,7 @@ import numpy
 
 from ase import Atoms
 from ase.calculators.calculator import Calculator
+from ase.calculators.singlepoint import SinglePointCalculator
 from ase.constraints import FixConstraint
 from ase.thermochemistry import AbstractMode, BaseThermoChem
 from ase.vibrations import VibrationsData
@@ -26,7 +32,7 @@ from fleche.digest import Indigestible, digest, Digest
 __all__ = ["atoms_digest", "calculator_digest", "constraint_digest", "vibrations_digest",
            "thermo_mode_digest", "thermochemistry_digest",
            "file_fingerprint", "register_calculator",
-           "digest_hooks", "PARAMETER_FREE"]
+           "digest_hooks", "destructurers", "PARAMETER_FREE"]
 
 #: Calculator class names for which an empty ``todict()`` is a complete identity rather than
 #: a missing one. Names, not classes, so that nothing here imports a calculator backend.
@@ -572,3 +578,22 @@ digest_hooks = [
         (AbstractMode, thermo_mode_digest),
         (BaseThermoChem, thermochemistry_digest),
 ]
+
+
+def _leaf(intern, value):
+    """Destructurer for an atomic value: depth 0, inlined like an ``int``."""
+    return value, 0
+
+
+def _is_light_atoms(value) -> bool:
+    # An attached calculator is pickled with the structure and can be a whole model,
+    # so only a structure without one, or with stored results only, is inlined.
+    return isinstance(value, Atoms) and (
+        value.calc is None or isinstance(value.calc, SinglePointCalculator)
+    )
+
+
+#: The destructurers fleche loads from this package's ``fleche``/``destructure`` entry point:
+#: an ``Atoms`` without a live calculator is a leaf, inlined into its parent like an ``int``.
+destructurers = [(_is_light_atoms, _leaf)]
+

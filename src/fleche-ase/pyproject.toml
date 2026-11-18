@@ -32,3 +32,4 @@ Documentation = "https://fleche.readthedocs.io/"
 
 [project.entry-points.'fleche']
 digest = 'fleche_ase:digest_hooks'
+destructure = 'fleche_ase:destructurers'

@@ -1,9 +1,12 @@
-"""fleche destructurer for numpy arrays of ``dtype=object``.
+"""fleche destructurers for numpy arrays.
 
 Registered through the ``fleche`` entry point ``destructure`` (see
-:data:`destructurers`).  An object array holds arbitrary Python objects, so a
-destructuring store takes it apart element by element, like a list.  Other
-arrays, and ndarray subclasses, stay whole.
+:data:`destructurers`).  An array of ``dtype=object`` holds arbitrary Python
+objects, so a destructuring store takes it apart element by element, like a
+list; an object-dtype ndarray subclass (``np.matrix``, a masked array) is not,
+since reshape and element access differ on it.  Any other array without object
+fields is a leaf: depth 0, inlined into its parent like an ``int``.  Structured
+arrays with object fields stay opaque.
 """
 
 from dataclasses import dataclass
@@ -13,7 +16,7 @@ import numpy as np
 
 from fleche.storage.destructuring import Digested
 
-__all__ = ["DigestedArray", "destructurers"]
+__all__ = ["DigestedArray", "destructurers", "leaf"]
 
 
 def _filled(array: np.ndarray, children) -> np.ndarray:
@@ -69,5 +72,17 @@ def _is_object_array(value: Any) -> bool:
     return type(value) is np.ndarray and value.dtype.kind == "O"
 
 
+def _is_plain_array(value: Any) -> bool:
+    return isinstance(value, np.ndarray) and not value.dtype.hasobject
+
+
+def leaf(intern, value):
+    """Destructurer for an atomic value: depth 0, inlined like an ``int``."""
+    return value, 0
+
+
 #: The destructurers fleche loads from this package's ``fleche``/``destructure`` entry point.
-destructurers = [(_is_object_array, DigestedArray.sunder)]
+destructurers = [
+    (_is_object_array, DigestedArray.sunder),
+    (_is_plain_array, leaf),
+]

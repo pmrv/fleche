@@ -400,17 +400,16 @@ class DestructuringMixin(base.ValueStorage):
 
     def save(self, value: Any, key: digest.Digest | None = None) -> digest.Digest:
         _load_entry_points()
-        # Empty list/tuple/dict: stored as-is (no point destructuring nothing)
+        # The top-level value always gets an entry, so whatever its depth, store
+        # what its destructurer makes of it.  Calling the destructurer directly
+        # skips _intern_rec's second scan of _DESTRUCTURERS.
         if isinstance(value, (list, tuple, dict)) and not value:
-            return super().save(value, key)
-
-        for pred, _ in _DESTRUCTURERS:
-            if pred(value):
-                value_or_digest, depth = self._intern_rec(value, key)
-                if depth < self.remaining_depth:
-                    return super().save(value_or_digest, key)
-                return value_or_digest
-
+            pass  # nothing to destructure
+        elif not (isinstance(value, tuple) and self._is_trojan_tuple(value)):
+            for pred, sunder_fn in _DESTRUCTURERS:
+                if pred(value):
+                    value, _ = sunder_fn(self._intern_rec, value)
+                    break
         return super().save(value, key)
 
     def load(self, key: digest.Digest | str) -> Any:
