@@ -3,8 +3,10 @@
 Registered through the ``fleche`` entry point ``destructure`` (see
 :data:`destructurers`).  An array of ``dtype=object`` holds arbitrary Python
 objects, so a destructuring store takes it apart element by element, like a
-list.  Any other array without object fields is a leaf: depth 0, inlined into
-its parent like an ``int``.  Structured arrays with object fields stay opaque.
+list; an object-dtype ndarray subclass (``np.matrix``, a masked array) is not,
+since reshape and element access differ on it.  Any other array without object
+fields is a leaf: depth 0, inlined into its parent like an ``int``.  Structured
+arrays with object fields stay opaque.
 """
 
 from dataclasses import dataclass
@@ -64,7 +66,10 @@ class DigestedArray(Digested):
 
 
 def _is_object_array(value: Any) -> bool:
-    return isinstance(value, np.ndarray) and value.dtype.kind == "O"
+    # Exact ndarrays only: subclasses change what reshape and element access
+    # return (np.matrix stays 2-D, a masked array yields np.ma.masked), so
+    # they are stored whole.
+    return type(value) is np.ndarray and value.dtype.kind == "O"
 
 
 def _is_plain_array(value: Any) -> bool:

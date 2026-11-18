@@ -12,8 +12,11 @@ np = pytest.importorskip("numpy")
 pytest.importorskip("fleche_numpy")
 
 import importlib.metadata
+import logging
 import subprocess
 import sys
+import threading
+from types import SimpleNamespace
 
 from fleche.digest import Digest, digest
 from fleche.storage import destructuring
@@ -171,6 +174,129 @@ def test_first_save_in_a_fresh_process_is_destructured():
         "vm = ValueMemory({})\n"
         "print(type(vm.storage[vm.save(arr)]).__qualname__)\n"
     )
-    out = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, check=True)
-    assert out.stdout.strip() == "DigestedArray"
+    out = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=120)
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip() == "DigestedArray", out.stderr
+
+
+@pytest.fixture
+def fresh_registry(monkeypatch):
+    """Reset the destructurer registry and the entry-point flag; restore both afterwards."""
+    monkeypatch.setattr(destructuring, "_DESTRUCTURERS", list(destructuring._DESTRUCTURERS))
+    monkeypatch.setattr(destructuring, "_ENTRY_POINTS_LOADED", False)
+    return monkeypatch
+
+
+class Tag:
+    """A value no built-in destructurer handles: opaque unless something registers it."""
+
+    def __digest__(self):
+        return digest("Tag")
+
+    def __eq__(self, other):
+        return isinstance(other, Tag)
+
+
+def _leaf(intern, value):
+    return value, 0
+
+
+def _entry_point(name, load):
+    return SimpleNamespace(value=name, load=load)
+
+
+def test_a_broken_entry_point_does_not_block_the_others(fresh_registry, caplog):
+    def broken():
+        raise ImportError("plugin missing a dependency")
+
+    eps = [
+        _entry_point("broken:destructurers", broken),
+        _entry_point("good:destructurers", lambda: [(lambda v: isinstance(v, Tag), _leaf)]),
+    ]
+    fresh_registry.setattr(destructuring.importlib.metadata, "entry_points", lambda **kw: eps)
+
+    vm = ValueMemory({})
+    with caplog.at_level(logging.ERROR, logger=destructuring.__name__):
+        key = vm.save([Tag(), 1])
+
+    assert set(vm.storage) == {key}, "the good entry point was not registered"
+    assert "broken:destructurers" in caplog.text
+
+
+def test_a_save_waits_for_entry_points_another_thread_is_loading(fresh_registry):
+    """A save racing the first load must not store values before the destructurers exist."""
+    started, release = threading.Event(), threading.Event()
+
+    def slow_load():
+        started.set()
+        release.wait(10)
+        return [(lambda v: isinstance(v, Tag), _leaf)]
+
+    fresh_registry.setattr(
+        destructuring.importlib.metadata, "entry_points",
+        lambda **kw: [_entry_point("slow:destructurers", slow_load)],
+    )
+    loader = threading.Thread(target=destructuring._load_entry_points)
+    loader.start()
+    assert started.wait(10)
+
+    vm = ValueMemory({})
+    saver = threading.Thread(target=vm.save, args=([Tag(), 1],))
+    saver.start()
+    saver.join(0.5)  # a save that does not wait finishes here, storing Tag whole
+    release.set()
+    loader.join(10)
+    saver.join(10)
+
+    assert len(vm.storage) == 1, "the save ran before the entry points were registered"
+
+
+# ---- N-D arrays, subclasses, inlined wrappers ----
+
+
+def test_2d_object_array_is_destructured_and_survives_gc():
+    from fleche.caches import Cache
+    from fleche.call import Call
+    from fleche.storage.memory import CallMemory
+
+    lists = [[1, 2], [3, 4], [5, 6], [7, 8]]
+    arr = object_array(*lists, shape=(2, 2))
+    cache = Cache(values=ValueMemory({}), calls=CallMemory({}))
+    key = cache.save(Call(name="f", arguments={"x": 1}, result=arr))
+
+    result_key = cache.calls.load(key).result
+    raw = cache.values.storage[result_key]
+    assert isinstance(raw, DigestedArray) and raw.items.shape == (2, 2)
+    assert cache.values.child_digests(result_key) == {digest(v) for v in lists}
+
+    assert cache.gc() == set()
+    assert same(cache.load(key).result, arr)
+
+
+@pytest.mark.parametrize("make", [
+    lambda: np.matrix(object_array([1], [2], [3], [4], shape=(2, 2))),
+    lambda: np.ma.masked_array(object_array([1, 2], [3, 4]), mask=[False, True]),
+    lambda: np.ma.masked_array(object_array([1, 2], [3, 4]), mask=[False, False]),
+], ids=["matrix", "masked", "unmasked"])
+def test_object_array_subclasses_are_stored_whole(make):
+    """reshape and element access differ on subclasses, so they are not taken apart."""
+    value = make()
+    vm = ValueMemory({})
+    key = vm.save(value)
+    assert type(vm.storage[key]) is type(value)
+    loaded = vm.load(key)
+    assert type(loaded) is type(value)
+    assert digest(loaded) == digest(value)
+
+
+def test_inlined_wrapper_inside_object_array_is_mended():
+    vm = ValueMemory({}, remaining_depth=3)
+    ref = vm.save((7, (8, 9)))
+    arr = object_array([1, ref], "x")
+    key = vm.save(arr)
+    raw = vm.storage[key]
+    assert isinstance(raw, DigestedArray)
+    assert vm.child_digests(key) == {ref}
+    loaded = vm.load(key)
+    assert loaded[0] == [1, (7, (8, 9))] and loaded[1] == "x"
 

@@ -95,8 +95,9 @@ types are stored:
 
 - fleche-numpy: an array without object fields is a leaf (depth 0, inlined like
   an ``int``).  An array of ``dtype=object`` holds arbitrary Python objects and
-  is destructured element by element like a list, keeping its shape.  A
-  structured array with object fields stays opaque.
+  is destructured element by element like a list, keeping its shape.  An
+  object-dtype ndarray subclass (``np.matrix``, a masked array) and a
+  structured array with object fields stay opaque.
 - fleche-pandas: ``DataFrame``, ``Series`` and ``Index`` are leaves.
 - fleche-ase: an ``Atoms`` is a leaf unless it carries a live calculator, which
   is pickled with it and may be a whole model; then it stays opaque.
