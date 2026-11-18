@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/pmrv/fleche/compare/fleche-pandas-1.0.0...fleche-pandas-1.1.0) (2026-11-18)
+
+
+### Features
+
+* **storage:** sister packages declare their types as depth-0 leaves ([#1083](https://github.com/pmrv/fleche/issues/1083)) ([644c64f](https://github.com/pmrv/fleche/commit/644c64f45e0031bf2d31ad934506a82d3395a5b3))
+
 ## 1.0.0 (2026-11-16)
 
 
