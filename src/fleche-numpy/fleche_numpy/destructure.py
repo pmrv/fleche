@@ -3,7 +3,7 @@
 Registered through the ``fleche`` entry point ``destructure`` (see
 :data:`destructurers`).  An object array holds arbitrary Python objects, so a
 destructuring store takes it apart element by element, like a list.  Other
-arrays stay whole.
+arrays, and ndarray subclasses, stay whole.
 """
 
 from dataclasses import dataclass
@@ -63,7 +63,10 @@ class DigestedArray(Digested):
 
 
 def _is_object_array(value: Any) -> bool:
-    return isinstance(value, np.ndarray) and value.dtype.kind == "O"
+    # Exact ndarrays only: subclasses change what reshape and element access
+    # return (np.matrix stays 2-D, a masked array yields np.ma.masked), so
+    # they are stored whole.
+    return type(value) is np.ndarray and value.dtype.kind == "O"
 
 
 #: The destructurers fleche loads from this package's ``fleche``/``destructure`` entry point.

@@ -92,7 +92,8 @@ well and also splits at every setting.
 **Object arrays.**  A numpy array of ``dtype=object`` holds arbitrary Python
 objects.  With fleche-numpy installed it is destructured element by element
 like a list, keeping its shape.  Every other numpy array, a structured one with
-object fields included, is opaque.
+object fields or an ndarray subclass such as ``np.matrix`` or a masked array
+included, is opaque.
 
 **Namedtuples.**  A plain tuple destructures normally, but a
 :func:`~collections.namedtuple` is kept opaque on purpose: its constructor
