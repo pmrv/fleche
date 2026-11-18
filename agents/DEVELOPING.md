@@ -88,9 +88,9 @@ SQLAlchemy is lazy the same way — `fleche.storage` resolves `Sql` and its `sql
 
 **Sister packages:** `src/` holds more than `fleche` — `src/fleche-numpy/` (`fleche_numpy`),
 `src/fleche-pandas/` (`fleche_pandas`) and `src/fleche-ase/` (`fleche_ase`) are separate distributions, each with its own `pyproject.toml`, static version,
-`CHANGELOG.md` and release, registering digest hooks through the `fleche`/`digest` entry point.
+`CHANGELOG.md` and release, registering digest hooks through the `fleche`/`digest` entry point (and destructurers through `fleche`/`destructure`).
 They share fleche's single test suite under `tests/`, which expects all of them installed.
-They may import `fleche.hashing` and `fleche.digest`'s public names, nothing else from fleche;
+They may import `fleche.hashing`, `fleche.digest`'s public names and, to write a destructurer, `fleche.storage.destructuring.Digested`, nothing else from fleche;
 `fleche_pandas` builds on `fleche_numpy.timedelta64_length`, and `fleche_ase` digests `Atoms.arrays`, so both depend on `fleche-numpy`.
 fleche-ase came from its own repository (pmrv/fleche-ase) with its history, after its 0.3.0 release.
 fleche itself never imports them, and the root sdist prunes them (`MANIFEST.in`).
@@ -266,6 +266,11 @@ Values and calls are stored separately so call records are queryable without des
   Scalars (depth 0, inlined like `int`) are `_SCALAR_TYPES` plus `_FOREIGN_SCALARS`, the latter matched by module and class name so numpy and pandas stay unimported;
   anything else no destructurer claims is opaque (depth ∞).
   `register_destructurer` appends to `_DESTRUCTURERS`, first match wins.
+  Packages declare destructurers under the `fleche` entry point `destructure`;
+  `_load_entry_points` registers them once, before the first `DestructuringMixin.save`, since destructuring decides before anything is digested and so cannot wait for digest's lazy entry-point load.
+  fleche-numpy uses it for `dtype=object` arrays (`fleche_numpy.destructure.DigestedArray`).
+  `Digested` inherits `storage.base.ChildItems`: every record that holds other stored entries declares them once through the abstract `child_items()`, and the record-level `child_digests()` derives from it.
+  `ValueStorage._raw_sub_digests` is one generic reader over that interface instead of a per-mixin `match`, so a wrapper registered via `register_destructurer` takes part in `gc`/`count_reuses` (#883, #905).
 - `thread_safe.py` — `SerializingMixin` and `PerKeyLockMixin` (striped locks keyed by the instance, so instances must be **hashable**) subclass `OperationContext` directly, so they attach at either layer.
   `_PicklableLock`/`_PicklableRLock` pickle without state — in-process only.
 

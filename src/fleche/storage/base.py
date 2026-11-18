@@ -391,6 +391,35 @@ class StorageBackend(KeyManagement):
                 return False
 
 
+class ChildItems(ABC):
+    """A stored record whose slots hold other stored entries.
+
+    Loading mends a record from its children.  :meth:`~fleche.caches.Cache.gc`
+    and :meth:`~fleche.storage.destructuring.DestructuringMixin.count_reuses`
+    follow :meth:`child_digests` to find the entries it references.  A record
+    type takes part by implementing :meth:`child_items`.
+    """
+
+    @abstractmethod
+    def child_items(self) -> "Iterable[tuple[Any, Any]]":
+        """``(label, child)`` for every slot of this record.
+
+        *label* names the slot: a field name, or ``None`` for positional slots.
+        *child* is an inlined value or the :class:`~fleche.digest.Digest` of a
+        separately stored entry.  List every slot; gc deletes what it cannot reach.
+        """
+
+    def child_digests(self) -> "set[Digest]":
+        """The digests this record references, including those of records inlined into it."""
+        found: set[Digest] = set()
+        for _, child in self.child_items():
+            if isinstance(child, Digest):
+                found.add(child)
+            elif isinstance(child, ChildItems):
+                found |= child.child_digests()
+        return found
+
+
 class ValueStorage(KeyManagement):
     """Abstract domain interface for value storage."""
 
@@ -399,6 +428,14 @@ class ValueStorage(KeyManagement):
 
     @abstractmethod
     def load(self, key: Digest | str) -> Any: ...
+
+    def _raw_sub_digests(self, raw: Any) -> set[Digest]:
+        """Digests referenced by a raw stored entry.
+
+        A :class:`ChildItems` record declares them; any other entry references
+        nothing.  Override for records that cannot implement the interface.
+        """
+        return raw.child_digests() if isinstance(raw, ChildItems) else set()
 
 
 class ValueMixin(ValueStorage, StorageBackend):

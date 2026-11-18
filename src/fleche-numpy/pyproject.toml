@@ -9,7 +9,7 @@ packages = ["fleche_numpy"]
 name = "fleche-numpy"
 # Bumped by release-please (release-type "python"); see release-please-config.json.
 version = "1.0.0"
-description = "numpy digest hooks for fleche"
+description = "numpy digest hooks and destructurers for fleche"
 authors = [
     { name="Marvin Poul", email="pmrv@posteo.de" },
 ]
@@ -21,7 +21,7 @@ classifiers = [
 ]
 license = "BSD-3-Clause"
 dependencies = [
-    'fleche >= 0.24.0.dev0',
+    'fleche >= 0.25.0.dev0',
     'numpy >= 1.26',
 ]
 
@@ -31,3 +31,4 @@ Documentation = "https://fleche.readthedocs.io/"
 
 [project.entry-points.'fleche']
 digest = 'fleche_numpy:digest_hooks'
+destructure = 'fleche_numpy.destructure:destructurers'
