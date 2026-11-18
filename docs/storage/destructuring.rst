@@ -16,7 +16,8 @@ the same value — is stored exactly once.
 Containers that are destructured: :class:`list`, :class:`tuple`,
 :class:`dict`, :mod:`dataclasses` instances, ``attrs`` instances, and, with
 fleche-numpy installed, numpy arrays of ``dtype=object``.  Scalars are leaves,
-and so are the types the sister packages declare (see `Special cases`_);
+and so are namedtuples and the types the sister packages declare (see
+`Special cases`_);
 everything else is treated as an opaque leaf.
 
 Deduplication
@@ -41,7 +42,8 @@ The ``remaining_depth`` parameter
 How finely a value is split is controlled by the ``remaining_depth`` option of
 the value backend (integer, default ``1``).  Depth is measured *up from the
 leaves*: a scalar (a number, :class:`str`, :class:`bytes`, ``None``, a
-:mod:`datetime` date, time or timedelta, ``np.bool_``, ``pd.NA``) has depth 0,
+:mod:`datetime` date, time or timedelta, ``np.bool_``, ``pd.NA``, a
+:func:`~collections.namedtuple`) has depth 0,
 and a container has depth ``1 + max(child depths)``.  Note that this is not
 the distance from the root — two siblings can have different depths.
 
@@ -105,9 +107,10 @@ types are stored:
 Without the package installed, its types are opaque.
 
 **Namedtuples.**  A plain tuple destructures normally, but a
-:func:`~collections.namedtuple` is kept opaque on purpose: its constructor
-does not accept a single iterable the way :class:`tuple` does, so fleche
-refuses to take it apart.
+:func:`~collections.namedtuple` is never taken apart: its constructor does not
+accept a single iterable the way :class:`tuple` does.  It counts as a scalar
+(depth 0) instead and inlines whole into its parent, fields included — even a
+field that would be opaque on its own.
 
 **Empty containers.**  ``[]``, ``()``, and ``{}`` count as scalars (depth 0):
 there is nothing to split, so they inline with their parent like any other
