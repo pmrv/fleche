@@ -3,7 +3,7 @@
 Outputs:
   dedup_forest.svg     -- two nested values -> flat deduplicated forest of entries
   remaining_depth.svg  -- how remaining_depth partitions a tree into entries
-  special_cases.svg    -- opaque objects (depth inf), namedtuples, empty containers
+  special_cases.svg    -- opaque objects (depth inf), namedtuples (depth 0), empty containers
 
 Run as a script (``python gen_diagrams.py``) this writes the three SVGs next to
 itself, with real digest labels computed by ``real_hashes()``: the depicted
@@ -26,7 +26,7 @@ every remaining_depth, so one mapping serves all four panels.
       default None renders no digest labels.
   svg_special(hashes={"opaque": {"root": ..., "A": ...},
                       "propagate": {"root": ..., "M": ..., "A": ...},
-                      "namedtuple": {"root": ..., "T": ..., "P": ...},
+                      "namedtuple": {"root": ..., "T": ...},
                       "empty": {"root": ...}})
       one sub-mapping per panel; default None renders no digest labels.
 """
@@ -445,15 +445,15 @@ def svg_special(hashes=None, background=True):
          [(258, 144, "start", "d=&#8734;"), (285, 188, "middle", "d=&#8734;")],
          {"root": (132, 60, "end"), "M": (258, 128, "start"), "A": (322, 224, "start")}),
 
-        ("namedtuple", 45, 380, "Namedtuple vs plain tuple", "3 entries", "[(4, 5), Point(x=4, y=5)]",
+        ("namedtuple", 45, 380, "Namedtuple vs plain tuple", "2 entries", "[(4, 5), Point(x=4, y=5)]",
          {"root": ("c", 170, 80, "[ ]"), "T": ("c", 110, 150, "( )"),
-          "P": ("o", 245, 150, "Pt"), "4": ("s", 75, 220, "4"),
+          "P": ("s", 230, 150, "Pt"), "4": ("s", 75, 220, "4"),
           "5": ("s", 145, 220, "5")},
          [("root", "T"), ("root", "P"), ("T", "4"), ("T", "5")],
-         [("root", [["root"]]), ("T", [["4", "T", "5"]]), ("P", [["P"]])],
-         {("root", "T"), ("root", "P")},
-         [(80, 138, "end", "d=1"), (245, 118, "middle", "d=&#8734;")],
-         {"root": (208, 60, "start"), "T": (78, 158, "end"), "P": (245, 188, "middle")}),
+         [("root", [["root", "P"]]), ("T", [["4", "T", "5"]])],
+         {("root", "T")},
+         [(80, 138, "end", "d=1"), (230, 187, "middle", "d=0")],
+         {"root": (208, 60, "start"), "T": (78, 158, "end")}),
 
         ("empty", 425, 380, "Empty containers", "1 entry", "[1, [], {}]",
          {"root": ("c", 170, 90, "[ ]"), "1": ("s", 100, 160, "1"),
@@ -530,8 +530,7 @@ def real_hashes():
                       "M": short(vm_p, digest([2, arr])),
                       "A": short(vm_p, digest(arr))},
         "namedtuple": {"root": short(vm_n, digest([(4, 5), Point(4, 5)])),
-                       "T": short(vm_n, digest((4, 5))),
-                       "P": short(vm_n, digest(Point(4, 5)))},
+                       "T": short(vm_n, digest((4, 5)))},
         "empty": {"root": short(vm_e, digest([1, [], {}]))},
     }
     return dedup, depth, special

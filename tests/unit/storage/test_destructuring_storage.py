@@ -319,10 +319,34 @@ def test_namedtuple_nested_in_list_not_destructured(ds):
     key = ds.save(data)
     raw = ds.storage[key]
     assert isinstance(raw, DigestedIterable)
-    # The namedtuple child should be stored separately as a Digest reference,
-    # but when retrieved it must still be a Point, not a plain tuple.
+    # At remaining_depth=0 the namedtuple child is stored separately, like any
+    # scalar, but when retrieved it must still be a Point, not a plain tuple.
+    assert raw.items[0] == digest(p)
+    assert type(ds.storage[digest(p)]) is Point
     loaded = ds.load(key)
     assert type(loaded[0]) is Point
+
+
+def test_namedtuple_inlined_like_scalar():
+    """A namedtuple has depth 0: at remaining_depth=1 it inlines whole into its parent."""
+    ds = make_ds(remaining_depth=1)
+    p = Point(x=7, y=8)
+    key = ds.save([p, 1])
+    # nothing is referenced, so the parent is stored plain, Point and all
+    assert ds.storage[key] == [p, 1]
+    assert type(ds.storage[key][0]) is Point
+    assert set(ds.storage) == {key}
+    assert ds.load(key) == [p, 1]
+
+
+def test_namedtuple_counts_as_depth_zero_child():
+    """A list of namedtuples has depth 1, so remaining_depth=2 inlines it into its parent."""
+    ds = make_ds(remaining_depth=2)
+    inner = [Point(1, 2), Point(3, 4)]
+    key = ds.save([inner, 5])
+    assert ds.storage[key] == [inner, 5]
+    assert set(ds.storage) == {key}
+    assert ds.load(key) == [inner, 5]
 
 
 # Each example may create a fresh namedtuple class, which can blow the default

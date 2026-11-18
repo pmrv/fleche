@@ -262,7 +262,7 @@ Values and calls are stored separately so call records are queryable without des
   Wrappers mark exactly the path from an entry's root to each reference: in `sunder` an inlined wrapper child counts as a reference,
   `Digested.get` mends nested wrappers, and `_raw_sub_digests` searches them, so `child_digests` and `gc` see references held through an inlined wrapper;
   `DigestedIterable` hashes via its underlying container, so an inlined tuple wrapper stays a valid dict key.
-  NamedTuples are not destructured.
+  NamedTuples are not destructured (their constructor takes fields, not one iterable) but count as scalars (depth 0), inlined whole.
   Scalars (depth 0, inlined like `int`) are `_SCALAR_TYPES` plus `_FOREIGN_SCALARS`, the latter matched by module and class name so numpy and pandas stay unimported;
   anything else no destructurer claims is opaque (depth ∞).
   `register_destructurer` appends to `_DESTRUCTURERS`, first match wins.

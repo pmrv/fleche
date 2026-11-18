@@ -49,28 +49,25 @@
 <text x="683" y="228" font-family="ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace" font-size="12" fill="#657b83" text-anchor="start">1d82…</text>
 <text x="747" y="324" font-family="ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace" font-size="12" fill="#657b83" text-anchor="start">b298…</text>
 <text x="47" y="396" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="13" fill="#073642" text-anchor="start" font-weight="600">Namedtuple vs plain tuple</text>
-<text x="393" y="396" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12" fill="#1e6ca3" text-anchor="end" font-weight="600">3 entries</text>
+<text x="393" y="396" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12" fill="#1e6ca3" text-anchor="end" font-weight="600">2 entries</text>
 <text x="47" y="420" font-family="ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace" font-size="12.5" fill="#073642" text-anchor="start">[(4, 5), Point(x=4, y=5)]</text>
-<path d="M 206.0 460.0 L 224.0 460.0" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke="#7ab3d8" stroke-width="43"/>
+<path d="M 215.0 460.0 L 275.0 530.0" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke="#7ab3d8" stroke-width="43"/>
 <path d="M 120.0 600.0 L 155.0 530.0 L 190.0 600.0" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke="#7ab3d8" stroke-width="43"/>
-<path d="M 281.0 530.0 L 299.0 530.0" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke="#7ab3d8" stroke-width="43"/>
-<path d="M 206.0 460.0 L 224.0 460.0" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke="#d2e4e8" stroke-width="38"/>
+<path d="M 215.0 460.0 L 275.0 530.0" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke="#d2e4e8" stroke-width="38"/>
 <path d="M 120.0 600.0 L 155.0 530.0 L 190.0 600.0" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke="#d2e4e8" stroke-width="38"/>
-<path d="M 281.0 530.0 L 299.0 530.0" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke="#d2e4e8" stroke-width="38"/>
 <line x1="198.1" y1="479.7" x2="172.6" y2="509.5" stroke="#1e6ca3" stroke-width="1.7" marker-end="url(#arr-blue)"/>
-<line x1="234.0" y1="477.7" x2="270.3" y2="511.6" stroke="#1e6ca3" stroke-width="1.7" marker-end="url(#arr-blue)"/>
+<line x1="222.8" y1="469.1" x2="267.2" y2="520.9" stroke="#b6ad93" stroke-width="1.6"/>
 <line x1="149.6" y1="540.7" x2="125.4" y2="589.3" stroke="#b6ad93" stroke-width="1.6"/>
 <line x1="160.4" y1="540.7" x2="184.6" y2="589.3" stroke="#b6ad93" stroke-width="1.6"/>
 <rect x="200.0" y="450.0" width="30" height="20" rx="6" fill="#fefbf0" stroke="#586e75" stroke-width="1.3"/><text x="215" y="463.6" font-family="ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace" font-size="10" fill="#073642" text-anchor="middle">[ ]</text>
 <rect x="140.0" y="520.0" width="30" height="20" rx="6" fill="#fefbf0" stroke="#586e75" stroke-width="1.3"/><text x="155" y="533.6" font-family="ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace" font-size="10" fill="#073642" text-anchor="middle">( )</text>
-<rect x="274.0" y="520.0" width="32" height="20" rx="6" fill="#eee8d5" stroke="#93a1a1" stroke-width="1.3" stroke-dasharray="3 2.5"/><text x="290" y="533.42" font-family="ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace" font-size="9.5" fill="#586e75" text-anchor="middle">Pt</text>
+<circle cx="275" cy="530" r="11" fill="#fefbf0" stroke="#93a1a1" stroke-width="1.3"/><text x="275" y="533.96" font-family="ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace" font-size="11" fill="#073642" text-anchor="middle">Pt</text>
 <circle cx="120" cy="600" r="11" fill="#fefbf0" stroke="#93a1a1" stroke-width="1.3"/><text x="120" y="603.96" font-family="ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace" font-size="11" fill="#073642" text-anchor="middle">4</text>
 <circle cx="190" cy="600" r="11" fill="#fefbf0" stroke="#93a1a1" stroke-width="1.3"/><text x="190" y="603.96" font-family="ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace" font-size="11" fill="#073642" text-anchor="middle">5</text>
 <text x="125" y="518" font-family="ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace" font-size="12.5" fill="#657b83" text-anchor="end" font-weight="600">d=1</text>
-<text x="290" y="498" font-family="ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace" font-size="12.5" fill="#657b83" text-anchor="middle" font-weight="600">d=&#8734;</text>
+<text x="275" y="567" font-family="ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace" font-size="12.5" fill="#657b83" text-anchor="middle" font-weight="600">d=0</text>
 <text x="253" y="440" font-family="ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace" font-size="12" fill="#657b83" text-anchor="start">14fd…</text>
 <text x="123" y="538" font-family="ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace" font-size="12" fill="#657b83" text-anchor="end">5d3e…</text>
-<text x="290" y="568" font-family="ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace" font-size="12" fill="#657b83" text-anchor="middle">4dfc…</text>
 <text x="427" y="396" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="13" fill="#073642" text-anchor="start" font-weight="600">Empty containers</text>
 <text x="773" y="396" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12" fill="#1e6ca3" text-anchor="end" font-weight="600">1 entry</text>
 <text x="427" y="420" font-family="ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace" font-size="12.5" fill="#073642" text-anchor="start">[1, [], {}]</text>
