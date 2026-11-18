@@ -428,7 +428,7 @@ class BagOfHoldingH5FileBackend(FileStorage):
 @dataclass(frozen=True)
 class ValueBagOfHoldingH5File(PerKeyLockMixin, DestructuringMixin, ValueMixin, BagOfHoldingH5FileBackend):
     def to_config(self) -> dict[str, Any]:
-        return {
+        config: dict[str, Any] = {
             "type": "bagofholding_hdf",
             # `root` is a Path; config dicts must stay TOML/JSON-representable.
             "root": str(self.root),
@@ -437,6 +437,9 @@ class ValueBagOfHoldingH5File(PerKeyLockMixin, DestructuringMixin, ValueMixin, B
             "prefix_length": self.prefix_length,
             "remaining_depth": self.remaining_depth,
         }
+        if self.split_level is not None:
+            config["split_level"] = self.split_level
+        return config
 
 @register_storage("bagofholding_hdf", kind="call")
 @dataclass(frozen=True)

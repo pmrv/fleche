@@ -10,7 +10,8 @@ following **lowercase** identifiers:
 ``"memory"``
     In-memory dict (:class:`~fleche.storage.ValueMemory` /
     :class:`~fleche.storage.CallMemory`).  No required keys.
-    Optional (value backend): ``remaining_depth`` (int, default ``1``).
+    Optional (value backend): ``remaining_depth`` (int, default ``1``),
+    ``split_level`` (int, default omitted).
 
 ``"void"``
     No-op — discards all data (:class:`~fleche.storage.ValueVoid` /
@@ -28,7 +29,8 @@ following **lowercase** identifiers:
     Optional: ``secret_key`` (list of hex strings) — HMAC-SHA256 signing keys;
     each element is a hex-encoded byte string (same format as ``FLECHE_SECRET_KEY``).
     If omitted, falls back to the ``FLECHE_SECRET_KEY`` environment variable.
-    Optional (value backend): ``remaining_depth`` (int, default ``1``).
+    Optional (value backend): ``remaining_depth`` (int, default ``1``),
+    ``split_level`` (int, default omitted).
 
 ``"cloudpickle"``
     Filesystem backend serialised with ``cloudpickle`` — handles more
@@ -38,7 +40,8 @@ following **lowercase** identifiers:
     Optional: ``compresslevel`` (int 0–9, default ``9``) — same as ``"pickle"``.
     Deprecated: ``lock_timeout`` (float) — dropped with a warning, as for ``"pickle"``.
     Optional: ``secret_key`` (list of hex strings) — same as ``"pickle"``.
-    Optional (value backend): ``remaining_depth`` (int, default ``1``).
+    Optional (value backend): ``remaining_depth`` (int, default ``1``),
+    ``split_level`` (int, default omitted).
 
 ``"dill"``
     Filesystem backend serialised with ``dill``.
@@ -47,7 +50,8 @@ following **lowercase** identifiers:
     Optional: ``compresslevel`` (int 0–9, default ``9``) — same as ``"pickle"``.
     Deprecated: ``lock_timeout`` (float) — dropped with a warning, as for ``"pickle"``.
     Optional: ``secret_key`` (list of hex strings) — same as ``"pickle"``.
-    Optional (value backend): ``remaining_depth`` (int, default ``1``).
+    Optional (value backend): ``remaining_depth`` (int, default ``1``),
+    ``split_level`` (int, default omitted).
 
 ``"bagofholding_hdf"``
     HDF5-backed storage via the ``bagofholding`` library
@@ -69,7 +73,8 @@ following **lowercase** identifiers:
     :meth:`~fleche.storage.bagofholding_file.BagOfHoldingH5FileBackend.refix`
     or repair a mixed root with
     :meth:`~fleche.storage.bagofholding_file.BagOfHoldingH5FileBackend.consolidate`.
-    Optional (value backend): ``remaining_depth`` (int, default ``1``).
+    Optional (value backend): ``remaining_depth`` (int, default ``1``),
+    ``split_level`` (int, default omitted).
 
 ``"sql"``
     SQL database via SQLAlchemy (:class:`~fleche.storage.sql.Sql`).
@@ -450,7 +455,7 @@ def storage_from_config(d: dict[str, Any], type: Literal["call", "value"]) -> st
     * ``{"type": "void"}``
     * ``{"type": "pickle", "root": "<path>"}``
       — optional: ``compress``, ``compresslevel``,
-      ``secret_key`` (list of hex strings), ``remaining_depth`` (value only);
+      ``secret_key`` (list of hex strings), ``remaining_depth``, ``split_level`` (value only);
       ``lock_timeout`` is deprecated and dropped with a ``FutureWarning``
     * ``{"type": "cloudpickle", "root": "<path>"}``
       — same optional keys as ``"pickle"``
@@ -458,7 +463,8 @@ def storage_from_config(d: dict[str, Any], type: Literal["call", "value"]) -> st
       — same optional keys as ``"pickle"``
     * ``{"type": "bagofholding_hdf", "root": "<path>"}``
       — optional: ``lock_timeout``,
-      ``version_validator``, ``prefix_length``, ``remaining_depth`` (value only)
+      ``version_validator``, ``prefix_length``, ``remaining_depth``,
+      ``split_level`` (value only)
     * ``{"type": "sql", "url": "<sqlalchemy-url>"}``  *(call storage only)*
       — optional: ``echo``
 

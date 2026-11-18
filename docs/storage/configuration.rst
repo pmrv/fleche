@@ -254,7 +254,7 @@ Available storage types
      - In-memory dictionary
        (:class:`~fleche.storage.ValueMemory` / :class:`~fleche.storage.CallMemory`)
      - —
-     - ``remaining_depth`` *(value only)*
+     - ``remaining_depth``, ``split_level`` *(value only)*
    * - ``"void"``
      - No-op; discards all data
        (:class:`~fleche.storage.ValueVoid` / :class:`~fleche.storage.CallVoid`)
@@ -265,7 +265,7 @@ Available storage types
        (:class:`~fleche.storage.ValuePickleFile` / :class:`~fleche.storage.CallPickleFile`)
      - ``root``
      - ``compress``, ``compresslevel``,
-       ``secret_key``, ``remaining_depth`` *(value only)*
+       ``secret_key``, ``remaining_depth``, ``split_level`` *(value only)*
    * - ``"cloudpickle"``
      - Filesystem backend, ``cloudpickle``; handles lambdas, closures, etc.
        (same classes as ``"pickle"``)
@@ -282,7 +282,8 @@ Available storage types
        :class:`~fleche.storage.CallBagOfHoldingH5File`)
      - ``root``
      - ``lock_timeout``,
-       ``version_validator``, ``prefix_length``, ``remaining_depth`` *(value only)*
+       ``version_validator``, ``prefix_length``, ``remaining_depth``,
+       ``split_level`` *(value only)*
    * - ``"sql"``
      - SQL via SQLAlchemy (:class:`~fleche.storage.sql.Sql`).
        *Call storage only.*
@@ -350,6 +351,10 @@ Key descriptions
 ``remaining_depth``
     (int, default ``1``) — destructuring depth; see `Destructuring`_ below.
 
+``split_level``
+    (int, default unset) — values of about ``2**split_level`` bytes or more
+    get an entry of their own; see `Destructuring`_ below.
+
 Multi-bagging (``bagofholding_hdf``)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -408,7 +413,10 @@ storage entries rather than storing them as one blob — see :doc:`destructuring
 for the full explanation, with figures.
 
 The optional ``remaining_depth`` key (integer, default ``1``) controls the
-granularity; see :doc:`destructuring` for the depth rule.
+granularity; see :doc:`destructuring` for the depth rule.  The optional
+``split_level`` key (integer, unset by default) gives values of about
+``2**split_level`` bytes or more an entry of their own, whatever their depth;
+see :doc:`destructuring`.
 
 Example:
 
@@ -417,7 +425,8 @@ Example:
    [mycache]
    values.type = "cloudpickle"
    values.root = "~/.cache/fleche/values"
-   values.remaining_depth = 0   # split every element into its own entry
+   values.remaining_depth = 2   # fold records up to two levels deep into one entry
+   values.split_level = 20      # but give anything of about 1 MiB or more its own
    calls.type = "cloudpickle"
    calls.root = "~/.cache/fleche/calls"
 

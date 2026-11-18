@@ -16,7 +16,7 @@ import numpy as np
 
 from fleche.storage.destructuring import Digested
 
-__all__ = ["DigestedArray", "destructurers", "leaf"]
+__all__ = ["DigestedArray", "array_is_big", "destructurers", "leaf"]
 
 
 def _filled(array: np.ndarray, children) -> np.ndarray:
@@ -81,8 +81,13 @@ def leaf(intern, value):
     return value, 0
 
 
+def array_is_big(value: np.ndarray, level: int) -> bool:
+    """Whether *value* holds about ``2**level`` bytes or more, by ``nbytes``."""
+    return value.nbytes >= 1 << level
+
+
 #: The destructurers fleche loads from this package's ``fleche``/``destructure`` entry point.
 destructurers = [
     (_is_object_array, DigestedArray.sunder),
-    (_is_plain_array, leaf),
+    (_is_plain_array, leaf, array_is_big),
 ]

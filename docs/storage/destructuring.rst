@@ -72,6 +72,23 @@ same key (which is why one set of digest labels serves all four panels above).
 section — see :ref:`configuring-destructuring` in the configuration reference
 for the syntax.
 
+Splitting by size
+-----------------
+
+Folding by depth puts a large value inside every entry that holds it.  The
+optional ``split_level`` setting of the value backend gives values of about
+``2**split_level`` bytes or more an entry of their own, so they are stored once
+however many entries refer to them.  For example, ``20`` is about 1 MiB and
+``24`` about 16 MiB.  Unset, nothing is split by size.
+
+A value split this way keeps its depth: its parent still folds by
+``remaining_depth`` and refers to it by digest.  Only the types that know their
+size take part, judged without serializing them: ``bytes`` and ``str`` by
+length, and with the sister packages installed, numpy arrays by ``nbytes``,
+pandas containers by ``memory_usage`` (object columns count their references
+only) and ASE ``Atoms`` by the bytes of their per-atom arrays.  Other values
+are never split by size.
+
 Special cases
 -------------
 
