@@ -35,6 +35,9 @@ Environment (ASE) <https://wiki.fysik.dtu.dk/ase/>`_:
   there is one.
   Two structures that differ only in their calculator get two keys, since
   ``get_potential_energy()`` answers differently for them.
+* ``ase.constraints.FixConstraint`` and its subclasses (``FixAtoms``, ...) —
+  digested from their ``todict()``, the same on their own as inside an
+  ``Atoms``.
 * ``ase.calculators.calculator.Calculator`` and its subclasses — identified by
   the first of:
 
