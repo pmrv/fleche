@@ -116,6 +116,27 @@ class AmbiguousDigestError(ValueError):
     pass
 
 
+class CorruptEntry(KeyError):
+    """An entry whose stored bytes are positively known to be damaged.
+
+    Raised by a backend's ``get`` only on a structural signal that the bytes
+    are not what any writer produced — a truncated pickle, a malformed
+    signature, a broken gzip stream — never on an error that could also hit
+    an intact entry (a locked or briefly unreachable file, a missing module
+    or package version).  :meth:`ValueMixin.load` evicts such an entry, so
+    the next save, in any process, writes it again.  Reads as a miss.
+    """
+
+
+class UnverifiedEntry(KeyError):
+    """An entry that is present and intact, but this storage cannot verify it.
+
+    E.g. a pickle signed with a key the storage does not hold, or altered
+    behind its signature.  It reads as a miss like any ``KeyError``, but is
+    never evicted or rewritten: it may be another key holder's valid value.
+    """
+
+
 class Intent(StrEnum):
     """Describes the kind of operation being performed on storage.
 
@@ -348,7 +369,15 @@ class StorageBackend(KeyManagement):
     """
 
     @abstractmethod
-    def put(self, value: Any, key: Digest) -> Digest: ...
+    def put(self, value: Any, key: Digest) -> Digest:
+        """Write *value* under *key*, replacing any entry already there.
+
+        Must be atomic with respect to ``_contains`` and ``get``: until the
+        entry is complete they see the previous state, never a partial one —
+        also if the process dies mid-write; :meth:`ValueMixin.save` skips keys
+        ``_contains`` reports.  If the value cannot be serialised, raise
+        :class:`SaveError` and leave no entry under *key*.
+        """
 
     @abstractmethod
     def get(self, key: Digest) -> Any: ...
@@ -440,12 +469,28 @@ class ValueMixin(ValueStorage, StorageBackend):
     Implements ``save`` and ``load`` using ``put`` and ``get``.
     Concrete classes inherit from this and a :class:`~fleche.storage.base.StorageBackend`
     implementation to get a fully functional value storage.
+
+    ``save`` skips keys already present, so an entry that is present but
+    damaged would never be rewritten by it.  A backend that recognises such an entry
+    raises :class:`CorruptEntry` from ``get``, and ``load`` evicts it then, so
+    the next save writes it again.  Any other load failure is re-raised
+    untouched.
     """
 
     def save(self, value: Any, key: Digest | None = None) -> Digest:
+        """Store *value* under *key* (its digest by default), unless already present.
+
+        Keys are content digests, so an entry already under *key* holds an
+        equal value and writing it again is pure I/O.  Skipping it relies on
+        every backend's ``put`` publishing a key only once its entry is
+        complete.
+        """
         if key is None:
             key = digest(value)
         with self._operation_context(key):
+            if self._contains(key):
+                logger.debug("Value with key %s already stored", key)
+                return key
             logger.debug("Saving value with key %s", key)
             return self.put(value, key)
 
@@ -453,7 +498,12 @@ class ValueMixin(ValueStorage, StorageBackend):
         with self._operation_context(key):
             key = self._normalize_key(key)
             logger.debug("Loading value with key %s", key)
-            return self.get(key)
+            try:
+                return self.get(key)
+            except CorruptEntry:
+                logger.warning("Value %s is corrupt; dropping it so the next save rewrites it", key)
+                self._evict(key)
+                raise
 
 
 class CallStorage(KeyManagement):

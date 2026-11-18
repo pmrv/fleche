@@ -218,6 +218,9 @@ def test_remaining_depth_reduces_storage_slots():
     assert len(list(ds2.list())) < len(list(ds0.list()))
 
 
+# Draws from st_nested_values like test_count_reuses_nonnegative below, so the
+# same cold-runner deadline problem applies (seen at 404ms on CI).
+@settings(deadline=None)
 @given(
     value=st_nested_values,
     write_depth=st.integers(min_value=0, max_value=5),

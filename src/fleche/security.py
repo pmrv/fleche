@@ -9,8 +9,21 @@ from dataclasses import dataclass
 logger = logging.getLogger("fleche.security")
 
 class SignatureError(Exception):
-    """Exception raised when signature verification fails."""
+    """Exception raised when signature verification fails.
+
+    Raised as is when the signed data is malformed — truncated, garbled, or
+    never signed — and as :class:`SignatureMismatch` when it is intact but
+    signed with a key not in hand.
+    """
     pass
+
+
+class SignatureMismatch(SignatureError):
+    """A well-formed signature that none of the keys verifies.
+
+    The entry is intact as far as the signer can tell: it was signed with a
+    key this reader does not hold (or its payload was altered in place).
+    """
 
 
 def normalize_secret_key(key: bytes | str | Sequence[bytes | str]) -> list[bytes]:
@@ -77,6 +90,23 @@ def get_secret_key() -> list[bytes]:
         return normalize_secret_key(env_key)
     return []
 
+_SIGNATURE_LENGTH = 64  # hex-encoded HMAC-SHA256
+_HEX_DIGITS = b"0123456789abcdef"
+
+
+def _well_formed_signature(signature: bytes) -> bool:
+    return len(signature) == _SIGNATURE_LENGTH and not signature.strip(_HEX_DIGITS)
+
+
+def _ends_like_a_pickle(content: bytes) -> bool:
+    """Whether *content* ends in pickle's STOP opcode, alone or followed by a
+    well-formed signature."""
+    if content.endswith(pickle.STOP):
+        return True
+    tail = content[-(_SIGNATURE_LENGTH + 1):]
+    return tail[:1] == pickle.STOP and _well_formed_signature(tail[1:])
+
+
 @dataclass(slots=True, frozen=True)
 class SignedBytes:
     """
@@ -126,6 +156,8 @@ class SignedBytes:
         Extracts the signature by searching for the pickle STOP opcode.
         Iterates through all provided keys for verification.
         Returns the original content if verification passes.
+        Without keys, returns the content as is, signed or not, unless it was
+        cut short.
 
         Args:
             content (bytes): The payload containing the data and the appended signature.
@@ -134,10 +166,14 @@ class SignedBytes:
             bytes: The original serialized data, stripped of the signature.
 
         Raises:
-            SignatureError: If verification fails, if the data is corrupted, or if the
-                            STOP opcode is missing.
+            SignatureMismatch: If the signature is well-formed but no key verifies it.
+            SignatureError: If the data is malformed: the STOP opcode or the
+                            signature is missing, or the signature is not 64 hex digits;
+                            without keys, if the content ends in neither.
         """
         if not self.keys:
+            if not _ends_like_a_pickle(content):
+                raise SignatureError("Truncated data")
             return content
 
         stop_index = content.rfind(pickle.STOP)
@@ -154,10 +190,17 @@ class SignedBytes:
             logger.error("Cache entry has no signature but security is enabled.")
             raise SignatureError("No signature found")
 
+        if not _well_formed_signature(signature):
+            # A truncated entry cuts into the signature, or loses it so that
+            # rfind lands on a STOP byte inside the payload: either way what
+            # follows the STOP is not 64 hex digits.
+            logger.error("Malformed signature in cache entry. Data is corrupted.")
+            raise SignatureError("Malformed signature")
+
         for key in self.keys:
             expected_signature = self._sign(data, key)
             if hmac.compare_digest(expected_signature, signature):
                 return data
 
         logger.error("Invalid signature for cache entry. Potential tampering or key mismatch.")
-        raise SignatureError("Invalid signature")
+        raise SignatureMismatch("Invalid signature")
