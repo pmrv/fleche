@@ -170,6 +170,42 @@ def test_atoms_digest_sees_constraints(water):
     assert digest(fixed) == digest(fixed.copy())
 
 
+def test_a_constraint_digests_on_its_own(water):
+    """A constraint is digestible as an argument, and as the same digest it has inside an Atoms."""
+    from ase.constraints import FixAtoms, FixBondLength
+
+    fix = FixAtoms(indices=[0])
+    assert digest(fix) == digest(FixAtoms(indices=[0]))
+    assert digest(fix) != digest(FixAtoms(indices=[1]))
+    assert digest(fix) != digest(FixBondLength(0, 1))
+
+    fixed = water.copy()
+    fixed.set_constraint(fix)
+    assert fleche_ase.atoms_digest(fixed) == digest((
+        "Atoms",
+        digest(water.cell),
+        digest(water.pbc),
+        digest(water.arrays),
+        ("constraints", (digest(fix),)),
+    ))
+
+
+def test_constrained_atoms_keep_their_key(water):
+    """Digesting constraints through the hook changes no Atoms key: it is the same todict() digest."""
+    from ase.constraints import FixAtoms
+
+    fixed = water.copy()
+    fixed.set_constraint(FixAtoms(indices=[0]))
+    previous = digest((
+        "Atoms",
+        digest(water.cell),
+        digest(water.pbc),
+        digest(water.arrays),
+        ("constraints", tuple(digest(c.todict()) for c in fixed.constraints)),
+    ))
+    assert digest(fixed) == previous
+
+
 def test_atoms_digest_sees_info(water):
     tagged = water.copy()
     tagged.info["solute"] = "Mg"

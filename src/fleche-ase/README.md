@@ -1,6 +1,6 @@
 # fleche-ase
 
-[fleche](https://github.com/pmrv/fleche) digest hooks for the [Atomic Simulation Environment](https://wiki.fysik.dtu.dk/ase/): `Atoms`, `Calculator`, `VibrationsData` and the `ase.thermochemistry` classes.
+[fleche](https://github.com/pmrv/fleche) digest hooks for the [Atomic Simulation Environment](https://wiki.fysik.dtu.dk/ase/): `Atoms`, its constraints, `Calculator`, `VibrationsData` and the `ase.thermochemistry` classes.
 
 ```bash
 pip install fleche-ase

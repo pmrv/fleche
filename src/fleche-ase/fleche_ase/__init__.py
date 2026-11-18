@@ -1,8 +1,8 @@
 """fleche digest hooks for ASE objects.
 
 Importing this package is all that is needed: :data:`digest_hooks` is published through
-fleche's ``fleche`` entry point, so ``Atoms``, ``Calculator``, ``VibrationsData`` and the
-``ase.thermochemistry`` classes are digestible arguments of any cached function.
+fleche's ``fleche`` entry point, so ``Atoms``, its constraints, ``Calculator``, ``VibrationsData``
+and the ``ase.thermochemistry`` classes are digestible arguments of any cached function.
 
 :data:`destructurers`, under the entry point ``destructure``, makes an ``Atoms``
 without a live calculator a leaf of a destructuring store: inlined into its
@@ -24,11 +24,12 @@ import numpy
 from ase import Atoms
 from ase.calculators.calculator import Calculator
 from ase.calculators.singlepoint import SinglePointCalculator
+from ase.constraints import FixConstraint
 from ase.thermochemistry import AbstractMode, BaseThermoChem
 from ase.vibrations import VibrationsData
 from fleche.digest import Indigestible, digest, Digest
 
-__all__ = ["atoms_digest", "calculator_digest", "vibrations_digest",
+__all__ = ["atoms_digest", "calculator_digest", "constraint_digest", "vibrations_digest",
            "thermo_mode_digest", "thermochemistry_digest",
            "file_fingerprint", "register_calculator",
            "digest_hooks", "destructurers", "PARAMETER_FREE"]
@@ -415,8 +416,10 @@ def _indigestible(value, why: str) -> Indigestible:
         f"to say what identifies it.")
 
 
-def _constraint_digest(con) -> Digest:
+def constraint_digest(con) -> Digest:
     """Digest of an ASE constraint, through its ``todict()``.
+
+    Registered as a hook, so a constraint digests the same on its own as inside an ``Atoms``.
 
     Args:
         con: The constraint.
@@ -466,7 +469,7 @@ def atoms_digest(structure: Atoms) -> Digest:
     # Absent constraints and info are not told apart from empty ones.
     if len(structure.constraints):
         parts.append(("constraints",
-                      tuple(_constraint_digest(c) for c in structure.constraints)))
+                      tuple(digest(c) for c in structure.constraints)))
     if structure.info:
         parts.append(("info", digest(structure.info)))
     if structure.calc is not None:
@@ -569,6 +572,7 @@ def thermochemistry_digest(thermo: BaseThermoChem) -> Digest:
 
 digest_hooks = [
         (Atoms, atoms_digest),
+        (FixConstraint, constraint_digest),
         (VibrationsData, vibrations_digest),
         (Calculator, calculator_digest),
         (AbstractMode, thermo_mode_digest),
