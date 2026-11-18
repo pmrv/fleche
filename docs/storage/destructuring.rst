@@ -14,9 +14,9 @@ sub-structure that appears in more than one saved value — or many times inside
 the same value — is stored exactly once.
 
 Containers that are destructured: :class:`list`, :class:`tuple`,
-:class:`dict`, :mod:`dataclasses` instances, ``attrs`` instances, and numpy
-arrays of ``dtype=object``.  Scalars are leaves; everything else is treated as
-an opaque leaf (see `Special cases`_).
+:class:`dict`, :mod:`dataclasses` instances, ``attrs`` instances, and, with
+fleche-numpy installed, numpy arrays of ``dtype=object``.  Scalars are leaves;
+everything else is treated as an opaque leaf (see `Special cases`_).
 
 Deduplication
 -------------
@@ -90,9 +90,9 @@ always get an entry of their own, at every ``remaining_depth``.
 well and also splits at every setting.
 
 **Object arrays.**  A numpy array of ``dtype=object`` holds arbitrary Python
-objects and is destructured element by element like a list, keeping its shape.
-Every other numpy array, a structured one with object fields included, is
-opaque.
+objects.  With fleche-numpy installed it is destructured element by element
+like a list, keeping its shape.  Every other numpy array, a structured one with
+object fields included, is opaque.
 
 **Namedtuples.**  A plain tuple destructures normally, but a
 :func:`~collections.namedtuple` is kept opaque on purpose: its constructor

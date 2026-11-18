@@ -1,4 +1,7 @@
 import hashlib
+import importlib.metadata
+import logging
+import threading
 from abc import ABC, abstractmethod
 from collections import Counter
 import dataclasses as _dataclasses
@@ -10,6 +13,8 @@ from typing import Any, Callable, Protocol, runtime_checkable
 from . import base
 from .. import _attrs
 from .. import digest
+
+logger = logging.getLogger(__name__)
 
 
 class Digested(base.ChildItems, ABC):
@@ -220,60 +225,11 @@ class DigestedAttrs(DigestedFields):
         return _attrs.field_items(value)
 
 
-@dataclass
-class DigestedArray(Digested):
-    """Marker for numpy arrays of ``dtype=object``, destructured element-wise like a list.
-
-    *items* is a copy of the array, of the same shape and type, whose elements are
-    the interned children: inline values or :class:`~fleche.digest.Digest`
-    back-references.  fleche-numpy digests an object array element by element and a
-    ``Digest`` digests as itself, so the default :meth:`__digest__` over *items*
-    equals the digest of the original array.  Only ndarray methods are used, so
-    fleche still never imports numpy.
-    """
-
-    items: Any  # numpy.ndarray of dtype object
-
-    def underlying(self):
-        return self.items
-
-    def child_items(self) -> list[tuple[None, Any]]:
-        return [(None, v) for v in self.items.reshape(-1)]
-
-    def mend(self, storage: 'DestructuringMixin'):
-        return self._filled(self.items, (self.get(storage, v) for v in self.items.reshape(-1)))
-
-    @staticmethod
-    def _filled(array, children):
-        # copy() is C-contiguous, so reshape(-1) is a view and writes land in *out*;
-        # assigning one element at a time stores lists and arrays as objects
-        # instead of letting numpy broadcast them.
-        out = array.copy()
-        flat = out.reshape(-1)
-        for i, child in enumerate(children):
-            flat[i] = child
-        return out
-
-    @classmethod
-    def _slots(cls, value: Any) -> list[tuple[None, Any]]:
-        return [(None, v) for v in value.reshape(-1)]
-
-    @classmethod
-    def _rebuild_plain(cls, value: Any, labels: tuple, children: tuple) -> Any:
-        # no element was replaced by a Digest, so the array itself is the result
-        return value
-
-    @classmethod
-    def _rebuild_digest(cls, value: Any, labels: tuple, children: tuple) -> 'DigestedArray':
-        return cls(cls._filled(value, children))
-
-
 _DESTRUCTURERS: list[tuple[Callable[[Any], bool], Callable]] = [
     (lambda v: isinstance(v, (list, tuple)), DigestedIterable.sunder),
     (lambda v: isinstance(v, dict), DigestedDict.sunder),
     (lambda v: _dataclasses.is_dataclass(v) and not isinstance(v, type), DigestedDataclass.sunder),
     (_attrs.is_attrs_instance, DigestedAttrs.sunder),
-    (lambda v: _is_ndarray(v) and v.dtype.kind == "O", DigestedArray.sunder),
 ]
 
 
@@ -286,8 +242,38 @@ def register_destructurer(pred: Callable[[Any], bool], fn: Callable) -> None:
     built-in ones; first match wins, so registering a handler for an entirely
     new container type is safe without displacing list/dict/dataclass/attrs.
     Call before any :class:`DestructuringMixin` instance is used.
+
+    A package should instead list its ``(pred, fn)`` pairs under the ``fleche``
+    entry point ``destructure``; they are registered before the first save.
     """
     _DESTRUCTURERS.append((pred, fn))
+
+
+_ENTRY_POINTS_LOADED = False
+_ENTRY_POINTS_LOCK = threading.Lock()
+
+
+def _load_entry_points() -> None:
+    """Register the destructurers packages declare under the ``fleche`` entry point ``destructure``.
+
+    Each entry point names a list of ``(pred, fn)`` pairs for
+    :func:`register_destructurer`.  Runs once, before the first save of any
+    destructuring store, so how a value is split never depends on what the
+    process happened to import before.
+    """
+    global _ENTRY_POINTS_LOADED
+    if _ENTRY_POINTS_LOADED:
+        return
+    with _ENTRY_POINTS_LOCK:
+        if _ENTRY_POINTS_LOADED:
+            return
+        for ep in importlib.metadata.entry_points(group="fleche", name="destructure"):
+            try:
+                for pred, fn in ep.load():
+                    register_destructurer(pred, fn)
+            except Exception as e:
+                logger.error("Failed to load entry point %s: %s", ep.value, e, exc_info=True)
+        _ENTRY_POINTS_LOADED = True
 
 
 # Leaves that are atomic values rather than containers or opaque objects: depth 0,
@@ -304,43 +290,35 @@ _SCALAR_TYPES = (
     datetime.tzinfo,
 )
 
-# Third-party types matched by (top-level module, class name) along the MRO, the
+# Third-party scalars matched by (top-level module, class name) along the MRO, the
 # way digest._SISTER_PACKAGES does, so fleche never imports numpy or pandas.
 # np.bool_ is not a numbers.Number since numpy 1.20; the other numpy number
 # scalars are, and np.str_/np.bytes_ subclass str/bytes.
-_FOREIGN_TYPES = {
-    ("numpy", "bool"): "scalar",  # np.bool_ on numpy 2
-    ("numpy", "bool_"): "scalar",  # np.bool_ on numpy 1
-    ("pandas", "NAType"): "scalar",
-    ("numpy", "ndarray"): "ndarray",
+_FOREIGN_SCALARS = {
+    ("numpy", "bool"),  # np.bool_ on numpy 2
+    ("numpy", "bool_"),  # np.bool_ on numpy 1
+    ("pandas", "NAType"),
 }
 
-# Per-type answers for the _FOREIGN_TYPES MRO walk; None for unmatched types.
-_FOREIGN_KIND_CACHE: dict[type, str | None] = {}
-
-
-def _foreign_kind(value: Any) -> str | None:
-    t = type(value)
-    try:
-        return _FOREIGN_KIND_CACHE[t]
-    except KeyError:
-        pass
-    kind = None
-    for c in t.__mro__:
-        kind = _FOREIGN_TYPES.get((c.__module__.partition(".")[0], c.__qualname__))
-        if kind is not None:
-            break
-    _FOREIGN_KIND_CACHE[t] = kind
-    return kind
-
-
-def _is_ndarray(value: Any) -> bool:
-    return _foreign_kind(value) == "ndarray"
+# Per-type answers for the _FOREIGN_SCALARS MRO walk.
+_FOREIGN_SCALAR_CACHE: dict[type, bool] = {}
 
 
 def _is_scalar(value: Any) -> bool:
     """Whether *value* is an atomic leaf, inlined like an ``int`` (depth 0)."""
-    return isinstance(value, _SCALAR_TYPES) or _foreign_kind(value) == "scalar"
+    if isinstance(value, _SCALAR_TYPES):
+        return True
+    t = type(value)
+    try:
+        return _FOREIGN_SCALAR_CACHE[t]
+    except KeyError:
+        pass
+    result = any(
+        (c.__module__.partition(".")[0], c.__qualname__) in _FOREIGN_SCALARS
+        for c in t.__mro__
+    )
+    _FOREIGN_SCALAR_CACHE[t] = result
+    return result
 
 
 @runtime_checkable
@@ -421,6 +399,7 @@ class DestructuringMixin(base.ValueStorage):
         return super().save(value, key), depth
 
     def save(self, value: Any, key: digest.Digest | None = None) -> digest.Digest:
+        _load_entry_points()
         # Empty list/tuple/dict: stored as-is (no point destructuring nothing)
         if isinstance(value, (list, tuple, dict)) and not value:
             return super().save(value, key)

@@ -21,6 +21,21 @@ place.)
    may produce inconsistent results.  Register all destructurers before any
    storage instance is first used.
 
+Registering from a package
+--------------------------
+
+A package lists its ``(predicate, sunder_fn)`` pairs under the ``fleche`` entry
+point ``destructure`` instead of calling ``register_destructurer`` itself:
+
+.. code-block:: toml
+
+   [project.entry-points.'fleche']
+   destructure = 'mypackage.destructure:destructurers'
+
+fleche registers them once, before the first save of any destructuring store,
+so they apply from the first value on.  fleche-numpy registers its
+``dtype=object`` array destructurer this way.
+
 Before reaching for this function, consider whether implementing
 ``__digest__`` (or ``add_hook``, see :doc:`custom_digests`) on the type in
 question is sufficient.  Destructurer registration is only necessary when a

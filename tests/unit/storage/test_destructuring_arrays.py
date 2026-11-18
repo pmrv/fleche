@@ -1,7 +1,9 @@
 """Destructuring of ``dtype=object`` numpy arrays (#1063).
 
-Object arrays are destructured element-wise like lists, keeping their shape.
-Other arrays, structured ones with object fields included, stay opaque.
+fleche-numpy declares the destructurer through the ``fleche`` entry point
+``destructure``.  Object arrays are destructured element-wise like lists,
+keeping their shape.  Other arrays, structured ones with object fields
+included, stay opaque.
 """
 
 import pytest
@@ -9,9 +11,15 @@ import pytest
 np = pytest.importorskip("numpy")
 pytest.importorskip("fleche_numpy")
 
+import importlib.metadata
+import subprocess
+import sys
+
 from fleche.digest import Digest, digest
-from fleche.storage.destructuring import DestructuringMixin, DigestedArray
+from fleche.storage import destructuring
+from fleche.storage.destructuring import DestructuringMixin
 from fleche.storage.memory import ValueMemory
+from fleche_numpy.destructure import DigestedArray, destructurers
 
 
 def raw_entries(vm):
@@ -111,3 +119,38 @@ def test_structured_object_array_stays_opaque():
     vm = ValueMemory({}, remaining_depth=99)
     vm.save([arr])
     assert digest(arr) in vm.storage
+
+
+# ---- Registration through the entry point ----
+
+
+def test_fleche_numpy_declares_its_destructurers():
+    eps = importlib.metadata.entry_points(group="fleche", name="destructure")
+    assert any(ep.load() is destructurers for ep in eps)
+
+
+def test_entry_points_load_once():
+    ValueMemory({}).save([1])
+    registered = list(destructuring._DESTRUCTURERS)
+    destructuring._load_entry_points()
+    assert destructuring._DESTRUCTURERS == registered
+    assert sum(fn is destructurers[0][1] for _, fn in registered) == 1
+
+
+def test_first_save_in_a_fresh_process_is_destructured():
+    """The destructurer is registered before the first save, not after the first digest.
+
+    Loaded with the digest hooks instead, the first object array of a process
+    would be stored whole and only later ones split.
+    """
+    script = (
+        "import numpy as np\n"
+        "from fleche.storage.memory import ValueMemory\n"
+        "arr = np.empty(2, dtype=object)\n"
+        "arr[0], arr[1] = 1, [2, 3]\n"
+        "vm = ValueMemory({})\n"
+        "print(type(vm.storage[vm.save(arr)]).__qualname__)\n"
+    )
+    out = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, check=True)
+    assert out.stdout.strip() == "DigestedArray"
+
