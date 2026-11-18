@@ -11,7 +11,11 @@
       "exclude-paths": [
         "src/fleche-numpy",
         "src/fleche-pandas",
-        "src/fleche-ase"
+        "src/fleche-ase",
+        "docs/digests/numpy.rst",
+        "docs/digests/pandas.rst",
+        "docs/digests/ase.rst",
+        "tests/unit/digest/test_ase.py"
       ]
     },
     "src/fleche-numpy": {

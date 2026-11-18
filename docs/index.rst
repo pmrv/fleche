@@ -45,6 +45,7 @@ Welcome to the **Fleche** library documentation.
    digests/digest_equivalence
    digests/numpy
    digests/pandas
+   digests/ase
    digests/entry_points
 
 .. toctree::
