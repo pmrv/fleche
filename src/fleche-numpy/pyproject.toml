@@ -8,7 +8,7 @@ packages = ["fleche_numpy"]
 [project]
 name = "fleche-numpy"
 # Bumped by release-please (release-type "python"); see release-please-config.json.
-version = "1.0.0"
+version = "1.1.0"
 description = "numpy digest hooks and destructurers for fleche"
 authors = [
     { name="Marvin Poul", email="pmrv@posteo.de" },
