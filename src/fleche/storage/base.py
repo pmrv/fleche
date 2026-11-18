@@ -392,46 +392,25 @@ class StorageBackend(KeyManagement):
 
 
 class ChildItems(ABC):
-    """A stored record that holds other stored entries in child slots.
+    """A stored record whose slots hold other stored entries.
 
-    A mending layer wraps a value in a record of its own (the
-    :class:`~fleche.storage.destructuring.Digested` wrappers a destructuring
-    save writes), which makes each such record a *node* in the value store's
-    reference graph rather than a leaf.  Its children then get asked about from
-    more than one place: the load side walks them to put the value back
-    together, and the reference walks behind :meth:`~fleche.caches.Cache.gc`
+    Loading mends a record from its children.  :meth:`~fleche.caches.Cache.gc`
     and :meth:`~fleche.storage.destructuring.DestructuringMixin.count_reuses`
-    walk them to find the record's outgoing edges.
-
-    Answering that question once per *reader* lets ``gc`` destroy data: a
-    record that describes its children to the loader but not to the sweep
-    looks like a leaf, so its children look unreferenced and get reclaimed out
-    from under it.  A record declares its children **here, once**, and every
-    reader goes through this interface, so a new record type, including one
-    from another package, joins the reference graph by implementing
-    :meth:`child_items`, and cannot join it halfway.
+    follow :meth:`child_digests` to find the entries it references.  A record
+    type takes part by implementing :meth:`child_items`.
     """
 
     @abstractmethod
     def child_items(self) -> "Iterable[tuple[Any, Any]]":
-        """``(label, child)`` for every child slot this record holds.
+        """``(label, child)`` for every slot of this record.
 
-        *label* is whatever names the slot to its owner — a field name, or
-        ``None`` for the positional slots of a list or a mapping — and *child* is what sits in it: an inlined plain
-        value, or a :class:`~fleche.digest.Digest` naming a separate entry.
+        *label* names the slot: a field name, or ``None`` for positional slots.
+        *child* is an inlined value or the :class:`~fleche.digest.Digest` of a
+        separately stored entry.  List every slot; gc deletes what it cannot reach.
         """
 
     def child_digests(self) -> "set[Digest]":
-        """The digests among :meth:`child_items` — this record's outgoing edges.
-
-        A child that is itself a record (inlined into this one because it is
-        shallow, while holding a reference further down) contributes its own
-        edges: they belong to the entry this record is stored in.
-
-        The record-level counterpart of
-        :meth:`~fleche.storage.destructuring.DestructuringMixin.child_digests`,
-        which answers the same question for a stored *key*.
-        """
+        """The digests this record references, including those of records inlined into it."""
         found: set[Digest] = set()
         for _, child in self.child_items():
             if isinstance(child, Digest):
@@ -451,14 +430,10 @@ class ValueStorage(KeyManagement):
     def load(self, key: Digest | str) -> Any: ...
 
     def _raw_sub_digests(self, raw: Any) -> set[Digest]:
-        """Digests directly referenced by a raw stored entry.
+        """Digests referenced by a raw stored entry.
 
-        One implementation for every layer: a record that carries references
-        declares them itself, via :class:`ChildItems`, so this never has to
-        know which mixin wrote it — no mixin gets to describe its own records
-        to the loader and forget the sweep.  An entry that is not such a
-        record references nothing.  Still overridable, for a storage whose
-        records are of a type it cannot make implement the interface.
+        A :class:`ChildItems` record declares them; any other entry references
+        nothing.  Override for records that cannot implement the interface.
         """
         return raw.child_digests() if isinstance(raw, ChildItems) else set()
 
