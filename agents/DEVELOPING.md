@@ -270,9 +270,10 @@ Values and calls are stored separately so call records are queryable without des
   `_load_entry_points` registers them once, before the first `DestructuringMixin.save`, since destructuring decides before anything is digested and so cannot wait for digest's lazy entry-point load.
   fleche-numpy uses it for `dtype=object` arrays (`fleche_numpy.destructure.DigestedArray`) and makes other arrays without object fields leaves (depth 0);
   fleche-pandas makes `DataFrame`/`Series`/`Index` leaves, fleche-ase an `Atoms` without a live calculator (one other than `SinglePointCalculator`).
-  `_DESTRUCTURERS` holds `(pred, fn, should_split)` plain tuples (not a NamedTuple: CPython's fast unpacking path is for exact tuples, and every save unpacks every entry);
-  with the value backend's `split_level` set,
-  `_intern_rec` stores a value whose `should_split(value, level)` holds (or a `bytes`/`str` of `len >= 2**level`) as its own entry while keeping its depth, so the parent still folds and holds a reference (#1076's wrapper propagation makes that reachable).
+  `_DESTRUCTURERS` holds `(pred, fn, size)` plain tuples (not a NamedTuple: CPython's fast unpacking path is for exact tuples, and every save unpacks every entry);
+  with the value backend's `remaining_size` set,
+  `_intern_rec` sums bytes-ish sizes on the way up (a node's own `size(value)` plus its inlined children's, passed through a `_parent` accumulator so `intern`'s `(value, depth)` contract stays) and stores a node as its own entry once that sum reaches `remaining_size`;
+  a child stored apart counts nothing towards its parent.
   `Digested` inherits `storage.base.ChildItems`: every record that holds other stored entries declares them once through the abstract `child_items()`, and the record-level `child_digests()` derives from it.
   `ValueStorage._raw_sub_digests` is one generic reader over that interface instead of a per-mixin `match`, so a wrapper registered via `register_destructurer` takes part in `gc`/`count_reuses` (#883, #905).
 - `thread_safe.py` — `SerializingMixin` and `PerKeyLockMixin` (striped locks keyed by the instance, so instances must be **hashable**) subclass `OperationContext` directly, so they attach at either layer.
@@ -379,7 +380,7 @@ Git history is the changelog — no PR numbers, dates or release versions here.
 - Central SQL call index on HPC (#1047 is the field report and entry point): no compute fallback when the server is down, hosted-server tooling and its config write-back,
   `autostart` on shared cluster nodes.
 - Destructuring store layout (#1063 is the entry point — read its newest comments before touching `destructuring.py`): per-leaf value files dominate NFS write time.
-  Agreed direction, in order: move destructurer registration to a `destructure` entry point so sister packages can ship destructurers (done), then a size-based split — `should_split` per registration judged against a log2-bytes level (`split_level`) on the value backend, monotonic, never measured by speculative pickling (done;
+  Agreed direction, in order: move destructurer registration to a `destructure` entry point so sister packages can ship destructurers (done), then a size-based split — a bytes-ish `size` per registration, summed over inlined children against `remaining_size` on the value backend, never measured by speculative pickling (done;
   off by default).
   Depth 0 is declared per type by the sister packages (numpy arrays, pandas containers, light `Atoms`);
   whether unknown opaque types should default to depth 0 too is undecided — keep them at ∞ until it is.

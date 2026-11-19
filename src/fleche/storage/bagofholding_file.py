@@ -437,8 +437,8 @@ class ValueBagOfHoldingH5File(PerKeyLockMixin, DestructuringMixin, ValueMixin, B
             "prefix_length": self.prefix_length,
             "remaining_depth": self.remaining_depth,
         }
-        if self.split_level is not None:
-            config["split_level"] = self.split_level
+        if self.remaining_size is not None:
+            config["remaining_size"] = self.remaining_size
         return config
 
 @register_storage("bagofholding_hdf", kind="call")

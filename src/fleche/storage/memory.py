@@ -71,8 +71,8 @@ class ValueMemory(PerKeyLockMixin, DestructuringMixin, ValueMixin, MemoryBackend
         # `storage` is the live store — runtime state, not configuration;
         # from_config seeds a fresh one instead.
         config: dict[str, Any] = {"type": "memory", "remaining_depth": self.remaining_depth}
-        if self.split_level is not None:
-            config["split_level"] = self.split_level
+        if self.remaining_size is not None:
+            config["remaining_size"] = self.remaining_size
         return config
 
 register_storage("memory", kind="value", factory=ValueMemory.from_config)(ValueMemory)
