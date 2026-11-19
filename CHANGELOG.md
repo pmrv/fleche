@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.25.0](https://github.com/pmrv/fleche/compare/0.24.0...0.25.0) (2026-11-18)
+
+
+### Features
+
+* **fleche-ase:** move fleche-ase into the monorepo, as src/fleche-ase ([#1075](https://github.com/pmrv/fleche/issues/1075)) ([c02c0d9](https://github.com/pmrv/fleche/commit/c02c0d9aabad03d29300318d6e7148cb6cbda1be))
+* **storage:** ChildItems, a destructure entry point, and object arrays destructured by fleche-numpy ([#1074](https://github.com/pmrv/fleche/issues/1074)) ([d13095c](https://github.com/pmrv/fleche/commit/d13095c0e3e031354263c2b0b2a1c89e6e9ceb20))
+* **storage:** make the pickle-family gzip level configurable ([#1071](https://github.com/pmrv/fleche/issues/1071)) ([8fccf2e](https://github.com/pmrv/fleche/commit/8fccf2ef032d6d5af4b85d9a538dbdbfb1788fde))
+* **storage:** sister packages declare their types as depth-0 leaves ([#1083](https://github.com/pmrv/fleche/issues/1083)) ([644c64f](https://github.com/pmrv/fleche/commit/644c64f45e0031bf2d31ad934506a82d3395a5b3))
+
+
+### Bug Fixes
+
+* **fleche-ase:** digest ASE constraints through a hook ([#1085](https://github.com/pmrv/fleche/issues/1085)) ([03e3ce5](https://github.com/pmrv/fleche/commit/03e3ce58e7f9c0b07f480cd9acbf52eb271e44b0))
+* **storage:** inline None, datetimes, np.bool_ and pd.NA when destructuring ([#1073](https://github.com/pmrv/fleche/issues/1073)) ([6624faf](https://github.com/pmrv/fleche/commit/6624faf07e0e628118cdbb7baddb71e7657b1dcc))
+
+
+### Performance Improvements
+
+* **digest:** keep the hooks in stable tuples, checked once per type ([#1064](https://github.com/pmrv/fleche/issues/1064)) ([1b63408](https://github.com/pmrv/fleche/commit/1b634086261ee5ec9ba95dfc04c511f79cc2690a))
+* **storage:** import SQLAlchemy only when SQL storage is used ([#1061](https://github.com/pmrv/fleche/issues/1061)) ([dbfa83b](https://github.com/pmrv/fleche/commit/dbfa83b6c9968bdabfa2013334316de0fb6974a3))
+* **storage:** skip writing values that are already stored ([#1072](https://github.com/pmrv/fleche/issues/1072)) ([bb79642](https://github.com/pmrv/fleche/commit/bb79642f6dbcc0dcff1a6d18ff71e7df2435f0f0))
+
 ## [0.24.0](https://github.com/pmrv/fleche/compare/0.23.1...0.24.0) (2026-11-16)
 
 

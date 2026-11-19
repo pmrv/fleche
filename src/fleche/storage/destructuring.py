@@ -414,8 +414,9 @@ class DestructuringMixin(base.ValueStorage):
             # empty containers treated like scalars; no point destructuring nothing
             depth = 0
         elif isinstance(value, tuple) and self._is_trojan_tuple(value):
-            # namedtuples break LSP by not accepting a single iterable — treat as opaque scalar
-            pass
+            # namedtuples break LSP by not accepting a single iterable, so they
+            # are never taken apart; inline them whole like any other scalar
+            depth = 0
         else:
             for pred, sunder_fn, should_split in _DESTRUCTURERS:
                 if pred(value):
