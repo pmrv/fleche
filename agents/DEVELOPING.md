@@ -339,7 +339,8 @@ discovery and merge rules are in [USAGE.md](USAGE.md#config-files--where-fleche-
 ## Other directories
 
 - `docs/` — Sphinx;
-  `docs/digests/digest_equivalence` covers stdlib types, while `numpy` and `pandas` each get a standalone page, documenting the `fleche-numpy` and `fleche-pandas` sister packages.
+  `docs/digests/digest_equivalence` covers stdlib types, while `numpy`,
+  `pandas` and `ase` each get a standalone page documenting how the sister package digests and stores its types, collected under `docs/plugins.rst` together with the entry-point mechanism (`docs/digests/entry_points.rst`).
   `docs/figures/` SVGs are checked in (the RTD builder has no `dot`), and `gen_diagrams.py` also refreshes the PNGs embedded in `notebooks/Destructuring.ipynb`.
   `docs/notebooks/` is symlinks, so a new notebook needs one.
 - `.github/workflows/` — `test-minimum-deps.yml` uses `uv pip install --resolution lowest-direct` (not `uv sync`, whose lock floats deps up) in a venv pinned to the `requires-python` floor — keep the pin in sync.

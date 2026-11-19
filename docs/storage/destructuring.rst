@@ -16,9 +16,8 @@ the same value — is stored exactly once.
 Containers that are destructured: :class:`list`, :class:`tuple`,
 :class:`dict`, :mod:`dataclasses` instances, ``attrs`` instances, and, with
 fleche-numpy installed, numpy arrays of ``dtype=object``.  Scalars are leaves,
-and so are namedtuples and the types the sister packages declare (see
-`Special cases`_);
-everything else is treated as an opaque leaf.
+and so are namedtuples and the types the :doc:`plugins <../plugins>` declare
+as such; everything else is treated as an opaque leaf.
 
 Deduplication
 -------------
@@ -92,19 +91,9 @@ entry of their own, at every ``remaining_depth``.
 ``1 + max(child depths)``, a container holding an opaque value is depth ∞ as
 well and also splits at every setting.
 
-**Types declared by the sister packages.**  These packages declare how their
-types are stored:
-
-- fleche-numpy: an array without object fields is a leaf (depth 0, inlined like
-  an ``int``).  An array of ``dtype=object`` holds arbitrary Python objects and
-  is destructured element by element like a list, keeping its shape.  An
-  object-dtype ndarray subclass (``np.matrix``, a masked array) and a
-  structured array with object fields stay opaque.
-- fleche-pandas: ``DataFrame``, ``Series`` and ``Index`` are leaves.
-- fleche-ase: an ``Atoms`` is a leaf unless it carries a live calculator, which
-  is pickled with it and may be a whole model; then it stays opaque.
-
-Without the package installed, its types are opaque.
+**Types declared by the plugins.**  The :doc:`plugins <../plugins>` declare
+how their types are stored; see the page of each.  Without the package
+installed, its types are opaque.
 
 **Namedtuples.**  A plain tuple destructures normally, but a
 :func:`~collections.namedtuple` is never taken apart: its constructor does not

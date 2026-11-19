@@ -43,10 +43,13 @@ Welcome to the **Fleche** library documentation.
 
    digests/digests_as_args
    digests/digest_equivalence
-   digests/numpy
-   digests/pandas
-   digests/ase
-   digests/entry_points
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Plugins
+   :hidden:
+
+   plugins
 
 .. toctree::
    :maxdepth: 2

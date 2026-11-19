@@ -1,7 +1,7 @@
 numpy
 =====
 
-How ``fleche`` digests numpy values.  numpy number scalars, such as
+How ``fleche`` digests and stores numpy values.  numpy number scalars, such as
 ``np.int64`` or ``np.float32``, are numbers and digest by their exact value;
 see :doc:`digest_equivalence`.
 
@@ -33,3 +33,15 @@ numpy registers ``np.timedelta64`` as a ``numbers.Integral`` and calls
 This covers single values.  An array of ``timedelta64`` dtype digests by its
 dtype and raw bytes, like every array, so there the unit matters:
 ``np.array([5], "m8[s]")`` and ``np.array([5000], "m8[ms]")`` digest apart.
+
+Storage
+-------
+
+How arrays are :doc:`destructured <../storage/destructuring>`:
+
+* An array without object fields is a leaf (depth 0, inlined like an
+  ``int``).
+* An array of ``dtype=object`` holds arbitrary Python objects and is
+  destructured element by element like a list, keeping its shape.
+* An object-dtype ndarray subclass (``np.matrix``, a masked array) and a
+  structured array with object fields stay opaque.

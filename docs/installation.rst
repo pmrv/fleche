@@ -116,8 +116,8 @@ installing them alongside ``fleche`` is all that is needed:
   ``DataFrame``, ``Series``, ``Index``, ``pd.Timedelta`` and ``pd.NA``; see
   :doc:`digests/pandas`. Pulls in ``fleche-numpy``.
 * ``fleche-ase`` (`PyPI <https://pypi.org/project/fleche-ase/>`__) — digest
-  hooks for the Atomic Simulation Environment. See :doc:`digests/entry_points`
-  for exactly which types it covers.
+  hooks for the Atomic Simulation Environment; see :doc:`digests/ase` for
+  exactly which types it covers.
 
 .. code-block:: bash
 
