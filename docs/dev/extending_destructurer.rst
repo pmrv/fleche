@@ -36,6 +36,13 @@ fleche registers them once, before the first save of any destructuring store,
 so they apply from the first value on.  fleche-numpy registers its
 ``dtype=object`` array destructurer this way.
 
+An entry may carry a third element, ``size(value) -> int``, for the store's
+``remaining_size``: an estimate of how many bytes *value* holds itself (the
+children its destructurer interns add their own).  It is bytes-ish, not exact:
+read it from what is cheap, such as an array's ``nbytes``, never by
+serializing the value, and accept that it may be off by a good margin.
+Without it, the value counts as holding nothing itself.
+
 Before reaching for this function, consider whether implementing
 ``__digest__`` (or ``add_hook``, see :doc:`custom_digests`) on the type in
 question is sufficient.  Destructurer registration is only necessary when a

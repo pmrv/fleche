@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from collections import Counter
 import dataclasses as _dataclasses
 import datetime
+import functools
 from dataclasses import dataclass
 from numbers import Number
 from typing import Any, Callable, Protocol, runtime_checkable
@@ -225,15 +226,22 @@ class DigestedAttrs(DigestedFields):
         return _attrs.field_items(value)
 
 
-_DESTRUCTURERS: list[tuple[Callable[[Any], bool], Callable]] = [
-    (lambda v: isinstance(v, (list, tuple)), DigestedIterable.sunder),
-    (lambda v: isinstance(v, dict), DigestedDict.sunder),
-    (lambda v: _dataclasses.is_dataclass(v) and not isinstance(v, type), DigestedDataclass.sunder),
-    (_attrs.is_attrs_instance, DigestedAttrs.sunder),
+# (pred, fn, size) per entry.  Plain tuples, not a NamedTuple: save() and
+# _intern_rec unpack every entry for every value, and CPython only takes its fast
+# unpacking path for exact tuples.
+_DESTRUCTURERS: list[tuple[Callable[[Any], bool], Callable, Callable[[Any], int] | None]] = [
+    (lambda v: isinstance(v, (list, tuple)), DigestedIterable.sunder, None),
+    (lambda v: isinstance(v, dict), DigestedDict.sunder, None),
+    (lambda v: _dataclasses.is_dataclass(v) and not isinstance(v, type), DigestedDataclass.sunder, None),
+    (_attrs.is_attrs_instance, DigestedAttrs.sunder, None),
 ]
 
 
-def register_destructurer(pred: Callable[[Any], bool], fn: Callable) -> None:
+def register_destructurer(
+    pred: Callable[[Any], bool],
+    fn: Callable,
+    size: Callable[[Any], int] | None = None,
+) -> None:
     """Register a custom container destructurer.
 
     *pred(value)* should return ``True`` for values this destructurer handles.
@@ -243,10 +251,17 @@ def register_destructurer(pred: Callable[[Any], bool], fn: Callable) -> None:
     new container type is safe without displacing list/dict/dataclass/attrs.
     Call before any :class:`DestructuringMixin` instance is used.
 
-    A package should instead list its ``(pred, fn)`` pairs under the ``fleche``
-    entry point ``destructure``; they are registered before the first save.
+    *size(value)* estimates how many bytes *value* holds itself, for the store's
+    ``remaining_size``; children that *fn* interns add their own.  It is an
+    estimate, bytes-ish rather than exact: read it from what is cheap (an array's
+    ``nbytes``), never by serializing the value.  Without it the value counts as
+    holding nothing itself.
+
+    A package should instead list its ``(pred, fn[, size])`` tuples under the
+    ``fleche`` entry point ``destructure``; they are registered before the first
+    save.
     """
-    _DESTRUCTURERS.append((pred, fn))
+    _DESTRUCTURERS.append((pred, fn, size))
 
 
 _ENTRY_POINTS_LOADED = False
@@ -269,8 +284,8 @@ def _load_entry_points() -> None:
             return
         for ep in importlib.metadata.entry_points(group="fleche", name="destructure"):
             try:
-                for pred, fn in ep.load():
-                    register_destructurer(pred, fn)
+                for entry in ep.load():
+                    register_destructurer(*entry)
             except Exception as e:
                 logger.error("Failed to load entry point %s: %s", ep.value, e, exc_info=True)
         _ENTRY_POINTS_LOADED = True
@@ -321,6 +336,23 @@ def _is_scalar(value: Any) -> bool:
     return result
 
 
+def _scalar_size(value: Any) -> int:
+    """Bytes-ish size of a scalar: the length of ``bytes``/``str``, a word for anything else."""
+    if isinstance(value, (bytes, str)):
+        return len(value)
+    return 8
+
+
+def _leaf_size(value: Any) -> int:
+    """Bytes-ish size of a value kept whole, e.g. a namedtuple field: scalar or registered size."""
+    if _is_scalar(value):
+        return _scalar_size(value)
+    for pred, _, size_fn in _DESTRUCTURERS:
+        if pred(value):
+            return size_fn(value) if size_fn is not None else 0
+    return 0
+
+
 @runtime_checkable
 class HasChildDigests(Protocol):
     """Structural protocol for value storages that expose a reference-graph edge query.
@@ -362,26 +394,54 @@ class DestructuringMixin(base.ValueStorage):
     """
 
     remaining_depth: int = 1
+    # A value gets an entry of its own once it holds about remaining_size bytes or more:
+    # its own size plus that of the children inlined into it.  Sizes are estimates
+    # (see register_destructurer); None never splits by size.
+    remaining_size: int | None = None
+
+    def __post_init__(self, *args, **kwargs):
+        # *args forwards InitVars (bagofholding's check_consistency) down the MRO.
+        size = self.remaining_size
+        if size is not None and (not isinstance(size, int) or isinstance(size, bool) or size < 0):
+            raise ValueError(f"remaining_size must be None or a non-negative int, not {size!r}")
+        post_init = getattr(super(), "__post_init__", None)
+        if post_init is not None:
+            post_init(*args, **kwargs)
 
     @staticmethod
     def _is_trojan_tuple(value):
         return hasattr(value, "_fields") and hasattr(value, "_field_defaults")
 
-    def _intern_rec(self, value: Any, key: digest.Digest | None = None) -> tuple[Any, int | float]:
+    def _intern_rec(
+        self, value: Any, key: digest.Digest | None = None, _parent: list[int] | None = None
+    ) -> tuple[Any, int | float]:
         """Post-order traversal: recurse to leaves, decide inline-vs-store on the way back up.
 
-        Returns ``(result, depth)`` where *result* is the plain value when ``depth < remaining_depth``
-        (the element is inlined in its parent's :class:`~fleche.storage.destructuring.Digested` wrapper) or a :class:`~fleche.digest.Digest` when
-        the element was written to storage separately.  Every node in the structure is visited exactly
-        once (O(n)), unlike a separate depth-counting pass.
+        Returns ``(result, depth)`` where *result* is the plain value when it is inlined into
+        its parent (``depth < remaining_depth`` and, with ``remaining_size`` set, its size
+        below that) or a :class:`~fleche.digest.Digest` when the element was written to
+        storage separately.  Every node in the structure is visited exactly once (O(n)).
+
+        With ``remaining_size`` set, an inlined node adds its size to *_parent*, the size
+        accumulator of the node it is inlined into; a node stored apart adds nothing, since
+        its parent only holds its digest.
         """
         if isinstance(value, digest.Digest):
             return value, -1
 
         depth = float("inf")
+        size = 0
+        sizing = self.remaining_size is not None
+        if sizing:
+            children = [0]
+            intern = functools.partial(self._intern_rec, _parent=children)
+        else:
+            intern = self._intern_rec
 
         if _is_scalar(value):
             depth = 0
+            if sizing:
+                size = _scalar_size(value)
         elif isinstance(value, (dict, list, tuple)) and not value:
             # empty containers treated like scalars; no point destructuring nothing
             depth = 0
@@ -389,27 +449,40 @@ class DestructuringMixin(base.ValueStorage):
             # namedtuples break LSP by not accepting a single iterable, so they
             # are never taken apart; inline them whole like any other scalar
             depth = 0
+            if sizing:
+                size = sum(_leaf_size(v) for v in value)
         else:
-            for pred, sunder_fn in _DESTRUCTURERS:
+            for pred, sunder_fn, size_fn in _DESTRUCTURERS:
                 if pred(value):
-                    value, depth = sunder_fn(self._intern_rec, value)
+                    if sizing and size_fn is not None:
+                        size = size_fn(value)
+                    value, depth = sunder_fn(intern, value)
                     break
 
-        if depth < self.remaining_depth:
+        if sizing:
+            size += children[0]
+            if depth < self.remaining_depth and size < self.remaining_size:
+                if _parent is not None:
+                    _parent[0] += size
+                return value, depth
+        elif depth < self.remaining_depth:
             return value, depth
         return super().save(value, key), depth
 
     def save(self, value: Any, key: digest.Digest | None = None) -> digest.Digest:
         _load_entry_points()
-        # The top-level value always gets an entry, so whatever its depth, store
-        # what its destructurer makes of it.  Calling the destructurer directly
+        # The top-level value always gets an entry, so whatever its depth or size,
+        # store what its destructurer makes of it.  Calling the destructurer directly
         # skips _intern_rec's second scan of _DESTRUCTURERS.
         if isinstance(value, (list, tuple, dict)) and not value:
             pass  # nothing to destructure
         elif not (isinstance(value, tuple) and self._is_trojan_tuple(value)):
-            for pred, sunder_fn in _DESTRUCTURERS:
+            intern = self._intern_rec
+            if self.remaining_size is not None:
+                intern = functools.partial(self._intern_rec, _parent=[0])
+            for pred, sunder_fn, _ in _DESTRUCTURERS:
                 if pred(value):
-                    value, _ = sunder_fn(self._intern_rec, value)
+                    value, _ = sunder_fn(intern, value)
                     break
         return super().save(value, key)
 

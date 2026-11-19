@@ -210,6 +210,8 @@ class ValuePickleFile(PerKeyLockMixin, DestructuringMixin, ValueMixin, PickleFil
         # Omitted at the default so configs written before the option existed round-trip unchanged.
         if self.compresslevel != 9:
             config["compresslevel"] = self.compresslevel
+        if self.remaining_size is not None:
+            config["remaining_size"] = self.remaining_size
         # Keys are bytes; store them hex-encoded, and omit the key list
         # entirely when unset so the config stays minimal.
         if self.secret_key:

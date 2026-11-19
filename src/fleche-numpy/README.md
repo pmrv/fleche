@@ -11,6 +11,7 @@ Without it, fleche does not digest these values.
 numpy number scalars (`np.float64`, `np.int32`, ...) need no hooks; fleche digests them itself.
 
 With fleche-numpy installed, destructuring value stores take arrays of `dtype=object` apart element by element, like lists, and inline other arrays into their parent entry like scalars.
+With the store's `remaining_size` set, an array counts its `nbytes` towards it.
 
 How arrays are digested — dtype, shape and bytes, per field for structured dtypes, per element for object dtypes — is described in fleche's [numpy documentation](https://fleche.readthedocs.io/en/latest/digests/numpy.html).
 

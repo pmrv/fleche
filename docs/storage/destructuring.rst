@@ -73,6 +73,31 @@ same key (which is why one set of digest labels serves all four panels above).
 section — see :ref:`configuring-destructuring` in the configuration reference
 for the syntax.
 
+Folding by size
+---------------
+
+Folding by depth puts a large value inside every entry that holds it.  The
+optional ``remaining_size`` setting of the value backend (bytes, unset by
+default) bounds that: a value gets an entry of its own once it holds about
+``remaining_size`` bytes or more, counting its own size and that of the
+children inlined into it.  A child stored on its own counts nothing towards its
+parent, which only holds its digest.  So small subtrees keep folding upward
+until together they are worth an entry, and anything of that size, a single
+array or a whole record, is stored once however many entries refer to it.
+
+The split adds to ``remaining_depth``: a value is inlined only while it is both
+shallower than ``remaining_depth`` and smaller than ``remaining_size``.  To get
+entries of roughly that size, raise ``remaining_depth`` too.  A file system's
+block size, often 32 KiB (``32768``), is a natural choice: a smaller entry
+still occupies a whole block.
+
+Sizes are estimates, bytes-ish rather than exact, read from what is cheap and
+never by serializing: ``bytes`` and ``str`` count their length and other
+scalars a word; with the sister packages installed, numpy arrays count
+``nbytes``, pandas containers ``memory_usage`` (object columns count their
+references only) and ASE ``Atoms`` the bytes of their per-atom arrays.  Other
+values count nothing themselves.
+
 Special cases
 -------------
 

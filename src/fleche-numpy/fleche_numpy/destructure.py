@@ -16,7 +16,7 @@ import numpy as np
 
 from fleche.storage.destructuring import Digested
 
-__all__ = ["DigestedArray", "destructurers", "leaf"]
+__all__ = ["DigestedArray", "array_size", "destructurers", "leaf"]
 
 
 def _filled(array: np.ndarray, children) -> np.ndarray:
@@ -81,8 +81,13 @@ def leaf(intern, value):
     return value, 0
 
 
+def array_size(value: np.ndarray) -> int:
+    """Bytes-ish size of a plain array: its ``nbytes``."""
+    return value.nbytes
+
+
 #: The destructurers fleche loads from this package's ``fleche``/``destructure`` entry point.
 destructurers = [
     (_is_object_array, DigestedArray.sunder),
-    (_is_plain_array, leaf),
+    (_is_plain_array, leaf, array_size),
 ]

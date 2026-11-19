@@ -585,6 +585,12 @@ def _leaf(intern, value):
     return value, 0
 
 
+def _atoms_size(value) -> int:
+    # Bytes-ish: the per-atom arrays are where an Atoms' size grows; cell, pbc and
+    # info are small.
+    return sum(a.nbytes for a in value.arrays.values())
+
+
 def _is_light_atoms(value) -> bool:
     # An attached calculator is pickled with the structure and can be a whole model,
     # so only a structure without one, or with stored results only, is inlined.
@@ -595,5 +601,5 @@ def _is_light_atoms(value) -> bool:
 
 #: The destructurers fleche loads from this package's ``fleche``/``destructure`` entry point:
 #: an ``Atoms`` without a live calculator is a leaf, inlined into its parent like an ``int``.
-destructurers = [(_is_light_atoms, _leaf)]
+destructurers = [(_is_light_atoms, _leaf, _atoms_size)]
 

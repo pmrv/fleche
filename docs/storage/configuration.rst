@@ -254,7 +254,7 @@ Available storage types
      - In-memory dictionary
        (:class:`~fleche.storage.ValueMemory` / :class:`~fleche.storage.CallMemory`)
      - —
-     - ``remaining_depth`` *(value only)*
+     - ``remaining_depth``, ``remaining_size`` *(value only)*
    * - ``"void"``
      - No-op; discards all data
        (:class:`~fleche.storage.ValueVoid` / :class:`~fleche.storage.CallVoid`)
@@ -265,7 +265,7 @@ Available storage types
        (:class:`~fleche.storage.ValuePickleFile` / :class:`~fleche.storage.CallPickleFile`)
      - ``root``
      - ``compress``, ``compresslevel``,
-       ``secret_key``, ``remaining_depth`` *(value only)*
+       ``secret_key``, ``remaining_depth``, ``remaining_size`` *(value only)*
    * - ``"cloudpickle"``
      - Filesystem backend, ``cloudpickle``; handles lambdas, closures, etc.
        (same classes as ``"pickle"``)
@@ -282,7 +282,8 @@ Available storage types
        :class:`~fleche.storage.CallBagOfHoldingH5File`)
      - ``root``
      - ``lock_timeout``,
-       ``version_validator``, ``prefix_length``, ``remaining_depth`` *(value only)*
+       ``version_validator``, ``prefix_length``, ``remaining_depth``,
+       ``remaining_size`` *(value only)*
    * - ``"sql"``
      - SQL via SQLAlchemy (:class:`~fleche.storage.sql.Sql`).
        *Call storage only.*
@@ -350,6 +351,11 @@ Key descriptions
 ``remaining_depth``
     (int, default ``1``) — destructuring depth; see `Destructuring`_ below.
 
+``remaining_size``
+    (int, bytes, default unset) — a value holding about this many bytes or
+    more, its inlined children included, gets an entry of its own; see
+    `Destructuring`_ below.
+
 Multi-bagging (``bagofholding_hdf``)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -408,7 +414,10 @@ storage entries rather than storing them as one blob — see :doc:`destructuring
 for the full explanation, with figures.
 
 The optional ``remaining_depth`` key (integer, default ``1``) controls the
-granularity; see :doc:`destructuring` for the depth rule.
+granularity; see :doc:`destructuring` for the depth rule.  The optional
+``remaining_size`` key (integer bytes, unset by default) gives a value an
+entry of its own once it holds about that many bytes, the children inlined
+into it included; see :doc:`destructuring`.
 
 Example:
 
@@ -417,7 +426,8 @@ Example:
    [mycache]
    values.type = "cloudpickle"
    values.root = "~/.cache/fleche/values"
-   values.remaining_depth = 0   # split every element into its own entry
+   values.remaining_depth = 4      # fold records up to four levels deep into one entry
+   values.remaining_size = 32768   # but no more than about 32 KiB per entry
    calls.type = "cloudpickle"
    calls.root = "~/.cache/fleche/calls"
 
