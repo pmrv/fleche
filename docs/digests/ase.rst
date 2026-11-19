@@ -41,6 +41,8 @@ companion package (``pip install fleche-ase``), an :doc:`entry point
 * ``ase.thermochemistry`` modes (``AbstractMode``) and objects
   (``BaseThermoChem``) — digested from the class name and the instance
   attributes.
+  An object's ``verbose``, which its energy and entropy getters write on
+  every call, is left out, so evaluating it does not change its key.
 
 Teach it a calculator it cannot identify by registering an extractor, a
 function returning anything ``fleche`` can digest that tells two instances

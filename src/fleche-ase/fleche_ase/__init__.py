@@ -32,7 +32,7 @@ from fleche.digest import Indigestible, digest, Digest
 __all__ = ["atoms_digest", "calculator_digest", "constraint_digest", "vibrations_digest",
            "thermo_mode_digest", "thermochemistry_digest",
            "file_fingerprint", "register_calculator",
-           "digest_hooks", "destructurers", "PARAMETER_FREE"]
+           "digest_hooks", "destructurers", "PARAMETER_FREE", "THERMOCHEMISTRY_RUN_STATE"]
 
 #: Calculator class names for which an empty ``todict()`` is a complete identity rather than
 #: a missing one. Names, not classes, so that nothing here imports a calculator backend.
@@ -555,8 +555,18 @@ def thermo_mode_digest(mode: AbstractMode) -> Digest:
     ))
 
 
+#: Attributes ``ase.thermochemistry`` writes on an object when it is evaluated, rather
+#: than when it is built: the energy and entropy getters store their ``verbose`` argument.
+#: They change no result, so they are not part of the identity.
+THERMOCHEMISTRY_RUN_STATE = frozenset({"verbose"})
+
+
 def thermochemistry_digest(thermo: BaseThermoChem) -> Digest:
     """Digest of a thermochemistry object: its class and its attributes.
+
+    Attributes in :data:`THERMOCHEMISTRY_RUN_STATE` are left out, so evaluating an
+    object does not move its key. A fresh object carries none of them, so its digest is
+    the one of its class and its full ``vars``.
 
     Args:
         thermo: The thermochemistry object.
@@ -566,7 +576,7 @@ def thermochemistry_digest(thermo: BaseThermoChem) -> Digest:
     """
     return digest((
         type(thermo).__name__,
-        vars(thermo),
+        {k: v for k, v in vars(thermo).items() if k not in THERMOCHEMISTRY_RUN_STATE},
     ))
 
 
