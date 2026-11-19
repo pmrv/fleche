@@ -8,7 +8,7 @@ packages = ["fleche_ase"]
 [project]
 name = "fleche-ase"
 # Bumped by release-please (release-type "python"); see release-please-config.json.
-version = "1.1.0"
+version = "1.1.1"
 description = "ASE digest hooks for fleche"
 authors = [
     { name="Marvin Poul", email="pmrv@posteo.de" },

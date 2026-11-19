@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/pmrv/fleche/compare/fleche-ase-1.1.0...fleche-ase-1.1.1) (2026-11-19)
+
+
+### Bug Fixes
+
+* **fleche-ase:** leave verbose out of thermochemistry digests ([#1102](https://github.com/pmrv/fleche/issues/1102)) ([0019268](https://github.com/pmrv/fleche/commit/00192687d1782b6c94ea701b58b88428dfca024f))
+
 ## [1.1.0](https://github.com/pmrv/fleche/compare/fleche-ase-1.0.0...fleche-ase-1.1.0) (2026-11-18)
 
 
