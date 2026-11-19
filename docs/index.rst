@@ -43,7 +43,6 @@ Welcome to the **Fleche** library documentation.
 
    digests/digests_as_args
    digests/digest_equivalence
-   digests/entry_points
 
 .. toctree::
    :maxdepth: 2
