@@ -631,10 +631,17 @@ def test_pickle_hooks_run_both_ways(tmp_path):
     assert loaded.restored
 
 
-@pytest.mark.parametrize("value", [FrozenSlotted(1, [1, 2]), Slotted(1, [1, 2])])
-def test_synthesized_pickle_hooks_still_destructured(ds, value):
-    """The hooks dataclasses writes for slotted classes only copy fields, so destructuring stays on."""
+def test_frozen_slotted_stored_whole(ds):
+    """dataclasses writes ``__getstate__``/``__setstate__`` for frozen slotted classes; those count too."""
+    value = FrozenSlotted(1, [1, 2])
     key = ds.save(value)
-    raw = ds.storage[key]
-    assert isinstance(raw, DigestedDataclass)
+    assert type(ds.storage[key]) is FrozenSlotted
+    assert ds.load(key) == value
+
+
+def test_slotted_without_hooks_still_destructured(ds):
+    """A plain slotted dataclass gets no pickle hooks, so it is still split into fields."""
+    value = Slotted(1, [1, 2])
+    key = ds.save(value)
+    assert isinstance(ds.storage[key], DigestedDataclass)
     assert ds.load(key) == value

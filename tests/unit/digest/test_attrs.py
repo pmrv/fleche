@@ -233,12 +233,12 @@ def test_attrs_stored_as_digested_attrs(ds):
     Mirrors :class:`DigestedDataclass` for stdlib dataclasses but is a distinct
     subclass so each record kind owns its own field-extraction logic.
     """
-    a = AttrsBasic(x=1, y="hello")
+    a = AttrSBasic(x=1, y="hello")
     key = ds.save(a)
     raw = ds.storage[key]
     assert isinstance(raw, DigestedAttrs)
     assert not isinstance(raw, DigestedDataclass)
-    assert raw.cls is AttrsBasic
+    assert raw.cls is AttrSBasic
 
 
 @attrs.define
@@ -255,23 +255,25 @@ class AttrsOwnGetstate:
         self.y = state["y"]
 
 
-@attrs.define(frozen=True)
-class AttrsFrozenSlotted:
+@attrs.frozen(cache_hash=True)
+class AttrsCachedHash:
     x: int
-    y: list
+    y: tuple
 
 
-def test_attrs_own_pickle_hooks_stored_whole(ds):
-    """An attrs class with its own pickle hooks is not destructured (#1104)."""
-    a = AttrsOwnGetstate(x=1, y=[1, 2])
+def test_attrs_slotted_stored_whole(ds):
+    """attrs writes ``__getstate__``/``__setstate__`` for slotted classes; those count as hooks too."""
+    a = AttrsBasic(x=1, y="hello")
     key = ds.save(a)
-    assert type(ds.storage[key]) is AttrsOwnGetstate
-    assert key == digest(a)
+    assert type(ds.storage[key]) is AttrsBasic
 
 
-def test_attrs_synthesized_pickle_hooks_still_destructured(ds):
-    """The ``__getstate__``/``__setstate__`` attrs writes for slotted classes only copy fields."""
-    a = AttrsFrozenSlotted(x=1, y=[1, 2])
-    key = ds.save(a)
-    assert isinstance(ds.storage[key], DigestedAttrs)
-    assert ds.load(key) == a
+def test_attrs_cached_hash_survives_load(tmp_path):
+    """attrs' own ``__setstate__`` resets the hash cache, so a loaded instance stays hashable."""
+    from fleche.storage import ValuePickleFile
+
+    ds = ValuePickleFile(root=tmp_path, remaining_depth=0)
+    a = AttrsCachedHash(x=1, y=(1, 2))
+    loaded = ds.load(ds.save(a))
+    assert loaded == a
+    assert hash(loaded) == hash(a)

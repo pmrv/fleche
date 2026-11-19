@@ -157,7 +157,8 @@ class DigestedFields(Digested):
     they are stored independently.  :meth:`~fleche.storage.destructuring.Digested.mend` reconstructs the original instance by
     bypassing ``__init__`` / ``__post_init__``, so ``InitVar`` and ``init=False`` fields
     (and attrs slots / frozen instances) are all handled uniformly.  Classes with their
-    own pickle hooks never reach it: the built-in predicates leave them to be stored whole.
+    pickle hooks (other than ``object``'s) never reach it: the built-in predicates leave
+    them to be stored whole.
     """
 
     cls: type
@@ -218,37 +219,19 @@ _PICKLE_HOOKS = (
 )
 
 
-@_dataclasses.dataclass(frozen=True, slots=True)
-class _FrozenSlottedProbe:
-    x: int = 0
-
-
-# Hooks the record decorators write themselves: dataclasses for frozen slotted
-# classes, attrs for slotted ones.  Both only copy the declared fields, the same
-# state a field walk stores, so they do not count as the class customising pickling.
-_SYNTHESIZED_PICKLE_CODE = _attrs.SYNTHESIZED_PICKLE_CODE | frozenset(
-    code
-    for code in (
-        getattr(getattr(_FrozenSlottedProbe, name, None), "__code__", None)
-        for name in ("__getstate__", "__setstate__")
-    )
-    if code is not None
-)
-
-
 def _customises_pickling(cls: type) -> bool:
-    """Whether *cls* resolves any pickle hook to one its author (not ``object``, dataclasses or attrs) wrote."""
-    for name in _PICKLE_HOOKS:
-        hook = getattr(cls, name, None)
-        if hook is None or hook is getattr(object, name, None):
-            continue
-        if getattr(hook, "__code__", None) in _SYNTHESIZED_PICKLE_CODE:
-            continue
-        return True
-    return False
+    """Whether *cls* resolves any pickle hook to something other than ``object``'s.
+
+    That includes the hooks dataclasses writes for frozen slotted classes and attrs
+    for slotted ones: they are not always plain field copies (attrs resets its hash
+    cache in ``__setstate__``), and a field walk plus mend would skip them too.
+    """
+    return any(
+        getattr(cls, name, None) is not getattr(object, name, None) for name in _PICKLE_HOOKS
+    )
 
 
-# A record whose class has its own pickle hooks is never taken apart: storing its
+# A record whose class has pickle hooks is never taken apart: storing its
 # fields and mending through object.__new__ would bypass both __getstate__ and
 # __setstate__.  No destructurer claims it, so it is stored whole and the backend's
 # serializer runs its hooks in both directions.

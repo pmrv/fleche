@@ -155,22 +155,6 @@ Boundaries to Keep in Mind
   dataclasses; it now extends to attrs.  If you have multiple classes named ``Point``
   in your project that mean different things, give them distinct names or override
   the digest per class (see :doc:`/dev/custom_digests`).
-* **Class-level construction logic is bypassed on load.**  When ``fleche`` reads a
-  destructured attrs / dataclass instance back from value storage, it reconstructs it
-  via :py:meth:`object.__new__` plus :py:meth:`object.__setattr__`, intentionally
-  bypassing ``__init__``, ``__post_init__``, attrs converters, and attrs validators.
-  The same instance going *into* the cache may have been constructed through any of
-  those; coming back out it will not.  In particular, validators do not re-run on
-  load.  Make sure your validators express *invariants of the data*, not *side
-  effects to perform on construction*.
-* **Classes with their own pickle hooks are stored whole.**  A dataclass or attrs
-  class that defines (or inherits) its own ``__getstate__``, ``__setstate__``,
-  ``__reduce__``, ``__reduce_ex__``, ``__getnewargs__`` or ``__getnewargs_ex__`` is
-  never destructured: its fields are not split into separate entries, and the
-  value storage's serializer pickles the instance, so both hooks run.  The hooks
-  that ``dataclasses`` and ``attrs`` write themselves for slotted classes only copy
-  the fields and do not count.  The digest is unaffected; it is still taken over
-  the fields.
 * **Runtime semantics are not part of the digest.**  ``slots``, ``frozen``,
   custom ``__eq__`` / ``__hash__``, attrs's ``eq_key``/``order_key``, ...  None of
   these affect the digest.  Two records that hash the same may still compare or
