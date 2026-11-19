@@ -156,7 +156,8 @@ class DigestedFields(Digested):
     Field values may be replaced by :class:`~fleche.digest.Digest` back-references when
     they are stored independently.  :meth:`~fleche.storage.destructuring.Digested.mend` reconstructs the original instance by
     bypassing ``__init__`` / ``__post_init__``, so ``InitVar`` and ``init=False`` fields
-    (and attrs slots / frozen instances) are all handled uniformly.
+    (and attrs slots / frozen instances) are all handled uniformly.  Classes with their
+    own pickle hooks never reach it: the built-in predicates leave them to be stored whole.
     """
 
     cls: type
@@ -207,6 +208,63 @@ class DigestedFields(Digested):
         return cls(type(value), dict(zip(labels, children)))
 
 
+_PICKLE_HOOKS = (
+    "__reduce_ex__",
+    "__reduce__",
+    "__getstate__",
+    "__setstate__",
+    "__getnewargs_ex__",
+    "__getnewargs__",
+)
+
+
+@_dataclasses.dataclass(frozen=True, slots=True)
+class _FrozenSlottedProbe:
+    x: int = 0
+
+
+# Hooks the record decorators write themselves: dataclasses for frozen slotted
+# classes, attrs for slotted ones.  Both only copy the declared fields, the same
+# state a field walk stores, so they do not count as the class customising pickling.
+_SYNTHESIZED_PICKLE_CODE = _attrs.SYNTHESIZED_PICKLE_CODE | frozenset(
+    code
+    for code in (
+        getattr(getattr(_FrozenSlottedProbe, name, None), "__code__", None)
+        for name in ("__getstate__", "__setstate__")
+    )
+    if code is not None
+)
+
+
+def _customises_pickling(cls: type) -> bool:
+    """Whether *cls* resolves any pickle hook to one its author (not ``object``, dataclasses or attrs) wrote."""
+    for name in _PICKLE_HOOKS:
+        hook = getattr(cls, name, None)
+        if hook is None or hook is getattr(object, name, None):
+            continue
+        if getattr(hook, "__code__", None) in _SYNTHESIZED_PICKLE_CODE:
+            continue
+        return True
+    return False
+
+
+# A record whose class has its own pickle hooks is never taken apart: storing its
+# fields and mending through object.__new__ would bypass both __getstate__ and
+# __setstate__.  No destructurer claims it, so it is stored whole and the backend's
+# serializer runs its hooks in both directions.
+
+def _is_destructurable_dataclass(value: Any) -> bool:
+    return (
+        _dataclasses.is_dataclass(value)
+        and not isinstance(value, type)
+        and not _customises_pickling(type(value))
+    )
+
+
+def _is_destructurable_attrs(value: Any) -> bool:
+    return _attrs.is_attrs_instance(value) and not _customises_pickling(type(value))
+
+
 @dataclass
 class DigestedDataclass(DigestedFields):
     """Per-field marker for stdlib :mod:`dataclasses` instances."""
@@ -228,8 +286,8 @@ class DigestedAttrs(DigestedFields):
 _DESTRUCTURERS: list[tuple[Callable[[Any], bool], Callable]] = [
     (lambda v: isinstance(v, (list, tuple)), DigestedIterable.sunder),
     (lambda v: isinstance(v, dict), DigestedDict.sunder),
-    (lambda v: _dataclasses.is_dataclass(v) and not isinstance(v, type), DigestedDataclass.sunder),
-    (_attrs.is_attrs_instance, DigestedAttrs.sunder),
+    (_is_destructurable_dataclass, DigestedDataclass.sunder),
+    (_is_destructurable_attrs, DigestedAttrs.sunder),
 ]
 
 

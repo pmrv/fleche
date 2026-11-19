@@ -239,3 +239,39 @@ def test_attrs_stored_as_digested_attrs(ds):
     assert isinstance(raw, DigestedAttrs)
     assert not isinstance(raw, DigestedDataclass)
     assert raw.cls is AttrsBasic
+
+
+@attrs.define
+class AttrsOwnGetstate:
+    """Writes its own ``__getstate__``; attrs then leaves its own pair out."""
+    x: int
+    y: list
+
+    def __getstate__(self):
+        return {"x": self.x, "y": self.y}
+
+    def __setstate__(self, state):
+        self.x = state["x"]
+        self.y = state["y"]
+
+
+@attrs.define(frozen=True)
+class AttrsFrozenSlotted:
+    x: int
+    y: list
+
+
+def test_attrs_own_pickle_hooks_stored_whole(ds):
+    """An attrs class with its own pickle hooks is not destructured (#1104)."""
+    a = AttrsOwnGetstate(x=1, y=[1, 2])
+    key = ds.save(a)
+    assert type(ds.storage[key]) is AttrsOwnGetstate
+    assert key == digest(a)
+
+
+def test_attrs_synthesized_pickle_hooks_still_destructured(ds):
+    """The ``__getstate__``/``__setstate__`` attrs writes for slotted classes only copy fields."""
+    a = AttrsFrozenSlotted(x=1, y=[1, 2])
+    key = ds.save(a)
+    assert isinstance(ds.storage[key], DigestedAttrs)
+    assert ds.load(key) == a

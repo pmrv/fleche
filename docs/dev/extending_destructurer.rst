@@ -106,7 +106,9 @@ intermediate base (itself a ``Digested`` subclass) that already implements
 ``underlying`` generically for any record-shaped value — it reconstructs
 instances via ``object.__new__`` plus ``__setattr__``, bypassing ``__init__``
 /``__post_init__``, so ``InitVar``, ``init=False``, frozen, and slotted
-fields all round-trip correctly. That leaves exactly **one** abstract hook
+fields all round-trip correctly.  (The built-in dataclass and attrs predicates
+skip classes with their own pickle hooks, so those are stored whole instead.)
+That leaves exactly **one** abstract hook
 for a subclass to fill in:
 
 - :meth:`~fleche.storage.destructuring.DigestedFields._field_items` — a
