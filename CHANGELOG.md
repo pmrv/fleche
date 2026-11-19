@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.26.0](https://github.com/pmrv/fleche/compare/0.25.0...0.26.0) (2026-11-19)
+
+
+### Features
+
+* **storage:** treat namedtuples as scalars (depth 0) when destructuring ([#1094](https://github.com/pmrv/fleche/issues/1094)) ([8076fba](https://github.com/pmrv/fleche/commit/8076fbab8e79252c7bcb68eb6bee2210d15f1b94))
+
+
+### Bug Fixes
+
+* **fleche-ase:** leave verbose out of thermochemistry digests ([#1102](https://github.com/pmrv/fleche/issues/1102)) ([0019268](https://github.com/pmrv/fleche/commit/00192687d1782b6c94ea701b58b88428dfca024f))
+* **query:** require a key for QueryIterator.sorted() ([#1100](https://github.com/pmrv/fleche/issues/1100)) ([1d96557](https://github.com/pmrv/fleche/commit/1d96557da7becb1e170388eba32d8cac7b40823a))
+* **storage:** store records with pickle hooks whole ([#1105](https://github.com/pmrv/fleche/issues/1105)) ([59aa783](https://github.com/pmrv/fleche/commit/59aa7836ab1c4a6ecb415e59e053bf43ac95216f))
+
 ## [0.25.0](https://github.com/pmrv/fleche/compare/0.24.0...0.25.0) (2026-11-18)
 
 
