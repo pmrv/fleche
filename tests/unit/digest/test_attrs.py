@@ -233,9 +233,47 @@ def test_attrs_stored_as_digested_attrs(ds):
     Mirrors :class:`DigestedDataclass` for stdlib dataclasses but is a distinct
     subclass so each record kind owns its own field-extraction logic.
     """
-    a = AttrsBasic(x=1, y="hello")
+    a = AttrSBasic(x=1, y="hello")
     key = ds.save(a)
     raw = ds.storage[key]
     assert isinstance(raw, DigestedAttrs)
     assert not isinstance(raw, DigestedDataclass)
-    assert raw.cls is AttrsBasic
+    assert raw.cls is AttrSBasic
+
+
+@attrs.define
+class AttrsOwnGetstate:
+    """Writes its own ``__getstate__``; attrs then leaves its own pair out."""
+    x: int
+    y: list
+
+    def __getstate__(self):
+        return {"x": self.x, "y": self.y}
+
+    def __setstate__(self, state):
+        self.x = state["x"]
+        self.y = state["y"]
+
+
+@attrs.frozen(cache_hash=True)
+class AttrsCachedHash:
+    x: int
+    y: tuple
+
+
+def test_attrs_slotted_stored_whole(ds):
+    """attrs writes ``__getstate__``/``__setstate__`` for slotted classes; those count as hooks too."""
+    a = AttrsBasic(x=1, y="hello")
+    key = ds.save(a)
+    assert type(ds.storage[key]) is AttrsBasic
+
+
+def test_attrs_cached_hash_survives_load(tmp_path):
+    """attrs' own ``__setstate__`` resets the hash cache, so a loaded instance stays hashable."""
+    from fleche.storage import ValuePickleFile
+
+    ds = ValuePickleFile(root=tmp_path, remaining_depth=0)
+    a = AttrsCachedHash(x=1, y=(1, 2))
+    loaded = ds.load(ds.save(a))
+    assert loaded == a
+    assert hash(loaded) == hash(a)

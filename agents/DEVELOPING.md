@@ -259,6 +259,8 @@ Values and calls are stored separately so call records are queryable without des
   `regression/test_sql_non_sqlite_backends.py::test_concurrent_processes_on_fresh_database` pins both against real servers.
 - `destructuring.py` — `DestructuringMixin` stores containers, dataclasses and attrs instances as separately stored parts (`remaining_depth`), composed **above** `ValueMixin`.
   `Digested*` markers keep digest equivalence via `__digest__` and rebuild fields via `object.__new__` + `__setattr__`, so `init=False`/`InitVar`/frozen/slots round-trip.
+  Records whose class resolves any pickle hook (`__getstate__`, `__setstate__`, `__reduce__`, ...) to something other than `object`'s are never claimed by the dataclass/attrs predicates, so they are stored whole and the serializer runs the hooks (#1104);
+  that includes the hooks dataclasses writes for frozen slotted classes and attrs for slotted ones (attrs' `__setstate__` resets `cache_hash`), so `attrs.define` records are stored whole.
   Wrappers mark exactly the path from an entry's root to each reference: in `sunder` an inlined wrapper child counts as a reference,
   `Digested.get` mends nested wrappers, and `_raw_sub_digests` searches them, so `child_digests` and `gc` see references held through an inlined wrapper;
   `DigestedIterable` hashes via its underlying container, so an inlined tuple wrapper stays a valid dict key.

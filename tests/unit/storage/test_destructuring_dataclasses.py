@@ -534,3 +534,114 @@ def test_init_false_mutated_after_construction(ds):
     loaded = ds.load(key)
     assert loaded.x == 3
     assert loaded.y == 999  # restored, NOT recomputed as 6
+
+
+# ---------------------------------------------------------------------------
+# Classes with their own pickle hooks are stored whole (#1104)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class VersionedState:
+    """Versions its pickled state; ``__setstate__`` rejects layouts it does not know."""
+    x: int
+    y: list
+
+    def __getstate__(self):
+        return {"version": 2, "x": self.x, "y": self.y}
+
+    def __setstate__(self, state):
+        assert state.pop("version") == 2, "unknown layout"
+        self.__dict__.update(state)
+        self.restored = True
+
+
+@dataclass
+class OwnReduce:
+    x: int
+    y: list
+
+    def __reduce__(self):
+        return (OwnReduce, (self.x, self.y))
+
+
+@dataclass
+class OnlySetstate:
+    x: int
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.restored = True
+
+
+class _PickleBase:
+    def __getstate__(self):
+        state = dict(self.__dict__)
+        state["inherited"] = True
+        return state
+
+
+@dataclass
+class InheritsGetstate(_PickleBase):
+    x: int
+
+
+@dataclass(frozen=True, slots=True)
+class FrozenSlotted:
+    x: int
+    y: list
+
+
+@dataclass(slots=True)
+class Slotted:
+    x: int
+    y: list
+
+
+@pytest.mark.parametrize("value", [
+    VersionedState(1, [1, 2]),
+    OwnReduce(1, [1, 2]),
+    OnlySetstate(1),
+    InheritsGetstate(1),
+])
+def test_own_pickle_hooks_stored_whole(ds, value):
+    """A class defining any pickle hook is not destructured; the backend stores the instance itself."""
+    key = ds.save(value)
+    raw = ds.storage[key]
+    assert type(raw) is type(value)
+    assert key == digest(value)
+
+
+def test_own_pickle_hooks_inside_container(ds):
+    """Nested in a container, the record becomes one opaque child entry, not a field wrapper."""
+    value = [VersionedState(1, [1, 2]), 3]
+    key = ds.save(value)
+    loaded = ds.load(key)
+    assert loaded == value
+    assert not any(isinstance(v, DigestedDataclass) for v in ds.storage.values())
+
+
+def test_pickle_hooks_run_both_ways(tmp_path):
+    """A pickling backend runs ``__getstate__`` on save and ``__setstate__`` on load."""
+    from fleche.storage import ValuePickleFile
+
+    ds = ValuePickleFile(root=tmp_path, remaining_depth=0)
+    key = ds.save(VersionedState(1, [1, 2]))
+    loaded = ds.load(key)
+    assert loaded == VersionedState(1, [1, 2])
+    assert loaded.restored
+
+
+def test_frozen_slotted_stored_whole(ds):
+    """dataclasses writes ``__getstate__``/``__setstate__`` for frozen slotted classes; those count too."""
+    value = FrozenSlotted(1, [1, 2])
+    key = ds.save(value)
+    assert type(ds.storage[key]) is FrozenSlotted
+    assert ds.load(key) == value
+
+
+def test_slotted_without_hooks_still_destructured(ds):
+    """A plain slotted dataclass gets no pickle hooks, so it is still split into fields."""
+    value = Slotted(1, [1, 2])
+    key = ds.save(value)
+    assert isinstance(ds.storage[key], DigestedDataclass)
+    assert ds.load(key) == value

@@ -105,6 +105,24 @@ field that would be opaque on its own.
 there is nothing to split, so they inline with their parent like any other
 leaf.
 
+**Records are rebuilt without construction.**  A destructured dataclass or
+attrs instance is read back via :py:meth:`object.__new__` plus
+:py:meth:`object.__setattr__` for each field, bypassing ``__init__``,
+``__post_init__``, attrs converters and attrs validators.  Validators do not
+re-run on load, and attributes that are not fields (set in ``__post_init__``,
+say) are not stored and do not come back.  Make sure your validators express
+*invariants of the data*, not *side effects to perform on construction*.
+
+**Records with pickle hooks are stored whole.**  A dataclass or attrs instance
+whose class has any pickle hook other than :class:`object`'s —
+``__getstate__``, ``__setstate__``, ``__reduce__``, ``__reduce_ex__``,
+``__getnewargs__`` or ``__getnewargs_ex__``, its own or inherited — is never
+taken apart.  It is opaque (depth ∞), and the backend's serializer pickles it,
+so the hooks run in both directions.  That includes the hooks ``dataclasses``
+writes for frozen slotted classes and ``attrs`` writes for slotted ones (the
+default for ``attrs.define``), so those records are stored whole too.  Their
+digest is unaffected.
+
 Extending and inspecting
 ------------------------
 
