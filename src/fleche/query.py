@@ -92,7 +92,7 @@ class QueryIterator(Iterable[call.LazyCall]):
     def any(self) -> "call.LazyCall | None":
         """Return the first matching call, or None if there are no matching calls.
 
-        Use `.sorted(reverse=...)` to control which call is returned when ordering matters.
+        Use `.sorted(key, reverse=...)` to control which call is returned when ordering matters.
         """
         for c in self:
             return c
@@ -118,7 +118,7 @@ class QueryIterator(Iterable[call.LazyCall]):
 
     def sorted(
         self,
-        key: "str | Callable[[call.LazyCall], Any] | None" = None,
+        key: "str | Callable[[call.LazyCall], Any]",
         reverse: bool = False,
     ) -> "QueryIterator":
         """Return a new QueryIterator with calls sorted by key.
@@ -127,8 +127,8 @@ class QueryIterator(Iterable[call.LazyCall]):
             key: a callable taking a LazyCall, or a string argument name to sort by
             reverse: if True, sort in descending order
         """
-        key = _resolve_key(key) if key is not None else None
-        return QueryIterator(lambda: builtins.sorted(self, key=key, reverse=reverse), cache=self.cache)
+        k = _resolve_key(key)
+        return QueryIterator(lambda: builtins.sorted(self, key=k, reverse=reverse), cache=self.cache)
 
     def unique(self, key: "str | Callable[[call.LazyCall], Any]") -> "QueryIterator":
         """Return a new QueryIterator with duplicates removed, keeping the first per group (lazy).

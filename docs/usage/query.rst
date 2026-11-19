@@ -139,7 +139,7 @@ Filtering and ordering
 ``.filter(predicate) -> QueryIterator``
     Keep only calls for which ``predicate(call)`` is truthy.  Lazy.
 
-``.sorted(key=None, reverse=False) -> QueryIterator``
+``.sorted(key, reverse=False) -> QueryIterator``
     Sort by *key*, where *key* is a callable ``(LazyCall) -> Any`` or
     a string argument name.  Lazy.
 
