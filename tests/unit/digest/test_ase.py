@@ -123,6 +123,37 @@ def test_thermochemistry_digest_differs_on_potentialenergy(name):
     )
 
 
+#: Every energy and entropy getter of ``ase.thermochemistry``, with its arguments.
+THERMO_GETTERS = {
+    "get_helmholtz_energy": (300.0,),
+    "get_gibbs_energy": (300.0, 101325.0),
+    "get_internal_energy": (300.0,),
+    "get_entropy": (300.0,),
+    "get_enthalpy": (300.0,),
+}
+
+
+@pytest.mark.parametrize("verbose", [False, True])
+@pytest.mark.parametrize("name", THERMO_FACTORIES)
+def test_thermochemistry_digest_survives_evaluation(name, verbose, capsys):
+    thermo = THERMO_FACTORIES[name]()
+    fresh = digest(thermo)
+    called = [m for m in THERMO_GETTERS if hasattr(thermo, m)]
+    assert called
+    for m in called:
+        getattr(thermo, m)(*THERMO_GETTERS[m], verbose=verbose)
+    assert "verbose" in vars(thermo)
+    assert digest(thermo) == fresh
+    assert digest(thermo) == digest(THERMO_FACTORIES[name]())
+
+
+@pytest.mark.parametrize("name", THERMO_FACTORIES)
+def test_a_fresh_thermochemistry_object_keeps_its_key(name):
+    thermo = THERMO_FACTORIES[name]()
+    # The hook's formula before evaluation state was left out.
+    assert fleche_ase.thermochemistry_digest(thermo) == digest((type(thermo).__name__, vars(thermo)))
+
+
 def test_thermochemistry_digest_differs_between_classes():
     harmonic = HarmonicThermo(VIB_ENERGIES, potentialenergy=1.0)
     quasi = QuasiHarmonicThermo(VIB_ENERGIES, potentialenergy=1.0)
