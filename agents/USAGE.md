@@ -180,4 +180,5 @@ only querying is broken.
 Only pickle-family backends (`pickle`/`cloudpickle`/`dill`) support signing.
 Set `secret_key` in the TOML section, or the `FLECHE_SECRET_KEY` env var (colon-separated hex strings), to HMAC-sign stored entries;
 a tampered or wrong-key entry surfaces as a cache miss (`KeyError`), not a crash.
+A structurally corrupt value entry (truncated or damaged on disk) is also a miss, and is evicted on read so the next save rewrites it.
 Details: `docs/storage/security.rst`.

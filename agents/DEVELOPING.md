@@ -198,8 +198,8 @@ Values and calls are stored separately so call records are queryable without des
   Named caches are interned in `_live_caches` (the default also under `None`), so a name always returns one instance and SSH/file backends aren't reopened.
 - `security.py` — `SignedBytes` HMAC is hex-encoded so it never contains the pickle STOP byte, which is how `loads` finds the signature.
   Only pickle-family backends sign;
-  the first key signs and all keys verify;
-  a `SignatureError` surfaces as `KeyError` (a miss).
+  the first key signs and all keys verify.
+  `pickle_file._from_file` maps `SignatureMismatch` (well-formed signature no held key verifies) to `UnverifiedEntry` and any other `SignatureError` (malformed) to `CorruptEntry` — both read as a miss, but only the latter is evicted.
 - `executor.py` — `wrap_executor` patches `.submit`: cached calls return a completed `Future`, and every other callable is `BoundWrapper`-bound so nested fleche calls see the active cache.
 - `__main__.py` — `python -m fleche remote --serve`, routed here rather than `python -m fleche.remote` so `runpy` doesn't import `remote.py` twice.
 - `remote.py` — `SshCache` forwards every cache op over one persistent SSH subprocess with length-prefixed **cloudpickle** frames.
@@ -380,6 +380,8 @@ Git history is the changelog — no PR numbers, dates or release versions here.
   Agreed direction, in order: move destructurer registration to a `destructure` entry point so sister packages can ship destructurers (done), then a size-based split — `should_split` per registration judged against a log2-bytes level on the value backend, monotonic, never measured by speculative pickling.
   Depth 0 is declared per type by the sister packages (numpy arrays, pandas containers, light `Atoms`);
   whether unknown opaque types should default to depth 0 too is undecided — keep them at ∞ until it is.
+  #1084 (sub-issue) is the mid-term follow-up: destructure pandas and ASE objects along their digest structure instead of the depth-0 stopgap;
+  `Atoms` digests already compose from part digests, a `DataFrame`'s does not (row-wise `hash_pandas_object`), so that side needs a `hash_version` bump + `redigest`, or a wrapper carrying the saved digest (relaxing the `Digested` contract).
   A 16-store production census (in the thread) supports depth 0 for plain arrays: duplication from inlining is small (≤ ~5 % of reachable store bytes) and sits in small arrays a size threshold would miss, while per-file overhead dominates — except when a large leaf is both a top-level result and nested in another result, which only the size split catches.
   `Digest` elements stay back-references, and returning them as data is a caller bug, not a reason for a `Ref` type (census: zero dangling references, no caller returns digests as data).
 
@@ -388,7 +390,6 @@ Git history is the changelog — no PR numbers, dates or release versions here.
 #895 cache hits return a plain `Future` (accepted);
 #916 `.query()` with `hash_version=False`/`hash_module=False` (fix on branch `fix/query-hash-flags-916`);
 #918 destructuring ignores digest hooks;
-#883 custom destructurers hide children from `gc`;
 #1047 concurrent workers computing the same call on the `sql` backend can raise `IntegrityError` out of the decorated function (a duplicate insert should count as a hit;
 also #790, #218).
 
