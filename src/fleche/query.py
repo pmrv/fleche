@@ -123,8 +123,6 @@ class QueryIterator(Iterable[call.LazyCall]):
     ) -> "QueryIterator":
         """Return a new QueryIterator with calls sorted by key.
 
-        ``LazyCall`` has no natural order, so a key is required.
-
         Args:
             key: a callable taking a LazyCall, or a string argument name to sort by
             reverse: if True, sort in descending order
