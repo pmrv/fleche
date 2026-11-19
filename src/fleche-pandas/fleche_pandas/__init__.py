@@ -159,11 +159,22 @@ def _leaf(intern, value):
     return value, 0
 
 
+def _pandas_is_big(value, level: int) -> bool:
+    # memory_usage without deep: cheap, but object columns count their pointers only.
+    if isinstance(value, pd.DataFrame):
+        size = value.memory_usage(index=True, deep=False).sum()
+    elif isinstance(value, pd.Series):
+        size = value.memory_usage(index=True, deep=False)
+    else:
+        size = value.memory_usage(deep=False)
+    return int(size) >= 1 << level
+
+
 def _is_pandas_container(value: Any) -> bool:
     return isinstance(value, (pd.DataFrame, pd.Series, pd.Index))
 
 
 #: The destructurers fleche loads from this package's ``fleche``/``destructure`` entry point:
 #: DataFrames, Series and Indexes are leaves, inlined into their parent like an ``int``.
-destructurers = [(_is_pandas_container, _leaf)]
+destructurers = [(_is_pandas_container, _leaf, _pandas_is_big)]
 

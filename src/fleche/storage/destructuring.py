@@ -225,15 +225,22 @@ class DigestedAttrs(DigestedFields):
         return _attrs.field_items(value)
 
 
-_DESTRUCTURERS: list[tuple[Callable[[Any], bool], Callable]] = [
-    (lambda v: isinstance(v, (list, tuple)), DigestedIterable.sunder),
-    (lambda v: isinstance(v, dict), DigestedDict.sunder),
-    (lambda v: _dataclasses.is_dataclass(v) and not isinstance(v, type), DigestedDataclass.sunder),
-    (_attrs.is_attrs_instance, DigestedAttrs.sunder),
+# (pred, fn, should_split) per entry.  Plain tuples, not a NamedTuple: save() and
+# _intern_rec unpack every entry for every value, and CPython only takes its fast
+# unpacking path for exact tuples.
+_DESTRUCTURERS: list[tuple[Callable[[Any], bool], Callable, Callable[[Any, int], bool] | None]] = [
+    (lambda v: isinstance(v, (list, tuple)), DigestedIterable.sunder, None),
+    (lambda v: isinstance(v, dict), DigestedDict.sunder, None),
+    (lambda v: _dataclasses.is_dataclass(v) and not isinstance(v, type), DigestedDataclass.sunder, None),
+    (_attrs.is_attrs_instance, DigestedAttrs.sunder, None),
 ]
 
 
-def register_destructurer(pred: Callable[[Any], bool], fn: Callable) -> None:
+def register_destructurer(
+    pred: Callable[[Any], bool],
+    fn: Callable,
+    should_split: Callable[[Any, int], bool] | None = None,
+) -> None:
     """Register a custom container destructurer.
 
     *pred(value)* should return ``True`` for values this destructurer handles.
@@ -243,10 +250,16 @@ def register_destructurer(pred: Callable[[Any], bool], fn: Callable) -> None:
     new container type is safe without displacing list/dict/dataclass/attrs.
     Call before any :class:`DestructuringMixin` instance is used.
 
-    A package should instead list its ``(pred, fn)`` pairs under the ``fleche``
-    entry point ``destructure``; they are registered before the first save.
+    *should_split(value, level)* says whether *value* is big enough to get an
+    entry of its own at the store's ``split_level`` (about ``2**level`` bytes or
+    more).  It must be monotonic: a value split at ``level`` is split at every
+    lower level.  Judge size from what is cheap to read; never serialize.
+
+    A package should instead list its ``(pred, fn[, should_split])`` tuples under
+    the ``fleche`` entry point ``destructure``; they are registered before the
+    first save.
     """
-    _DESTRUCTURERS.append((pred, fn))
+    _DESTRUCTURERS.append((pred, fn, should_split))
 
 
 _ENTRY_POINTS_LOADED = False
@@ -269,8 +282,8 @@ def _load_entry_points() -> None:
             return
         for ep in importlib.metadata.entry_points(group="fleche", name="destructure"):
             try:
-                for pred, fn in ep.load():
-                    register_destructurer(pred, fn)
+                for entry in ep.load():
+                    register_destructurer(*entry)
             except Exception as e:
                 logger.error("Failed to load entry point %s: %s", ep.value, e, exc_info=True)
         _ENTRY_POINTS_LOADED = True
@@ -362,6 +375,19 @@ class DestructuringMixin(base.ValueStorage):
     """
 
     remaining_depth: int = 1
+    # Values of about 2**split_level bytes or more get an entry of their own, whatever
+    # their depth; None never splits by size.  Each destructurer judges size through
+    # its should_split; scalars by len() for bytes and str.
+    split_level: int | None = None
+
+    def __post_init__(self, *args, **kwargs):
+        # *args forwards InitVars (bagofholding's check_consistency) down the MRO.
+        level = self.split_level
+        if level is not None and (not isinstance(level, int) or isinstance(level, bool) or level < 0):
+            raise ValueError(f"split_level must be None or a non-negative int, not {level!r}")
+        post_init = getattr(super(), "__post_init__", None)
+        if post_init is not None:
+            post_init(*args, **kwargs)
 
     @staticmethod
     def _is_trojan_tuple(value):
@@ -379,9 +405,11 @@ class DestructuringMixin(base.ValueStorage):
             return value, -1
 
         depth = float("inf")
+        big = False
 
         if _is_scalar(value):
             depth = 0
+            big = self._split_level_reached(value)
         elif isinstance(value, (dict, list, tuple)) and not value:
             # empty containers treated like scalars; no point destructuring nothing
             depth = 0
@@ -390,14 +418,26 @@ class DestructuringMixin(base.ValueStorage):
             # are never taken apart; inline them whole like any other scalar
             depth = 0
         else:
-            for pred, sunder_fn in _DESTRUCTURERS:
+            for pred, sunder_fn, should_split in _DESTRUCTURERS:
                 if pred(value):
+                    if should_split is not None and self.split_level is not None:
+                        big = should_split(value, self.split_level)
                     value, depth = sunder_fn(self._intern_rec, value)
                     break
 
-        if depth < self.remaining_depth:
+        # A big value gets an entry of its own but keeps its depth, so its parent
+        # still folds by remaining_depth and holds it by reference.
+        if depth < self.remaining_depth and not big:
             return value, depth
         return super().save(value, key), depth
+
+    def _split_level_reached(self, value: Any) -> bool:
+        """Whether the scalar *value* is big at ``split_level``: ``bytes``/``str`` by length."""
+        return (
+            self.split_level is not None
+            and isinstance(value, (bytes, str))
+            and len(value) >= 1 << self.split_level
+        )
 
     def save(self, value: Any, key: digest.Digest | None = None) -> digest.Digest:
         _load_entry_points()
@@ -407,7 +447,7 @@ class DestructuringMixin(base.ValueStorage):
         if isinstance(value, (list, tuple, dict)) and not value:
             pass  # nothing to destructure
         elif not (isinstance(value, tuple) and self._is_trojan_tuple(value)):
-            for pred, sunder_fn in _DESTRUCTURERS:
+            for pred, sunder_fn, _ in _DESTRUCTURERS:
                 if pred(value):
                     value, _ = sunder_fn(self._intern_rec, value)
                     break
