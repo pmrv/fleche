@@ -143,8 +143,9 @@ Three mechanisms, in precedence order (highest first):
    numpy and pandas support ships this way too: [`fleche-numpy`](https://pypi.org/project/fleche-numpy/) (arrays, `np.bool_`, `np.timedelta64`) and [`fleche-pandas`](https://pypi.org/project/fleche-pandas/) (`DataFrame`, `Series`, `Index`, `pd.Timedelta`, `pd.NA`), or `pip install "fleche[numpy,pandas]"`.
    Without them those values raise `Indigestible`, and the warning for an uncached call names the package to install;
    numpy number scalars need neither.
-   Notably, [`fleche-ase`](https://pypi.org/project/fleche-ase/) ships hooks for ASE's `Atoms`,
-   `VibrationsData`, and `Calculator` types — `pip install fleche-ase` and ASE objects digest correctly with no further setup, so don't hand-roll digests for ASE types.
+   Notably, [`fleche-ase`](https://pypi.org/project/fleche-ase/) ships hooks for ASE's `Atoms` (constraints included),
+   `Calculator`,
+   `VibrationsData` and the `ase.thermochemistry` classes — `pip install fleche-ase` and ASE objects digest correctly with no further setup, so don't hand-roll digests for ASE types.
    Among entry-point hooks a subclass's hook beats its base's;
    `__digest__` sits above them because they load lazily and would otherwise flip a subclass's digest mid-process.
 
@@ -165,7 +166,7 @@ expensive.query().latest()               # most recent call by Runtime timestamp
 These are two different filtering mechanisms — `.query(**kwargs)` matches call arguments/metadata exactly,
 `.filter(predicate)` runs an arbitrary predicate over the (already-fetched) calls — see `docs/usage/query.rst`.
 
-`QueryIterator` is chainable (`take`/`skip`/`filter`/`unique`/`sorted`);
+`QueryIterator` is chainable (`take`/`skip`/`filter`/`unique`/`sorted` — `sorted` requires a key, since calls have no natural order);
 terminal methods (`only`/`any`/`count`/`table`/`groupby`/`transfer`/`evict`) consume it.
 `latest()`/`oldest()` order by `Runtime` metadata and raise `ValueError` when no matching call carries it (and `IndexError` when nothing matches at all).
 Full API: `docs/usage/query.rst`.

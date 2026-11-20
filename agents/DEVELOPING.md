@@ -190,6 +190,7 @@ Values and calls are stored separately so call records are queryable without des
 - `query.py` — `QueryIterator.calls` is a zero-arg factory, so an iterator is re-iterable and reflects current cache state.
   `.table()` shrinks keys to unambiguous prefixes by default (`shrink_keys=False` on big caches) and prefixes clashing argument names with `a_`.
   `latest`/`oldest` need `Runtime` metadata: `ValueError` if no match carries it, `IndexError` if nothing matches.
+  `sorted()` requires a key — `LazyCall` has no ordering, so a keyless sort could only raise.
 - `metadata.py` — `@configurable` registers a `MetaData` class in `CONFIGURABLE` under its PascalCase name (what TOML uses) and sets `name` to the lowercase name;
   `Tags` needs constructor args, so it is not configurable.
   Static schemas live in `_keys: ClassVar`, which a test checks against `pre`/`post` output.
@@ -367,6 +368,8 @@ Git history is the changelog — no PR numbers, dates or release versions here.
   `BackgroundSaveMixin` #447 for off-hot-path I/O.
 - Performance (#625, read its newest comment;
   #440): raw-bytes digests behind a `hash_version` bump, `blake2b` switch (#615), double cache+storage locking, HDF5 open per access, `Sql` fsync per key.
+  `Sql` call-store size (#1101, measured schema variants in the issue): hex-text digests are stored 2–3× per row;
+  BLOB digests plus composite `WITHOUT ROWID` keys shrink it ~2.3×, with no `hash_version` bump, but existing DBs need a schema version and a copy migration.
 - Cold value tier for HPC (#552).
 - Config redesign (#568), explicit config location (#1019), Linux-only XDG assumptions (#868, #885).
 - Path handling (#516, #517, #522, #33): files stored by content, restored as `TempPath`s;
@@ -382,6 +385,8 @@ Git history is the changelog — no PR numbers, dates or release versions here.
   Agreed direction, in order: move destructurer registration to a `destructure` entry point so sister packages can ship destructurers (done), then a size-based split — `should_split` per registration judged against a log2-bytes level on the value backend, monotonic, never measured by speculative pickling.
   Depth 0 is declared per type by the sister packages (numpy arrays, pandas containers, light `Atoms`);
   whether unknown opaque types should default to depth 0 too is undecided — keep them at ∞ until it is.
+  Records whose class has pickle hooks are stored whole (no field-level dedup);
+  #1106 tracks getting the dedup back by destructuring along `__reduce_ex__` instead of `fields()`.
   #1084 (sub-issue) is the mid-term follow-up: destructure pandas and ASE objects along their digest structure instead of the depth-0 stopgap;
   `Atoms` digests already compose from part digests, a `DataFrame`'s does not (row-wise `hash_pandas_object`), so that side needs a `hash_version` bump + `redigest`, or a wrapper carrying the saved digest (relaxing the `Digested` contract).
   A 16-store production census (in the thread) supports depth 0 for plain arrays: duplication from inlining is small (≤ ~5 % of reachable store bytes) and sits in small arrays a size threshold would miss, while per-file overhead dominates — except when a large leaf is both a top-level result and nested in another result, which only the size split catches.
