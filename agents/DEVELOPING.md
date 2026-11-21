@@ -390,9 +390,11 @@ Git history is the changelog — no PR numbers, dates or release versions here.
   #1084 (sub-issue) is the mid-term follow-up: destructure pandas and ASE objects along their digest structure instead of the depth-0 stopgap;
   `Atoms` digests already compose from part digests, a `DataFrame`'s does not (row-wise `hash_pandas_object`), so that side needs a `hash_version` bump + `redigest`, or a wrapper carrying the saved digest (relaxing the `Digested` contract).
   A 16-store production census (in the thread) supports depth 0 for plain arrays: duplication from inlining is small (≤ ~5 % of reachable store bytes) and sits in small arrays a size threshold would miss, while per-file overhead dominates — except when a large leaf is both a top-level result and nested in another result, which only the size split catches.
-  `Digest` elements stay back-references, and returning them as data is a caller bug, not a reason for a `Ref` type (census: zero dangling references, no caller returns digests as data).
+  `Digest` elements stay back-references, so a result that contains a `Digest` as data saves fine but can never be loaded (#1108 is the field report: `.load()` raises `KeyError`, or would silently return the wrong object on a key collision);
+  whether that warrants a private marker type, a save-time refusal or a `str` conversion is undecided — the earlier census argued no caller returns digests as data, which #1108 disproves.
 
 **Known bugs**: #826 gc vs `PreparedCall`;
+#1108 a result containing a `Digest` saves but never loads (destructuring reads it back as a back-reference — every value backend, workaround `str(...)`);
 #893/#903 multi-bag `filelock.Timeout` under contention;
 #895 cache hits return a plain `Future` (accepted);
 #916 `.query()` with `hash_version=False`/`hash_module=False` (fix on branch `fix/query-hash-flags-916`);
