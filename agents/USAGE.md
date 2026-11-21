@@ -176,6 +176,13 @@ Known trap (bug #916): on a function decorated with `hash_version=False` or `has
 The calls *are* cached;
 only querying is broken.
 
+## Provenance
+
+A cached result is addressed by its call key, and that key, together with the call's stored argument digests, is the result's provenance.
+Ask fleche for it where you need it: `f.digest(*args, **kwargs)` gives the key of a known call,
+`f.query(...)` finds stored calls, and a call's `arguments` link it to its inputs (`docs/usage/lazy_call.rst`).
+Cached results then hold just the computed data, and fleche stays the single source of lineage.
+
 ## Security
 
 Only pickle-family backends (`pickle`/`cloudpickle`/`dill`) support signing.
