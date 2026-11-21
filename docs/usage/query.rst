@@ -212,3 +212,13 @@ Results and side effects
     :class:`~fleche.caches.BaseCache`).  Skips entries already present
     unless ``overwrite=True``.  Set ``pop=True`` to evict them from the
     source after transfer.
+
+
+Provenance
+----------
+A cached result is addressed by its call key, and that key, together with the
+call's stored argument digests, is the result's provenance. Ask fleche for it
+where you need it: ``f.digest(*args, **kwargs)`` gives the key of a known call,
+``f.query(...)`` finds stored calls, and a call's ``arguments`` link it to its
+inputs (see :doc:`lazy_call`). Cached results then hold just the computed data,
+and fleche stays the single source of lineage.
