@@ -154,6 +154,7 @@ Full details: `docs/digests/entry_points.rst` (the entry-point mechanism, fleche
 Use `D(value)` (from `fleche`) to pass an existing digest/key as a lookup shortcut instead of the real value — the cache expands it back to the value before hashing.
 `D(value)` also accepts a stored value (returns its digest) or a hex-digest string, so `cache().load_value(D(x))` retrieves a value directly from either shape — see `docs/digests/digests_as_args.rst` ("Looking Up a Value Directly").
 Note this is a **value** digest (`fleche.digest.digest()`), not a call's lookup key (`func.digest(...)`): `cache().load_value(D(func.digest(x)))` raises `KeyError` — a call's lookup key and its result's value digest are different digests over different things.
+Do not put a `Digest` *inside* a cached function's result (e.g. provenance dicts of `func.digest(...)` keys): the save succeeds but every later `.load()` raises `KeyError` (#1108) — store it as `str(...)` instead.
 
 ## Querying stored calls
 
