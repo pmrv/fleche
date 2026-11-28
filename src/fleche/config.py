@@ -243,6 +243,7 @@ whatever ``fleche.toml`` happens to live in a parent directory or ``$HOME``::
 
 import tomllib
 import logging
+import urllib.parse
 import warnings
 from typing import Callable, Literal, cast, overload
 from pathlib import Path
@@ -735,6 +736,57 @@ def cache_to_config(c: caches.BaseCache) -> "dict[str, Any] | list[dict[str, Any
                     d["workdir"] = c.workdir
                 return d
             raise ValueError(f"Cannot convert cache of type {type(c).__name__!r} to config")
+
+
+#: Config keys whose values are credentials and must not be shown or sent anywhere.
+#: ``secret_key`` carries HMAC signing keys.  A ``url`` may carry a database
+#: password in its userinfo component; :func:`redact_config` masks that part alone.
+SENSITIVE_CONFIG_KEYS: frozenset[str] = frozenset({"secret_key"})
+
+
+def redact_url_password(url: str) -> str:
+    """Replace the password component of a SQLAlchemy URL with ``"***"``.
+
+    Plain sqlite URLs (no userinfo) round-trip unchanged.  Anything that
+    doesn't parse as a URL with a userinfo component is returned as-is.
+    """
+    try:
+        parsed = urllib.parse.urlsplit(url)
+    except Exception:
+        return url
+    if not parsed.password:
+        return url
+    user = parsed.username or ""
+    host_and_port = parsed.hostname or ""
+    if parsed.port is not None:
+        host_and_port = f"{host_and_port}:{parsed.port}"
+    netloc = f"{user}:***@{host_and_port}" if user else f":***@{host_and_port}"
+    return urllib.parse.urlunsplit(
+        (parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment)
+    )
+
+
+def redact_config(value: Any) -> Any:
+    """Return a copy of a :func:`cache_to_config` result that is safe to show.
+
+    Walks dicts and lists.  The value of a key in :data:`SENSITIVE_CONFIG_KEYS`
+    is replaced with ``"<redacted>"``.  A string under a ``url`` key has only
+    its password masked (:func:`redact_url_password`), so the rest of the URL
+    stays readable.  Anything else is returned unchanged.
+    """
+    if isinstance(value, dict):
+        out: dict[str, Any] = {}
+        for k, v in value.items():
+            if k in SENSITIVE_CONFIG_KEYS:
+                out[k] = "<redacted>"
+            elif k == "url" and isinstance(v, str):
+                out[k] = redact_url_password(v)
+            else:
+                out[k] = redact_config(v)
+        return out
+    if isinstance(value, list):
+        return [redact_config(item) for item in value]
+    return value
 
 
 def _default_memory_cache(name: str | None, reason: str | None = None) -> caches.Cache:

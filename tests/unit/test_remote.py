@@ -553,76 +553,18 @@ def test_info_echoes_cache_name():
 # ---------------------------------------------------------------------------
 
 
-def test_info_redacts_secret_key():
-    """`secret_key` in the served cache config must not leak via info()."""
-    from fleche.remote import _redact_config
+def test_server_info_redacts_credentials(tmp_path):
+    """The config in the info handshake carries neither signing keys nor URL passwords."""
+    from fleche.caches import Cache
+    from fleche.remote import _server_info
+    from fleche.storage import CallMemory, ValuePickleFile
 
-    # Direct test of the redactor — independent of the in-process server.
-    raw = {
-        "values": {"type": "cloudpickle", "root": "/x", "secret_key": ["a" * 64]},
-        "calls": {"type": "cloudpickle", "root": "/y", "secret_key": ["b" * 64]},
-    }
-    redacted = _redact_config(raw)
-    assert redacted["values"]["secret_key"] == "<redacted>"
-    assert redacted["calls"]["secret_key"] == "<redacted>"
-    # Non-sensitive fields pass through.
-    assert redacted["values"]["root"] == "/x"
-
-
-def test_info_redacts_url_password():
-    """URL passwords in non-sqlite SQL configs are masked."""
-    from fleche.remote import _redact_url_password
-
-    assert (
-        _redact_url_password("postgresql://alice:hunter2@db.example.com:5432/x")
-        == "postgresql://alice:***@db.example.com:5432/x"
-    )
-    # No password component → pass through.
-    assert (
-        _redact_url_password("sqlite:///tmp/foo.db")
-        == "sqlite:///tmp/foo.db"
-    )
-    assert (
-        _redact_url_password("postgresql://alice@db.example.com/x")
-        == "postgresql://alice@db.example.com/x"
-    )
-
-
-def test_redact_config_walks_stack_with_nested_sql_url():
-    """`_redact_config` recurses through list-shaped stack configs and masks nested SQL URLs.
-
-    :func:`cache_to_config` serialises a :class:`~fleche.caches.CacheStack` as a
-    top-level list of member dicts.  A member with a :class:`~fleche.storage.sql.Sql`
-    call storage carries the DB password inside its nested ``calls.url``.  Both
-    the list traversal (recursion into each member) and the nested ``url``
-    rewrite must fire for a stack-of-SQL-caches ``info()`` handshake not to leak
-    the password.  The primitives are exercised in isolation by
-    ``test_info_redacts_secret_key`` / ``test_info_redacts_url_password``; this
-    test pins their composition on the shape that ends up on the wire.
-    """
-    from fleche.remote import _redact_config
-
-    stack_config = [
-        {
-            "values": {"type": "memory"},
-            "calls": {
-                "type": "sql",
-                "url": "postgresql://alice:hunter2@db.example.com:5432/x",
-            },
-        },
-        {
-            "values": {"type": "memory"},
-            "calls": {"type": "memory"},
-        },
-    ]
-    redacted = _redact_config(stack_config)
-    assert isinstance(redacted, list)
-    assert len(redacted) == 2
-    assert (
-        redacted[0]["calls"]["url"]
-        == "postgresql://alice:***@db.example.com:5432/x"
-    )
-    assert redacted[1]["calls"] == {"type": "memory"}
+    key = bytes(range(32))
+    cache = Cache(ValuePickleFile(tmp_path, secret_key=[key]), CallMemory({}))
+    config = _server_info(cache, None)["cache"]
+    assert config["values"]["secret_key"] == "<redacted>"
+    assert key.hex() not in repr(config)
+    assert config["values"]["root"] == str(tmp_path)
 
 
 def test_is_read_only_of_cache_stack_follows_write_target():
