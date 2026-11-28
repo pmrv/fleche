@@ -45,7 +45,7 @@ served cache back to the client.  The raw config contains credentials —
 signing keys (``secret_key``) as hex strings, and the SQL backend's
 ``url`` may include a database password in the userinfo component.
 ``_server_info()`` therefore walks the config through
-``_redact_config()`` before putting it on the wire: ``secret_key``
+:func:`~fleche.config.redact_config` before putting it on the wire: ``secret_key``
 values are replaced with ``"<redacted>"`` and URL passwords are masked
 to ``***``.  This matters because ``info()``'s return value is
 ordinary user-visible data — a caller that prints or logs it (or the
@@ -56,8 +56,8 @@ never the response payload, so it is not the exposure path the
 redaction guards against.
 
 If you add a new storage type that round-trips credentials through
-``cache_to_config``, extend ``_SENSITIVE_CONFIG_KEYS`` to cover the new
-field name.
+``cache_to_config``, extend :data:`~fleche.config.SENSITIVE_CONFIG_KEYS`
+to cover the new field name.
 
 Version handshake
 ~~~~~~~~~~~~~~~~~

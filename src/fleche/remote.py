@@ -222,60 +222,6 @@ def _is_read_only(cache: BaseCache) -> bool:
     return False
 
 
-# Config keys whose values are credentials we must not put on the wire.
-# ``secret_key`` carries HMAC signing keys; ``url`` may carry a database
-# password in its userinfo component (postgres / mysql).
-_SENSITIVE_CONFIG_KEYS = frozenset({"secret_key"})
-
-
-def _redact_url_password(url: str) -> str:
-    """Replace the password component of a SQLAlchemy URL with ``"***"``.
-
-    Plain sqlite URLs (no userinfo) round-trip unchanged.  Anything that
-    doesn't parse as a URL with a userinfo component is returned as-is.
-    """
-    try:
-        import urllib.parse as _up
-
-        parsed = _up.urlsplit(url)
-    except Exception:
-        return url
-    if not parsed.password:
-        return url
-    user = parsed.username or ""
-    host_and_port = parsed.hostname or ""
-    if parsed.port is not None:
-        host_and_port = f"{host_and_port}:{parsed.port}"
-    netloc = f"{user}:***@{host_and_port}" if user else f":***@{host_and_port}"
-    return _up.urlunsplit(
-        (parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment)
-    )
-
-
-def _redact_config(value: Any) -> Any:
-    """Recursively redact credential-ish fields from a cache_to_config dict.
-
-    Walks dicts and lists; for any dict whose key is in
-    :data:`_SENSITIVE_CONFIG_KEYS`, replaces the value with
-    ``"<redacted>"``.  For ``url`` keys whose value is a string with a
-    password component, the password component alone is masked so the
-    rest of the URL still appears in info output.
-    """
-    if isinstance(value, dict):
-        out: dict[str, Any] = {}
-        for k, v in value.items():
-            if k in _SENSITIVE_CONFIG_KEYS:
-                out[k] = "<redacted>"
-            elif k == "url" and isinstance(v, str):
-                out[k] = _redact_url_password(v)
-            else:
-                out[k] = _redact_config(v)
-        return out
-    if isinstance(value, list):
-        return [_redact_config(item) for item in value]
-    return value
-
-
 def _server_info(cache: BaseCache, cache_name: str | None) -> dict[str, Any]:
     """Diagnostic snapshot of the server's view of itself.
 
@@ -285,7 +231,7 @@ def _server_info(cache: BaseCache, cache_name: str | None) -> dict[str, Any]:
     "remote loaded a different fleche.toml than I expected" failure mode.
 
     Credential fields (``secret_key``, URL passwords) are redacted by
-    :func:`_redact_config` before going on the wire — the info dict is
+    :func:`~fleche.config.redact_config` before going on the wire — the info dict is
     visible to anyone the client logs against, including the DEBUG
     ``rpc ←`` lines, and signing keys must not leak there.
 
@@ -295,10 +241,10 @@ def _server_info(cache: BaseCache, cache_name: str | None) -> dict[str, Any]:
     ``evict`` locally instead of paying a round-trip just to receive
     :class:`~fleche.caches.Rejected`.
     """
-    from .config import cache_to_config
+    from .config import cache_to_config, redact_config
 
     try:
-        cache_config: Any = _redact_config(cache_to_config(cache))
+        cache_config: Any = redact_config(cache_to_config(cache))
     except Exception as e:
         cache_config = f"<cache_to_config failed: {e}>"
     return {

@@ -197,6 +197,8 @@ Values and calls are stored separately so call records are queryable without des
   `Runtime.cputime`/`systime` include child processes and are omitted (not `None`) where `resource` is missing.
 - `config.py` — loading and round-tripping, see [Config](#config).
   Named caches are interned in `_live_caches` (the default also under `None`), so a name always returns one instance and SSH/file backends aren't reopened.
+  `redact_config` returns a copy of a `cache_to_config` result without credentials (`SENSITIVE_CONFIG_KEYS`, URL passwords);
+  a backend whose config carries a new credential key adds it to that set.
 - `security.py` — `SignedBytes` HMAC is hex-encoded so it never contains the pickle STOP byte, which is how `loads` finds the signature.
   Only pickle-family backends sign;
   the first key signs and all keys verify.
@@ -205,7 +207,7 @@ Values and calls are stored separately so call records are queryable without des
 - `__main__.py` — `python -m fleche remote --serve`, routed here rather than `python -m fleche.remote` so `runpy` doesn't import `remote.py` twice.
 - `remote.py` — `SshCache` forwards every cache op over one persistent SSH subprocess with length-prefixed **cloudpickle** frames.
   The `info` handshake warns on version skew and caches `read_only`;
-  `info()` output is redacted (secret keys, URL passwords) because it is ordinary user-visible data.
+  `info()` output is redacted (secret keys, URL passwords) with `config.redact_config` because it is ordinary user-visible data.
   Server `_REMOTE_METHODS` and client `_CLIENT_METHODS` change together (#737).
   `prepare` ships the `Call` and gets back the sealed `DigestedCall`;
   `save(prepared)` is two RPCs, and a failure between them leaves a `gc`-able orphan.
@@ -407,7 +409,7 @@ also #790, #218).
 **Open refactor issues**, by area (check before refactoring nearby): `wrapper.py`/`call.py`/`executor.py` #639, #788, #901, #960, #961;
 `caches.py` #688, #710, #711, #761, #762, #789, #809, #920, #921;
 `config.py` #708, #884, #922;
-`remote.py` #737, #832, #835, #944;
+`remote.py` #737, #832, #944;
 `digest.py` #834, #923;
 `storage/` #739, #760, #790, #833, #866, #974, #975;
 `metadata.py` #902;
